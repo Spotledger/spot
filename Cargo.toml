@@ -149,6 +149,7 @@ members = [
     "crates/framework/spot-meta",
     "crates/framework/spot-meta-live",
     "crates/framework/spot-metering",
+    "crates/framework/spot-mgmt-journal",
     "crates/framework/spot-mgmt-ops",
     "crates/framework/spot-migration-apply",
     "crates/framework/spot-migration-approval",

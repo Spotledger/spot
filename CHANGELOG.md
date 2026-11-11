@@ -9,6 +9,18 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.5] - 2026-11-12
+
+Continuous integration, and nothing else: 0.1.4 failed two of the lint gates.
+
+### Fixed
+
+- Seven stable error codes added in 0.1.4 (the capture-invariant findings, the console's
+  unexpected-reply code and the job worker's final-attempt-hook failure) are now in the error
+  catalogue, so the error-code completeness gate passes.
+- The query gate no longer flags the console's test file, which reads the audit chain through the
+  test database pool and feeds a refused `drop table` input to the console's command parser.
+
 ## [0.1.4] - 2026-11-12
 
 Runtime changes since 0.1.3: an administrator console, lease metrics, role-conditioned services and

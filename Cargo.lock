@@ -9216,6 +9216,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-mgmt-journal"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "spot-agent-linux",
+ "spot-agent-runtime",
+ "spot-mgmt-ops",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "spot-mgmt-ops"
 version = "0.1.0"
 dependencies = [

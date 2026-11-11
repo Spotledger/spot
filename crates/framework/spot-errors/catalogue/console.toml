@@ -1,0 +1,10 @@
+# console codes: the administrator console of the spot binary. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "console.unexpected_reply"
+class = "none"
+summary = "The server's reply to a console command carried no error code."
+explanation_key = "error.console.unexpected_reply"
+params = []
+remedy = "Check that the console and the server are the same version and read the server log."
+since = "0.1.0"

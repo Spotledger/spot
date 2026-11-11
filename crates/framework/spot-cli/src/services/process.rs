@@ -51,14 +51,11 @@
 //! all, so no run id, process name or error text can ever reach one. Logs carry ids; metric
 //! labels never do.
 //!
-//! **Known limitation (pinned, retired versions):** [`ProcessHost::reload_definitions`] and the
-//! readiness check load only *published* versions (`spot_bpm_definitions::load_into`'s own
-//! contract); a Case pinned to a version that is later retired keeps that pin
-//! (`CaseRecord`/`Run::dag_version`), but nothing in this module loads a retired version back
-//! into the registry for it. Such a Case's next `step` fails with `ProcessNotFound` until an
-//! operator republishes that exact version. This is documented, not fixed, here (tracked by
-//! WP-BPM-09.T5, the task brief); see `docs/running-spot/process.md`
-//! and this task's report `## Open questions`.
+//! **Pinned, retired versions:** [`ProcessHost::reload_definitions`] and the readiness check
+//! load every published version plus each retired version the store's `running_pins` still lists
+//! (`spot_bpm_definitions::load_into`), so a Case pinned to a later-retired version resumes on
+//! its pin after a restart. `ProcessRegistry::latest` returns published versions only, so a new
+//! start never lands on a retired version (WP-BPM-09.T5).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};

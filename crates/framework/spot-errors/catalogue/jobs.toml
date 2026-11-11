@@ -1,0 +1,10 @@
+# jobs codes: the job worker's host wiring. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "jobs.final_attempt_hook_failed"
+class = "none"
+summary = "A final-attempt hook of the job worker panicked; the remaining hooks still ran."
+explanation_key = "error.jobs.final_attempt_hook_failed"
+params = []
+remedy = "Read the log for the hook index and the panic, and fix that hook."
+since = "0.1.0"

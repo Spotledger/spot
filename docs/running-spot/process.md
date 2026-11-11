@@ -83,16 +83,11 @@ reload — so readiness polling never re-mutates the live `ProcessRegistry` on a
 (WP-BPM-09.T4). Failures name the process and version (and, for a missing handler, the node
 kind); they never include the process text or any case's data.
 
-**Known limitation (a Case pinned to a retired version).** Both the one-time readiness load
-and `reload_definitions` load only *published* versions. A Case keeps its pinned version
-number for its whole life (`Run::dag_version`); if that version is later retired,
-`ProcessRegistry::latest` can pick a different (retired-successor) version, and nothing in
-this module reloads the retired version the Case actually needs. Such a Case's next `step`
-fails with a `process_not_found`-style error until an operator republishes exactly that
-version. This is documented here rather than fixed: loading pinned-but-retired versions for
-still-open Cases would need the definition store to report "retired versions a Case still
-needs", which this task does not add. This is tracked by WP-BPM-09.T5
-(the task brief).
+**A Case pinned to a retired version.** The readiness load and `reload_definitions` load every
+published version, plus each retired version the definition store's `running_pins` still lists,
+so a Case keeps running on its pinned version (`Run::dag_version`) across a restart.
+`ProcessRegistry::latest` considers published versions only, so a retired version is never
+chosen for a new start (WP-BPM-09.T5). A failure to read the pin list aborts the load.
 
 ## Metrics
 

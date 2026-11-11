@@ -50,21 +50,30 @@ impl LoadReport {
     }
 }
 
-/// Compiles every published version in the store into `registry`.
+/// Compiles every published version in the store into `registry`, and every retired version a
+/// running Case is still pinned to.
 ///
-/// Each stored text is parsed, given the stored version number and the `Published` status, and
-/// compiled; the compiled content hash must equal the stored one. A version that fails any step
-/// is listed in the report and not registered; the rest still load. A store failure aborts with
-/// the error: a half-read store is not a clean start. Retired versions are not loaded.
+/// Each stored text is parsed, given the stored version number and its stored status
+/// (`Published` or `Retired`), and compiled; the compiled content hash must equal the stored
+/// one. A version that fails any step is listed in the report and not registered; the rest
+/// still load. A store failure aborts with the error: a half-read store is not a clean start.
+///
+/// A retired version is loaded when, and only when, the store's `running_pins` for its name
+/// lists its number, so a Case that survives a restart can resume on it (the registry's
+/// `latest` never returns it, so no new start lands on it). A retired version nobody pins is
+/// not loaded.
 ///
 /// # Errors
-/// The store's error from `names` or `list`.
+/// The store's error from `names`, `running_pins` or `list`.
 pub async fn load_into<S: DefinitionStore + ?Sized>(
     registry: &ProcessRegistry,
     store: &S,
 ) -> Result<LoadReport> {
     let mut report = LoadReport::default();
     for name in store.names().await? {
+        // Read once per name, before any page: an unreadable pin list aborts the load rather
+        // than silently dropping the versions Cases are pinned to.
+        let pins = store.running_pins(&name).await?;
         let mut after = None;
         loop {
             let page = store.list(&name, after, MAX_PAGE).await?;
@@ -72,9 +81,13 @@ pub async fn load_into<S: DefinitionStore + ?Sized>(
                 break;
             };
             for stored in page {
-                if stored.state != VersionState::Published {
-                    continue;
-                }
+                let status = match stored.state {
+                    VersionState::Published => VersionStatus::Published,
+                    VersionState::Retired if pins.contains(&stored.version) => {
+                        VersionStatus::Retired
+                    }
+                    VersionState::Retired => continue,
+                };
                 let failure = |kind| LoadFailure {
                     name: stored.name.clone(),
                     version: stored.version,
@@ -85,7 +98,7 @@ pub async fn load_into<S: DefinitionStore + ?Sized>(
                     continue;
                 };
                 version.version = stored.version;
-                version.status = VersionStatus::Published;
+                version.status = status;
                 let definition = match ProcessDefinition::compile(&version) {
                     Ok(definition) => definition,
                     Err(problems) => {

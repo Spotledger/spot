@@ -107,3 +107,39 @@ explanation_key = "error.capture_invariant.out_of_window"
 params = []
 remedy = "Enlarge the window beyond the longest commit-to-journal lag, or treat it as a missed capture."
 since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.conditions_unavailable"
+class = "none"
+summary = "The conditions engine could not be read or written, so the invariant pass could not raise or clear its finding."
+explanation_key = "error.capture_invariant.conditions_unavailable"
+params = []
+remedy = "Check that the conditions engine is up; the next pass retries."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.engine_unavailable"
+class = "none"
+summary = "The exclusion list could not be read, so the invariant pass could not judge."
+explanation_key = "error.capture_invariant.engine_unavailable"
+params = []
+remedy = "Check the exclusion source and the site's database; the next pass retries."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.pass_panicked"
+class = "none"
+summary = "An invariant pass panicked and was abandoned; the checker keeps running."
+explanation_key = "error.capture_invariant.pass_panicked"
+params = []
+remedy = "Read the log for the panic message and report it; the next pass starts clean."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.raise_refused"
+class = "none"
+summary = "The conditions engine refused to raise the capture mismatch finding."
+explanation_key = "error.capture_invariant.raise_refused"
+params = []
+remedy = "Read the refusal code in the log; fix the condition's registration or permissions."
+since = "0.1.0"

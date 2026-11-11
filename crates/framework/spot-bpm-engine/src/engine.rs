@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde_json::Value as Json;
 use spot_app_api::prelude::OffsetDateTime;
-use spot_bpm_model::{Problem, ProcessVersion, RetryPolicy};
+use spot_bpm_model::{Problem, ProcessVersion, RetryPolicy, VersionStatus};
 use spot_dag::{NodeId, Published};
 use spot_dag_exec::{Instant, NodeStatus, RunStatus, cancel as dag_cancel, start as dag_start};
 
@@ -116,18 +116,27 @@ impl ProcessRegistry {
         shared
     }
 
-    /// The definition with this name and version, when one is registered.
+    /// The definition with this name and version, when one is registered, whatever its status.
+    ///
+    /// This is how a Case pinned to a retired version stays resolvable: a retired version is
+    /// kept for the runs already on it, so `get` never filters by status.
     #[must_use]
     pub fn get(&self, name: &str, version: u32) -> Option<Arc<ProcessDefinition>> {
         self.lock().get(&(name.to_owned(), version)).cloned()
     }
 
-    /// The highest-numbered version registered for a name, when one is.
+    /// The highest-numbered *published* version registered for a name, when one is.
+    ///
+    /// A draft or retired version is never returned, so a new start (or a sub-process node that
+    /// names no version) can never land on a retired version. When only retired or draft
+    /// versions are registered the answer is `None`; [`Self::get`] still returns them.
     #[must_use]
     pub fn latest(&self, name: &str) -> Option<Arc<ProcessDefinition>> {
         self.lock()
             .iter()
-            .filter(|((candidate, _), _)| candidate == name)
+            .filter(|((candidate, _), definition)| {
+                candidate == name && definition.version.status == VersionStatus::Published
+            })
             .max_by_key(|((_, version), _)| *version)
             .map(|(_, definition)| definition.clone())
     }

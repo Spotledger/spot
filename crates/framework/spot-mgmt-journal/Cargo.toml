@@ -1,0 +1,34 @@
+# The journal's operations as typed management operations (WP-RTB-04.T1, ADR-061 sections 4, 6,
+# 7 and 8, ADR-44). The operation catalogue is data (ids, parameters, risk levels); the
+# executors live in the site host (WP-RTB-04.T3) behind the `JournalOps` trait defined here.
+#
+# Pure: no storage, no clock, no randomness, no network. Every service access is the executor's.
+[package]
+name = "spot-mgmt-journal"
+description = "The journal's operations as typed management operations (WP-RTB-04.T1, ADR-061, ADR-44): status, policy, snapshots, verify, audit, recovery report, rebuild plan and run, reader grants, subject erasure and reship, with risk levels, parameters, CLI renderings and a typed executor trait"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: ids, parameters, risk levels, validation, rendering.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# Results serialise to stable JSON (the management API's result envelope).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `dyn JournalOps` needs boxed futures; the executor is an async trait object.
+async-trait = "0.1"
+# Typed errors.
+thiserror = "2"
+
+[dev-dependencies]
+# The Linux and database modules, so the collision test assembles the real catalogue.
+spot-agent-linux = { path = "../spot-agent-linux" }
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+# A minimal executor to drive the async `dispatch` in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

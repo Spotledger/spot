@@ -28,3 +28,8 @@ reason = "WP-PRD-01.T50: the `spot audit verify` command tests prove the verifie
 path = "crates/framework/spot-cli/tests/secrets_host.rs"
 pattern = "SQL SELECT"
 reason = "WP-SEC-03.T9: the secrets-host test reads the stored sealed column of a throwaway test database back as raw bytes to prove the credential value is not in the database in the clear; such a read exists only in a database, so this one test file issues the single SELECT through the pool. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/console.rs"
+pattern = "SQL (SELECT|DROP)"
+reason = "WP-PRD-01.T30: the console tests read the audit chain rows back through the pool to prove each command was audited with the right actor, and one refused-input case feeds the text 'drop table ...' to the console parser (it is a rejected command, not executed SQL); such reads exist only in a database. Tests only."
