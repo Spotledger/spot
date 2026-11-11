@@ -16,13 +16,14 @@ use spot_app_api::{
     Phase, Target,
 };
 use spot_committed_delivery::{
-    CommittedStepsHandler, InMemoryMarkers, MarkerError, SingleSite, StepMarkers,
+    CommittedStepsHandler, InMemoryMarkers, JobStoreMarkers, MarkerError, SingleSite, StepMarkers,
 };
 use spot_core::ManualClock;
 use spot_document::engine::{
     DurableDelivery, Engine, JOB_COMMITTED_STEPS, RetryPolicy, V7Ids, job_from_event,
 };
 use spot_events_contract::lifecycle::Operation;
+use spot_jobs::model::Claim;
 use spot_jobs::store::JobFilter;
 use spot_jobs::worker::{HandlerResult, JobContext};
 use spot_jobs::{InMemoryJobStore, Job, JobId, JobState, JobStore, NewJob};
@@ -394,7 +395,7 @@ async fn a_step_refused_with_a_business_error_does_not_block_the_next_step() {
 
 /// Markers that fail the first write of a point: a crash between the side effect and the marker.
 struct CrashBeforeMark {
-    inner: InMemoryMarkers,
+    inner: Arc<dyn StepMarkers>,
     crashed: Mutex<bool>,
 }
 
@@ -406,7 +407,12 @@ impl StepMarkers for CrashBeforeMark {
         self.inner.done(job)
     }
 
-    fn mark<'a>(&'a self, job: JobId, point: &'a str) -> BoxFuture<'a, Result<(), MarkerError>> {
+    fn mark<'a>(
+        &'a self,
+        job: JobId,
+        claim: Option<&'a Claim>,
+        point: &'a str,
+    ) -> BoxFuture<'a, Result<(), MarkerError>> {
         Box::pin(async move {
             let first = {
                 let mut crashed = self.crashed.lock().unwrap();
@@ -415,7 +421,7 @@ impl StepMarkers for CrashBeforeMark {
             if first {
                 return Err(MarkerError);
             }
-            self.inner.mark(job, point).await
+            self.inner.mark(job, claim, point).await
         })
     }
 }
@@ -423,7 +429,7 @@ impl StepMarkers for CrashBeforeMark {
 #[tokio::test]
 async fn a_crash_between_a_side_effect_and_its_marker_reruns_that_one_step_only() {
     let marks: Arc<dyn StepMarkers> = Arc::new(CrashBeforeMark {
-        inner: InMemoryMarkers::new(),
+        inner: Arc::new(InMemoryMarkers::new()),
         crashed: Mutex::new(false),
     });
     let (f, _) = fx_with(Some(marks)).await;
@@ -553,4 +559,124 @@ async fn a_job_for_another_site_runs_nothing() {
         HandlerResult::Fail("committed_delivery.bad_args".to_owned())
     );
     assert!(f.calls().is_empty(), "no step ran for any of them");
+}
+
+impl Fx {
+    /// One attempt as the worker makes it: the job claimed from the store, so the handler sees
+    /// the claim of its own attempt.
+    async fn claimed(&self) -> spot_jobs::store::ClaimedJob {
+        self.store
+            .claim(
+                &["default".to_owned()],
+                "w",
+                Duration::from_secs(60),
+                now(),
+                1,
+            )
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap()
+    }
+
+    async fn run(&self, job: &Job) -> HandlerResult {
+        self.handler
+            .handle(&JobContext {
+                attempt: job.attempt,
+                job: job.clone(),
+                clock: now(),
+            })
+            .await
+    }
+}
+
+#[tokio::test]
+async fn a_restart_between_a_step_and_its_marker_repeats_that_step_once_and_never_after_its_marker()
+{
+    // The markers sit on the store the jobs live in: build the fixture, then swap them in.
+    let (probe, _) = fx_with(None).await;
+    let durable: Arc<dyn StepMarkers> = Arc::new(JobStoreMarkers::new(probe.store.clone()));
+    let crashing: Arc<dyn StepMarkers> = Arc::new(CrashBeforeMark {
+        inner: durable.clone(),
+        crashed: Mutex::new(false),
+    });
+    let f = rebuilt(probe, crashing);
+    f.create("Acme").await;
+    let id = f.intake().await[0];
+    let claimed = f.claimed().await;
+    assert_eq!(claimed.job.id, id);
+    // The crash: step one ran, its marker did not land.
+    assert!(matches!(f.run(&claimed.job).await, HandlerResult::Retry(_)));
+    assert_eq!(f.calls(), ["create_committed"]);
+    assert!(durable.done(id).await.unwrap().is_empty());
+    // The retry repeats step one once, then writes both markers.
+    assert_eq!(f.run(&claimed.job).await, HandlerResult::Ok);
+    assert_eq!(
+        f.calls(),
+        ["create_committed", "create_committed", "save_committed"]
+    );
+    // Both are in the job's own context row now, so a fresh handler repeats nothing.
+    assert_eq!(durable.done(id).await.unwrap().len(), 2);
+    let stored = f.job(id).await;
+    assert_eq!(
+        stored.context["committed_done"],
+        json!(["create_committed", "save_committed"])
+    );
+    assert_eq!(f.run(&claimed.job).await, HandlerResult::Ok);
+    assert_eq!(f.calls().len(), 3);
+}
+
+/// The fixture again, with `markers` in place of the ones it was built with and the same store.
+fn rebuilt(old: Fx, markers: Arc<dyn StepMarkers>) -> Fx {
+    let handler = Arc::new(CommittedStepsHandler::new(
+        Arc::new(SingleSite::new(
+            SiteId::new(SITE).unwrap(),
+            Arc::new(old.engine.runner()),
+        )),
+        markers,
+        old.store.clone(),
+    ));
+    Fx { handler, ..old }
+}
+
+#[tokio::test]
+async fn a_lost_claim_writes_no_marker_and_the_job_retries() {
+    let (probe, _) = fx_with(None).await;
+    let durable: Arc<dyn StepMarkers> = Arc::new(JobStoreMarkers::new(probe.store.clone()));
+    let f = rebuilt(probe, durable.clone());
+    f.create("Acme").await;
+    let id = f.intake().await[0];
+    let claimed = f.claimed().await;
+    // The lease is gone (the job was finished or reaped): the store refuses the marker.
+    f.store
+        .complete(&claimed.claim, JobState::Succeeded, None)
+        .await
+        .unwrap();
+    assert!(matches!(f.run(&claimed.job).await, HandlerResult::Retry(_)));
+    assert!(durable.done(id).await.unwrap().is_empty());
+    // An attempt with no claim at all cannot record progress either.
+    let mut unclaimed = claimed.job.clone();
+    unclaimed.claim = None;
+    assert!(matches!(f.run(&unclaimed).await, HandlerResult::Retry(_)));
+    assert!(durable.done(id).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_corrupt_marker_list_is_an_error_never_an_empty_one() {
+    let (probe, _) = fx_with(None).await;
+    let durable = JobStoreMarkers::new(probe.store.clone());
+    probe.create("Acme").await;
+    let id = probe.intake().await[0];
+    let claimed = probe.claimed().await;
+    let mut patch = serde_json::Map::new();
+    patch.insert("committed_done".to_owned(), json!("create_committed"));
+    probe
+        .store
+        .merge_context(id, &claimed.claim, patch)
+        .await
+        .unwrap();
+    assert_eq!(durable.done(id).await, Err(MarkerError));
+    // An unknown job is an error as well.
+    assert_eq!(durable.done(JobId(u64::MAX)).await, Err(MarkerError));
 }

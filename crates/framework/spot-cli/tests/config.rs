@@ -106,13 +106,30 @@ fn the_mail_sent_log_follows_the_job_store_unless_told_otherwise() {
     assert!(services.mail.sent_log_in_postgres("postgres"));
     assert!(!services.mail.sent_log_in_postgres("memory"));
 
+    assert_eq!(services.mail.effective_sent_log("postgres"), "postgres");
+    assert_eq!(services.mail.effective_sent_log("memory"), "memory");
+    assert_eq!(
+        services.mail.sent_log_description("postgres"),
+        "mail sent log: postgres (auto)"
+    );
+    assert_eq!(
+        services.mail.sent_log_description("memory"),
+        "mail sent log: memory (auto: job store is memory)"
+    );
+
     services.mail.sent_log = "memory".into();
+    assert_eq!(services.mail.effective_sent_log("postgres"), "memory");
+    assert_eq!(
+        services.mail.sent_log_description("postgres"),
+        "mail sent log: memory (explicit)"
+    );
     assert!(
         !services.mail.sent_log_in_postgres("postgres"),
         "memory is a choice"
     );
     services.mail.sent_log = "postgres".into();
     assert!(services.mail.sent_log_in_postgres("postgres"));
+    assert_eq!(services.mail.effective_sent_log("memory"), "postgres");
 
     // `postgres` without the PostgreSQL job store, and a word nobody knows, are refused.
     services.jobs.store = "memory".into();

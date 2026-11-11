@@ -128,7 +128,9 @@ async fn main() -> std::process::ExitCode {
         Err(error) => {
             if let Some(message) = commands::unknown_command_message(&command, &error) {
                 eprint!("{message}");
-                return commands::Exit::Usage.into();
+                // Clap's own usage-error code, which scripts relied on; returned before any
+                // command runs, so it is not `Exit::Usage` (1).
+                return std::process::ExitCode::from(2);
             }
             error.exit()
         }

@@ -23,9 +23,15 @@
 //!   room whose answer is now "no" the host calls [`RealtimeBus::evict_room`]: the principal's
 //!   connections stay open and in their other rooms (its own `user:` room included), and from
 //!   the moment the call returns no further event of the evicted room reaches them, events
-//!   already buffered included. The client may re-join, and is asked again. Rooms are also asked
-//!   again every few seconds, so a removed role assignment (a record, not a snapshot) is
-//!   noticed.
+//!   already buffered included. The client may re-join, and is asked again.
+//!
+//!   A removed role assignment is a stored record and publishes no snapshot, so the service
+//!   also watches the change feed: when a pump run has just fed an entry of a DocType that
+//!   feeds the permission engine ([`is_authorisation_doctype`]), the joined rooms are asked
+//!   again right after that run, once per run however many such entries it fed. A run that fed
+//!   none of them asks nothing. Rooms are still asked again every few seconds
+//!   ([`REVALIDATE_EVERY`]) as the backstop for anything this signal misses, for example a
+//!   change feed that cannot be read.
 //! - **Sessions.** A connection is closed (code 4009) only when its **session** ends: the
 //!   transport asks the sessions again every few seconds, and a token that no longer verifies
 //!   (expired, revoked, the user disabled) is rejected. A permission change never closes one.
@@ -50,6 +56,7 @@ use spot_http::api::service::{Credential, RequestCtx};
 use spot_http::request::RequestId;
 use spot_permissions::{DocFacts, PermissionEngine, Snapshot};
 use spot_postgres::PgBackend;
+use spot_storage_contract::{ChangeFeed, FeedPosition};
 use spot_realtime::ws::{self, CancellationToken, ExpiryWatch, Rejected, TokenVerifier, WsConfig};
 use spot_realtime::{
     AuthFuture, BusConfig, Principal as WirePrincipal, RealtimeBus, Room, RoomAuthorizer,
@@ -67,9 +74,25 @@ use crate::services::{CheckFuture, Level, RunFuture, Service};
 /// How often a connected session is asked whether it is still valid.
 const SESSION_CHECK: Duration = Duration::from_secs(10);
 
-/// How often every joined room is asked again even when no snapshot changed: a role assignment
-/// is a storage record that does not publish a snapshot, so a removed role is noticed here.
+/// How often every joined room is asked again even when nothing signalled a change: the
+/// backstop for an authorisation change the change-feed signal missed (a role assignment is a
+/// storage record that does not publish a snapshot; the pump normally revalidates on it at once).
 const REVALIDATE_EVERY: Duration = Duration::from_secs(10);
+
+/// Whether a change to a document of this DocType can change what a principal may read: the
+/// records the permission engine's facts are loaded from. A change to one of these makes the
+/// pump's run revalidate the joined rooms at once instead of waiting for [`REVALIDATE_EVERY`].
+#[must_use]
+pub fn is_authorisation_doctype(doctype: &str) -> bool {
+    use spot_platform_app::doctype;
+    matches!(
+        doctype,
+        doctype::ROLE
+            | doctype::ROLE_DUTY
+            | doctype::ROLE_ASSIGNMENT
+            | doctype::ROLE_ASSIGNMENT_SCOPE
+    )
+}
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|p| p.into_inner())
@@ -416,6 +439,9 @@ pub struct Realtime {
     authorizer: Authorizer,
     ledger: Arc<Ledger>,
     pump: FeedPump<PgBackend, PumpLog>,
+    /// The feed the pump reads, read again (never written) to see which DocTypes a run fed.
+    feed: Arc<PgBackend>,
+    page_limit: u32,
     stop_sockets: CancellationToken,
     bus: RealtimeBus,
 }
@@ -478,14 +504,17 @@ impl Realtime {
                 shutdown: stop_sockets.clone(),
             },
         );
+        let feed = Arc::new(backend);
+        let config = PumpConfig::default();
+        let page_limit = config.page_limit;
         let pump = FeedPump::new(
             site.clone(),
-            Arc::new(backend),
+            Arc::clone(&feed),
             bus.clone(),
             Arc::new(MemoryPosition::default()),
             None,
             Arc::new(PumpLog { site: site.clone() }),
-            PumpConfig::default(),
+            config,
         );
         Some(Arc::new(Realtime {
             site,
@@ -496,6 +525,8 @@ impl Realtime {
             authorizer,
             ledger,
             pump,
+            feed,
+            page_limit,
             stop_sockets,
             bus,
         }))
@@ -521,6 +552,43 @@ impl Realtime {
         Arc::new(RealtimeService {
             hub: Arc::clone(self),
         })
+    }
+
+    /// Runs the pump once. When the run fed a change to an authorisation record
+    /// ([`is_authorisation_doctype`]), asks the joined rooms again right away, once.
+    ///
+    /// `fed_up_to` is the change-feed position the previous run ended at (the pump's own
+    /// position, the start of the log before the first run).
+    async fn pump_and_revalidate(
+        &self,
+        fed_up_to: &mut FeedPosition,
+    ) -> Result<(), spot_realtime_bridge::BridgeError> {
+        let outcome = self.pump.pump_once().await?;
+        let before = std::mem::replace(fed_up_to, outcome.position.changes);
+        let fed = outcome.mapping.changes_published > 0;
+        if !outcome.mapping.changes_resynced && !fed {
+            return Ok(());
+        }
+        // Nobody joined: nothing to ask, and a replay after a restart costs no second read.
+        if self.ledger.snapshot().is_empty() {
+            return Ok(());
+        }
+        // A resync lost entries we cannot see; so does a feed that cannot be read again.
+        let relevant = if outcome.mapping.changes_resynced {
+            true
+        } else {
+            match self.feed.read_changes(before, self.page_limit).await {
+                Ok(changes) => changes.iter().any(|change| {
+                    change.position <= outcome.position.changes
+                        && is_authorisation_doctype(change.document.entity.as_str())
+                }),
+                Err(_) => true,
+            }
+        };
+        if relevant {
+            self.revalidate().await;
+        }
+        Ok(())
     }
 
     /// Asks again about every room a connected principal joined, under the snapshot published
@@ -591,6 +659,7 @@ impl Service for RealtimeService {
             again.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             again.reset();
             let mut failing = false;
+            let mut fed_up_to = FeedPosition::START;
             loop {
                 tokio::select! {
                     changed = stop.changed() => {
@@ -609,8 +678,8 @@ impl Service for RealtimeService {
                         self.hub.revalidate().await;
                     }
                     _ = tick.tick() => {
-                        match self.hub.pump.pump_once().await {
-                            Ok(_) => failing = false,
+                        match self.hub.pump_and_revalidate(&mut fed_up_to).await {
+                            Ok(()) => failing = false,
                             Err(e) if !failing => {
                                 failing = true;
                                 tracing::warn!(site = %self.hub.site, %e, "the realtime pump failed; retrying");
@@ -628,5 +697,20 @@ impl Service for RealtimeService {
             self.hub.stop_sockets.cancel();
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_authorisation_doctype;
+
+    #[test]
+    fn only_the_records_the_permission_engine_reads_signal_a_revalidation() {
+        for doctype in ["role", "role_duty", "role_assignment", "role_assignment_scope"] {
+            assert!(is_authorisation_doctype(doctype), "{doctype}");
+        }
+        for doctype in ["task", "project", "user", "session", "api_key", "sys_user_notice"] {
+            assert!(!is_authorisation_doctype(doctype), "{doctype}");
+        }
     }
 }

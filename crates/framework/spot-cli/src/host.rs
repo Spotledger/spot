@@ -1102,6 +1102,13 @@ async fn mail(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
     let env = *ctx.env()?;
     let (site, backend, live) = (env.site, env.backend, env.live);
     let services_config = &env.loaded.common.services;
+    tracing::info!(
+        site = %site.site,
+        "{}",
+        services_config
+            .mail
+            .sent_log_description(&services_config.jobs.store)
+    );
     let sent_log: Option<Arc<dyn spot_mail_queue::SentLog>> = if services_config
         .mail
         .sent_log_in_postgres(&services_config.jobs.store)

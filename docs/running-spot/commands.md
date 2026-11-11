@@ -11,7 +11,7 @@ Part of [Running Spot](../running-spot.md).
   Adding one edits no shared file, `main.rs` included.
 
 `spot --help` lists both. An unknown name prints the clap message and `available commands:` with
-every name, and exits 1.
+every name, and exits 2.
 
 ## A command file
 
@@ -68,13 +68,15 @@ must never print or log. Review enforces both.
 | Code | `Exit` | Meaning |
 | --- | --- | --- |
 | 0 | `Exit::Ok` | done |
-| 1 | `Exit::Usage` | wrong usage: unknown command, missing or invalid arguments |
+| 1 | `Exit::Usage` | wrong usage by a registered command: missing or invalid arguments |
 | 2 | `Exit::Refused` | refused by policy or permission; nothing was changed |
 | 3 | `Exit::Failed` | failed while running |
 
 Return `Ok(Exit::Refused)` after writing the reason to `ctx.err()`. An `Err` from `run` is printed
 on standard error and exits 3, so keep error text free of secrets, keys, payloads and personal
-data. (Clap's own errors for a registered command's arguments keep clap's exit code.)
+data. (Clap's own errors for a registered command's arguments keep clap's exit code.) An unknown
+command name exits **2**, clap's usage-error code, returned by `main` before any command runs;
+`Exit::Usage` (1) is what a registered command returns for its own wrong usage.
 
 ## Conventions for a command that changes data
 

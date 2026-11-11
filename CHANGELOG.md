@@ -9,6 +9,16 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.3] - 2026-11-11
+
+Continuous integration on GitHub-hosted runners, and nothing else.
+
+### Fixed
+
+- The help-coverage test of the unattended-support crate checked a process note that the public
+  repository does not ship, so shard 2 of the Rust job failed. It now checks a note that ships
+  with the repository.
+
 ## [0.1.2] - 2026-11-11
 
 Continuous integration on GitHub-hosted runners, and nothing else.

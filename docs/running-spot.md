@@ -323,8 +323,13 @@ Every option is validated **together**: one start-up reports every problem at on
 the combinations (`profile = "cluster"` requires `metadata.bus = "polling"` and
 `jobs.store = "postgres"`; `sink = "smtp"` requires an `[services.mail.smtp]` table;
 `mail.sent_log = "postgres"` requires `jobs.store = "postgres"` (`auto`, the default, follows the job
-store); the scheduler's
+store; the start-up log says which log is in use, for example `mail sent log: postgres (auto)`); the scheduler's
 `lease_ttl_ms` must exceed `tick_ms`).
+
+The database sent log is the table `spot_mail_sent_log`. It lives in the `spot_` namespace that
+`spot migrate` leaves alone, so using it never blocks an online schema change. A site opts out with
+`sent_log = "memory"`; the risk is a repeat send: a crash between the mail server's acceptance and
+the log write loses the record, and the retry sends the same message again.
 
 ### A worked cluster
 

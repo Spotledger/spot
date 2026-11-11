@@ -90,7 +90,7 @@ fn the_gate_fails_on_a_missing_orphan_and_bad_document() {
 #[test]
 fn a_real_document_id_passes() {
     let mut help = sample("document.not_found");
-    help.learn_more = Some("process/pipeline".to_owned());
+    help.learn_more = Some("process/idle-connections".to_owned());
     let text = spot_unattended_support::coverage::render_file("document", &[help]);
     let index = HelpIndex::load_files(&[("document.toml", &text)]).expect("parses");
     let findings = check(Catalogue::load(), &index, Some(&docs_root()));
@@ -99,7 +99,7 @@ fn a_real_document_id_passes() {
             .errors
             .iter()
             .any(|e| e.code() == "unattended_support.help_bad_doc"),
-        "the pipeline notes must exist"
+        "docs/process/idle-connections.md must exist"
     );
 }
 

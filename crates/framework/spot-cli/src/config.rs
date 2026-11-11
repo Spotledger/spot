@@ -231,14 +231,32 @@ pub struct Mail {
     pub smtp: Option<Smtp>,
 }
 impl Mail {
-    /// Whether the sent log lives in PostgreSQL for a site whose job store is `job_store`:
-    /// `auto` follows the job store, the others say so themselves.
+    /// The sent log in use for a site whose job store is `job_store`: `"postgres"` or
+    /// `"memory"`. `auto` follows the job store; an explicit value says so itself.
+    #[must_use]
+    pub fn effective_sent_log(&self, job_store: &str) -> &'static str {
+        match self.sent_log.as_str() {
+            "postgres" => "postgres",
+            "memory" => "memory",
+            _ if job_store == "postgres" => "postgres",
+            _ => "memory",
+        }
+    }
+
+    /// Whether the sent log lives in PostgreSQL for a site whose job store is `job_store`.
     #[must_use]
     pub fn sent_log_in_postgres(&self, job_store: &str) -> bool {
-        match self.sent_log.as_str() {
-            "postgres" => true,
-            "memory" => false,
-            _ => job_store == "postgres",
+        self.effective_sent_log(job_store) == "postgres"
+    }
+
+    /// One line saying which sent log is in use and why, for the start-up log.
+    #[must_use]
+    pub fn sent_log_description(&self, job_store: &str) -> String {
+        let effective = self.effective_sent_log(job_store);
+        match (self.sent_log.as_str(), effective) {
+            ("auto", "postgres") => "mail sent log: postgres (auto)".into(),
+            ("auto", _) => "mail sent log: memory (auto: job store is memory)".into(),
+            (_, e) => format!("mail sent log: {e} (explicit)"),
         }
     }
 }

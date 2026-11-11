@@ -16,6 +16,8 @@ spot-document = { path = "../spot-document" }
 spot-jobs = { path = "../spot-jobs" }
 # The site a job belongs to.
 spot-core = { path = "../spot-core" }
+# The job context is JSON: the markers read and merge `committed_done`.
+serde_json = "1"
 
 [dev-dependencies]
 # The real engine over the in-memory backend: the tests drive documents through it.
@@ -24,7 +26,6 @@ spot-storage-contract = { path = "../../../contracts/storage" }
 spot-events-contract = { path = "../../../contracts/events" }
 spot-meta = { path = "../spot-meta" }
 spot-seams = { path = "../spot-seams" }
-serde_json = "1"
 time = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
 

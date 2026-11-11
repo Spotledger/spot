@@ -57,4 +57,4 @@ mod handler;
 mod markers;
 
 pub use handler::{CommittedStepsHandler, RunnerFor, SingleSite, StepRunner};
-pub use markers::{InMemoryMarkers, MarkerError, StepMarkers};
+pub use markers::{InMemoryMarkers, JobStoreMarkers, MarkerError, StepMarkers};

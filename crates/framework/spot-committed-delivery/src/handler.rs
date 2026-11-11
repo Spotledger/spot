@@ -148,7 +148,12 @@ impl CommittedStepsHandler {
                 // An infrastructure failure: no marker, the queue's backoff reruns from here.
                 return HandlerResult::Retry(code::STEP_UNAVAILABLE.to_owned());
             }
-            if self.markers.mark(job.id, name).await.is_err() {
+            if self
+                .markers
+                .mark(job.id, job.claim.as_ref(), name)
+                .await
+                .is_err()
+            {
                 return HandlerResult::Retry(code::UNAVAILABLE.to_owned());
             }
         }

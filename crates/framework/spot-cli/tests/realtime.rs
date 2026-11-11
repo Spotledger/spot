@@ -285,6 +285,128 @@ async fn a_role_edit_that_removes_read_takes_the_room_and_leaves_the_connection_
     w.started.finish().await;
 }
 
+/// The viewer's own role assignment: its id and the ETag a delete must carry.
+async fn viewer_assignment(w: &World) -> (String, String) {
+    let (addr, host) = (w.started.addr, w.env.site.clone());
+    let viewer_id = user_id(addr, &host, &w.admin, "viewer@example.com").await;
+    let list = http(
+        addr,
+        &host,
+        Some(&w.admin),
+        "GET",
+        "/api/v1/resource/role_assignment?limit=100",
+        &[],
+        None,
+    )
+    .await;
+    expect(&list, 200);
+    let id = list.body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["user"] == viewer_id)
+        .map(|row| row["id"].as_str().unwrap().to_owned())
+        .expect("the viewer has a role assignment");
+    let one = http(
+        addr,
+        &host,
+        Some(&w.admin),
+        "GET",
+        &format!("/api/v1/resource/role_assignment/{id}"),
+        &[],
+        None,
+    )
+    .await;
+    expect(&one, 200);
+    (id, one.etag)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_removed_role_assignment_takes_the_room_at_the_next_pump_run_not_at_the_timer() {
+    let Some(w) = world().await else { return };
+    let (addr, host) = (w.started.addr, w.env.site.clone());
+    let (assignment, etag) = viewer_assignment(&w).await;
+    let viewer_id = user_id(addr, &host, &w.admin, "viewer@example.com").await;
+    let own_room = format!("user:{viewer_id}");
+    let mut viewer = Ws::connect(addr, &host).await;
+    viewer.sign_in(&w.viewer).await;
+    assert_eq!(viewer.join("doctype:task").await["type"], "joined");
+    assert_eq!(viewer.join(&own_room).await["type"], "joined");
+    create_task(&w, "Before the removal").await;
+    let before = messages(&mut viewer, Duration::from_secs(2)).await;
+    assert_eq!(
+        room_events(&before, "doctype:task").count(),
+        1,
+        "{before:?}"
+    );
+
+    // An operator's connection hears the pump feed the removal, which tells the test when the
+    // pump has reached it however loaded the machine is.
+    let mut operator = Ws::connect(addr, &host).await;
+    operator.sign_in(&w.admin).await;
+    assert_eq!(
+        operator.join("doctype:role_assignment").await["type"],
+        "joined"
+    );
+
+    // Remove the grant. It is a stored record: no snapshot is published.
+    let deleted = http(
+        addr,
+        &host,
+        Some(&w.admin),
+        "DELETE",
+        &format!("/api/v1/resource/role_assignment/{assignment}"),
+        &[("If-Match", &etag)],
+        None,
+    )
+    .await;
+    assert!(
+        deleted.status == 200 || deleted.status == 204,
+        "{}",
+        deleted.body
+    );
+    let fed = operator.expect_type("event", Duration::from_secs(10)).await;
+    assert_eq!(fed["payload"]["id"], assignment, "{fed}");
+    let fed_at = tokio::time::Instant::now();
+
+    // The pump polls every 100 ms and revalidates right after the run that fed the removal; the
+    // 10 s timer must not be what notices. A later task would be heard by the connection if the
+    // room were still joined.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    create_task(&w, "After the removal").await;
+    let after = messages(&mut viewer, Duration::from_millis(1200)).await;
+    assert!(
+        fed_at.elapsed() < Duration::from_secs(5),
+        "the checks took too long to prove anything"
+    );
+    assert_eq!(
+        room_events(&after, "doctype:task").count(),
+        0,
+        "a principal whose role assignment was removed still hears the room: {after:?}"
+    );
+    // The connection is alive and still in its own room; the Task room is refused afresh.
+    assert_eq!(viewer.join(&own_room).await["type"], "joined");
+    assert_eq!(viewer.join("doctype:task").await["type"], "join_error");
+    w.started.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unrelated_document_change_leaves_the_joined_rooms_alone() {
+    let Some(w) = world().await else { return };
+    let (addr, host) = (w.started.addr, w.env.site.clone());
+    let mut viewer = Ws::connect(addr, &host).await;
+    viewer.sign_in(&w.viewer).await;
+    assert_eq!(viewer.join("doctype:task").await["type"], "joined");
+    for n in 0..3 {
+        create_task(&w, &format!("Unrelated {n}")).await;
+    }
+    // Every change is heard, nothing is evicted and the connection stays open.
+    let seen = messages(&mut viewer, Duration::from_secs(2)).await;
+    assert_eq!(room_events(&seen, "doctype:task").count(), 3, "{seen:?}");
+    assert_eq!(viewer.join("doctype:task").await["type"], "joined");
+    w.started.finish().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_revoked_session_still_closes_the_connection_with_4009() {
     let Some(w) = world().await else { return };

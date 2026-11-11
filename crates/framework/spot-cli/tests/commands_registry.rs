@@ -177,12 +177,12 @@ fn an_unknown_name_is_a_usage_failure_that_lists_every_command() {
 }
 
 #[test]
-fn the_binary_exits_1_for_an_unknown_name_and_lists_the_built_in_commands() {
+fn the_binary_exits_2_for_an_unknown_name_and_lists_the_built_in_commands() {
     let output = Process::new(env!("CARGO_BIN_EXE_spot"))
         .arg("nonesuch")
         .output()
         .unwrap();
-    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("nonesuch"), "{stderr}");
     for name in ["new-site", "serve", "install-app", "migrate", "check"] {
@@ -198,6 +198,20 @@ fn the_binary_exits_1_for_an_unknown_name_and_lists_the_built_in_commands() {
             .unwrap()
             .contains("install-app")
     );
+}
+
+#[test]
+fn a_built_in_that_fails_keeps_its_own_code_not_the_unknown_name_code() {
+    let root = std::env::temp_dir().join(format!("spot-t47-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let output = Process::new(env!("CARGO_BIN_EXE_spot"))
+        .arg("--root")
+        .arg(&root)
+        .arg("check")
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(output.status.code(), Some(1));
 }
 
 // --- running ---------------------------------------------------------------------------------
