@@ -9,6 +9,18 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.2] - 2026-11-11
+
+Continuous integration on GitHub-hosted runners, and nothing else.
+
+### Fixed
+
+- The test harnesses create development sites that accept the unsigned sample app: new sites
+  require signed apps by default, which made the harness tests fail on installing it.
+- The client conformance corpus (`tools/client-conformance/`) ships with the repository, so the
+  client core's corpus test finds its cases.
+- A test run in CI now reports every failing test of a shard instead of stopping at the first.
+
 ## [0.1.1] - 2026-11-11
 
 Continuous integration on GitHub-hosted runners, and nothing else.

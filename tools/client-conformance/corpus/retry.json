@@ -1,0 +1,698 @@
+{
+ "topic": "Bounded retry: Retry-After, backoff, idempotency",
+ "cases": [
+  {
+   "name": "503 with Retry-After is retried after the wait with the same key",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 1000
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "POST",
+      "path": "/api/v1/resource/Invoice",
+      "body": "{\"a\":1}",
+      "idempotency_key": "k-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 503,
+       "headers": [
+        [
+         "Retry-After",
+         "2"
+        ]
+       ],
+       "body": "{\"error\":{\"code\":\"server.unavailable\",\"message\":\"m\",\"retryable\":true,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "set_timer",
+       "at_ms": 3000
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 2999
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 3000
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 3,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 3,
+      "reply": {
+       "status": 201,
+       "headers": [
+        [
+         "Idempotency-Replayed",
+         "true"
+        ]
+       ],
+       "body": "{\"data\":{\"id\":\"INV-9\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "done",
+       "req_id": 2,
+       "status": 201,
+       "body": "{\"data\":{\"id\":\"INV-9\"}}",
+       "replayed": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "retries stop after three sends",
+   "description": "Without Retry-After the wait doubles from one second: 1 s, then 2 s.",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "resource_get",
+      "req_id": 2,
+      "doctype": "Invoice",
+      "id": "INV-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "GET",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 503,
+       "headers": [],
+       "body": "{\"error\":{\"code\":\"server.unavailable\",\"message\":\"m\",\"retryable\":true,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "set_timer",
+       "at_ms": 1000
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 1000
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 3,
+       "request": {
+        "method": "GET",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 3,
+      "reply": {
+       "status": 503,
+       "headers": [],
+       "body": "{\"error\":{\"code\":\"server.unavailable\",\"message\":\"m\",\"retryable\":true,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "set_timer",
+       "at_ms": 3000
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 3000
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 4,
+       "request": {
+        "method": "GET",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 4,
+      "reply": {
+       "status": 503,
+       "headers": [],
+       "body": "{\"error\":{\"code\":\"server.unavailable\",\"message\":\"m\",\"retryable\":true,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "failed",
+       "req_id": 2,
+       "status": 503,
+       "problem": {
+        "code": "server.unavailable",
+        "message": "m",
+        "retryable": true,
+        "request_id": "r1"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Retry-After is capped at 60 seconds",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "resource_get",
+      "req_id": 2,
+      "doctype": "Invoice",
+      "id": "INV-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "GET",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 429,
+       "headers": [
+        [
+         "Retry-After",
+         "3600"
+        ]
+       ],
+       "body": "{\"error\":{\"code\":\"api.rate_limited\",\"message\":\"m\",\"retryable\":true,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "set_timer",
+       "at_ms": 60000
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a lost reply is resent only when that is safe",
+   "description": "A POST with no Idempotency-Key is never resent after a lost reply.",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "POST",
+      "path": "/api/v1/resource/Invoice",
+      "body": "{\"a\":1}"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_error",
+      "id": 2
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "failed",
+       "req_id": 2,
+       "status": 0,
+       "problem": {
+        "code": "client.network",
+        "message": "The request got no reply.",
+        "retryable": true
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 3,
+      "method": "POST",
+      "path": "/api/v1/resource/Invoice",
+      "body": "{\"a\":1}",
+      "idempotency_key": "k-2"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 3,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-2"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_error",
+      "id": 3
+     },
+     "out": [
+      {
+       "type": "set_timer",
+       "at_ms": 1000
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "tick",
+      "now_ms": 1000
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 4,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-2"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

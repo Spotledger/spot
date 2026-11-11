@@ -273,7 +273,7 @@ impl Launched {
             root.join("common.toml"),
             format!(
                 "apps = [{:?}, \"sample\"]\n[server]\nbind = [\"127.0.0.1:{port}\"]\nshutdown_grace = 5\n\
-                 [postgres]\nadmin_url = {pg_url:?}\n",
+                 [postgres]\nadmin_url = {pg_url:?}\n[trust]\nrequire_signed = false\n",
                 platform.display().to_string()
             ),
         )

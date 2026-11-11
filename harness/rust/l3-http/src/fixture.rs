@@ -131,7 +131,9 @@ impl Fixture {
                  admin_url = {url:?}\n\
                  pool_max_size = 48\n\
                  [services.events]\n\
-                 enabled = true\n",
+                 enabled = true\n\
+                 [trust]\n\
+                 require_signed = false\n",
                 repo.join("apps/platform").display().to_string()
             ),
         )

@@ -1,0 +1,554 @@
+{
+  "topic": "Sequence gaps, resume, resync_required, notifications",
+  "cases": [
+    {
+      "name": "a newer document version invalidates the cache, an old one is ignored",
+      "description": "",
+      "steps": [
+        {
+          "in": {
+            "type": "request",
+            "op": "sign_in",
+            "req_id": 1,
+            "user": "a@x.test",
+            "password": "pw"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 1,
+              "request": {
+                "method": "POST",
+                "path": "/api/v1/auth/login",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Content-Type",
+                    "application/json"
+                  ]
+                ],
+                "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 1,
+            "reply": {
+              "status": 200,
+              "headers": [],
+              "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "signed_in",
+              "req_id": 1,
+              "user_id": "u1",
+              "expires_at": "2026-11-06T08:00:00Z"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "resource_get",
+            "req_id": 2,
+            "doctype": "Invoice",
+            "id": "INV-1"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 2,
+              "request": {
+                "method": "GET",
+                "path": "/api/v1/resource/Invoice/INV-1",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Authorization",
+                    "Bearer tok-1"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 2,
+            "reply": {
+              "status": 200,
+              "headers": [
+                [
+                  "ETag",
+                  "\"3\""
+                ]
+              ],
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "resource",
+              "req_id": 2,
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}",
+              "from_cache": false
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "subscribe",
+            "room": "doc:Invoice:INV-1"
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "realtime_join",
+              "room": "doc:Invoice:INV-1",
+              "resume_after": null
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 1,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 3
+            }
+          },
+          "out": []
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 2,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 4
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "invalidated",
+              "doctype": "Invoice",
+              "id": "INV-1"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "resource_get",
+            "req_id": 3,
+            "doctype": "Invoice",
+            "id": "INV-1"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 3,
+              "request": {
+                "method": "GET",
+                "path": "/api/v1/resource/Invoice/INV-1",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Authorization",
+                    "Bearer tok-1"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a sequence gap is a resync",
+      "description": "",
+      "steps": [
+        {
+          "in": {
+            "type": "request",
+            "op": "sign_in",
+            "req_id": 1,
+            "user": "a@x.test",
+            "password": "pw"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 1,
+              "request": {
+                "method": "POST",
+                "path": "/api/v1/auth/login",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Content-Type",
+                    "application/json"
+                  ]
+                ],
+                "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 1,
+            "reply": {
+              "status": 200,
+              "headers": [],
+              "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "signed_in",
+              "req_id": 1,
+              "user_id": "u1",
+              "expires_at": "2026-11-06T08:00:00Z"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "resource_get",
+            "req_id": 2,
+            "doctype": "Invoice",
+            "id": "INV-1"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 2,
+              "request": {
+                "method": "GET",
+                "path": "/api/v1/resource/Invoice/INV-1",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Authorization",
+                    "Bearer tok-1"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 2,
+            "reply": {
+              "status": 200,
+              "headers": [
+                [
+                  "ETag",
+                  "\"3\""
+                ]
+              ],
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "resource",
+              "req_id": 2,
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}",
+              "from_cache": false
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "subscribe",
+            "room": "doc:Invoice:INV-1"
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "realtime_join",
+              "room": "doc:Invoice:INV-1",
+              "resume_after": null
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 1,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 3
+            }
+          },
+          "out": []
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 3,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 5
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "resync",
+              "room": "doc:Invoice:INV-1"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "resource_get",
+            "req_id": 3,
+            "doctype": "Invoice",
+            "id": "INV-1"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 3,
+              "request": {
+                "method": "GET",
+                "path": "/api/v1/resource/Invoice/INV-1",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Authorization",
+                    "Bearer tok-1"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a repeated seq is ignored",
+      "description": "",
+      "steps": [
+        {
+          "in": {
+            "type": "request",
+            "op": "sign_in",
+            "req_id": 1,
+            "user": "a@x.test",
+            "password": "pw"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 1,
+              "request": {
+                "method": "POST",
+                "path": "/api/v1/auth/login",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Content-Type",
+                    "application/json"
+                  ]
+                ],
+                "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 1,
+            "reply": {
+              "status": 200,
+              "headers": [],
+              "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "signed_in",
+              "req_id": 1,
+              "user_id": "u1",
+              "expires_at": "2026-11-06T08:00:00Z"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "resource_get",
+            "req_id": 2,
+            "doctype": "Invoice",
+            "id": "INV-1"
+          },
+          "out": [
+            {
+              "type": "send_http",
+              "id": 2,
+              "request": {
+                "method": "GET",
+                "path": "/api/v1/resource/Invoice/INV-1",
+                "headers": [
+                  [
+                    "Accept",
+                    "application/json"
+                  ],
+                  [
+                    "Authorization",
+                    "Bearer tok-1"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "transport_reply",
+            "id": 2,
+            "reply": {
+              "status": 200,
+              "headers": [
+                [
+                  "ETag",
+                  "\"3\""
+                ]
+              ],
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}"
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "resource",
+              "req_id": 2,
+              "body": "{\"data\":{\"id\":\"INV-1\",\"version\":3}}",
+              "from_cache": false
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "subscribe",
+            "room": "doc:Invoice:INV-1"
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "realtime_join",
+              "room": "doc:Invoice:INV-1",
+              "resume_after": null
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 1,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 4
+            }
+          },
+          "out": [
+            {
+              "type": "emit",
+              "event": "invalidated",
+              "doctype": "Invoice",
+              "id": "INV-1"
+            }
+          ]
+        },
+        {
+          "in": {
+            "type": "request",
+            "op": "realtime",
+            "kind": "event",
+            "room": "doc:Invoice:INV-1",
+            "seq": 1,
+            "event": "doc_updated",
+            "payload": {
+              "doctype": "Invoice",
+              "id": "INV-1",
+              "version": 4
+            }
+          },
+          "out": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,542 @@
+{
+ "topic": "412, 409 and per-document ordering",
+ "cases": [
+  {
+   "name": "stale version is a conflict, not a retry",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "PATCH",
+      "path": "/api/v1/resource/Invoice/INV-1",
+      "body": "{\"a\":1}",
+      "if_match": 3,
+      "idempotency_key": "k-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "PATCH",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "If-Match",
+          "\"3\""
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 412,
+       "headers": [],
+       "body": "{\"error\":{\"code\":\"document.stale_version\",\"message\":\"m\",\"retryable\":false,\"request_id\":\"r1\",\"details\":{\"current_version\":4}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "conflict",
+       "req_id": 2,
+       "current_version": 4
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "idempotency conflict fails and is not retried",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "PATCH",
+      "path": "/api/v1/resource/Invoice/INV-1",
+      "body": "{\"a\":1}",
+      "if_match": 3,
+      "idempotency_key": "k-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "PATCH",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "If-Match",
+          "\"3\""
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 409,
+       "headers": [],
+       "body": "{\"error\":{\"code\":\"api.idempotency_conflict\",\"message\":\"m\",\"retryable\":false,\"request_id\":\"r1\"}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "failed",
+       "req_id": 2,
+       "status": 409,
+       "problem": {
+        "code": "api.idempotency_conflict",
+        "message": "m",
+        "retryable": false,
+        "request_id": "r1"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "two changes to one document go out one at a time, in order",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "PATCH",
+      "path": "/api/v1/resource/Invoice/INV-1",
+      "body": "{\"a\":1}",
+      "if_match": 3,
+      "idempotency_key": "k-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "PATCH",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "If-Match",
+          "\"3\""
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 3,
+      "method": "PATCH",
+      "path": "/api/v1/resource/Invoice/INV-1",
+      "body": "{\"a\":1}",
+      "if_match": 4,
+      "idempotency_key": "k-2"
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "done",
+       "req_id": 2,
+       "status": 200,
+       "body": "{\"data\":{}}",
+       "replayed": false
+      },
+      {
+       "type": "send_http",
+       "id": 3,
+       "request": {
+        "method": "PATCH",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "If-Match",
+          "\"4\""
+         ],
+         [
+          "Idempotency-Key",
+          "k-2"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a malformed error body still yields a problem",
+   "description": "",
+   "steps": [
+    {
+     "in": {
+      "type": "request",
+      "op": "sign_in",
+      "req_id": 1,
+      "user": "a@x.test",
+      "password": "pw"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 1,
+       "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "body": "{\"password\":\"pw\",\"user\":\"a@x.test\"}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 1,
+      "reply": {
+       "status": 200,
+       "headers": [],
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\",\"email\":\"a@x.test\",\"full_name\":\"A\"}}}"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "signed_in",
+       "req_id": 1,
+       "user_id": "u1",
+       "expires_at": "2026-11-06T08:00:00Z"
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "request",
+      "op": "call",
+      "req_id": 2,
+      "method": "PATCH",
+      "path": "/api/v1/resource/Invoice/INV-1",
+      "body": "{\"a\":1}",
+      "if_match": 3,
+      "idempotency_key": "k-1"
+     },
+     "out": [
+      {
+       "type": "send_http",
+       "id": 2,
+       "request": {
+        "method": "PATCH",
+        "path": "/api/v1/resource/Invoice/INV-1",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "If-Match",
+          "\"3\""
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "body": "{\"a\":1}"
+       }
+      }
+     ]
+    },
+    {
+     "in": {
+      "type": "transport_reply",
+      "id": 2,
+      "reply": {
+       "status": 500,
+       "headers": [],
+       "body": "<html>oops</html>"
+      }
+     },
+     "out": [
+      {
+       "type": "emit",
+       "event": "failed",
+       "req_id": 2,
+       "status": 500,
+       "problem": {
+        "code": "client.unparseable_error",
+        "message": "The server answered 500 without a readable error body.",
+        "retryable": false
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

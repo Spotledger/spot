@@ -184,7 +184,9 @@ impl Node {
                  shutdown_grace = 5\n\
                  [postgres]\n\
                  admin_url = {url:?}\n\
-                 pool_max_size = 16\n",
+                 pool_max_size = 16\n\
+                 [trust]\n\
+                 require_signed = false\n",
                 repo.join("apps/platform").display().to_string()
             ),
         )

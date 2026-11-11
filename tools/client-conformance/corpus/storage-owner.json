@@ -1,0 +1,874 @@
+{
+ "cases": [
+  {
+   "description": "",
+   "name": "a normal write is stored with its owner",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "method": "GET",
+      "op": "call",
+      "path": "/api/v1/meta/Invoice",
+      "req_id": 90,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ]
+        ],
+        "method": "GET",
+        "path": "/api/v1/meta/Invoice"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 2,
+      "reply": {
+       "body": "{\"data\":{\"doctype\":\"Invoice\",\"label\":\"Invoice\",\"version\":1,\"fields\":[{\"name\":\"title\",\"label\":\"Title\",\"type\":\"text\"}]}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "body": "{\"data\":{\"doctype\":\"Invoice\",\"label\":\"Invoice\",\"version\":1,\"fields\":[{\"name\":\"title\",\"label\":\"Title\",\"type\":\"text\"}]}}",
+       "event": "done",
+       "replayed": false,
+       "req_id": 90,
+       "status": 200,
+       "type": "emit"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{}",
+      "idempotency_key": "k-1",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1/resource/Invoice",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 3,
+       "request": {
+        "body": "{}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/resource/Invoice"
+       },
+       "type": "send_http"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/resource/Invoice\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-1\"}]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "With an empty site no queue is written; the call still runs from memory.",
+   "name": "no queue is written without a site",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": ""
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{}",
+      "idempotency_key": "k-1",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1/method/invoice_ping",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "body": "{}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/method/invoice_ping"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "Nothing is sent before sign-in; then each stored call goes out once.",
+   "name": "restore for the same user replays after sign-in",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-1\"}]}"
+     },
+     "out": [
+      {
+       "event": "reauth_required",
+       "req_id": 2,
+       "type": "emit"
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "id": 2,
+       "request": {
+        "body": "{}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-1"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/method/invoice_ping"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "",
+   "name": "restore under a different user is discarded",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-1\"}]}"
+     },
+     "out": [
+      {
+       "event": "reauth_required",
+       "req_id": 2,
+       "type": "emit"
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u2@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u2@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u2\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "failed",
+       "problem": {
+        "code": "auth.session_changed",
+        "message": "A different user signed in; the request was not sent.",
+        "retryable": false
+       },
+       "req_id": 2,
+       "status": 0,
+       "type": "emit"
+      },
+      {
+       "count": 1,
+       "event": "queue_discarded",
+       "reason": "owner_changed",
+       "type": "emit"
+      },
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u2"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "",
+   "name": "restore on a different site is discarded",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s2"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-1\"}]}"
+     },
+     "out": [
+      {
+       "event": "reauth_required",
+       "req_id": 2,
+       "type": "emit"
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "failed",
+       "problem": {
+        "code": "auth.session_changed",
+        "message": "A different user signed in; the request was not sent.",
+        "retryable": false
+       },
+       "req_id": 2,
+       "status": 0,
+       "type": "emit"
+      },
+      {
+       "count": 1,
+       "event": "queue_discarded",
+       "reason": "owner_changed",
+       "type": "emit"
+      },
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "",
+   "name": "old untagged array is discarded",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-1\"}]"
+     },
+     "out": [
+      {
+       "event": "reauth_required",
+       "req_id": 2,
+       "type": "emit"
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "failed",
+       "problem": {
+        "code": "auth.session_changed",
+        "message": "A different user signed in; the request was not sent.",
+        "retryable": false
+       },
+       "req_id": 2,
+       "status": 0,
+       "type": "emit"
+      },
+      {
+       "count": 1,
+       "event": "queue_discarded",
+       "reason": "untagged",
+       "type": "emit"
+      },
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "",
+   "name": "garbage is discarded",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "not json at all {"
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "count": 0,
+       "event": "queue_discarded",
+       "reason": "unreadable",
+       "type": "emit"
+      },
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "",
+   "name": "unknown version is discarded",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":3,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[]}"
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "count": 0,
+       "event": "queue_discarded",
+       "reason": "unreadable",
+       "type": "emit"
+      },
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "requires": [
+  "storage"
+ ],
+ "topic": "Persisted queue: owner tag and restore under another user"
+}

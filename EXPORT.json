@@ -1,8 +1,8 @@
 {
-  "content_sha256": "78e3803352fc527450811982ef9b60b0fcd79e99645aa2e87805a861b04c33e2",
-  "file_count": 8039,
-  "file_list_sha256": "1c10062483be9c68155f3d4876404953303392b93d3e1af63e481c1a8f86e96c",
-  "manifest_sha256": "76cdec79e75a37d0d59f0eb295bece54b11631cb65de86451c92ab44390ff35b",
+  "content_sha256": "f5a84edfec753caf944620ff3f7d2a777be5d9384c411b3ca23d60fac4657db3",
+  "file_count": 8052,
+  "file_list_sha256": "aedc99c032d961960e858018d8ab524d302878248591826102c88d0ed2d718f6",
+  "manifest_sha256": "0c8533579630c4f443e6c42b47d7afd521634a626be07f71f6f11f0caf5d3b37",
   "patches": {
     "edits": 63,
     "files_changed": 37
@@ -15,7 +15,7 @@
     "citations_rewritten": 29,
     "files_changed": 104
   },
-  "source_commit": "3fe75440520046ec716737d5f90f646cc17375f9",
-  "source_commit_date_utc": "2026-11-11T10:56:03Z",
+  "source_commit": "609842afb053f1d8de0c08b35fedc84ae7ed4dfb",
+  "source_commit_date_utc": "2026-11-11T11:30:40Z",
   "tool_version": "1.1.0"
 }

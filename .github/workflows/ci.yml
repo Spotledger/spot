@@ -111,7 +111,7 @@ jobs:
           ' "${{ matrix.shard }}")
           echo "shard ${{ matrix.shard }}/4: $(echo "$packages" | wc -w | tr -d ' ') arguments"
           # shellcheck disable=SC2086
-          cargo test --locked $packages
+          cargo test --locked --no-fail-fast $packages
       # ADR-061 section 6: a patch that changes a stored shape ships the upcaster that rewrites
       # the images written before it. Linux only: the journal fixtures are byte files.
       - if: runner.os == 'Linux' && matrix.shard == 1
