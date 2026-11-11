@@ -50,7 +50,7 @@ public sealed class PerfTests
         Assert.Equal(1, budgets.Multiplier("reference", "reference"));
         Assert.Throws<ArgumentException>(() => budgets.Multiplier("reference", "self-hosted"));
         using var temp = new TemporaryDirectory();
-        new Budget(budgets, "ci-linux", "self-hosted", temp.Path).Assert("paint", 100);
+        new Budget(budgets, "ci-linux", "self-hosted", temp.Path, advisory: false).Assert("paint", 100);
         using var json = JsonDocument.Parse(File.ReadAllText(Assert.Single(Directory.GetFiles(temp.Path, "*.json"))));
         Assert.Equal("WARNING", json.RootElement.GetProperty("status").GetString());
         Assert.Equal(40, json.RootElement.GetProperty("allowed").GetDouble());
@@ -103,7 +103,7 @@ public sealed class PerfTests
         using var temp = new TemporaryDirectory();
         var stats = PerfStatistics.From([1, 2, 3, 4]);
         var measurement = new PerfMeasurement(stats, stats);
-        new Budget(PerfBudget.Parse(Declaration), "reference", "reference", temp.Path).Assert("paint", measurement);
+        new Budget(PerfBudget.Parse(Declaration), "reference", "reference", temp.Path, advisory: false).Assert("paint", measurement);
         using var json = JsonDocument.Parse(File.ReadAllText(Assert.Single(Directory.GetFiles(temp.Path, "*.json"))));
         Assert.Equal(4, json.RootElement.GetProperty("samples").GetProperty("WallTime").GetProperty("Count").GetInt32());
         Assert.Equal(4, json.RootElement.GetProperty("measured").GetDouble());
@@ -114,7 +114,7 @@ public sealed class PerfTests
     {
         using var temp = new TemporaryDirectory();
         var budgets = PerfBudget.Parse(Declaration);
-        var assertion = new Budget(budgets, "reference", "reference", temp.Path);
+        var assertion = new Budget(budgets, "reference", "reference", temp.Path, advisory: false);
         assertion.Assert("paint", 10);
         assertion.Assert("paint", 10);
         Assert.Equal(2, Directory.GetFiles(temp.Path, "*.json").Length);
@@ -129,7 +129,7 @@ public sealed class PerfTests
     {
         using var temp = new TemporaryDirectory();
         var budgets = PerfBudget.Parse(Declaration);
-        var budget = new Budget(budgets, "reference", "reference", temp.Path, "abc");
+        var budget = new Budget(budgets, "reference", "reference", temp.Path, "abc", advisory: false);
         var error = Assert.Throws<BudgetExceededException>(() => budget.Assert("paint", 11));
         Assert.Contains("11", error.Message);
         Assert.Contains("10", error.Message);

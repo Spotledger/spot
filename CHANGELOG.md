@@ -9,6 +9,18 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.1] - 2026-11-11
+
+Continuous integration on GitHub-hosted runners, and nothing else.
+
+### Fixed
+
+- The Rust tests run in four parallel shards: the full workspace test build did not fit on one
+  hosted runner.
+- The UI performance budgets, which were measured on a reference machine, are recorded as
+  warnings on shared hosted runners instead of failing the run; the strict unit tests of the
+  budget code no longer depend on that setting.
+
 ## [0.1.0] - 2026-11-11
 
 The first public release. Spotledger Runtime is pre-release software: it is not yet ready to run
