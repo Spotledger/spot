@@ -1,0 +1,16 @@
+# Help for the permission error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "permission.denied"
+what_happened = "The caller may not perform this action."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask a role with the needed permission, or have an administrator grant it.", "If it keeps happening, tell your administrator and quote the code permission.denied."]
+audience = "user"
+
+[[help]]
+code = "permission.field_denied"
+what_happened = "A write names a field the caller may not set, or a query filters on a field the caller may not read unmasked."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Remove the field from the request, or ask for a role with the field's right.", "If it keeps happening, tell your administrator and quote the code permission.field_denied."]
+audience = "user"

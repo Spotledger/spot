@@ -1,0 +1,50 @@
+[package]
+name = "spot-bpm-triggers"
+description = "Triggers for the Business Process engine (WS8, WP-BPM-03.T1, ADR-49, ADR-080): the TriggerSpec per trigger node, the TriggerIndex that matches committed events and start requests to published process versions, the open TriggerRegistry of trigger kinds, the TriggerIntake that starts exactly one Case per source event through a CaseStarter, incoming-webhook signature verification, and the manual/API permission gate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The Process model: the typed `NodeKind::Trigger` a spec is built from.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `Schedule`, `MissedRunPolicy`, `RunSlot` and the fencing the schedule source reuses.
+spot-scheduler = { path = "../spot-scheduler" }
+# `Cron` and `Queue`, for building a schedule from a trigger node's cron text.
+spot-manifest = { path = "../spot-manifest" }
+# `StepName`, for the schedule the trigger node names.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `CommittedEvent`, `EventType`, `evaluate_condition` and the HMAC verifier, reused whole.
+spot-webhooks = { path = "../spot-webhooks" }
+# `Principal`, `PermissionEngine`, `Action` and `DocFacts`: the manual/API gate and the
+# document read check.
+spot-permissions = { path = "../spot-permissions" }
+# The stable `bpm_triggers.*` codes and the app error shape.
+thiserror = "2"
+# The start input, the spec config and the webhook body serialise as JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Instants are arguments, never read from a wall clock.
+time = { version = "0.3", features = ["serde", "macros"] }
+# The async `CaseStarter` seam.
+async-trait = "0.1"
+# The body hash that keys a webhook delivery when the caller sends no idempotency header.
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "rt-multi-thread", "test-util"] }
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# `Topic`, for building committed document events in tests.
+spot-events-contract = { path = "../../../contracts/events" }
+# `ManualClock`, for driving the scheduler instances in the schedule test.
+spot-core = { path = "../spot-core" }
+# An empty effective metadata, to build a real `PermissionEngine` for the read-gate test.
+spot-meta = { path = "../spot-meta" }
+# `RunSlot` carries a jiff `Timestamp`; the schedule tests build slots directly.
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

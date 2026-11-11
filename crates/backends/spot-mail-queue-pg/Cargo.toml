@@ -1,0 +1,39 @@
+[package]
+name = "spot-mail-queue-pg"
+description = "PostgreSQL SentLog for the outgoing mail queue (WP-PLT-11.T6): the receipt of every message the server accepted, keyed by site and message id, first write wins, so a restart or a second node cannot send one message twice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `SentLog` port, its `SendReceipt` argument and the `Unavailable` error this store reports.
+spot-mail-queue = { path = "../../framework/spot-mail-queue" }
+# `SendReceipt`, `Address` and `SmtpReply`: the receipt a row is rebuilt into.
+spot-mail = { path = "../../framework/spot-mail" }
+# `SiteId`, the site every receipt belongs to.
+spot-core = { path = "../../framework/spot-core" }
+# `AppResult`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its one table.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# The instant a retention cutoff is given as; the mail crates already use this type for time.
+time = "0.3"
+# `#[async_trait]`: the port is an `async_trait` trait, so its implementation needs the macro.
+async-trait = "0.1"
+
+[dev-dependencies]
+# The migrator the sent-log table must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The `SentLog` contract suite (behind the crate's `testing` feature), run against this store.
+spot-mail-queue = { path = "../../framework/spot-mail-queue", features = ["testing"] }
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

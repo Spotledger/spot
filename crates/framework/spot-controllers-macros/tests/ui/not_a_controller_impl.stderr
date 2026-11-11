@@ -1,0 +1,5 @@
+error: #[whitelist] only works on a method inside an impl block marked #[controller(doctype = "...")]
+  --> tests/ui/not_a_controller_impl.rs:20:5
+   |
+20 |     async fn go(&self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

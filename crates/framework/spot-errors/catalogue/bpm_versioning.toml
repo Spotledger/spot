@@ -1,0 +1,174 @@
+# bpm_versioning codes (WP-BPM-09.T1): process version pinning, optional Case migration, bulk
+# migration batch runs and the compensation path when an upstream document is cancelled. One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_versioning.unmapped_node"
+class = "none"
+summary = "A node the Case still stands on has no mapping in the target version."
+explanation_key = "error.bpm_versioning.unmapped_node"
+params = []
+remedy = "Add a node-to-node mapping for the current node, or keep the node id in the target version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.unknown_target_node"
+class = "none"
+summary = "A migration mapping names a target node the target version does not carry."
+explanation_key = "error.bpm_versioning.unknown_target_node"
+params = []
+remedy = "Map onto a node the target version defines, or correct the target process version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.mapping_collision"
+class = "none"
+summary = "Two source nodes map onto the same target node."
+explanation_key = "error.bpm_versioning.mapping_collision"
+params = []
+remedy = "Give each source node its own target node, or merge the nodes in the target version first."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.variable_missing"
+class = "none"
+summary = "The target version requires a Case variable the Case does not carry, and the mapping gives no default."
+explanation_key = "error.bpm_versioning.variable_missing"
+params = []
+remedy = "Add a default for the variable in the mapping, or populate it on the Case before migrating."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_not_running"
+class = "none"
+summary = "A migration was planned for a Case that is not running."
+explanation_key = "error.bpm_versioning.case_not_running"
+params = []
+remedy = "Migrate only Cases that are still running; a finished Case keeps its pinned version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.version_mismatch"
+class = "none"
+summary = "The Case is pinned to a different process version than the one the caller named."
+explanation_key = "error.bpm_versioning.version_mismatch"
+params = []
+remedy = "Plan the migration from the version the Case actually pins."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.process_mismatch"
+class = "none"
+summary = "The pinned process definition is missing from the registry, or its content hash differs."
+explanation_key = "error.bpm_versioning.process_mismatch"
+params = []
+remedy = "Publish the exact pinned version again; never recompile it with different content."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.stale_plan"
+class = "none"
+summary = "The Case changed between planning the migration and applying it."
+explanation_key = "error.bpm_versioning.stale_plan"
+params = []
+remedy = "Plan the migration again against the Case's current state."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.batch_already_completed"
+class = "none"
+summary = "A batch run with this identity already completed."
+explanation_key = "error.bpm_versioning.batch_already_completed"
+params = []
+remedy = "Start a batch with a new scope, or abandon the old run before reusing its identity."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.batch_restart_required"
+class = "none"
+summary = "A batch run with this identity is paused, stopping or failed and must be resumed."
+explanation_key = "error.bpm_versioning.batch_restart_required"
+params = []
+remedy = "Resume the existing batch run instead of starting a new one."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.batch_in_progress"
+class = "none"
+summary = "A batch run with this identity is already running."
+explanation_key = "error.bpm_versioning.batch_in_progress"
+params = []
+remedy = "Wait for the running batch to finish, or stop it first."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.batch_unknown"
+class = "none"
+summary = "No batch run has the id the caller named."
+explanation_key = "error.bpm_versioning.batch_unknown"
+params = []
+remedy = "Use the id the batch run was started with."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.batch_not_running"
+class = "none"
+summary = "The batch run is in a state the requested operation does not apply to."
+explanation_key = "error.bpm_versioning.batch_not_running"
+params = []
+remedy = "Inspect the batch run's status and choose an operation it allows."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.plan_missing"
+class = "none"
+summary = "A bulk migration item has no migration plan."
+explanation_key = "error.bpm_versioning.plan_missing"
+params = []
+remedy = "Plan every Case in the batch scope before running the batch."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.compensation_failed"
+class = "none"
+summary = "A compensation step could not be raised or a Case could not be parked."
+explanation_key = "error.bpm_versioning.compensation_failed"
+params = []
+remedy = "Check the compensation sink and the Case's declarations, then deliver the cancelled event again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.engine"
+class = "none"
+summary = "The Business Process engine refused an operation the versioning layer asked for."
+explanation_key = "error.bpm_versioning.engine"
+params = []
+remedy = "Read the engine's message, correct the Case or process state, and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.store_failed"
+class = "none"
+summary = "A store or port the versioning layer depends on refused the operation."
+explanation_key = "error.bpm_versioning.store_failed"
+params = []
+remedy = "Check the backend's health and retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.publish_refused"
+class = "none"
+summary = "The publish guard refused the process version, so nothing was registered."
+explanation_key = "error.bpm_versioning.publish_refused"
+params = []
+remedy = "Fix every listed node: register the service principal, grant the author use of it, and give the author the publish permission; then publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.guard_required"
+class = "none"
+summary = "The version names a service principal on a Document node, so it cannot be published without the publish guard."
+explanation_key = "error.bpm_versioning.guard_required"
+params = []
+remedy = "Publish through publish_guarded with a PublishCheck instead of the unguarded publish."
+since = "0.1.0"

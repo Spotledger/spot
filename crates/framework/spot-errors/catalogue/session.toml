@@ -1,0 +1,108 @@
+# session codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The first eight belong to the support-session crate (WP-AI-06.T2) and the rest to
+# spot-sessions (WP-PLT-02.T2, ADR-070): the user-session vocabulary. The codes a session
+# *caller* sees never distinguish unknown, expired and revoked tokens — the three deaths
+# share `session.invalid`, whose internal reason stays in the audit log (ADR-070 §8.4);
+# the API layer maps it onto `auth.invalid_credentials`/`auth.session_expired`. The
+# throttle's codes live in `throttle.toml` (one code, one prefix, one file).
+
+[[entry]]
+code = "session.wrong_tenant"
+class = "none"
+summary = "The support session was granted for a different tenant."
+explanation_key = "error.session.wrong_tenant"
+params = []
+remedy = "Use the session on the tenant it was granted for, or request a new session."
+since = "0.1.0"
+
+[[entry]]
+code = "session.not_yet_active"
+class = "none"
+summary = "The support session has not started yet."
+explanation_key = "error.session.not_yet_active"
+params = []
+remedy = "Wait until the session's start time, or request a session that starts now."
+since = "0.1.0"
+
+[[entry]]
+code = "session.expired"
+class = "none"
+summary = "The support session has expired."
+explanation_key = "error.session.expired"
+params = []
+remedy = "Request a new support session."
+since = "0.1.0"
+
+[[entry]]
+code = "session.revoked"
+class = "none"
+summary = "The support session was revoked."
+explanation_key = "error.session.revoked"
+params = []
+remedy = "Request a new support session if the work is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "session.above_ceiling"
+class = "none"
+summary = "The action needs a higher tier than the session's ceiling allows."
+explanation_key = "error.session.above_ceiling"
+params = []
+remedy = "Request a session with a higher ceiling, or choose a lower-tier action."
+since = "0.1.0"
+
+[[entry]]
+code = "session.doctype_not_in_scope"
+class = "none"
+summary = "The DocType is not in the session's DocType scope."
+explanation_key = "error.session.doctype_not_in_scope"
+params = []
+remedy = "Request a session whose scope includes the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "session.action_not_in_scope"
+class = "none"
+summary = "The action is not in the session's action scope."
+explanation_key = "error.session.action_not_in_scope"
+params = []
+remedy = "Request a session whose scope includes the action."
+since = "0.1.0"
+
+[[entry]]
+code = "session.write_in_read_only_scope"
+class = "none"
+summary = "A write was attempted in a read-only session."
+explanation_key = "error.session.write_in_read_only_scope"
+params = []
+remedy = "Request a session that allows writes, or use a read action."
+since = "0.1.0"
+
+# --- spot-sessions (WP-PLT-02.T2): the user-session vocabulary. ---
+
+[[entry]]
+code = "session.invalid"
+class = "none"
+summary = "The presented session token did not verify: unknown, revoked or expired."
+explanation_key = "error.session.invalid"
+params = []
+remedy = "Sign in again. Logs and the audit trail (not the client) carry which of the three it was."
+since = "0.1.0"
+
+[[entry]]
+code = "session.malformed"
+class = "none"
+summary = "The presented session token does not have the shape a token can have."
+explanation_key = "error.session.malformed"
+params = []
+remedy = "Send the token exactly as it was issued; it is a 43-character Base64url string."
+since = "0.1.0"
+
+[[entry]]
+code = "session.store_failed"
+class = "Internal"
+summary = "The session store could not complete the operation."
+explanation_key = "error.session.store_failed"
+params = []
+remedy = "Retry; if the backend keeps failing, check its connection and health checks."
+since = "0.1.0"

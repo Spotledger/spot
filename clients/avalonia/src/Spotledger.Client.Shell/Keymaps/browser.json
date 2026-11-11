@@ -1,0 +1,12 @@
+{
+  "name": "browser",
+  "altMenus": false,
+  "bindings": [
+    { "chord": "Ctrl+K", "commandId": "shell.launcher" },
+    { "chord": "Ctrl+B", "commandId": "view.sidebar" },
+    { "chord": "Ctrl+Tab", "commandId": "tab.next" },
+    { "chord": "Ctrl+Shift+Tab", "commandId": "tab.previous" },
+    { "chord": "Ctrl+Shift+F4", "commandId": "tab.close" },
+    { "chord": "Ctrl+Alt+T", "commandId": "tab.duplicate" }
+  ]
+}

@@ -1,0 +1,164 @@
+# bpm_engine codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The durable Business Process engine (spot-bpm-engine, blueprint WS8, ADR-49).
+
+[[entry]]
+code = "bpm_engine.case_not_found"
+class = "none"
+summary = "No Case has this id: {id}."
+explanation_key = "error.bpm_engine.case_not_found"
+params = ["id"]
+remedy = "Check the Case id, or start the Case first."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.case_not_running"
+class = "none"
+summary = "The Case is no longer running, so it cannot be stepped: {id} is {status}."
+explanation_key = "error.bpm_engine.case_not_running"
+params = ["id", "status"]
+remedy = "Read the Case to see its outcome, or start a new Case."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.process_not_found"
+class = "none"
+summary = "The process a Case pins is not registered: {key} version {version}."
+explanation_key = "error.bpm_engine.process_not_found"
+params = ["key", "version"]
+remedy = "Publish the process version before starting or stepping its Cases."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.process_mismatch"
+class = "none"
+summary = "The registered process does not carry the content hash the Case pins: {key} version {version}."
+explanation_key = "error.bpm_engine.process_mismatch"
+params = ["key", "version"]
+remedy = "Publish exactly the process version the Case was started from."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.process_invalid"
+class = "none"
+summary = "A process version does not compile: {detail}."
+explanation_key = "error.bpm_engine.process_invalid"
+params = ["detail"]
+remedy = "Fix the process problems the model reports and compile it again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.handler_missing"
+class = "none"
+summary = "No handler is registered for a node's kind: node {node} of kind {kind}."
+explanation_key = "error.bpm_engine.handler_missing"
+params = ["kind", "node"]
+remedy = "Register a handler for the node's kind before stepping the Case."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.handler_failed"
+class = "none"
+summary = "A node failed and its retries are exhausted: node {node}, reason {reason}."
+explanation_key = "error.bpm_engine.handler_failed"
+params = ["node", "reason"]
+remedy = "Fix what the node does, or give the node an error branch."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.node_timeout"
+class = "none"
+summary = "A running node passed its deadline: node {node} after {seconds} seconds."
+explanation_key = "error.bpm_engine.node_timeout"
+params = ["node", "seconds"]
+remedy = "Raise the node's timeout, or make the node finish within it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.config_invalid"
+class = "none"
+summary = "A node's config is not the shape its kind needs: node {node}, {detail}."
+explanation_key = "error.bpm_engine.config_invalid"
+params = ["detail", "node"]
+remedy = "Fix the node's config in the process definition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.expression_invalid"
+class = "none"
+summary = "A branch condition or mapping expression is invalid: node {node}, expression {expression}, {detail}."
+explanation_key = "error.bpm_engine.expression_invalid"
+params = ["detail", "expression", "node"]
+remedy = "Fix the expression against the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.script_unsupported"
+class = "none"
+summary = "A TypeScript code node was reached, but this engine does not host scripts: node {node}."
+explanation_key = "error.bpm_engine.script_unsupported"
+params = ["node"]
+remedy = "Run script nodes through the TypeScript host (WP-BPM-06)."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.child_failed"
+class = "none"
+summary = "A sub-process node's child Case ended without success: node {node}, child {child}."
+explanation_key = "error.bpm_engine.child_failed"
+params = ["child", "node"]
+remedy = "Give the sub-process node an error branch, or fix the child process."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.child_process_unknown"
+class = "none"
+summary = "A sub-process node names a process that is not registered: node {node}, process {process}."
+explanation_key = "error.bpm_engine.child_process_unknown"
+params = ["node", "process"]
+remedy = "Publish the child process, or fix the sub-process node's config."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.version_conflict"
+class = "none"
+summary = "The Case changed since it was read: found version {current}, expected {expected}."
+explanation_key = "error.bpm_engine.version_conflict"
+params = ["current", "expected"]
+remedy = "Reload the Case and step it at its current version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.store_failed"
+class = "none"
+summary = "The execution store failed: {detail}."
+explanation_key = "error.bpm_engine.store_failed"
+params = ["detail"]
+remedy = "Retry the step once the store is available; nothing partial was committed."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.crashed"
+class = "none"
+summary = "A scripted fault aborted the step at an effect boundary: {point}."
+explanation_key = "error.bpm_engine.crashed"
+params = ["point"]
+remedy = "Step the Case again; the durable state resumes exactly where it stopped."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.cancelled"
+class = "none"
+summary = "The Case was cancelled while a step was in flight: {id}."
+explanation_key = "error.bpm_engine.cancelled"
+params = ["id"]
+remedy = "Stop stepping the Case; its state is kept for history."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.work_failed"
+class = "none"
+summary = "The caller's document work failed, so nothing was committed: {message}."
+explanation_key = "error.bpm_engine.work_failed"
+params = ["message"]
+remedy = "Fix the caller's document change and retry the same transition."
+since = "0.1.0"

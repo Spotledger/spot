@@ -1,0 +1,37 @@
+[package]
+name = "spot-partition"
+description = "Single-writer partition ownership (scope key to owning node, effective-dated and audited) enforced before a write and when a replica arrives, and per-branch naming series that allocate numbers from hub-leased ranges without collisions offline (WP-EDG-03.T1, ADR-062, ADR-23)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `NodeId` is the node identity in every ownership decision and range lease (ADR-056).
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# `SeriesKey` is the naming series identity a branch leases a numeric range of (WP-DOC-05).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `RecordName` turns an allocated number into a legal record name (WP-DOC-05, ADR-33).
+spot-naming = { path = "../spot-naming" }
+# The engine's pre-write seam: `Seam`, `SeamProvider`, `AppError` and `ErrorClass` (ADR-08).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The engine's transaction participant seam (`TxParticipant`, WP-DOC-04.T3): the owner check runs
+# inside every document write, so it cannot be skipped.
+spot-document = { path = "../spot-document" }
+# The platform outbox event (`Topic`, `PayloadDocument`) of the running-low notice (WP-EDG-03.T7).
+spot-events-contract = { path = "../../../contracts/events" }
+# Instants are arguments; effective dates and lease grants are `OffsetDateTime` (ADR-077).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# The pre-write seam carries JSON in the native API value encoding.
+serde_json = "1"
+
+[dev-dependencies]
+spot-meta = { path = "../spot-meta" }
+spot-seams = { path = "../spot-seams" }
+spot-core = { path = "../spot-core" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

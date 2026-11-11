@@ -1,0 +1,40 @@
+[package]
+name = "spot-graph-query"
+description = "Spotledger graph query API (WS8, WP-GRA-03.T1, ADR-50): typed, permission-aware path queries over the storage traversal (direction, edge types, depth, filters), with the GraphExecutor seam the in-memory index plugs into"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The `contract::same_answers` harness that runs the same scenarios on two executors.
+testing = []
+
+[dependencies]
+# The traversal, the record ids and the typed values (the API's native encoding).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Edge types by canonical name, compiled to storage edge specs.
+spot-graph-model = { path = "../spot-graph-model" }
+# The GraphView trait the result of a query implements.
+spot-graph-algo = { path = "../spot-graph-algo" }
+# The read decision, the field access and the masks.
+spot-permissions = { path = "../spot-permissions" }
+# Typed errors with stable `graphq.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Fixtures: the in-memory backend passes the storage contract and supports traversal.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Effective metadata for the graph model and the permission snapshot in tests.
+spot-meta = { path = "../spot-meta" }
+# Randomised graphs and permissions for the property test.
+proptest = "1"
+# PostgreSQL scratch databases for the relation-edge tests that run when `SPOT_TEST_PG_URL` is set.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }
+# The testing harness enabled for this crate's own tests.
+spot-graph-query = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

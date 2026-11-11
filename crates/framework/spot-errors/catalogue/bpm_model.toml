@@ -1,0 +1,281 @@
+# bpm_model codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The Process model (spot-bpm-model, blueprint WS8, ADR-49, ADR-080).
+
+[[entry]]
+code = "bpm_model.empty"
+class = "none"
+summary = "The process version has no nodes."
+explanation_key = "error.bpm_model.empty"
+params = []
+remedy = "Add at least a trigger and a terminal node."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.version_zero"
+class = "none"
+summary = "The process version number is 0; versions start at 1."
+explanation_key = "error.bpm_model.version_zero"
+params = []
+remedy = "Number the version starting at 1."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.invalid_name"
+class = "none"
+summary = "A process name or app is not a valid name: {name}."
+explanation_key = "error.bpm_model.invalid_name"
+params = ["name"]
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.invalid_kind"
+class = "none"
+summary = "A node kind is not a valid kind token: {kind}."
+explanation_key = "error.bpm_model.invalid_kind"
+params = ["kind"]
+remedy = "Use lower-case letters, digits, underscores or dots, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.float_in_config"
+class = "none"
+summary = "A float is inside a node's config; config numbers must be integers: node {node} at {path}."
+explanation_key = "error.bpm_model.float_in_config"
+params = ["node", "path"]
+remedy = "Write the value as an integer or a string."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.duplicate_node"
+class = "none"
+summary = "The same node id appears twice: {node}."
+explanation_key = "error.bpm_model.duplicate_node"
+params = ["node"]
+remedy = "Keep one node per id."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.duplicate_edge"
+class = "none"
+summary = "The same edge appears twice: {from} to {to}."
+explanation_key = "error.bpm_model.duplicate_edge"
+params = ["from", "to"]
+remedy = "Keep one edge per source, target and condition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.duplicate_rule"
+class = "none"
+summary = "The same rule id appears twice: {rule}."
+explanation_key = "error.bpm_model.duplicate_rule"
+params = ["rule"]
+remedy = "Keep one rule per id."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unknown_node"
+class = "none"
+summary = "An edge or error branch references a node that is not declared: {node}."
+explanation_key = "error.bpm_model.unknown_node"
+params = ["node"]
+remedy = "Declare the referenced node or fix the reference."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unknown_node_kind"
+class = "none"
+summary = "A node has a kind this build does not know: {kind}."
+explanation_key = "error.bpm_model.unknown_node_kind"
+params = ["kind"]
+remedy = "Install the app or update that defines the kind."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unknown_rule"
+class = "none"
+summary = "An edge references a rule that is not declared: {rule}."
+explanation_key = "error.bpm_model.unknown_rule"
+params = ["rule"]
+remedy = "Declare the rule or use an inline condition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.cycle"
+class = "none"
+summary = "The process graph has a cycle and must be acyclic to compile onto the DAG runtime: {cycle}."
+explanation_key = "error.bpm_model.cycle"
+params = ["cycle"]
+remedy = "Remove one edge of the cycle or model the repetition as a loop step."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.missing_trigger"
+class = "none"
+summary = "The process version has no trigger node."
+explanation_key = "error.bpm_model.missing_trigger"
+params = []
+remedy = "Add a trigger node that starts the run."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unreachable"
+class = "none"
+summary = "A node cannot be reached from any entry node: {node}."
+explanation_key = "error.bpm_model.unreachable"
+params = ["node"]
+remedy = "Connect the node to the graph or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.dead_end"
+class = "none"
+summary = "A node has no outgoing edge and is not terminal: {node}."
+explanation_key = "error.bpm_model.dead_end"
+params = ["node"]
+remedy = "Connect the node onward or mark it terminal."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.ambiguous_branch"
+class = "none"
+summary = "A node branches without distinct conditions or a default edge: {node}."
+explanation_key = "error.bpm_model.ambiguous_branch"
+params = ["node"]
+remedy = "Give each branch a distinct condition, or mark one edge default."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.join_insufficient"
+class = "none"
+summary = "A join needs more incoming edges than the node has: {node}."
+explanation_key = "error.bpm_model.join_insufficient"
+params = ["node"]
+remedy = "Lower the join's required count or add incoming edges."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unknown_doctype"
+class = "none"
+summary = "A node names a DocType that is not installed: {doctype}."
+explanation_key = "error.bpm_model.unknown_doctype"
+params = ["doctype"]
+remedy = "Check the DocType's spelling or install the app that defines it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.unknown_operation"
+class = "none"
+summary = "A node names a lifecycle operation that does not exist: {operation}."
+explanation_key = "error.bpm_model.unknown_operation"
+params = ["operation"]
+remedy = "Use an operation the DocType's lifecycle defines."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.trigger_incomplete"
+class = "none"
+summary = "A trigger node is missing what its trigger type needs: {node}."
+explanation_key = "error.bpm_model.trigger_incomplete"
+params = ["node"]
+remedy = "Fill in the trigger's DocType, operation, schedule or path."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.expression"
+class = "none"
+summary = "An edge condition or a rule does not parse: {node}."
+explanation_key = "error.bpm_model.expression"
+params = ["node"]
+remedy = "Fix the expression against the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.subprocess_unknown"
+class = "none"
+summary = "A sub-process node names a process that does not exist: {process}."
+explanation_key = "error.bpm_model.subprocess_unknown"
+params = ["process"]
+remedy = "Check the process name or install the app that defines it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.subprocess_cycle"
+class = "none"
+summary = "Sub-process references form a cycle: {node}."
+explanation_key = "error.bpm_model.subprocess_cycle"
+params = ["node"]
+remedy = "Break the sub-process cycle so the nesting terminates."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.too_many_nodes"
+class = "none"
+summary = "The version has more nodes than the limit allows: {limit}."
+explanation_key = "error.bpm_model.too_many_nodes"
+params = ["limit"]
+remedy = "Split the process or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.too_many_edges"
+class = "none"
+summary = "The version has more edges than the limit allows: {limit}."
+explanation_key = "error.bpm_model.too_many_edges"
+params = ["limit"]
+remedy = "Reduce the edges or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.too_deep"
+class = "none"
+summary = "The longest chain is deeper than the limit allows: {limit}."
+explanation_key = "error.bpm_model.too_deep"
+params = ["limit"]
+remedy = "Flatten the process or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.process_mismatch"
+class = "none"
+summary = "A version's process or app does not match its process: {name}."
+explanation_key = "error.bpm_model.process_mismatch"
+params = ["name"]
+remedy = "Make the version's process and app match the process it belongs to."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.dag_invalid"
+class = "none"
+summary = "The DAG runtime rejected a process graph that validation accepted."
+explanation_key = "error.bpm_model.dag_invalid"
+params = []
+remedy = "Report this as a defect; the process model and the DAG layer disagree."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.logic_config_unexpected"
+class = "none"
+summary = "A logic node sets a key its logic type does not read: {node}."
+explanation_key = "error.bpm_model.logic_config_unexpected"
+params = ["node"]
+remedy = "Remove the key, or change the node's logic type to one that reads it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.logic_config_invalid"
+class = "none"
+summary = "A loop or map setting is out of range or empty: {node}."
+explanation_key = "error.bpm_model.logic_config_invalid"
+params = ["node"]
+remedy = "Use max_iterations from 1 to 10000 and give every body or mapping entry a target and an expression."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.principal_invalid"
+class = "none"
+summary = "A document node's service principal is empty, longer than 128 bytes or contains whitespace or a control character: {node}."
+explanation_key = "error.bpm_model.principal_invalid"
+params = ["node"]
+remedy = "Name the service principal in 1 to 128 bytes with no whitespace or control characters, or remove the field to act as the Case's actor."
+since = "0.1.0"

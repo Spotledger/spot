@@ -1,0 +1,7 @@
+================ Zertifikat 0 ================
+Seriennummer: 1a2b3c4d5e6f
+Aussteller: CN=spotledger-test-ca
+ NotBefore: 15.01.2024 00:00:00
+ NotAfter: 15.01.2026 23:59:59
+Antragsteller: CN=spotledger-test
+Zertifikathash(sha1): aabbccddeeff00112233445566778899aabbccdd

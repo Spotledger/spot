@@ -1,0 +1,38 @@
+# Perf budgets for WP-GRA-06.T1 (WP-GRA-06's acceptance: a 10,000-node hierarchy is
+# navigable within the performance budget: cold open under 1 s, scroll and expand at 60 fps,
+# keyboard expand/collapse/jump under 50 ms). Measured on the reference runner:
+# Fedora 44, 6 slow cores, .NET 10. CI runners apply the multiplier below.
+
+[[budget]]
+id = "graph-hierarchy-open"
+metric = "p95"
+max = 1000.0
+unit = "ms"
+runner = "reference"
+
+[[budget]]
+id = "graph-hierarchy-scroll-frame"
+metric = "max"
+max = 16.0
+unit = "ms"
+runner = "reference"
+
+[[budget]]
+id = "graph-hierarchy-keyboard"
+metric = "p95"
+max = 50.0
+unit = "ms"
+runner = "reference"
+
+[[budget]]
+id = "graph-lineage-layout"
+metric = "p95"
+max = 750.0
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 4.0
+
+[runner.ci-windows]
+multiplier = 4.0

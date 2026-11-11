@@ -1,0 +1,42 @@
+[package]
+name = "spot-custom-bundle"
+description = "Site customization bundle (WP-ALM-01): a versioned, content-addressed package of a site's customizations — custom fields, property overrides, view layers, scripts, rules and fixtures — with capture, apply, diff and a round-trip guarantee"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The site-level metadata delta: Customisations, CustomField, Override, Property, Definition.
+spot-meta = { path = "../spot-meta" }
+# View layers: ViewLayer, LayerKind, LayerName, ViewDef, resolve, validate_layer.
+spot-views = { path = "../spot-views" }
+# Rules are expression strings that must parse; a rule that does not is refused at pack time.
+spot-expr = { path = "../spot-expr" }
+# A script is checked by re-transpiling its source; the recorded hash must match.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The ZIP container. Default features off; only DEFLATE and Stored, nothing else.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# SHA-256 for the canonical digest and every item hash.
+sha2 = "0.10"
+# App and host versions, and the major/minor compatibility rule.
+semver = "1"
+# bundle.toml and every section file are plain TOML.
+serde = { version = "1", features = ["derive"] }
+# Fixtures are JSON documents.
+serde_json = "1"
+toml = "0.8"
+# Stable error enums.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: arbitrary bytes never panic the reader; insertion order does not change the
+# digest.
+proptest = "1"
+# Integration tests build raw ZIPs (reordered entries, a tampered section, a bomb) with the
+# same container the crate reads.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

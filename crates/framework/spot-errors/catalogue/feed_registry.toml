@@ -1,0 +1,13 @@
+# feed_registry codes: the outbox publish path checks every topic against the events contract
+# registry (WP-JRN-01.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The message names the topic and the contract version only, never a payload or a value.
+
+[[entry]]
+code = "feed_registry.unregistered_topic"
+class = "none"
+summary = "The event topic {topic} is not registered in the events contract {contract_version}, or is retired, so it cannot be published."
+explanation_key = "error.feed_registry.unregistered_topic"
+params = ["contract_version", "topic"]
+remedy = "Register the topic in the events contract registry (a platform topic needs a registry entry and a class), or publish under the current name if the topic is retired."
+since = "0.1.0"

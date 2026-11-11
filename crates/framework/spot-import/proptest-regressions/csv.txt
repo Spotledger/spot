@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b4e43491aab8d238b66e83ecaea09b654a0bc36f96254418833c72200d523caa # shrinks to rows = [["", "", ""], ["A"]]
+cc 73749019f1e2260a2f9fb80d67b96a87bec12d53d04129d21e5c45e9d41205b3 # shrinks to rows = [["", ""], ["\0"]]
+cc 2dee871e25d955ba566e4f4e95b7678f2bb1ffd4ea1f94f07b394ed2641ead01 # shrinks to rows = [["\t"]]
+cc 11844b277f2198aed8cadfac101517c07256f82a7167d0f26dd428f0892041f9 # shrinks to rows = [["\u{feff}"]]
+cc 1cffb81d20cf06a6b055207d583049af133ef6b313c4e537ab2fe50c37860479 # shrinks to rows = [["\u{feff}"]]

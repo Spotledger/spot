@@ -1,0 +1,280 @@
+# Customer-consented deep-access refusals (WP-SEC-07.T1).
+
+[[entry]]
+code = "deep_access.missing_receipt"
+class = "none"
+summary = "A customer consent receipt is required."
+explanation_key = "error.deep_access.missing_receipt"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.wrong_request"
+class = "none"
+summary = "The receipt approves a different request."
+explanation_key = "error.deep_access.wrong_request"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.unknown_approver"
+class = "none"
+summary = "The customer has not trusted this approver and key."
+explanation_key = "error.deep_access.unknown_approver"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.operator_approval"
+class = "none"
+summary = "The operator cannot approve their own access."
+explanation_key = "error.deep_access.operator_approval"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.bad_signature"
+class = "none"
+summary = "The customer signature is invalid."
+explanation_key = "error.deep_access.bad_signature"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.not_yet_valid"
+class = "none"
+summary = "Consent is not valid yet."
+explanation_key = "error.deep_access.not_yet_valid"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.expired_receipt"
+class = "none"
+summary = "Consent has expired."
+explanation_key = "error.deep_access.expired_receipt"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.widened_scope"
+class = "none"
+summary = "Consent must narrow the requested scope."
+explanation_key = "error.deep_access.widened_scope"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.weak_method"
+class = "none"
+summary = "The authentication method is too weak for this tier."
+explanation_key = "error.deep_access.weak_method"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.replayed_receipt"
+class = "none"
+summary = "The consent nonce was already consumed."
+explanation_key = "error.deep_access.replayed_receipt"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.missing_attestation"
+class = "none"
+summary = "A hardware-key attestation is required."
+explanation_key = "error.deep_access.missing_attestation"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.bad_attestation"
+class = "none"
+summary = "The hardware-key attestation is invalid."
+explanation_key = "error.deep_access.bad_attestation"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.wrong_operator_key"
+class = "none"
+summary = "The hardware attestation names another operator key."
+explanation_key = "error.deep_access.wrong_operator_key"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.invalid_request"
+class = "none"
+summary = "The access request is invalid."
+explanation_key = "error.deep_access.invalid_request"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.invalid_policy"
+class = "none"
+summary = "The session policy is invalid."
+explanation_key = "error.deep_access.invalid_policy"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.not_started"
+class = "none"
+summary = "The credential is not active yet."
+explanation_key = "error.deep_access.not_started"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.expired"
+class = "none"
+summary = "The credential has expired."
+explanation_key = "error.deep_access.expired"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.revoked"
+class = "none"
+summary = "The customer or platform has revoked this session."
+explanation_key = "error.deep_access.revoked"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.replayed_use"
+class = "none"
+summary = "The use counter must strictly increase."
+explanation_key = "error.deep_access.replayed_use"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.invalid_proof"
+class = "none"
+summary = "The operator did not sign this exact action and arguments."
+explanation_key = "error.deep_access.invalid_proof"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.out_of_scope"
+class = "none"
+summary = "The action is outside the consented scope."
+explanation_key = "error.deep_access.out_of_scope"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.tier_refused"
+class = "none"
+summary = "The agent tier or hard-floor checks refused the action."
+explanation_key = "error.deep_access.tier_refused"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.step_up_required"
+class = "none"
+summary = "This action requires fresh, action-specific customer consent."
+explanation_key = "error.deep_access.step_up_required"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.audit_unavailable"
+class = "none"
+summary = "The customer audit log could not record the decision."
+explanation_key = "error.deep_access.audit_unavailable"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.state_unavailable"
+class = "none"
+summary = "The authoritative nonce or revocation store is unavailable."
+explanation_key = "error.deep_access.state_unavailable"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.invalid_escalation"
+class = "none"
+summary = "An escalation must narrow to one action and cannot extend the session."
+explanation_key = "error.deep_access.invalid_escalation"
+params = []
+remedy = "Customer approver: review the request, scope, window and authentication method before signing a fresh receipt. Operator: stop this operation, correct the stated failure and request fresh consent; contact the tenant administrator if storage or audit is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.requested"
+class = "none"
+summary = "A deep-access request was recorded in the session log."
+explanation_key = "error.deep_access.requested"
+params = []
+remedy = "Customer approver: this is a session-log event, not a failure; check it matches what you approved and revoke the session if it does not. Operator: no action needed."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.consented"
+class = "none"
+summary = "The customer signed a consent receipt for the request."
+explanation_key = "error.deep_access.consented"
+params = []
+remedy = "Customer approver: this is a session-log event, not a failure; check it matches what you approved and revoke the session if it does not. Operator: no action needed."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.issued"
+class = "none"
+summary = "A deep-access credential was issued under the consent receipt."
+explanation_key = "error.deep_access.issued"
+params = []
+remedy = "Customer approver: this is a session-log event, not a failure; check it matches what you approved and revoke the session if it does not. Operator: no action needed."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.escalated"
+class = "none"
+summary = "A fresh single-action consent escalated the session."
+explanation_key = "error.deep_access.escalated"
+params = []
+remedy = "Customer approver: this is a session-log event, not a failure; check it matches what you approved and revoke the session if it does not. Operator: no action needed."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access.allow"
+class = "none"
+summary = "A deep-access use was allowed: the outcome code of an approved decision."
+explanation_key = "error.deep_access.allow"
+params = []
+remedy = "No action: this is the success outcome; refusals carry the other deep_access codes."
+since = "0.1.0"

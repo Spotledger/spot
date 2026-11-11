@@ -1,0 +1,40 @@
+# throttle codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The login throttle (spot-sessions, WP-PLT-02.T2, ADR-070). The API layer maps
+# throttle.locked onto auth.locked (403) and throttle.backoff_delayed onto
+# auth.rate_limited with Retry-After (429); throttle.invalid_account is library-internal.
+
+[[entry]]
+code = "throttle.locked"
+class = "none"
+summary = "The account is hard-locked after repeated failed sign-ins."
+explanation_key = "error.throttle.locked"
+params = []
+remedy = "Wait for the lockout to expire, or have an administrator unlock the account."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle.backoff_delayed"
+class = "none"
+summary = "Sign-in attempts are being held back by the exponential backoff."
+explanation_key = "error.throttle.backoff_delayed"
+params = []
+remedy = "Wait the given delay before the next attempt; a correct password waits too."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle.invalid_account"
+class = "none"
+summary = "Library-internal: the throttle refused a malformed account key or configuration."
+explanation_key = "error.throttle.invalid_account"
+params = []
+remedy = "For logs and metrics; fix the account key or the throttle configuration at the call site."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle.store_failed"
+class = "Internal"
+summary = "The throttle store could not complete the operation."
+explanation_key = "error.throttle.store_failed"
+params = []
+remedy = "Retry; if the backend keeps failing, check its connection and health checks."
+since = "0.1.0"

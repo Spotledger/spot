@@ -1,0 +1,20 @@
+[package]
+name = "spot-journal-rebuild-plan"
+description = "The journal rebuild planner (WP-JRN-05.T1, ADR-061 s6): a pure library that turns a description of what the journal holds (verified snapshots, segment ranges, forks and an optional backup) and a target position into a rebuild plan — which base to restore, which segment ranges to apply in which order, whether the rebuild ends at the journal's end or forks the stream into a new generation, and why, as typed explanation lines for the recovery report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The plan and the catalogue are encoded for the rebuild's record and the recovery report.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `journal_rebuild_plan.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

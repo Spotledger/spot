@@ -1,0 +1,100 @@
+# l3 codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "l3.out_of_ids"
+class = "Internal"
+summary = "Test-harness vocabulary: a nested probe step ran more often than the test queued ids for."
+explanation_key = "error.l3.out_of_ids"
+params = []
+remedy = "Contract test only; enlarge the queue."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.refuse_nested"
+class = "Internal"
+summary = "Test-harness vocabulary: a hook refuses to create a second document."
+explanation_key = "error.l3.refuse_nested"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.first"
+class = "none"
+summary = "Test-harness vocabulary: the first message of the hook-order probe."
+explanation_key = "error.l3.first"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.second"
+class = "none"
+summary = "Test-harness vocabulary: the second message of the hook-order probe."
+explanation_key = "error.l3.second"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.third"
+class = "none"
+summary = "Test-harness vocabulary: the third message of the hook-order probe."
+explanation_key = "error.l3.third"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.committed"
+class = "none"
+summary = "Test-harness vocabulary: the message of the committed-phase probe."
+explanation_key = "error.l3.committed"
+params = []
+remedy = "Brief: no action."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.outer_before"
+class = "none"
+summary = "Test-harness vocabulary: the outer before_create message probe."
+explanation_key = "error.l3.outer_before"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.outer_validate"
+class = "none"
+summary = "Test-harness vocabulary: the outer validate_save message probe."
+explanation_key = "error.l3.outer_validate"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.outer_after"
+class = "none"
+summary = "Test-harness vocabulary: the outer after_save message probe."
+explanation_key = "error.l3.outer_after"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.inner_after"
+class = "none"
+summary = "Test-harness vocabulary: the inner after_create message probe."
+explanation_key = "error.l3.inner_after"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "l3.noted"
+class = "none"
+summary = "Test-harness vocabulary: the message a method-emitted note probe sends."
+explanation_key = "error.l3.noted"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"

@@ -1,0 +1,129 @@
+# protected_keys codes (WP-SEC-10.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. Messages name ids, groups and epochs only; never
+# key material.
+
+[[entry]]
+code = "protected_keys.unknown_group"
+class = "none"
+summary = "No protection group {group} has a key."
+explanation_key = "error.protected_keys.unknown_group"
+params = ["group"]
+remedy = "Create the protection group before using or releasing its key."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.group_exists"
+class = "none"
+summary = "A protection group {group} already has a key."
+explanation_key = "error.protected_keys.group_exists"
+params = ["group"]
+remedy = "Use the existing group, or rotate its key instead of creating it again."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.unknown_epoch"
+class = "none"
+summary = "Group {group} has no key at epoch {epoch}."
+explanation_key = "error.protected_keys.unknown_epoch"
+params = ["epoch", "group"]
+remedy = "Release a live epoch, or re-encrypt the data under the current epoch."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.epoch_retired"
+class = "none"
+summary = "Group {group} epoch {epoch} is retired."
+explanation_key = "error.protected_keys.epoch_retired"
+params = ["epoch", "group"]
+remedy = "Re-encrypt values still under the retired epoch before opening them."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.unknown_node"
+class = "none"
+summary = "No node {node} is registered."
+explanation_key = "error.protected_keys.unknown_node"
+params = ["node"]
+remedy = "Register the node and its wrapping key before releasing keys to it."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.node_not_active"
+class = "none"
+summary = "Node {node} is {status} and takes no key release."
+explanation_key = "error.protected_keys.node_not_active"
+params = ["node", "status"]
+remedy = "Reactivate the node, or issue the release to an active node."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.node_revoked"
+class = "none"
+summary = "Node {node} is revoked and can never be released a key at or after its revocation epoch."
+explanation_key = "error.protected_keys.node_revoked"
+params = ["node"]
+remedy = "Do not release keys to a revoked node; enrol a replacement node instead."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.no_permission"
+class = "none"
+summary = "Node {node} has no permission-snapshot tier for group {group}."
+explanation_key = "error.protected_keys.no_permission"
+params = ["group", "node"]
+remedy = "Add the group to the node's scope in the permission snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.wrong_node"
+class = "none"
+summary = "The release is addressed to node {addressed}, not {node}."
+explanation_key = "error.protected_keys.wrong_node"
+params = ["addressed", "node"]
+remedy = "Deliver the release to the node it is addressed to."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.lease_expired"
+class = "none"
+summary = "The key lease for group {group} has passed."
+explanation_key = "error.protected_keys.lease_expired"
+params = ["group"]
+remedy = "Request a fresh release while the node's tier bound is still valid."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.tampered"
+class = "none"
+summary = "A wrapped key or a protected field failed authentication."
+explanation_key = "error.protected_keys.tampered"
+params = []
+remedy = "Do not trust the value; re-derive it from its source and re-encrypt it."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.malformed"
+class = "none"
+summary = "A wrapped key or a protected field is not in the expected shape."
+explanation_key = "error.protected_keys.malformed"
+params = []
+remedy = "Produce the value again through the key hierarchy."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.root_key"
+class = "none"
+summary = "The tenant root key provider failed: {error}."
+explanation_key = "error.protected_keys.root_key"
+params = ["error"]
+remedy = "Check the root key provider's configuration and availability."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys.bad_id"
+class = "none"
+summary = "A {kind} is empty, too long or holds a control character."
+explanation_key = "error.protected_keys.bad_id"
+params = ["kind"]
+remedy = "Use a non-empty name of at most 128 characters without control characters."
+since = "0.1.0"

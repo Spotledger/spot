@@ -1,0 +1,68 @@
+[package]
+name = "spot-mcp"
+description = "The native MCP server core (WP-AI-04.T1): JSON-RPC 2.0 framing, the MCP lifecycle, tools generated from effective metadata, a read-only query tool on the storage query IR, whitelisted methods, long operations returned as jobs, and every call run strictly as the calling user"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId`, `Clock`: the tenant and the only clock.
+spot-core = { path = "../spot-core" }
+# The document handle, patch, metadata view, `DocumentService` and `AppError`.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Effective metadata, the registry and site customisations the tools are generated from.
+spot-meta = { path = "../spot-meta" }
+# The permission decision core (`Principal`, `PermissionEngine`).
+spot-permissions = { path = "../spot-permissions" }
+# The read filter, column restriction and query refusals (ADR-070 section 12).
+spot-perm-query = { path = "../spot-perm-query" }
+# The query IR the `query` tool takes and the rows it returns.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `QueryService`: the site-bound query seam the host adapter runs queries through.
+spot-api-services = { path = "../spot-api-services" }
+# The whitelisted-function registry and its argument schema check.
+spot-functions = { path = "../spot-functions" }
+# Agent tiers and the authoriser that refuses out-of-tier actions.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# The tamper-evident AI audit chain every call is recorded to.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# API-key scope: a key is a provable subset of its owner's rights.
+spot-iam-access = { path = "../spot-iam-access" }
+# Long operations enqueue a job and return its id.
+spot-jobs = { path = "../spot-jobs" }
+# Per-principal rate limits that may not lose a token.
+spot-coordinator = { path = "../spot-coordinator" }
+# The shared HTTP core the Streamable HTTP transport adapter builds on.
+spot-http = { path = "../spot-http" }
+# Stable derive-based serde on every wire type.
+serde = { version = "1", features = ["derive"] }
+# The wire encoding itself; the query IR JSON form is decoded here.
+serde_json = "1"
+# The one error type, with stable `mcp.*` codes.
+thiserror = "2"
+# `OffsetDateTime`: time is an argument, never read here.
+time = { version = "0.3", features = ["std", "formatting", "parsing"] }
+# The metrics facade the audit-failure counters and the retry-queue gauge are published through
+# (the same facade and version `spot-telemetry` renders).
+metrics = "0.24"
+# The structured audit-failure alert event.
+tracing = "0.1"
+# The per-call timeout, the only timer the core uses.
+tokio = { version = "1", features = ["time"] }
+
+[dev-dependencies]
+# `#[tokio::test]` for the conformance transcripts.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+# The principal-isolation property test.
+proptest = "1"
+# `install` and `render_prometheus`: the tests read the metrics back as Prometheus text.
+spot-telemetry = { path = "../spot-telemetry" }
+# Captures the alert event the tests assert on.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The in-memory storage backend the query tool tests run against.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+
+[lints]
+workspace = true

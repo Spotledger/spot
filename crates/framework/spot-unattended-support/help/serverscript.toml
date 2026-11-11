@@ -1,0 +1,37 @@
+# Help for the serverscript error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "serverscript.compile_failed"
+what_happened = "A Server Script's TypeScript source did not compile."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the reported syntax error on the source field; the diagnostic names the line and column.", "If it keeps happening, tell your administrator and quote the code serverscript.compile_failed."]
+audience = "user"
+
+[[help]]
+code = "serverscript.limit_exceeded"
+what_happened = "A Server Script exceeded one of its limits."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Make the script faster and lighter, or raise its timeout; the operation was not saved.", "If it keeps happening, tell your administrator and quote the code serverscript.limit_exceeded."]
+audience = "operator"
+
+[[help]]
+code = "serverscript.phase_violation"
+what_happened = "A Server Script did something its lifecycle phase does not allow."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Move the work to an event whose phase allows it: derive in before_*, check in validate, act in after_*.", "If it keeps happening, tell your administrator and quote the code serverscript.phase_violation."]
+audience = "operator"
+
+[[help]]
+code = "serverscript.record_invalid"
+what_happened = "A Server Script record is missing or malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the script a name, a document type, one of the document events and TypeScript source.", "If it keeps happening, tell your administrator and quote the code serverscript.record_invalid."]
+audience = "user"
+
+[[help]]
+code = "serverscript.store_failed"
+what_happened = "The script store could not load or record what it was asked to."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report the failure with the request details; the store's backend is unavailable or misconfigured.", "If it keeps happening, tell your administrator and quote the code serverscript.store_failed."]
+audience = "operator"

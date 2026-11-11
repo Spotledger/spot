@@ -1,0 +1,137 @@
+# graph query codes: the graph query API's builder, compiler and executor (WP-GRA-03.T1).
+# Storage failures pass through with their own `storage.*` codes and are not listed here.
+
+[[entry]]
+code = "graphq.no_start"
+class = "none"
+summary = "A graph query names no start node."
+explanation_key = "error.graphq.no_start"
+params = []
+remedy = "Give the query at least one start node with `from`."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.no_edges"
+class = "none"
+summary = "A graph query follows no edge type."
+explanation_key = "error.graphq.no_edges"
+params = []
+remedy = "Name at least one edge type with `follow`."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.depth_out_of_range"
+class = "none"
+summary = "A graph query's max_depth is outside 1 to 64: {depth}."
+explanation_key = "error.graphq.depth_out_of_range"
+params = ["depth"]
+remedy = "Choose a max_depth from 1 to 64."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.max_nodes_out_of_range"
+class = "none"
+summary = "A graph query's max_nodes is outside 1 to 100,000: {max_nodes}."
+explanation_key = "error.graphq.max_nodes_out_of_range"
+params = ["max_nodes"]
+remedy = "Choose a max_nodes from 1 to 100,000."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.unsupported_filter"
+class = "none"
+summary = "A node or edge filter uses an operator the query API cannot evaluate: {operator}."
+explanation_key = "error.graphq.unsupported_filter"
+params = ["operator"]
+remedy = "Use field comparisons, null tests, `in`, and `and`, `or`, `not` in the filter."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.unknown_edge_type"
+class = "none"
+summary = "The graph model has no edge type named {name}."
+explanation_key = "error.graphq.unknown_edge_type"
+params = ["name"]
+remedy = "Use one of the canonical edge-type names the graph model lists."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.unsupported_edge"
+class = "none"
+summary = "The edge type {name} cannot be followed by the query API yet: {reason}."
+explanation_key = "error.graphq.unsupported_edge"
+params = ["name", "reason"]
+remedy = "Follow a link, table, dynamic-link or relation edge type; multi-select edges wait for their storage mapping."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.unknown_edge_property"
+class = "none"
+summary = "The edge type {edge} has no property named {property}."
+explanation_key = "error.graphq.unknown_edge_property"
+params = ["edge", "property"]
+remedy = "Use one of the properties the edge type declares, or check that the edge store holds the property."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.unsupported_edge_value"
+class = "none"
+summary = "The property {property} of edge type {edge} holds a value type the query API does not support."
+explanation_key = "error.graphq.unsupported_edge_value"
+params = ["edge", "property"]
+remedy = "Edge properties in queries are null, bool, integer, decimal, text, date or link values."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.rollup_overflow"
+class = "none"
+summary = "The rolled-up {property} along {edge} overflows."
+explanation_key = "error.graphq.rollup_overflow"
+params = ["edge", "property"]
+remedy = "Narrow the query to a shallower path, or check the quantities on the edges for a wrong scale."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.rollup_not_numeric"
+class = "none"
+summary = "The rolled-up property {property} of edge type {edge} is not an integer or a decimal."
+explanation_key = "error.graphq.rollup_not_numeric"
+params = ["edge", "property"]
+remedy = "Roll up an integer or decimal property that every edge on the path carries."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.invalid"
+class = "none"
+summary = "A graph query failed validation without a more specific code."
+explanation_key = "error.graphq.invalid"
+params = []
+remedy = "Read the query's problems and correct each one."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.too_many_paths"
+class = "none"
+summary = "The summed rollup would evaluate more than {max_paths} paths."
+explanation_key = "error.graphq.too_many_paths"
+params = ["max_paths"]
+remedy = "Narrow the query (a shallower depth, an edge filter) or raise max_paths, up to its ceiling; a partial sum is never returned."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.ambiguous_relation_edge"
+class = "none"
+summary = "The relation edge type {edge} joins the same two records through {count} relation records, so its properties are ambiguous."
+explanation_key = "error.graphq.ambiguous_relation_edge"
+params = ["count", "edge"]
+remedy = "Keep one relation record per pair of records, or merge the duplicate lines."
+since = "0.1.0"
+
+[[entry]]
+code = "graphq.edge_value_overflow"
+class = "none"
+summary = "Summing {property} over the lines of the relation edge type {edge} overflows."
+explanation_key = "error.graphq.edge_value_overflow"
+params = ["edge", "property"]
+remedy = "Correct the quantities of the lines; a partial sum is never returned."
+since = "0.1.0"

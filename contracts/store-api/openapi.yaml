@@ -1,0 +1,897 @@
+openapi: 3.1.1
+info:
+  title: Spotledger store API
+  version: 0.2.0
+  summary: >-
+    ADR-21 (docs/blueprint/platform.md, section WS11): third-party apps are distributed
+    through Spotledger's own app store as signed WASM components. This contract is that
+    store's public surface for publishers, sites and the review desk (WP-CON-03.T55,
+    draft, awaiting architecture-owner approval).
+  description: |
+    ## ADR note
+
+    This surface belongs to **ADR-21** (`docs/blueprint/platform.md` WS11: "Third-party apps
+    are distributed through our own app store as signed WASM components targeting WASI 0.3 and
+    our versioned WIT world; native dynamic libraries are never accepted from third parties").
+    ADR-21 has no standalone file under `docs/adr/`; it is documented inline in the blueprint
+    and quoted by `docs/adr/ADR-075-module-boundaries-inside-an-app-suite.md` and
+    `docs/security/threat-model.md`. This contract is a sibling of `contracts/app-api/`
+    (ADR-057, the app-facing WASM/Rust API an installed app calls at runtime) and of
+    `contracts/native-api/` (ADR-055, the tenant-facing REST API): it is the **store's own**
+    REST surface -- publish, search, download, yank, revocations and the review desk -- not an
+    API an installed app calls, and not the tenant API a site's own users call. It follows the
+    house conventions `contracts/native-api/openapi.yaml` sets (envelope `{data, next_cursor}`,
+    idempotency keys, rate classes stated in descriptions, `x-spot-error-codes`, `explanation`
+    text for user-facing errors) and is modelled on that contract's files.
+
+    ## Decisions already taken (lead, 31 Oct 2026; do not reopen here)
+    - The store never signs a bundle on a publisher's behalf and holds no private signing key:
+      it stores and serves exactly what the publisher signed (`spot-bundle-signing`,
+      `spot-registry::SignatureRef`). Every publish call carries the publisher's own detached
+      signature; the store only verifies it.
+    - The review report never says an app is safe. `verdict` is exactly one of
+      `spot-app-review::Verdict`'s three values, `looks_clean` the best of them; a person
+      still approves listing after reading the full report outside this contract. No field of
+      this contract may say "safe", "approved", "trusted" or "verified" on the store's own
+      authority.
+    - Payments and purchases are not part of this contract version (WP-STR-08); entitlement to
+      a paid app is a boolean the store checks against a site licence token, never a price, a
+      currency amount or a transaction record.
+    - The store is a separate deployable, not part of `spot serve` (see `servers` below: its
+      own host, never a site's host).
+
+    ## Placeholders kept until WP-STR-08 (lead, 8 Nov 2026)
+    - The host `store.spotledger.example` in `servers` is a placeholder (an RFC 2606 reserved
+      name); the real hostname is set when the store is deployed, and changing it is not a
+      contract change.
+    - Entitlement to a paid app stays a **boolean** the store checks against a site licence
+      token until WP-STR-08 defines prices, licences and transactions; this contract carries
+      none of them.
+
+    ## Feature negotiation
+    This is the first version. A client that wants to know what a later store serves reads
+    `info.version` of the served document, or (once one exists) a liveness probe analogous to
+    the native API's `GET /api/health/live`; none is defined in 0.2.0 because a store process
+    with no site tenancy needs no per-tenant readiness story yet.
+
+    ## Versioning
+    Paths are prefixed `/store/v1`. Additive changes (new endpoints, new optional request
+    fields, new response fields, new error codes) bump the minor version and do not change the
+    prefix; clients must ignore unknown response fields. Anything else is a breaking change: a
+    new major version and a new prefix, with the old one served for a deprecation window (the
+    same rule `contracts/native-api` states).
+
+    ## Names
+    - An app is addressed by its storage name (`spot-registry::AppName`:
+      `[a-z][a-z0-9_]*`, at most 63 bytes), the same syntax a DocType name uses and the exact
+      name a manifest declares.
+    - A version is a semantic version (`MAJOR.MINOR.PATCH` with optional pre-release and build
+      metadata, `semver::Version`). Monotonicity is checked ignoring build metadata.
+    - A review is addressed by its review id, an opaque identifier returned by
+      `app_publish`; it is not a document id in the tenant sense and grants no site access.
+
+    ## Values
+    No schema in this document uses `type: number`: sizes and counts are integers, and nothing
+    in this surface carries money (ADR-12; `check.py` fails if one does).
+
+    ## Responses
+    Success bodies are `{"data": ...}`, with `next_cursor` alongside `data` on a paged list
+    (the same envelope `contracts/native-api` uses). Error bodies are the `ErrorEnvelope`.
+    Every response carries `X-Request-Id`.
+
+    ## Idempotency
+    `POST /store/v1/apps/{name}/versions` accepts `Idempotency-Key` (1 to 128 visible ASCII
+    characters, the same rule as the native API), scoped to the publisher key's publisher id
+    so one publisher's key can never replay or probe another's: a repeat with the same key and the same
+    uploaded bytes within 24 hours returns the stored `202` again with
+    `Idempotency-Replayed: true`; the same key with a different upload fails with
+    `400 store.invalid_request` (the store API defines its own registry and does not import
+    the native API's `api.idempotency_conflict`).
+
+    ## Rate limits
+    Three classes, enforced per credential (or per client address for anonymous reads):
+    - `store_public`: `app_search`, `app_get`, `app_version_get`, `app_bundle_download`,
+      `revocations_get`. Generous; no credential required.
+    - `store_publish`: `app_publish`, `app_version_yank`. Strict, per publisher key; publishing
+      is the expensive, security-sensitive path (signature verification, review enqueue).
+    - `store_review`: `review_get`. Per publisher key, moderate.
+    Every class answers `429 store.rate_limited` with `Retry-After` when exceeded.
+
+    ## Trust and verification (decision, do not reopen)
+    `app_bundle_download`'s response is never trusted by the site that fetches it: the
+    installer (WP-STR-04) and the startup loader verify the detached signature and the content
+    digest themselves (`spot-bundle-signing::verify`), the same pure check that function
+    performs, before anything from the archive is written to disk. The store exists to make
+    bytes and signed metadata reachable; it is not a trust decision by itself, and no field or
+    header of any operation in this contract may claim the download is already verified, safe
+    or trusted.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: https://store.spotledger.example
+    description: >-
+      The store's own deployable (lead decision 31 Oct 2026: never part of spot serve,
+      never a site's own host).
+
+security:
+  - publisherKey: []
+
+tags:
+  - name: apps
+  - name: reviews
+  - name: revocations
+
+paths:
+  /store/v1/apps/{name}/versions:
+    post:
+      tags: [apps]
+      operationId: app_publish
+      summary: Publish a new version of an app (bundle plus its detached signature).
+      description: |
+        The store never signs on the publisher's behalf: `signature` and `certificate_chain`
+        are exactly what the publisher's own signing step produced
+        (`spot-bundle-signing::BundleSignature`/`CertificateChain`), and the store only
+        verifies them against the uploaded `bundle` bytes. A successful call never means the
+        app is listed: it enqueues `spot-app-review` and answers `202` with a `review_id`; a
+        human decides whether to list it after reading the review (`review_get`).
+
+        The name in the path is authoritative and must equal the `name` the bundle's manifest
+        declares; a mismatch is `422 store.invalid_manifest`. Names are
+        matched only as `AppName` values and are never used as a file path by the store.
+        **Upload limits (normative).** These are maximums a conforming store enforces and a
+        client may rely on:
+        - the `bundle` part is at most **64 MiB** (67,108,864 bytes), the same value as
+          `spot-bundle`'s default `Limits::max_compressed_bytes`;
+        - the bundle's `manifest.toml` is at most **64 KiB** (65,536 bytes);
+        - the app name is at most **63 bytes** (`AppName`, see Names).
+        An upload whose `bundle` part exceeds 64 MiB is refused as soon as the limit is
+        crossed, without being buffered whole, with `413 store.too_large`. A manifest over
+        64 KiB, a manifest that does not parse or fails validation (including a `name` that
+        differs from the path), and an archive that breaks the lower-level checks (entry
+        count, inflated sizes, illegal paths) are `422`: `store.invalid_manifest` for the
+        manifest, `store.bundle_invalid` (with `details.bundle_code`) for the archive. The
+        per-entry and inflated-size limits (`spot-bundle` `max_total_bytes`, `max_entries`,
+        `max_file_bytes`) remain the deployment's `spot-bundle` defaults and surface as
+        `store.bundle_invalid`.
+
+        Refused before any review runs: an app name already owned by a different publisher
+        (`409 store.name_taken`), a version that is not strictly greater than every version
+        already published for this app (`422 store.version_not_monotonic`,
+        `spot-registry`'s monotonic check), a signature that does not verify against the
+        bundle's canonical digest or the certificate chain
+        (`422 store.signature_invalid`), a publisher whose status is not `active`
+        (`403 store.publisher_revoked`), or an archive the lower-level bundle checks reject --
+        `422 store.bundle_invalid`, whose `details.bundle_code` carries the specific
+        `bundle.*` problem code (for example `bundle.bad_archive`,
+        `bundle.illegal_path`; see `crates/framework/spot-errors/catalogue/bundle.toml`).
+
+        Rate class `store_publish`.
+      security:
+        - publisherKey: []
+      parameters:
+        - $ref: "#/components/parameters/AppNamePath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {$ref: "#/components/schemas/PublishUpload"}
+      responses:
+        "202":
+          description: Accepted for review. Not yet listed.
+          headers:
+            Idempotency-Replayed:
+              description: "`true` only when this `202` is a stored replay of an earlier call with the same `Idempotency-Key`; absent on the first response."
+              schema: {type: string, const: "true"}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/PublishAccepted"}
+              example:
+                data:
+                  review_id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e01
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/apps:
+    get:
+      tags: [apps]
+      operationId: app_search
+      summary: Search the public catalogue. Public listings only.
+      description: |
+        Never returns a withdrawn or unlisted release, and never a pre-release or an inactive
+        (yanked-only) release of an app -- a publisher reviews their own unlisted and inactive
+        releases through `app_get`/`app_version_get` with their own `publisherKey`, not through
+        this endpoint, which takes no credential. The same query, cursor and page size rules as
+        the native API's keyset paging: `cursor` is opaque and query-bound; a result page is
+        `{data, next_cursor}`, `next_cursor` absent at the end.
+
+        Rate class `store_public`.
+      security: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          description: Free-text catalogue search (tokenised, case-insensitive). Empty means every public listing.
+          schema: {type: string, maxLength: 256}
+        - name: category
+          in: query
+          required: false
+          schema: {type: string, maxLength: 64}
+        - name: capability
+          in: query
+          required: false
+          description: "One capability an app must declare: network, email, files, doctypes.read or doctypes.write."
+          schema: {type: string, enum: [network, email, files, "doctypes.read", "doctypes.write"]}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque, query-bound; from a previous page's next_cursor. Never a secret, never shared between different queries.
+          schema: {type: string, minLength: 1, maxLength: 2048}
+      responses:
+        "200":
+          description: A page of public listings, ranked by relevance then name.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AppSearchPage"}
+              example:
+                data:
+                  - name: invoice_reminders
+                    title: Invoice reminders
+                    description: Sends a reminder e-mail before an invoice is due.
+                    category: finance
+                    publisher: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e02
+                    latest_version: "1.4.0"
+                    published_at: "2026-10-20T08:00:00Z"
+                next_cursor: null
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/apps/{name}:
+    get:
+      tags: [apps]
+      operationId: app_get
+      summary: One app's public listing metadata.
+      description: |
+        A missing app and an app whose only releases are unlisted or withdrawn answer the same
+        `404 store.app_not_found`, so this is no existence oracle beyond what `app_search`
+        already reveals. A `publisherKey` is optional: with one, the owning publisher also
+        sees their own unlisted listing. Rate class `store_public`.
+      security:
+        - publisherKey: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/AppNamePath"
+      responses:
+        "200":
+          description: The app's public listing.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/AppListing"}
+              example:
+                data:
+                  name: invoice_reminders
+                  title: Invoice reminders
+                  description: Sends a reminder e-mail before an invoice is due.
+                  category: finance
+                  publisher: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e02
+                  latest_version: "1.4.0"
+                  published_at: "2026-10-20T08:00:00Z"
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/apps/{name}/versions/{version}:
+    get:
+      tags: [apps]
+      operationId: app_version_get
+      summary: "One version's metadata: digest, signature id and whether it is yanked."
+      description: |
+        The digest is the canonical bundle digest (`spot_bundle::Digest`, the same bytes
+        `app_bundle_download`'s `ETag` carries); `signature_id` identifies the stored detached
+        signature and certificate chain without exposing their bytes (those travel with the
+        bundle download, not here). `yanked` is `true` once the owning publisher has called
+        `app_version_yank`. Yank semantics are normative; see `app_version_yank`: a yanked
+        version's bundle stays downloadable by exact digest for existing installs
+        (`spot-registry::Release::active`'s "digest fetch remains possible"), but is never
+        offered as installable by `app_search`, which omits it; `app_version_get` reports `yanked: true`.
+
+        A missing app or version answers `404 store.version_not_found`. Rate class
+        `store_public`.
+
+        A `publisherKey` is optional: with one, the owning publisher also sees their own
+        unlisted (under review) versions; without one, or for another publisher's key, only
+        public versions exist and the rest answer `404`.
+      security:
+        - publisherKey: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/AppNamePath"
+        - $ref: "#/components/parameters/VersionPath"
+      responses:
+        "200":
+          description: The version's metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/VersionDetail"}
+              example:
+                data:
+                  app: invoice_reminders
+                  version: "1.4.0"
+                  digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+                  signature_id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e03
+                  size: 184320
+                  published_at: "2026-10-20T08:00:00Z"
+                  yanked: false
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/apps/{name}/versions/{version}/bundle:
+    get:
+      tags: [apps]
+      operationId: app_bundle_download
+      summary: Download the signed bundle archive.
+      description: |
+        The site never trusts this response. The installer (WP-STR-04) and the startup
+        loader verify the detached signature and the content digest themselves
+        (`spot-bundle-signing::verify`) before anything from the archive is written to disk;
+        this endpoint hands back bytes and an `ETag`, nothing more, and no header or field here
+        may claim the download is already verified or safe.
+
+        `ETag` is the canonical content digest in the same `"<sha-256-hex>"` form as
+        `VersionDetail.digest`. The response supports RFC 9110 single-range requests
+        (`Accept-Ranges: bytes`; a `Range` request answers `206` with `Content-Range`, or
+        `416` for a range outside the content; `416` and `304` use the default error envelope
+        and an empty body respectively, nothing special) and conditional requests (`If-None-Match`
+        answers `304` when the digest is unchanged, which it always is for an immutable
+        release).
+
+        A free app's bundle needs no credential. A paid app (entitlement, not price --
+        WP-STR-08 is out of scope here) needs a `siteLicence` bearer whose entitlement check
+        passes; a missing or insufficient licence on a paid app's bundle answers
+        `403 store.not_entitled`. A missing app or version answers
+        `404 store.version_not_found` either way, so a licence check never reveals whether an
+        unentitled site could otherwise see the app. A free app needs no credential, so a
+        `siteLicence` token sent for a free app, including an invalid or expired one, is
+        ignored and the download proceeds. Rate class `store_public`.
+      security:
+        - siteLicence: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/AppNamePath"
+        - $ref: "#/components/parameters/VersionPath"
+        - name: Range
+          in: header
+          required: false
+          schema: {type: string, pattern: '^bytes=\d*-\d*$'}
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: The full bundle archive. Never trusted; verify signature and digest before use.
+          headers:
+            ETag: {$ref: "#/components/headers/BundleDigestETag"}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
+          content:
+            application/octet-stream:
+              schema: {type: string, contentEncoding: binary}
+        "206":
+          description: A byte range of the bundle archive.
+          headers:
+            ETag: {$ref: "#/components/headers/BundleDigestETag"}
+            Content-Range: {schema: {type: string}}
+          content:
+            application/octet-stream:
+              schema: {type: string, contentEncoding: binary}
+        "304":
+          description: The digest named in If-None-Match is unchanged (always true for an immutable release). No body.
+        "416":
+          description: The requested range is outside the content. Uses the default error envelope (`store.invalid_request`).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/apps/{name}/versions/{version}/yank:
+    post:
+      tags: [apps]
+      operationId: app_version_yank
+      summary: Mark a version unavailable for new installs.
+      description: |
+        Only the owning publisher may yank their own app's version. An unknown app or version
+        and an app or version owned by another publisher answer the same
+        `404 store.version_not_found`, so yank is no existence oracle (`403 store.forbidden` is
+        never used for ownership). A version already yanked answers
+        `409 store.already_yanked` (a second call is refused, not silently repeated, so the
+        audit trail records exactly one yank with its one reason).
+
+        **Yank semantics (normative).** A yanked bundle stays downloadable by its exact digest
+        for existing installs (`app_bundle_download` still serves it; yank never deletes the
+        bundle or the signature, `spot-registry::Release::active`). It can no longer be newly
+        resolved as installable: `app_search` omits it and `app_version_get` reports
+        `yanked: true`, so a client must not offer it for a new install or an update. There is
+        **no un-yank**; to restore the code, publish a new, higher version. Yank is a
+        publisher's retirement of a release, not a takedown: removing a bundle for security or
+        legal reasons goes through the revocation list (`revocations_get`), which sites
+        honour even for bundles they already hold. A publisher whose status is not
+        `active` cannot yank either (`403 store.publisher_revoked`) -- a revoked publisher's
+        releases are yanked by an operator action outside this contract, not by the publisher
+        themselves.
+
+        Rate class `store_publish`.
+      security:
+        - publisherKey: []
+      parameters:
+        - $ref: "#/components/parameters/AppNamePath"
+        - $ref: "#/components/parameters/VersionPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/YankRequest"}
+            example: {reason: "A credential leaked in a log line; replaced in 1.4.1."}
+      responses:
+        "200":
+          description: Yanked. The version's updated metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/VersionDetail"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/revocations:
+    get:
+      tags: [revocations]
+      operationId: revocations_get
+      summary: The signed revocation list (keys, publishers and bundle digests no longer trusted).
+      description: |
+        `spot-bundle-signing::RevocationList` plus `next_update`: a `generation` that strictly
+        increases, the root key that issued it, and the three sorted lists (`keys`,
+        `publishers`, `bundles`). Sites poll this and refuse to install or keep running a
+        bundle that the list now revokes (the verifier, not this endpoint, makes that
+        decision). A site verifies the list's signature against its pinned root itself and
+        refuses a list whose `generation` is lower than the highest it has accepted (a replayed
+        older list must never replace a newer one). `ETag` is `"<generation>"`; cacheable, conditional `If-None-Match` answers
+        `304`. No credential required. Rate class `store_public`.
+
+        **Freshness (normative).** The list carries `issued_at` and `next_update` (both
+        RFC 3339 UTC, both inside the signed body, so neither can be altered in transit), and
+        a `200` carries `Cache-Control: max-age=300`. A client MUST fail closed for **new**
+        installs and updates: when the newest list it holds has `next_update` in the past
+        (stale) and a fresh one cannot be fetched, it refuses the install or update. A stale
+        list never permits a new install. Bundles that are **already installed** keep running
+        while the list is stale; their revocation is checked when the next fresh list is
+        accepted, at which point a revoked bundle stops. The store issues a new list (even
+        with unchanged entries, with a higher `generation`) before `next_update` passes.
+        **Rebuilding the signed bytes (normative).** A client verifies `signature` over bytes
+        it rebuilds from the JSON, never over the response body as received. It builds the
+        same object `spot-bundle-signing::RevocationBody::signed_bytes`
+        (`crates/framework/spot-bundle-signing/src/revocation.rs`) builds: the ASCII domain
+        prefix `SPOT-REVOCATION-LIST-V1\n` followed by the compact JSON (no whitespace, UTF-8)
+        of an object holding `bundles`, `generation`, `issued_at`, `issued_by`, `keys`,
+        `next_update` and `publishers` (every object's keys in lexicographic order; `signature`
+        itself is excluded), each entry of `keys`, `publishers` and `bundles` carrying exactly
+        its schema fields, entries in the order the list gives them (the store sorts by key id,
+        publisher id and digest respectively). Timestamps enter the body as the integer UTC
+        seconds of the RFC 3339 string. The root's signature is checked against that byte string.
+
+        **Open follow-up for the serving task (known wire divergences from the crate).** The
+        crate as of this contract differs from this wire form in three ways, and the crate or
+        the serving layer must reconcile them before the contract ships: (1) `next_update` is
+        inside the signed body here but `RevocationBody` has no such field; (2) times are RFC
+        3339 strings on the wire but `i64` UTC seconds in the crate (the client converts, as
+        above); (3) a revoked bundle's digest is `digest` on the wire (and in the crate's signed
+        object) but the Rust field is `digest_hex`. Until reconciled, a list signed by the
+        current crate does not verify against the rebuild above.
+      security: []
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: The current revocation list.
+          headers:
+            ETag: {$ref: "#/components/headers/RevocationGenerationETag"}
+            Cache-Control:
+              description: "`max-age=300`. A cached copy within max-age needs no refetch; independent of that, the client's fail-closed rule is driven by `next_update`."
+              schema: {type: string, const: "max-age=300"}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/RevocationList"}
+              example:
+                data:
+                  generation: 7
+                  issued_at: "2026-10-31T00:00:00Z"
+                  next_update: "2026-10-31T06:00:00Z"
+                  issued_by: root-2026
+                  signature: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHw==
+                  keys: []
+                  publishers:
+                    - publisher_id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e04
+                      effective_from: "2026-10-30T00:00:00Z"
+                      reason: "Certificate authority reported key compromise."
+                  bundles: []
+        "304":
+          description: Unchanged since the generation named in If-None-Match.
+        default: {$ref: "#/components/responses/Error"}
+
+  /store/v1/reviews/{id}:
+    get:
+      tags: [reviews]
+      operationId: review_get
+      summary: The publisher's own view of a review report summary.
+      description: |
+        The review never says an app is safe: `verdict` is exactly one of
+        `spot-app-review::Verdict`'s three values, `looks_clean` the best of them, and a human
+        still approves listing after reading the full report outside this contract. Only the
+        publisher who submitted the reviewed bundle may read it
+        (anyone else gets `404 store.review_not_found`, the same answer an unknown id gets, so
+        this is no existence oracle). A review id that never existed, or belongs to another
+        publisher, or has expired from retention, all answer `404 store.review_not_found`;
+        `403 store.forbidden` is never returned by this operation.
+
+        This is a summary, not the full findings list: counts by severity and the verdict,
+        enough for a publisher to decide whether to fix something and republish. Rate class
+        `store_review`.
+      security:
+        - publisherKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {$ref: "#/components/schemas/ReviewId"}
+      responses:
+        "200":
+          description: The review summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/ReviewSummary"}
+              example:
+                data:
+                  id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e01
+                  app: invoice_reminders
+                  version: "1.4.0"
+                  verdict: looks_clean
+                  findings: {info: 2, warning: 0, blocker: 0}
+                  created_at: "2026-10-31T00:05:00Z"
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    publisherKey:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <publisher API key>`. A publisher API key bound to exactly one publisher
+        id (the key cannot act for a different publisher, even a publisher the same person
+        also owns). Missing credentials give `401 store.unauthorized`; a bad, expired or
+        revoked key gives the same `401 store.unauthorized` (never a different answer that
+        would tell an attacker which part failed).
+    siteLicence:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <site licence token>`. A token proving a site's entitlement to a paid app's
+        bundle (WP-STR-08 defines how a site gets one; out of scope here). Entitlement is
+        checked as a boolean; this contract carries no price or transaction. A missing or
+        insufficient licence on a paid app's bundle answers `403 store.not_entitled`.
+
+  headers:
+    BundleDigestETag:
+      description: The bundle's canonical content digest, strong entity tag form, for example "9f86d081...f00a08".
+      schema: {type: string, pattern: '^"[0-9a-f]{64}"$'}
+    RevocationGenerationETag:
+      description: The revocation list's generation, strong entity tag form, for example "7".
+      schema: {type: string, pattern: '^"[0-9]+"$'}
+
+  parameters:
+    AppNamePath:
+      name: name
+      in: path
+      required: true
+      description: The app's storage name.
+      schema: {$ref: "#/components/schemas/AppName"}
+    VersionPath:
+      name: version
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/SemVer"}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+
+  responses:
+    Error:
+      description: Any error. The status and error.code follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait, on 429.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+          examples:
+            name_taken:
+              value:
+                error:
+                  code: store.name_taken
+                  message: "This app name is owned by a different publisher."
+                  explanation: "App names are first-come, first-served and exclusive. Choose a different name, or ask the current owner for a transfer (out of scope of this contract)."
+                  retryable: false
+                  request_id: 0192f3c4-5b6a-7c8d-9e0f-00000000f001
+
+  schemas:
+    AppName:
+      type: string
+      description: Lower-case storage name, the same syntax a manifest declares (spot-registry::AppName).
+      pattern: '^[a-z][a-z0-9_]{0,62}$'
+
+    SemVer:
+      type: string
+      description: A semantic version (MAJOR.MINOR.PATCH, optional pre-release and build metadata).
+      pattern: '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+
+    PublisherId:
+      type: string
+      description: The certificate publisher id (spot-registry::Publisher.id). Opaque; never an e-mail address or a display name.
+      pattern: '^[A-Za-z0-9_-]{1,128}$'
+
+    ReviewId:
+      type: string
+      description: Opaque review identifier returned by app_publish. Not a document id and grants no site access.
+      pattern: '^[A-Za-z0-9_-]{1,128}$'
+
+    Digest:
+      type: string
+      description: SHA-256 of the canonical bundle bytes, hex, lower-case (spot_bundle::Digest).
+      pattern: '^[0-9a-f]{64}$'
+
+    DateTimeUtc:
+      type: string
+      description: RFC 3339, always UTC with Z.
+      format: date-time
+
+    ErrorCode:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable, request_id]
+          properties:
+            code: {$ref: "#/components/schemas/ErrorCode"}
+            message: {type: string}
+            explanation: {type: string}
+            retryable: {type: boolean, description: True when the same request may succeed later unchanged.}
+            request_id: {type: string}
+            details: {type: object, additionalProperties: true, description: Code-specific data, documented per code.}
+
+    PublishUpload:
+      type: object
+      additionalProperties: false
+      required: [bundle, signature, certificate_chain]
+      properties:
+        bundle:
+          type: string
+          contentEncoding: binary
+          description: The archive bytes (ADR-21, the signed WASM component bundle). The store computes the canonical digest from these bytes; it is never supplied by the client.
+        signature:
+          type: string
+          contentEncoding: base64
+          maxLength: 1024
+          description: The publisher's own detached signature over the bundle's canonical digest (spot-bundle-signing::BundleSignature). The store never produces this; it only verifies it.
+        certificate_chain:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: {type: string, contentEncoding: base64}
+          description: >-
+            The publisher's certificate chain to a trusted root (spot-bundle-signing::CertificateChain).
+            In the multipart body each certificate is its own text part named `certificate_chain`
+            (the field repeated once per certificate, in chain order), each part's value the
+            standard-alphabet base64 (RFC 4648, padded) of that certificate's bytes, with
+            `Content-Type: text/plain`. A single JSON array in one part is not accepted.
+
+    PublishAccepted:
+      type: object
+      additionalProperties: false
+      required: [review_id]
+      properties:
+        review_id: {$ref: "#/components/schemas/ReviewId"}
+
+    AppListing:
+      type: object
+      additionalProperties: false
+      required: [name, title, description, category, publisher, latest_version, published_at]
+      properties:
+        name: {$ref: "#/components/schemas/AppName"}
+        title: {type: string, maxLength: 128}
+        description: {type: string, maxLength: 2000}
+        category: {type: string, maxLength: 64}
+        publisher: {$ref: "#/components/schemas/PublisherId"}
+        latest_version: {$ref: "#/components/schemas/SemVer"}
+        published_at: {$ref: "#/components/schemas/DateTimeUtc"}
+
+    AppSearchPage:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: {$ref: "#/components/schemas/AppListing"}
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque, query-bound. Absent (null) at the end of results.
+
+    VersionDetail:
+      type: object
+      additionalProperties: false
+      required: [app, version, digest, signature_id, size, published_at, yanked]
+      properties:
+        app: {$ref: "#/components/schemas/AppName"}
+        version: {$ref: "#/components/schemas/SemVer"}
+        digest: {$ref: "#/components/schemas/Digest"}
+        signature_id:
+          type: string
+          description: Identifies the stored detached signature and certificate chain; opaque, carries no key material.
+          pattern: '^[A-Za-z0-9_-]{1,128}$'
+        size: {type: integer, minimum: 0, description: The archive size in bytes.}
+        published_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        requires_host:
+          type: [string, "null"]
+          description: The manifest's host version requirement, when it states one.
+        yanked: {type: boolean}
+        yanked_reason:
+          type: [string, "null"]
+          maxLength: 2000
+          description: Present only when yanked is true.
+
+    YankRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Why, for the audit trail and for VersionDetail.yanked_reason.
+
+    RevokedKey:
+      type: object
+      additionalProperties: false
+      required: [key_id, effective_from, compromised, reason]
+      properties:
+        key_id: {type: string, maxLength: 256}
+        effective_from: {$ref: "#/components/schemas/DateTimeUtc"}
+        compromised: {type: boolean}
+        reason: {type: string, maxLength: 2000}
+
+    RevokedPublisher:
+      type: object
+      additionalProperties: false
+      required: [publisher_id, effective_from, reason]
+      properties:
+        publisher_id: {$ref: "#/components/schemas/PublisherId"}
+        effective_from: {$ref: "#/components/schemas/DateTimeUtc"}
+        reason: {type: string, maxLength: 2000}
+
+    RevokedBundle:
+      type: object
+      additionalProperties: false
+      required: [digest, reason]
+      properties:
+        digest: {$ref: "#/components/schemas/Digest"}
+        reason: {type: string, maxLength: 2000}
+
+    RevocationList:
+      type: object
+      additionalProperties: false
+      required: [generation, issued_at, next_update, issued_by, signature, keys, publishers, bundles]
+      description: |
+        The unsigned body plus the root's signature, mirroring spot-bundle-signing's
+        RevocationBody/RevocationList property for property, plus `next_update`, which is part
+        of the signed body (see revocations_get, "Freshness").
+      properties:
+        generation: {type: integer, minimum: 0, description: Strictly increasing per issued list.}
+        issued_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        next_update:
+          allOf:
+            - $ref: "#/components/schemas/DateTimeUtc"
+          description: Latest time a client may treat this list as fresh. After it, the list is stale and a client refuses new installs and updates until it holds a fresh one.
+        issued_by: {type: string, maxLength: 256, description: The signing root's key id.}
+        signature: {type: string, contentEncoding: base64, description: The root's signature over the canonical body bytes.}
+        keys:
+          type: array
+          items: {$ref: "#/components/schemas/RevokedKey"}
+        publishers:
+          type: array
+          items: {$ref: "#/components/schemas/RevokedPublisher"}
+        bundles:
+          type: array
+          items: {$ref: "#/components/schemas/RevokedBundle"}
+
+    ReviewVerdict:
+      type: string
+      description: Exactly spot-app-review::Verdict's three variants. Never a value that claims the app is safe.
+      enum: [rejected, needs_human_review, looks_clean]
+
+    ReviewSummary:
+      type: object
+      additionalProperties: false
+      required: [id, app, version, verdict, findings, created_at]
+      properties:
+        id: {$ref: "#/components/schemas/ReviewId"}
+        app: {$ref: "#/components/schemas/AppName"}
+        version: {$ref: "#/components/schemas/SemVer"}
+        verdict: {$ref: "#/components/schemas/ReviewVerdict"}
+        findings:
+          type: object
+          additionalProperties: false
+          required: [info, warning, blocker]
+          description: Counts by severity (spot-app-review::SeverityCounts), never the finding text itself.
+          properties:
+            info: {type: integer, minimum: 0}
+            warning: {type: integer, minimum: 0}
+            blocker: {type: integer, minimum: 0}
+        created_at: {$ref: "#/components/schemas/DateTimeUtc"}
+
+x-spot-error-codes:
+  store.invalid_request: [400, false, "The request is malformed or does not match the schema."]
+  store.unauthorized: [401, false, "No credential was sent, or it is invalid, expired or revoked."]
+  store.forbidden: [403, false, "The credential is valid but does not permit this operation. Never used to say a resource belongs to someone else: ownership failures answer 404 so they reveal nothing about existence."]
+  store.not_entitled: [403, false, "This site licence does not cover this paid app, or no licence was sent for a paid app's bundle."]
+  store.publisher_revoked: [403, false, "The publisher's status is not active; they may not publish, yank or receive transfers."]
+  store.app_not_found: [404, false, "No app with this name, or it has no public listing."]
+  store.version_not_found: [404, false, "No such version of this app, or (for a yank) the app or version belongs to another publisher."]
+  store.review_not_found: [404, false, "No such review, it belongs to another publisher, or it has expired from retention."]
+  store.name_taken: [409, false, "This app name is already owned by a different publisher."]
+  store.already_yanked: [409, false, "This version is already yanked; yanking it again would overwrite the first reason. There is no un-yank; publish a higher version instead."]
+  store.version_not_monotonic: [422, false, "The version is not strictly greater than every version already published for this app."]
+  store.signature_invalid: [422, false, "The detached signature does not verify against the uploaded bundle's digest or the certificate chain."]
+  store.too_large: [413, false, "The uploaded bundle is larger than the 64 MiB maximum; shrink the archive and publish again."]
+  store.invalid_manifest: [422, false, "The bundle's manifest.toml is larger than 64 KiB, does not parse, fails validation, or declares a name different from the path."]
+  store.bundle_invalid: [422, false, "The archive failed a lower-level bundle check; details.bundle_code names the exact bundle.* problem code."]
+  store.rate_limited: [429, true, "Too many requests for this credential; wait for Retry-After."]

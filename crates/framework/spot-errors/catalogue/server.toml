@@ -1,0 +1,28 @@
+# server codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "server.unavailable"
+class = "Unavailable"
+summary = "The service is temporarily busy or unreachable; the same request may succeed later."
+explanation_key = "error.server.unavailable"
+params = []
+remedy = "Retry later with the same request id."
+since = "0.1.0"
+
+[[entry]]
+code = "server.conflict_retry_exhausted"
+class = "Unavailable"
+summary = "Concurrent changes kept conflicting until the host ran out of retries."
+explanation_key = "error.server.conflict_retry_exhausted"
+params = []
+remedy = "Retry the whole operation later, when contention has settled."
+since = "0.1.0"
+
+[[entry]]
+code = "server.maintenance"
+class = "none"
+summary = "Reserved for planned maintenance windows; nothing raises it yet."
+explanation_key = "error.server.maintenance"
+params = []
+remedy = "Retry after the maintenance window ends."
+since = "0.1.0"

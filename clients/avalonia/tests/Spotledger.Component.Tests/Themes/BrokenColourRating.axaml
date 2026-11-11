@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:broken="using:Spotledger.Component.Tests">
+  <!-- Deliberately broken: a hard-coded colour instead of a Theme token. The contract kit
+       must reject this package (tokens.literal). -->
+  <ControlTheme x:Key="{x:Type broken:BrokenRatingView}" TargetType="broken:BrokenRatingView">
+    <Setter Property="Background" Value="#FFD700" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+  </ControlTheme>
+</ResourceDictionary>

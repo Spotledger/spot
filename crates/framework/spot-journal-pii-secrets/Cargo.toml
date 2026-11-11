@@ -1,0 +1,26 @@
+[package]
+name = "spot-journal-pii-secrets"
+description = "The SubjectKeys adapter over the spot-secrets key provider (WP-JRN-08.T3, ADR-061 s6 and s9): per-subject keys created on first use and stored wrapped by the tenant's key provider, destroyed on erasure with an audit event, a bounded zeroizing cache, and fail-closed errors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-journal-pii = { path = "../spot-journal-pii" }
+spot-secrets = { path = "../spot-secrets" }
+# The audit event is a serialisable value the host's audit port stores.
+serde = { version = "1", features = ["derive"] }
+# SHA-256 for the tenant-salted subject hash in the audit event. Not named in the brief's list:
+# see Open questions (spot-secrets and spot-journal-pii already use the same crate).
+sha2 = "0.10"
+thiserror = "2"
+zeroize = "1"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# The record image protect/reveal take is a serde_json::Value; used by the tests only.
+serde_json = "1"

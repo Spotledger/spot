@@ -1,0 +1,226 @@
+# webhook codes: outbound webhooks with guaranteed delivery (WP-INT-01). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "webhook.not_found"
+class = "NotFound"
+summary = "The webhook was not found: {id}."
+explanation_key = "error.webhook.not_found"
+params = ["id"]
+remedy = "Check the webhook ID and try again, or create a new webhook."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.disabled"
+class = "PermissionDenied"
+summary = "The webhook is disabled: {id}."
+explanation_key = "error.webhook.disabled"
+params = ["id"]
+remedy = "Enable the webhook in the webhook configuration."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_condition"
+class = "Validation"
+summary = "Invalid condition expression: {reason}."
+explanation_key = "error.webhook.invalid_condition"
+params = ["reason"]
+remedy = "Fix the condition expression syntax and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_payload_mode"
+class = "Validation"
+summary = "Invalid payload mode: {mode}."
+explanation_key = "error.webhook.invalid_payload_mode"
+params = ["mode"]
+remedy = "Use one of: ids, fields, full."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_secret"
+class = "Internal"
+summary = "Invalid secret: {reason}."
+explanation_key = "error.webhook.invalid_secret"
+params = ["reason"]
+remedy = "Check the secret configuration and ensure it is properly sealed."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_url"
+class = "Validation"
+summary = "Invalid URL: {reason}."
+explanation_key = "error.webhook.invalid_url"
+params = ["reason"]
+remedy = "Provide a valid HTTP or HTTPS URL."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_headers"
+class = "Validation"
+summary = "Invalid headers: {reason}."
+explanation_key = "error.webhook.invalid_headers"
+params = ["reason"]
+remedy = "Check the header names and values for validity."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_timeout"
+class = "Validation"
+summary = "Invalid timeout: {reason}."
+explanation_key = "error.webhook.invalid_timeout"
+params = ["reason"]
+remedy = "Set timeout between 1 and 300 seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_max_attempts"
+class = "Validation"
+summary = "Invalid max attempts: {reason}."
+explanation_key = "error.webhook.invalid_max_attempts"
+params = ["reason"]
+remedy = "Set max attempts between 1 and 100."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_filter"
+class = "Validation"
+summary = "Invalid filter: {reason}."
+explanation_key = "error.webhook.invalid_filter"
+params = ["reason"]
+remedy = "Ensure at least one event type is specified and the DocType exists."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.delivery_not_found"
+class = "NotFound"
+summary = "The webhook delivery was not found: {id}."
+explanation_key = "error.webhook.delivery_not_found"
+params = ["id"]
+remedy = "Check the delivery ID and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.delivery_failed"
+class = "Internal"
+summary = "The webhook delivery failed after {attempts} attempts: {last_error}."
+explanation_key = "error.webhook.delivery_failed"
+params = ["attempts", "last_error"]
+remedy = "Check the delivery log for details. The webhook may be in dead-letter state."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.delivery_blocked"
+class = "PermissionDenied"
+summary = "The webhook delivery was blocked by egress policy: {reason}."
+explanation_key = "error.webhook.delivery_blocked"
+params = ["reason"]
+remedy = "Contact your administrator to review the egress policy for this destination."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.delivery_rate_limited"
+class = "Unavailable"
+summary = "The webhook delivery was rate limited: retry after {retry_after_secs} seconds."
+explanation_key = "error.webhook.delivery_rate_limited"
+params = ["retry_after_secs"]
+remedy = "The delivery will be retried automatically after the specified interval."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.circuit_open"
+class = "Unavailable"
+summary = "The circuit breaker is open for endpoint {endpoint}: retry after {retry_after_secs} seconds."
+explanation_key = "error.webhook.circuit_open"
+params = ["endpoint", "retry_after_secs"]
+remedy = "The delivery will be retried when the circuit breaker allows probes."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.bulkhead_full"
+class = "Unavailable"
+summary = "The bulkhead is full for endpoint {endpoint}: too many concurrent deliveries."
+explanation_key = "error.webhook.bulkhead_full"
+params = ["endpoint"]
+remedy = "Wait for concurrent deliveries to complete or increase the bulkhead limit."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.signature_verification_failed"
+class = "PermissionDenied"
+summary = "Webhook signature verification failed: {reason}."
+explanation_key = "error.webhook.signature_verification_failed"
+params = ["reason"]
+remedy = "Verify the signing secret matches and the payload was not tampered with."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.secret_rotation_failed"
+class = "Internal"
+summary = "Webhook secret rotation failed: {reason}."
+explanation_key = "error.webhook.secret_rotation_failed"
+params = ["reason"]
+remedy = "Check the secret configuration and try rotating again."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.payload_too_large"
+class = "Validation"
+summary = "The webhook payload is too large: {size} bytes (max {max} bytes)."
+explanation_key = "error.webhook.payload_too_large"
+params = ["max", "size"]
+remedy = "Reduce the payload size or use 'ids' payload mode."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.condition_evaluation_failed"
+class = "Internal"
+summary = "Webhook condition evaluation failed: {reason}."
+explanation_key = "error.webhook.condition_evaluation_failed"
+params = ["reason"]
+remedy = "Fix the condition expression or the event data it references."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.intake_failed"
+class = "Internal"
+summary = "Webhook intake failed: {reason}."
+explanation_key = "error.webhook.intake_failed"
+params = ["reason"]
+remedy = "Check the system logs for details on the intake failure."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.replay_failed"
+class = "Internal"
+summary = "Webhook replay failed: {reason}."
+explanation_key = "error.webhook.replay_failed"
+params = ["reason"]
+remedy = "Check the delivery record exists and is in a replayable state."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.test_failed"
+class = "Internal"
+summary = "Webhook test failed: {reason}."
+explanation_key = "error.webhook.test_failed"
+params = ["reason"]
+remedy = "Check the webhook configuration and endpoint availability."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.invalid_config"
+class = "Validation"
+summary = "Invalid webhook configuration: {reason}."
+explanation_key = "error.webhook.invalid_config"
+params = ["reason"]
+remedy = "Review the webhook configuration and fix any errors."
+since = "0.1.0"
+
+[[entry]]
+code = "webhook.dead_letter"
+class = "Internal"
+summary = "The webhook is in dead-letter state: {id}."
+explanation_key = "error.webhook.dead_letter"
+params = ["id"]
+remedy = "Review the delivery log, fix the underlying issue, and replay the delivery."
+since = "0.1.0"

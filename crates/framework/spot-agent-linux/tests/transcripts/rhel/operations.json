@@ -1,0 +1,55 @@
+{
+  "distro": "rhel",
+  "description": "A RHEL-compatible host: install a package, apply security updates only, enable a unit, lock an account and open a source rule on firewalld.",
+  "state": {
+    "installed": ["bash", "systemd", "openssh-server", "firewalld"],
+    "updates": [
+      { "name": "openssl", "security": true },
+      { "name": "vim", "security": false }
+    ],
+    "services": { "nginx.service": { "active": false, "enabled": false } },
+    "users": { "alice": 1000 },
+    "firewall_backend": "firewalld",
+    "firewall_ports": ["22/tcp"]
+  },
+  "scenarios": [
+    {
+      "name": "install httpd",
+      "op": "os.package.install",
+      "params": { "packages": ["httpd"] },
+      "expect_argv": [["dnf", "-y", "install", "httpd"]],
+      "idempotent": true
+    },
+    {
+      "name": "apply security updates only",
+      "op": "os.update.apply",
+      "params": { "security_only": true },
+      "expect_argv": [["dnf", "-y", "upgrade", "--security"]],
+      "idempotent": true
+    },
+    {
+      "name": "enable nginx",
+      "op": "os.service.enable",
+      "params": { "unit": "nginx.service" },
+      "expect_argv": [["systemctl", "--no-pager", "enable", "nginx.service"]],
+      "idempotent": true
+    },
+    {
+      "name": "lock alice",
+      "op": "os.user.lock",
+      "params": { "name": "alice" },
+      "expect_argv": [["usermod", "--lock", "--", "alice"]],
+      "idempotent": true
+    },
+    {
+      "name": "open source 10.0.0.0/8",
+      "op": "os.firewall.open",
+      "params": { "source": "10.0.0.0/8" },
+      "expect_argv": [
+        ["firewall-cmd", "--permanent", "--add-source", "10.0.0.0/8"],
+        ["firewall-cmd", "--reload"]
+      ],
+      "idempotent": true
+    }
+  ]
+}

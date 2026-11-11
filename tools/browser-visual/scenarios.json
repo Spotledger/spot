@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "comment": "Browser visual states (WP-UI-16.T2). Every scenario is driven through the documented page contract in clients/avalonia/docs/browser-publish.md; nothing reaches into the build. A scenario the published head cannot reach is recorded as unavailable with its reason, never captured from a fixture and never silently skipped.",
+  "viewports": [
+    { "name": "desktop", "width": 1280, "height": 800 },
+    { "name": "tablet", "width": 768, "height": 1024 },
+    { "name": "phone", "width": 390, "height": 844 }
+  ],
+  "scenarios": [
+    {
+      "id": "login",
+      "description": "the signed-out start screen: server picker and login form",
+      "steps": []
+    },
+    {
+      "id": "home-with-tabs",
+      "description": "the shell with two document tabs open",
+      "steps": [ { "openList": "ToDo" }, { "openList": "Note" } ]
+    },
+    {
+      "id": "list",
+      "description": "a list tab for one doctype",
+      "steps": [ { "openList": "ToDo" } ]
+    },
+    {
+      "id": "form",
+      "description": "a form tab for one document",
+      "steps": [ { "openForm": [ "ToDo", "DEMO-0001" ] } ]
+    },
+    {
+      "id": "gallery-catalogues",
+      "description": "the control catalogue gallery",
+      "requires": "gallery-route",
+      "unavailable": "the published browser head exposes no gallery route: the galleries are hosted only by the Desktop dev menu",
+      "steps": []
+    },
+    {
+      "id": "gallery-grid",
+      "description": "the data grid gallery page",
+      "requires": "gallery-route",
+      "unavailable": "the published browser head exposes no gallery route: the galleries are hosted only by the Desktop dev menu",
+      "steps": []
+    }
+  ]
+}

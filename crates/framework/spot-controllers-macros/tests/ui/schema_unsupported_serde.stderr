@@ -1,0 +1,5 @@
+error: `#[serde(rename_all)]` is not supported by #[derive(MethodSchema)]: the schema could not match what serde reads; write the argument type with plain named fields
+  --> tests/ui/schema_unsupported_serde.rs:19:9
+   |
+19 | #[serde(rename_all = "camelCase")]
+   |         ^^^^^^^^^^

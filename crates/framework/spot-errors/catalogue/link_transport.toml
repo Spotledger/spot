@@ -1,0 +1,147 @@
+# link_transport codes — carriers for tenant links (WP-CTL-10.T2, ADR-058 rule 11).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. The server renders them in
+# the `{ "error": { "code", "message", "retryable" } }` body; none rides an `AppError`.
+
+[[entry]]
+code = "link_transport.identity_required"
+class = "none"
+summary = "No client certificate was presented on the link request."
+explanation_key = "error.link_transport.identity_required"
+params = []
+remedy = "Connect over mutual TLS with the certificate pinned for this side of the link."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.forbidden"
+class = "none"
+summary = "This caller may not use this link."
+explanation_key = "error.link_transport.forbidden"
+params = []
+remedy = "Check that the certificate is pinned to the link's peer and that the link id is right; the answer is the same for an unknown link, so nothing more is revealed."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.revoked"
+class = "none"
+summary = "The link was revoked, so no exchange is accepted on it."
+explanation_key = "error.link_transport.revoked"
+params = []
+remedy = "Propose a new link if the relationship continues; revocation cannot be undone."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.not_active"
+class = "none"
+summary = "The link is not active (not yet activated, or expired)."
+explanation_key = "error.link_transport.not_active"
+params = []
+remedy = "Finish the handshake, or renew the link if it expired."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.carrier_disabled"
+class = "none"
+summary = "This side does not use this carrier in this direction on this link."
+explanation_key = "error.link_transport.carrier_disabled"
+params = []
+remedy = "Use the other carrier for this direction, or change the link's carrier settings on both sides."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.invalid_request"
+class = "none"
+summary = "The link request is malformed."
+explanation_key = "error.link_transport.invalid_request"
+params = []
+remedy = "Send a JSON body of the documented shape and a valid query."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.replayed"
+class = "none"
+summary = "The handshake message or revoke was already used."
+explanation_key = "error.link_transport.replayed"
+params = []
+remedy = "Do not resend it: the first copy was taken. If the exchange did not finish, start the missing step again with a new message, which carries a new nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.too_large"
+class = "none"
+summary = "The request body is larger than the limit."
+explanation_key = "error.link_transport.too_large"
+params = []
+remedy = "Send a smaller message or fewer receipts per request."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.rate_limited"
+class = "none"
+summary = "Too many requests arrived on this link in a short time."
+explanation_key = "error.link_transport.rate_limited"
+params = []
+remedy = "Wait for the Retry-After period and send again; the sender does this by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.busy"
+class = "none"
+summary = "The receiver is busy and took nothing."
+explanation_key = "error.link_transport.busy"
+params = []
+remedy = "Send the same message again later; the sender keeps it and does this by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.unavailable"
+class = "none"
+summary = "The request could not be recorded, so nothing was acknowledged."
+explanation_key = "error.link_transport.unavailable"
+params = []
+remedy = "Send again later; check the store, the audit trail and the quarantine if it persists."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.peer_unavailable"
+class = "none"
+summary = "The peer could not be reached or answered with a server error."
+explanation_key = "error.link_transport.peer_unavailable"
+params = []
+remedy = "Check that the peer's server is running and reachable; queued messages are kept and sent when it returns."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.peer_refused"
+class = "none"
+summary = "The peer refused the request."
+explanation_key = "error.link_transport.peer_refused"
+params = []
+remedy = "Check the link state and the pinned certificates on both sides."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.peer_misbehaved"
+class = "none"
+summary = "The peer sent a reply or a receipt that does not verify."
+explanation_key = "error.link_transport.peer_misbehaved"
+params = []
+remedy = "Check the peer's identity key in the link; the item was refused and audited."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.circuit_open"
+class = "none"
+summary = "The peer is being given time to recover after repeated failures."
+explanation_key = "error.link_transport.circuit_open"
+params = []
+remedy = "Nothing to do; the link is probed again after the breaker period."
+since = "0.1.0"
+
+[[entry]]
+code = "link_transport.deadline_exceeded"
+class = "none"
+summary = "The call took longer than its deadline."
+explanation_key = "error.link_transport.deadline_exceeded"
+params = []
+remedy = "Check the network path to the peer; the call is retried by the loop."
+since = "0.1.0"

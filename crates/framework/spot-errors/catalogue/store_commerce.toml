@@ -1,0 +1,318 @@
+# store_commerce codes: the app store's back end (WP-STR-08.T1). One [[entry]] per code in the
+# `store_commerce.*` family; see crates/framework/spot-errors/README.md. These ride the crate's own
+# `StoreError`, not an `AppError`, so every class is `none`.
+
+[[entry]]
+code = "store_commerce.invalid_input"
+class = "none"
+summary = "A caller-supplied value is invalid: a blank or malformed id, or a duplicate record."
+explanation_key = "error.store_commerce.invalid_input"
+params = []
+remedy = "Correct the named field and retry; the message names the field, never its value."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.not_found"
+class = "none"
+summary = "A record the caller named does not exist."
+explanation_key = "error.store_commerce.not_found"
+params = []
+remedy = "Check the identifier, or create the record first."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.publisher_unknown"
+class = "none"
+summary = "The publisher is not known to the store."
+explanation_key = "error.store_commerce.publisher_unknown"
+params = []
+remedy = "Onboard the publisher before acting on its behalf."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.publisher_not_verified"
+class = "none"
+summary = "The publisher has not completed verification, so it may not publish."
+explanation_key = "error.store_commerce.publisher_not_verified"
+params = []
+remedy = "Verify the publisher, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.publisher_suspended"
+class = "none"
+summary = "The publisher is suspended and may not publish."
+explanation_key = "error.store_commerce.publisher_suspended"
+params = []
+remedy = "Reinstate the publisher, or resolve the suspension, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.signing_key_invalid"
+class = "none"
+summary = "A registered signing key is not a valid Ed25519 public key."
+explanation_key = "error.store_commerce.signing_key_invalid"
+params = []
+remedy = "Register the publisher's 32-byte Ed25519 public key."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.signing_key_duplicate"
+class = "none"
+summary = "The signing key is already registered for this publisher."
+explanation_key = "error.store_commerce.signing_key_duplicate"
+params = []
+remedy = "Use the registered key, or revoke it before registering a replacement."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.listing_unknown"
+class = "none"
+summary = "The listing is not known to the catalogue."
+explanation_key = "error.store_commerce.listing_unknown"
+params = []
+remedy = "Create the listing, or check the listing id."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.listing_unreviewed"
+class = "none"
+summary = "The app version has not been approved by a human reviewer, or the listing is not on sale."
+explanation_key = "error.store_commerce.listing_unreviewed"
+params = []
+remedy = "Complete the review and approve the version, then publish the listing."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.listing_unsigned"
+class = "none"
+summary = "The release carries no valid signature for this app and publisher."
+explanation_key = "error.store_commerce.listing_unsigned"
+params = []
+remedy = "Publish a signed bundle for the app version."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.listing_free"
+class = "none"
+summary = "The listing is free, so there is nothing to check out."
+explanation_key = "error.store_commerce.listing_free"
+params = []
+remedy = "Install a free listing directly; checkout is only for paid listings."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.listing_paid"
+class = "none"
+summary = "The listing is paid, so a free install cannot grant it."
+explanation_key = "error.store_commerce.listing_paid"
+params = []
+remedy = "Start a checkout for the paid listing instead of installing it free."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.version_unknown"
+class = "none"
+summary = "The app version is not known to the listing."
+explanation_key = "error.store_commerce.version_unknown"
+params = []
+remedy = "Submit the version before naming it, and use one version once."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.review_not_found"
+class = "none"
+summary = "No review report is recorded for the app version."
+explanation_key = "error.store_commerce.review_not_found"
+params = []
+remedy = "Run the review by submitting the version."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.price_invalid"
+class = "none"
+summary = "A price or validity window is not a positive, exact whole number of minor units."
+explanation_key = "error.store_commerce.price_invalid"
+params = []
+remedy = "Give a paid plan a positive price in minor units, and a consistent validity window."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.plan_invalid"
+class = "none"
+summary = "A plan slug is not a valid edition string."
+explanation_key = "error.store_commerce.plan_invalid"
+params = []
+remedy = "Use a plan slug of letters, digits, `_` and `-` starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.session_unknown"
+class = "none"
+summary = "The checkout session is not known."
+explanation_key = "error.store_commerce.session_unknown"
+params = []
+remedy = "Start a checkout session first, or check the session id."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.session_not_pending"
+class = "none"
+summary = "The checkout session is not pending, so it cannot complete again."
+explanation_key = "error.store_commerce.session_not_pending"
+params = []
+remedy = "Do not complete a session twice; start a new session for a new payment."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.payment_failed"
+class = "none"
+summary = "The payment provider reported a failed payment."
+explanation_key = "error.store_commerce.payment_failed"
+params = []
+remedy = "Ask the customer to retry the payment; the entitlement lapses after its grace."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.webhook_signature_invalid"
+class = "none"
+summary = "A webhook's signature did not verify against the provider secret."
+explanation_key = "error.store_commerce.webhook_signature_invalid"
+params = []
+remedy = "Check the signing secret and that the exact body bytes were verified."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.webhook_malformed"
+class = "none"
+summary = "A webhook body is not the event shape the store expects, or names no known record."
+explanation_key = "error.store_commerce.webhook_malformed"
+params = []
+remedy = "Send the provider's event shape for a checkout session the store knows."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.webhook_stale"
+class = "none"
+summary = "A webhook's timestamp is outside the accepted tolerance."
+explanation_key = "error.store_commerce.webhook_stale"
+params = []
+remedy = "Deliver webhooks promptly, or widen the tolerance if the provider is slow."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.entitlement_unknown"
+class = "none"
+summary = "The tenant holds no entitlement for the app."
+explanation_key = "error.store_commerce.entitlement_unknown"
+params = []
+remedy = "Complete a purchase for the app before reading or renewing its entitlement."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.entitlement_revoked"
+class = "none"
+summary = "The entitlement has been revoked by a refund or chargeback."
+explanation_key = "error.store_commerce.entitlement_revoked"
+params = []
+remedy = "Buy the app again to grant a new entitlement."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.licence_invalid"
+class = "none"
+summary = "An app licence is structurally invalid or its signature does not verify."
+explanation_key = "error.store_commerce.licence_invalid"
+params = []
+remedy = "Present a licence the store signed, in its `SPOT-LICENCE-1` text form."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.licence_wrong_tenant"
+class = "none"
+summary = "The app licence belongs to a different tenant."
+explanation_key = "error.store_commerce.licence_wrong_tenant"
+params = []
+remedy = "Install the licence that names this tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.licence_wrong_app"
+class = "none"
+summary = "The app licence grants a different app."
+explanation_key = "error.store_commerce.licence_wrong_app"
+params = []
+remedy = "Install the licence that grants the app being checked."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.licence_revoked"
+class = "none"
+summary = "The app licence is named by a signed revocation list."
+explanation_key = "error.store_commerce.licence_revoked"
+params = []
+remedy = "Stop using the revoked licence; buy a new entitlement to replace it."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.revocation_invalid"
+class = "none"
+summary = "A revocation list is signed by another root, is stale, or its signature does not verify."
+explanation_key = "error.store_commerce.revocation_invalid"
+params = []
+remedy = "Use a list signed by the trusted store root with a strictly newer generation."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.renewal_stale"
+class = "none"
+summary = "A renewal does not strictly extend the validity window and the serial."
+explanation_key = "error.store_commerce.renewal_stale"
+params = []
+remedy = "Renew with a later expiry and a higher serial than the current grant."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.provider_error"
+class = "none"
+summary = "The payment provider refused an operation."
+explanation_key = "error.store_commerce.provider_error"
+params = []
+remedy = "Retry the provider operation, or surface the provider's refusal to the operator."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.registry_error"
+class = "none"
+summary = "The app registry refused an operation."
+explanation_key = "error.store_commerce.registry_error"
+params = []
+remedy = "Resolve the registry's refusal, named in the message, and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.money_error"
+class = "none"
+summary = "A money operation failed: a missing currency or an inexact or overflowing amount."
+explanation_key = "error.store_commerce.money_error"
+params = []
+remedy = "Add the currency to the currency table, or use an amount on the rule's grid."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.ledger_error"
+class = "none"
+summary = "A ledger record would overwrite history or names an unknown order."
+explanation_key = "error.store_commerce.ledger_error"
+params = []
+remedy = "Record each order, fee and payout once; the ledger is append-only."
+since = "0.1.0"
+
+[[entry]]
+code = "store_commerce.signing_error"
+class = "none"
+summary = "A signing operation failed, or a public key is not a valid curve point."
+explanation_key = "error.store_commerce.signing_error"
+params = []
+remedy = "Check the signing key material and the public key bytes."
+since = "0.1.0"

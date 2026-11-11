@@ -1,0 +1,56 @@
+[package]
+name = "spot-doc-audit"
+description = "Tamper-evident audit of every document change (WP-SEC-06.T1): a lifecycle step that writes a masked audit event to the outbox in the business transaction, a lane-sharded appender that chains events in commit order off the hot path, a head digest that binds the lanes into a signed site checkpoint, and the lag, verification and per-document history views"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The document lifecycle, controllers and hook contexts the audit step attaches to.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Validated topics and the payload document (`{meta, data}`) the outbox carries.
+spot-events-contract = { path = "../../../contracts/events" }
+# `OutboxEvent`, `OutboxRecord`, `ChangeFeed`, `FeedPosition` and the value model.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The chain, its store trait and the verifier (WP-AI-11.T1).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# `FieldChange` (the version-history diff shape) the audit diff is built from.
+spot-activity = { path = "../spot-activity" }
+# The document engine's transaction-participant seam (`TxParticipant`, `WriteRecord`): the audit
+# event is written through it, inside the document's own transaction (WP-DOC-04.T3).
+spot-document = { path = "../spot-document" }
+# The field guard: `redact_diff` for the reader-facing history and the protection facts the
+# stored (masked) form is built from (ADR-070 section 12 rule 9).
+spot-field-guard = { path = "../spot-field-guard", default-features = false }
+# `Principal`, `DocFacts`, `Action`, `mask`: the permission core the masking is built on.
+spot-permissions = { path = "../spot-permissions" }
+# `ControllerRegistry`: the host registers the audit step like any other controller.
+spot-controllers = { path = "../spot-controllers" }
+# `JobHandlerRegistry` and `HandlerResult`: the appender runs as a fenced job.
+spot-jobs = { path = "../spot-jobs" }
+# `SiteId` and `Clock`.
+spot-core = { path = "../spot-core" }
+# Stable serde on the event and the checkpoint; SHA-256 for lanes, digests and the head digest.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+# The one warning for a denial that could not be recorded (code only, never a value).
+tracing = "0.1"
+time = { version = "0.3", features = ["serde"] }
+
+[dev-dependencies]
+# The engine tests build a seam registry (no controllers) to run a real `Engine` on the fake.
+spot-seams = { path = "../spot-seams" }
+# The fake storage backend: a real transactional outbox to prove atomicity and rollback.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Effective metadata and the permission snapshot a real `FieldGuard` fixture needs.
+spot-meta = { path = "../spot-meta" }
+# A deterministic clock for event stamps.
+spot-core = { path = "../spot-core" }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[lints]
+workspace = true

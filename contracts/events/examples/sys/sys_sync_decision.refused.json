@@ -1,0 +1,7 @@
+{
+  "action": "quarantine_released",
+  "actor": "0192f1c0-0000-7000-8000-000000000007",
+  "code": "sync.quarantine_hold_active",
+  "entity": "sales_invoice",
+  "outcome": "refused"
+}

@@ -1,0 +1,73 @@
+# snapshot codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "snapshot.version_mismatch"
+class = "none"
+summary = "The snapshot came from PostgreSQL {snapshot_major} but the target runs {target_major}."
+explanation_key = "error.snapshot.version_mismatch"
+params = ["snapshot_major", "target_major"]
+remedy = "Restore into a PostgreSQL {snapshot_major} target, or ask the operator whether a logical restore into the newer major version is possible for this data."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.replace_required"
+class = "none"
+summary = "The restore target {target} already holds data and nothing was replaced."
+explanation_key = "error.snapshot.replace_required"
+params = ["target"]
+remedy = "Pass replace with a confirmation token, or restore into an empty target."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.replace_token_mismatch"
+class = "none"
+summary = "The confirmation token does not match the replace target; nothing was replaced: {expected}."
+explanation_key = "error.snapshot.replace_token_mismatch"
+params = ["expected"]
+remedy = "Repeat the token the operation reported (it names the target) to confirm the replace."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.tool_missing"
+class = "none"
+summary = "The required tool {tool} was not found ({searched})."
+explanation_key = "error.snapshot.tool_missing"
+params = ["searched", "tool"]
+remedy = "Point the provider at a bundled layout or a PostgreSQL binary directory that holds the tool."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.verify_failed"
+class = "none"
+summary = "Snapshot verification failed: {reason}."
+explanation_key = "error.snapshot.verify_failed"
+params = ["reason"]
+remedy = "Take the snapshot again; do not restore from a snapshot that fails verification."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.invariants_failed"
+class = "none"
+summary = "The restore finished but invariant checks failed: {violations}."
+explanation_key = "error.snapshot.invariants_failed"
+params = ["violations"]
+remedy = "Discard the non-activated restore, fix the cause, and restore again from a verified snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.not_scratch"
+class = "none"
+summary = "{target} was not dropped: it is not a scratch this crate may destroy ({reason})."
+explanation_key = "error.snapshot.not_scratch"
+params = ["reason", "target"]
+remedy = "Only a database restored by this crate (it carries the scratch marker of its snapshot) or a directory under the declared scratch root can be dropped, and never the live database; check the name, then drop it by hand if you are sure."
+since = "0.1.0"
+
+[[entry]]
+code = "snapshot.io"
+class = "none"
+summary = "A snapshot or restore operation failed underneath the request (disk, process or connection)."
+explanation_key = "error.snapshot.io"
+params = []
+remedy = "Retry once the underlying storage or server is healthy; the target is left unchanged or moved aside, never deleted."
+since = "0.1.0"

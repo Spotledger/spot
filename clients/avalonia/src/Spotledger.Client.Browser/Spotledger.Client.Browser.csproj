@@ -1,0 +1,118 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!-- WP-UI-09.T1: the browser head of the Avalonia client (ADR-27, SPK-07). Avalonia.Browser runs the
+       shared client libraries as WebAssembly in the page. The release publish is AOT + trimmed, with
+       pre-compressed (Brotli) files and an integrity manifest (assets.json). Read
+       clients/avalonia/docs/browser-publish.md for how to publish and serve it. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <RootNamespace>Spotledger.Client.Browser</RootNamespace>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- The JSImport/JSExport source generators emit pointer code and refuse to run without this switch
+         (SYSLIB1074/1075). No handwritten file in this project contains the unsafe keyword. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- The release profile (SPK-07): AOT beats the interpreter on sort and entry latency, trimming and
+       Brotli keep the download down. A debug build stays interpreted so `dotnet build` is quick.
+       PROVISIONAL: the AOT choice is provisional until the SPK-07.T2 re-run. docs/spikes/SPK-07/VERIFICATION.md
+       says the AOT publish, every AOT row and both static-link rows were NOT independently reproduced, and
+       asks for a re-run of lab/SPK-07/run.sh on a quiet host before the recommendation is relied on.
+       SpotBrowserAot (default true) switches AOT off from the command line, for example
+       `dotnet publish -c Release -p:SpotBrowserAot=false`, which gives the interpreted build the spike
+       measured. No size or time budget is fixed by this project. -->
+  <PropertyGroup>
+    <SpotBrowserAot Condition="'$(SpotBrowserAot)' == ''">true</SpotBrowserAot>
+  </PropertyGroup>
+
+  <!-- A plain `dotnet build` or `dotnet test` of the solution must work without the wasm-tools workload
+       (NETSDK1147 otherwise; CI and developers build the .sln). Only `dotnet publish` (which sets
+       _IsPublishing) turns AOT on and needs `dotnet workload install wasm-tools`. The SkiaSharp and
+       HarfBuzz native libraries are linked only by a publish; for any other build they are dropped before the
+       SDK's check warns that they "won't be linked in" (which -warnaserror turns into an error). -->
+  <Target Name="SpotDropNativeReferencesOutsidePublish"
+          BeforeTargets="_CheckBrowserWorkloadNeededButNotAvailable"
+          Condition="'$(_IsPublishing)' != 'true'">
+    <ItemGroup>
+      <NativeFileReference Remove="@(NativeFileReference)" />
+    </ItemGroup>
+  </Target>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RunAOTCompilation Condition="'$(_IsPublishing)' == 'true'">$(SpotBrowserAot)</RunAOTCompilation>
+    <RunAOTCompilation Condition="'$(_IsPublishing)' != 'true'">false</RunAOTCompilation>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <CompressionEnabled>true</CompressionEnabled>
+    <WasmEnableSIMD>true</WasmEnableSIMD>
+    <!-- No ICU data: the invariant culture keeps the download about 1 MB smaller per SPK-07 risk 3.
+         Culture-specific formatting is the server's concern; the client formats through its own helpers. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- One summary line per trimming warning source instead of one per call site. -->
+    <TrimmerSingleWarn>true</TrimmerSingleWarn>
+    <!-- Shell (RecentServersStore, KeymapProfile) and Api read JSON with the reflection serializer; a
+         trimmed app turns that off by default and the shell then fails at start-up with
+         JsonSerializerIsReflectionDisabled (seen in the first published build). Switched on here until those
+         libraries use source-generated contexts (PR Open questions). Their assemblies are rooted in
+         linker-roots.xml (Shell) or small enough to keep what is used. -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
+  <!-- Known open trimming warnings of libraries outside this task (SPK-07 risk 1): Spotledger.Client.Api
+       (System.Text.Json reflection in ApiConnection and RememberedUserStore), Spotledger.Client.Theme
+       (ResourceInclude by URI), Spotledger.Client.Shell (System.Text.Json reflection in RecentServersStore and
+       KeymapProfile) and Spotledger.Client.Grid (reflection in SpotGrid.RaiseGridKeyDown, IL2075). The clients tree treats warnings as errors; only this head lets the
+       trimming and AOT analysis codes (IL2026, IL2055-IL2123, IL3050-IL3053) through, and only until those libraries are fixed (PR Open questions). The blanket list hides trimming and AOT regressions
+       in this head; removing it has no owning task yet (PR Open questions).
+       Every other warning stays an error. -->
+  <PropertyGroup>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL2055;IL2056;IL2057;IL2058;IL2059;IL2060;IL2061;IL2062;IL2063;IL2064;IL2065;IL2066;IL2067;IL2068;IL2069;IL2070;IL2071;IL2072;IL2073;IL2074;IL2075;IL2076;IL2077;IL2078;IL2079;IL2080;IL2081;IL2082;IL2083;IL2084;IL2085;IL2086;IL2087;IL2088;IL2089;IL2090;IL2091;IL2092;IL2093;IL2094;IL2095;IL2096;IL2097;IL2098;IL2099;IL2100;IL2101;IL2102;IL2103;IL2104;IL2105;IL2106;IL2107;IL2108;IL2109;IL2110;IL2111;IL2112;IL2113;IL2114;IL2115;IL2116;IL2117;IL2118;IL2119;IL2120;IL2121;IL2122;IL2123;IL3050;IL3051;IL3052;IL3053</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Browser" VersionOverride="12.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Grid/Spotledger.Client.Grid.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+
+  <!-- What the trimmer must keep and why: see linker-roots.xml. -->
+  <ItemGroup>
+    <TrimmerRootDescriptor Include="linker-roots.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <StaticWebAssetFingerprintPattern Include="JS" Pattern="*.js" Expression="#[.{fingerprint}]!" />
+    <!-- Build/AssetManifest.cs is compiled by the manifest task below (and by the tests), not into the head. -->
+    <Compile Remove="Build/**" />
+    <None Include="Build/AssetManifest.cs" />
+  </ItemGroup>
+
+  <!-- The integrity manifest: assets.json in the published web root lists every published file with its
+       size and SHA-256, plus one build id. Written after the compressed files exist. -->
+  <UsingTask TaskName="Spotledger.Client.Browser.Build.WriteAssetManifest"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)Build/AssetManifest.cs" />
+    </Task>
+  </UsingTask>
+
+  <Target Name="WriteBrowserAssetManifest" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <BrowserPublishWebRoot>$([MSBuild]::EnsureTrailingSlash('$(PublishDir)'))wwwroot</BrowserPublishWebRoot>
+    </PropertyGroup>
+    <WriteAssetManifest Root="$(BrowserPublishWebRoot)" />
+  </Target>
+
+</Project>

@@ -1,0 +1,59 @@
+doctype = "sales_invoice"
+kind = "form"
+title = "Sales Invoice"
+
+[[sections]]
+id = "fields"
+
+[[sections.items]]
+type = "field"
+field = "customer"
+label = "Customer"
+
+[[sections.items]]
+type = "field"
+field = "posting_date"
+
+[[sections.items]]
+type = "field"
+field = "due_date"
+
+[[sections.items]]
+type = "field"
+field = "grand_total"
+
+[[sections]]
+id = "table_items"
+title = "Invoice Lines"
+columns = 1
+
+[[sections.items]]
+type = "field"
+field = "items"
+label = "Invoice Lines"
+
+[[sections]]
+id = "long_form"
+title = "Details"
+
+[[sections.items]]
+type = "field"
+field = "remarks"
+
+[[sections]]
+id = "status"
+title = "Status"
+
+[[sections.items]]
+type = "field"
+field = "doc_state"
+label = "Document State"
+
+[[sections.items]]
+type = "field"
+field = "amended_from"
+label = "Amended From"
+
+[[sections.items]]
+type = "control"
+control = "divider"

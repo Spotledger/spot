@@ -1,0 +1,71 @@
+# Spotledger Windows Service host (WP-PRD-02.T8): wraps `spot serve` and the bundled
+# PostgreSQL supervisor (`spot-pg-supervisor`) as the Windows service `SpotledgerServer`.
+#
+# Dependencies: tokio for the async orchestration (mirrors `spot-pg-supervisor`), clap for
+# the `spot-winsvc` subcommands, serde/toml for the service config file, thiserror for typed
+# errors, tracing for diagnostics, rand (already a workspace pattern, see `spot-auth`) for
+# the first-start secrets, semver (already used by `spot-updater`) for the upgrade pointer
+# format. `windows` (already the workspace's Win32-bindings crate, see `spot-agent-windows`)
+# is the Service Control Manager binding, target-specific so Linux never builds it.
+[package]
+name = "spot-winsvc"
+description = "Windows Service host for `spot serve` and the bundled PostgreSQL supervisor (WP-PRD-02.T8): install/uninstall/start/stop/run/upgrade, with a Linux-buildable library (state machine, config, ACL strings, upgrade pointer) and Windows-only SCM glue behind cfg(windows)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "spot-winsvc"
+path = "src/main.rs"
+
+[dependencies]
+spot-pg-supervisor = { path = "../spot-pg-supervisor" }
+spot-updater = { path = "../spot-updater" }
+spot-redact = { path = "../spot-redact" }
+tokio = { version = "1.47", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "2"
+tracing = "0.1"
+rand = { version = "0.9", features = ["os_rng"] }
+semver = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# The real Service Control Manager binding. Target-specific so Linux (the main CI host)
+# never builds it; only the thin `src/service/real.rs` module uses it. Chosen over adding a
+# new `windows-service` dependency because `windows` is already the workspace's established
+# Win32-bindings crate (see `spot-agent-windows`); flagged under Open Questions for the lead.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_EventLog",
+    "Win32_System_JobObjects",
+    "Win32_System_Services",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+
+# The workspace forbids `unsafe`; the Windows SCM dispatcher needs a handful of small
+# platform blocks (service control handler, status reporting, job objects), exactly the
+# precedent `spot-pg-supervisor` and `spot-agent-windows` already set.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

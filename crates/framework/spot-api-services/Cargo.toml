@@ -1,0 +1,34 @@
+[package]
+name = "spot-api-services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "Adapters between the HTTP service traits and the document engine (WP-PLT-05.T2): EngineResources onto spot-app-api DocumentService and spot-meta EffectiveMeta"
+
+[dependencies]
+spot-http = { path = "../spot-http" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-meta = { path = "../spot-meta" }
+spot-document = { path = "../spot-document" }
+spot-permissions = { path = "../spot-permissions" }
+spot-core = { path = "../spot-core" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-events-contract = { path = "../../../contracts/events" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["std", "formatting", "parsing"] }
+base64 = "0.22"
+
+[dev-dependencies]
+axum = "0.8"
+spot-seams = { path = "../spot-seams" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+tower = { version = "0.5", features = ["util"] }
+jsonschema = { version = "0.58", default-features = false }
+serde_norway = "0.9"
+
+[lints]
+workspace = true

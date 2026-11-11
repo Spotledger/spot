@@ -1,0 +1,8 @@
+# The app's step-to-controller map (WP-DOC-10.T1).
+#
+# Every step the manifest names must resolve here: `native:<name>` for a controller built
+# into the host, `ts:<path>` for a script.
+[controllers]
+{% if with_controller %}"{{ name }}:validate_{{ doctype_name }}" = "native:{{ name }}"
+{% endif %}{% if with_script %}"{{ name }}:{{ script_name }}" = "ts:scripts/{{ script_name }}.ts"
+{% endif %}

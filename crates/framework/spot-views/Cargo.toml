@@ -1,0 +1,20 @@
+[package]
+name = "spot-views"
+description = "The view definition model as layered differences over effective metadata: groups, tabs, columns, actions, the merge and its validation (WP-UI-10.T1, ADR-068 §7, ADR-069)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+spot-meta = { path = "../spot-meta" }
+thiserror = "2"
+toml = "0.8"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

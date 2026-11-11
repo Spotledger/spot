@@ -1,0 +1,145 @@
+# effects codes (app API contract 0.5.0, ADR-080 section 6). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "effects.duplicate_step"
+class = "Internal"
+summary = "The effects of step {step} are declared twice."
+explanation_key = "error.effects.duplicate_step"
+params = ["step"]
+remedy = "Declare each step's effects once."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.internal_not_reversible"
+class = "Internal"
+summary = "Internal effect {class} must be reversible by a lifecycle operation."
+explanation_key = "error.effects.internal_not_reversible"
+params = ["class"]
+remedy = "Declare the effect as reversible by the operation that reverses the step's own operation."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.internal_writes_nothing"
+class = "Internal"
+summary = "Internal effect {class} names no store it writes."
+explanation_key = "error.effects.internal_writes_nothing"
+params = ["class"]
+remedy = "Name the stores the effect writes."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid_action"
+class = "Internal"
+summary = "An action reference is <app>:<action>: {value}."
+explanation_key = "error.effects.invalid_action"
+params = ["value"]
+remedy = "Write the reference as <app>:<action>, both storage-style names."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid_class"
+class = "Internal"
+summary = "An effect class must be a storage-style name: {value}."
+explanation_key = "error.effects.invalid_class"
+params = ["value"]
+remedy = "Use lowercase letters, digits and underscores, starting with a letter, at most 63 bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid_digest"
+class = "Internal"
+summary = "A digest is 64 lowercase hexadecimal characters."
+explanation_key = "error.effects.invalid_digest"
+params = []
+remedy = "Give the SHA-256 digest as 64 lowercase hex characters."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid_ref"
+class = "Internal"
+summary = "An opaque reference is 1 to 128 bytes with no control characters."
+explanation_key = "error.effects.invalid_ref"
+params = []
+remedy = "Shorten the reference and remove control characters."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid_store"
+class = "Internal"
+summary = "A store name must be a storage-style name: {value}."
+explanation_key = "error.effects.invalid_store"
+params = ["value"]
+remedy = "Use lowercase letters, digits and underscores, starting with a letter, at most 63 bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.irreversible_reason"
+class = "Internal"
+summary = "Irreversible effect {class} needs a reason."
+explanation_key = "error.effects.irreversible_reason"
+params = ["class"]
+remedy = "State why nothing can undo the effect."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.unknown_step"
+class = "Internal"
+summary = "Effects are declared for {step}, which is not a step of the controller."
+explanation_key = "error.effects.unknown_step"
+params = ["step"]
+remedy = "Declare effects only for steps the controller declares."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.wrong_phase"
+class = "Internal"
+summary = "Effect {class} runs in the wrong phase for its kind: {point}."
+explanation_key = "error.effects.wrong_phase"
+params = ["class", "point"]
+remedy = "Run internal effects in an after hook and external effects in a committed hook."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.wrong_reversal"
+class = "Internal"
+summary = "Internal effect {class} at {point} must be reversible by {operation}."
+explanation_key = "error.effects.wrong_reversal"
+params = ["class", "operation", "point"]
+remedy = "Declare the reversal as the operation that reverses the step's own operation."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.no_paired_reversal"
+class = "Internal"
+summary = "An internal effect that cancel reverses has no step writing the same store in the cancel pipeline."
+explanation_key = "error.effects.no_paired_reversal"
+params = []
+remedy = "Add a step to the after-cancel pipeline whose internal effect writes the same store, or declare the forward effect irreversible with a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.override_drops_reversal"
+class = "Internal"
+summary = "An override removes the step that reverses an internal effect while the forward step stays."
+explanation_key = "error.effects.override_drops_reversal"
+params = []
+remedy = "Keep the reversing step when overriding, or replace it with a step declaring the same reversal."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.unknown_class"
+class = "Internal"
+summary = "A step declares an effect class that is not a known effect class."
+explanation_key = "error.effects.unknown_class"
+params = []
+remedy = "Declare one of the known effect classes."
+since = "0.1.0"
+
+[[entry]]
+code = "effects.invalid"
+class = "Internal"
+summary = "An effect declaration is refused by the contract."
+explanation_key = "error.effects.invalid"
+params = []
+remedy = "Fix the declaration named in the message."
+since = "0.1.0"

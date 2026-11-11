@@ -1,0 +1,48 @@
+# fleet_health codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# These are library-internal vocabulary (`class = "none"`): the control plane maps them onto
+# its own AppError when it exposes the engine through the management API.
+
+[[entry]]
+code = "fleet_health.invalid_identifier"
+class = "none"
+summary = "A {kind} identifier was refused because it is empty, too long or contains a forbidden character."
+explanation_key = "error.fleet_health.invalid_identifier"
+params = ["kind"]
+remedy = "Use 1 to 128 letters, digits, '-', '_', '.' or ':' with no spaces."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_health.invalid_settings"
+class = "none"
+summary = "The fleet health settings were refused: {reason}."
+explanation_key = "error.fleet_health.invalid_settings"
+params = ["reason"]
+remedy = "Set an evaluation interval between 1 and 3600 seconds and a window between one interval and one day."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_health.invalid_rule_set"
+class = "none"
+summary = "The fleet health rule set was refused: {reason}."
+explanation_key = "error.fleet_health.invalid_rule_set"
+params = ["reason"]
+remedy = "Fix the named rule file and keep ids unique, thresholds inside the signal's unit and exactly one freshness register."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_health.invalid_observation"
+class = "none"
+summary = "A fleet health observation was refused: {reason}."
+explanation_key = "error.fleet_health.invalid_observation"
+params = ["reason"]
+remedy = "Send the value in the signal's own unit: basis points for rates, seconds for lag, 0 or 1 for a probe and 0 to 2 for a licence state."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_health.invalid_silence"
+class = "none"
+summary = "A fleet health silence was refused: {reason}."
+explanation_key = "error.fleet_health.invalid_silence"
+params = ["reason"]
+remedy = "Give the silence a future expiry and a written reason."
+since = "0.1.0"

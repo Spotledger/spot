@@ -1,0 +1,25 @@
+# AlmaLinux 10 (RHEL-compatible), booted, for the packaging scenarios (WP-PRD-09.T2).
+#
+# The RHEL-compatible host is the production recommendation, so its package behaviour is
+# proved on a real AlmaLinux, not on Fedora. It is a *test* image: systemd is PID 1 so
+# `--systemd=always` gives a real service manager, and the RPM tooling the scenarios drive
+# is present. The product runtime image lives in packaging/linux/container/Containerfile.
+#
+#   podman build -t localhost/spot-pkgverify-almalinux-10:10 -f Containerfile .
+#
+# tools/packaging/verify/run.py builds this image itself; the command above is only for
+# poking at it by hand.
+FROM quay.io/almalinuxorg/almalinux:10
+
+RUN dnf -y install \
+        --setopt=install_weak_deps=0 \
+        systemd \
+        util-linux \
+        procps-ng \
+        shadow-utils \
+        curl-minimal \
+        glibc-common \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+CMD ["/sbin/init"]

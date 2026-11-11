@@ -1,0 +1,28 @@
+name = "job failing since a setting changed"
+description = "A telemetry signal reports the nightly job failing and names the retry-limit setting; why(Job) must follow the signal to the setting."
+epoch = 14
+
+[caller]
+id = "agent:t1"
+tier = "T1"
+
+[[settings]]
+key = "job.retry_limit"
+scope = "tenant:acme"
+at = 390
+change = "the retry limit was lowered"
+change_kind = "updated"
+record = "setting:1"
+
+[[signals]]
+name = "job failing:nightly"
+status = "failing"
+target = { kind = "Job", name = "nightly" }
+cause = { kind = "Setting", name = "job.retry_limit" }
+at = 400
+detail = "the nightly job is failing after the retry limit changed"
+record = "health:1"
+
+[[expect]]
+subject = { kind = "Job", name = "nightly" }
+paths = [["Job:nightly", "HealthSignal:job failing:nightly", "Setting:job.retry_limit"]]

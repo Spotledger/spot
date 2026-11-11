@@ -1,0 +1,18 @@
+[package]
+name = "spot-l3-documents"
+version = "0.1.0"
+description = "L3 document behaviour suite (WP-TST-10): nested lifecycles, amend chains, links and rename, child tables, posted documents, versions, events and messages, run over any spot-app-api host"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+spot-app-api = { path = "../../../contracts/app-api" }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

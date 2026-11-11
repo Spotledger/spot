@@ -1,0 +1,19 @@
+# whitelist codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "whitelist.bad_arguments"
+class = "Validation"
+summary = "The arguments of method {method} are not valid: {detail}"
+explanation_key = "error.whitelist.bad_arguments"
+params = ["detail", "method"]
+remedy = "Send the arguments the method's schema describes: every required field, the right types, and no fields the schema does not list."
+since = "0.1.0"
+
+[[entry]]
+code = "whitelist.failed"
+class = "Internal"
+summary = "The method {method} failed unexpectedly and its changes were rolled back."
+explanation_key = "error.whitelist.failed"
+params = ["method"]
+remedy = "Try again; if it keeps failing, report it to the app's author with the request id."
+since = "0.1.0"

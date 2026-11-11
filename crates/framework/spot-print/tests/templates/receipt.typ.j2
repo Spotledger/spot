@@ -1,0 +1,21 @@
+{#- Every {{ value }} is escaped by spot-template into a Typst string literal (#"..."). -#}
+#set document(title: [{{ title }}], author: "Spotledger test fixture")
+#set text(font: ("Noto Sans", "Noto Naskh Arabic"), size: 9pt)
+#set page(paper: "a4", margin: (x: 15mm, top: 15mm, bottom: 20mm),
+  footer: context align(center, text(8pt)[Page #counter(page).display() of #counter(page).final().first()]))
+#set page(width: 80mm, height: auto, margin: (x: 4mm, y: 5mm), footer: none)
+#set text(size: 8.5pt)
+#align(center)[#text(11pt)[*{{ shop }}*] \ {{ address }} \ NTN: {{ ntn }} \ Receipt {{ number }} · {{ date }}]
+#line(length: 100%, stroke: (thickness: 0.5pt, dash: "dashed"))
+#table(columns: (1fr, auto, auto), stroke: none, inset: (x: 0pt, y: 2.5pt), column-gutter: 3mm,
+  align: (left, right, right),
+  table.header([*Item*], [*Qty × Price*], [*Amount*]),
+{%- for r in rows %}
+  [#text(lang: "ur", size: 10pt)[{{ r.ur }}] \ {{ r.en }}], [{{ r.qty }} × {{ r.price | number(2) }}], [{{ r.amount | number(2) }}],
+{%- endfor %}
+)
+#line(length: 100%, stroke: (thickness: 0.5pt, dash: "dashed"))
+#grid(columns: (1fr, auto), row-gutter: 3pt, [Subtotal], [{{ totals.value | number(2) }}], [Sales tax 18%], [{{ totals.tax | number(2) }}],
+  [*TOTAL PKR*], [*{{ totals.total | number(2) }}*])
+#v(3mm)
+#align(center, text(lang: "ur", size: 10pt)[{{ thanks }}])

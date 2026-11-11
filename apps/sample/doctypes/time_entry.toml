@@ -1,0 +1,62 @@
+# The Time Entry: the app's submittable document (WP-DX-05.T1).
+#
+# Posted on submit (ADR-42: draft → posted → cancel, and `correct` re-opens it as an
+# amended draft). Submitting adds its hours to the linked Task's `logged_hours` and
+# cancelling subtracts them — the controller's roll-up, inside the same transaction.
+name = "time_entry"
+label = "Time Entry"
+app = "sample"
+module = "tasks"
+is_posted = true
+title_field = "entry_no"
+
+[[fields]]
+name = "entry_no"
+label = "Entry No"
+type = "text"
+max_chars = 140
+description = "Named by the series TE-.YYYY.-.##### (WP-MET-03)."
+
+[[fields]]
+name = "task"
+label = "Task"
+type = "link"
+options = "task"
+required = true
+index = true
+
+[[fields]]
+name = "person"
+label = "Person"
+type = "link"
+options = "user"
+required = true
+
+[[fields]]
+name = "work_date"
+label = "Work Date"
+type = "date"
+required = true
+index = true
+
+[[fields]]
+name = "hours"
+label = "Hours"
+type = "decimal"
+scale = 2
+precision = 18
+required = true
+description = "Between 0.25 and 24, one decimal place set. Same scale and format as `task.estimated_hours`."
+
+[[fields]]
+name = "billable"
+label = "Billable"
+type = "bool"
+
+[[fields]]
+name = "note"
+label = "Note"
+type = "long_text"
+
+[[indexes]]
+fields = ["task", "work_date"]

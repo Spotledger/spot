@@ -1,0 +1,19 @@
+# The fixture catalogue: knows exactly two codes.
+[[entry]]
+code = "doc.thing"
+class = "Validation"
+summary = "A fixture code the clean tree raises: {field}."
+explanation_key = "error.doc.thing"
+params = ["field"]
+remedy = "Fix the fixture field."
+since = "0.1.0"
+
+[[entry]]
+code = "doc.retired"
+class = "none"
+summary = "A retired fixture code kept so old clients still resolve it."
+explanation_key = "error.doc.retired"
+params = []
+remedy = "Use doc.thing instead."
+since = "0.1.0"
+retired = true

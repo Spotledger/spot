@@ -1,0 +1,73 @@
+# coordinator codes: fenced leases, locks, counters and rate limits of spot-coordinator (WP-PLT-18). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "coordinator.lease_held"
+class = "none"
+summary = "The lease is held by another holder, so it cannot be acquired yet."
+explanation_key = "error.coordinator.lease_held"
+params = []
+remedy = "Wait for the holder to release it or for its ttl to pass, then try again."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.lease_lost"
+class = "none"
+summary = "The lease handle is stale (expired, released or taken over), so the operation was refused."
+explanation_key = "error.coordinator.lease_lost"
+params = []
+remedy = "Stop the work that relied on the lease and acquire it again before continuing."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.lock_timeout"
+class = "none"
+summary = "The lock was not available within the time allowed to wait for it."
+explanation_key = "error.coordinator.lock_timeout"
+params = []
+remedy = "Try again later, or wait longer for the current holder to finish."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.second_node"
+class = "none"
+summary = "A second node is running beside the in-process coordinator, which serves one node only."
+explanation_key = "error.coordinator.second_node"
+params = []
+remedy = "Run the database coordinator for a cluster, or stop the other node."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.invalid_name"
+class = "none"
+summary = "A coordinator name is empty, longer than 200 bytes or not printable."
+explanation_key = "error.coordinator.invalid_name"
+params = []
+remedy = "Use a name of 1 to 200 bytes with no control characters."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.invalid_argument"
+class = "none"
+summary = "A coordinator argument is out of range: a zero step, ttl or cost, an over-long ttl, an empty rate-limit window, or a cost above the capacity."
+explanation_key = "error.coordinator.invalid_argument"
+params = []
+remedy = "Pass a step, ttl and cost above zero, a ttl of at most a year, and a cost within the limit's capacity."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.counter_overflow"
+class = "none"
+summary = "The counter cannot advance by the requested step without passing the largest value."
+explanation_key = "error.coordinator.counter_overflow"
+params = []
+remedy = "Use a new counter name, or a smaller step."
+since = "0.1.0"
+
+[[entry]]
+code = "coordinator.unavailable"
+class = "none"
+summary = "The coordination store could not complete the call: the database or its connection pool failed."
+explanation_key = "error.coordinator.unavailable"
+params = []
+remedy = "Check the database connection and try again; a failed call may be retried."
+since = "0.1.0"

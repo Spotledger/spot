@@ -1,0 +1,29 @@
+[package]
+name = "spot-ui-ext"
+description = "Tier A UI extensions (WP-UI-13.T2, ADR-069): parse, validate and resolve declarative app UI across apps into one deterministic canonical bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Every expression is parsed and its identifiers resolved at install time.
+spot-expr = { path = "../spot-expr" }
+# DocType fields for expression and field-list checks.
+spot-meta = { path = "../spot-meta" }
+# The view vocabulary a panel's field list shares with generated views.
+spot-views = { path = "../spot-views" }
+# The declared methods and routes a `call` and `navigate_url` are checked against.
+spot-manifest = { path = "../spot-manifest" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,37 @@
+# Help for the sync_reconcile error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sync_reconcile.invalid_schedule"
+what_happened = "The reconciliation cycle settings do not parse."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use a six-field cron expression and an IANA time zone name.", "If it keeps happening, tell your administrator and quote the code sync_reconcile.invalid_schedule."]
+audience = "user"
+
+[[help]]
+code = "sync_reconcile.invalid_scope"
+what_happened = "The reconciliation asked a source for a scope it does not hold."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Run the cycle for the scope keys the node actually holds.", "If it keeps happening, tell your administrator and quote the code sync_reconcile.invalid_scope."]
+audience = "user"
+
+[[help]]
+code = "sync_reconcile.mirror_as_source"
+what_happened = "A repair was planned using a copy as the source of truth instead of the owner."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Reconcile with the record's owner as the source of truth, never a mirror.", "If it keeps happening, tell your administrator and quote the code sync_reconcile.mirror_as_source."]
+audience = "operator"
+
+[[help]]
+code = "sync_reconcile.source_failed"
+what_happened = "Reading a node's storage for reconciliation failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the node's storage and retry the reconciliation cycle.", "If it keeps happening, tell your administrator and quote the code sync_reconcile.source_failed."]
+audience = "operator"
+
+[[help]]
+code = "sync_reconcile.unknown_entity"
+what_happened = "The digest plan names an entity the node's catalog does not hold."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Declare the digest plan from the metadata that defines the entities.", "If it keeps happening, tell your administrator and quote the code sync_reconcile.unknown_entity."]
+audience = "user"

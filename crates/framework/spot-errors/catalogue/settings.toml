@@ -1,0 +1,145 @@
+# settings codes: raised by spot-settings. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "settings.duplicate_key"
+class = "none"
+summary = "Two specs register the same setting key."
+explanation_key = "error.settings.duplicate_key"
+params = []
+remedy = "Give each setting a unique dotted key."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.default_invalid"
+class = "none"
+summary = "A default does not satisfy its setting's own value type."
+explanation_key = "error.settings.default_invalid"
+params = []
+remedy = "Correct the default so it satisfies the declared type and its bounds."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.default_missing"
+class = "none"
+summary = "A non-secret setting declares no default value."
+explanation_key = "error.settings.default_missing"
+params = []
+remedy = "Give the setting a default, or mark it secret (a secret has none)."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.scopes_empty"
+class = "none"
+summary = "A setting declares an empty scope list."
+explanation_key = "error.settings.scopes_empty"
+params = []
+remedy = "List at least one scope the setting may be set at."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.scopes_order"
+class = "none"
+summary = "A setting's scopes are not in broad-to-narrow order."
+explanation_key = "error.settings.scopes_order"
+params = []
+remedy = "Order the scopes from fleet to user, broadest first."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.secret_with_default"
+class = "none"
+summary = "A secret setting declares a default value."
+explanation_key = "error.settings.secret_with_default"
+params = []
+remedy = "Remove the default; a secret is set explicitly and never defaulted."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.depends_on_unknown"
+class = "none"
+summary = "A setting depends_on an unknown setting key."
+explanation_key = "error.settings.depends_on_unknown"
+params = []
+remedy = "Point depends_on at a registered setting key."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.depends_on_cycle"
+class = "none"
+summary = "A setting's depends_on forms a cycle."
+explanation_key = "error.settings.depends_on_cycle"
+params = []
+remedy = "Break the cycle so the depends_on graph stays acyclic."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.deprecated_unknown"
+class = "none"
+summary = "A deprecation points to an unknown use_instead key."
+explanation_key = "error.settings.deprecated_unknown"
+params = []
+remedy = "Point use_instead at the registered key that replaces the setting."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.key_format"
+class = "none"
+summary = "A setting key does not match the required dotted lower-case form."
+explanation_key = "error.settings.key_format"
+params = []
+remedy = "Use at least two dot-separated segments, each [a-z][a-z0-9_]*."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.scope_not_allowed"
+class = "none"
+summary = "A value was set at a scope the setting does not allow."
+explanation_key = "error.settings.scope_not_allowed"
+params = []
+remedy = "Set the value at one of the scopes the setting declares."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.read_only"
+class = "none"
+summary = "A read-only setting was written."
+explanation_key = "error.settings.read_only"
+params = []
+remedy = "Read-only settings are observed values; they cannot be set."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.validation_failed"
+class = "none"
+summary = "A value failed validation against its setting's type."
+explanation_key = "error.settings.validation_failed"
+params = []
+remedy = "Correct the value so it satisfies the setting's declared type and bounds."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.change_set_invalid"
+class = "none"
+summary = "A change set holds duplicate or otherwise invalid changes."
+explanation_key = "error.settings.change_set_invalid"
+params = []
+remedy = "Remove the duplicate change; a key is set at most once per scope in a batch."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.unknown_setting"
+class = "none"
+summary = "A key names a setting that is not registered."
+explanation_key = "error.settings.unknown_setting"
+params = []
+remedy = "Register the setting before resolving or setting it."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.catalogue_invalid"
+class = "none"
+summary = "A compiled-in setting spec could not be parsed."
+explanation_key = "error.settings.catalogue_invalid"
+params = []
+remedy = "Fix the setting's TOML so it matches the SettingSpec shape."
+since = "0.1.0"

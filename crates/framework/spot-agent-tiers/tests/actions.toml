@@ -1,0 +1,58 @@
+# The integration suite's action catalogue, in our own words, covering the four tiers,
+# both domains and every effect. Loaded by the tests with ActionCatalogue::from_toml.
+#
+# Tier ladder (blueprint WS13):
+#   T0 Explain    - read and diagnose any issue
+#   T1 Configure  - reversible settings within policy
+#   T2 Repair data- remedies from the catalogue only
+#   T3 Structural - customizations, scripts, app installs, migrations
+#
+# effect     minimum tier   (one table: read->T0, reversible->T1, data_repair->T2, structural->T3)
+
+[[actions]]
+name = "explain_failed_job"
+tier = "T0"
+domain = "support"
+effect = "read"
+
+[[actions]]
+name = "diagnose_stock_discrepancy"
+tier = "T0"
+domain = "operations"
+effect = "read"
+
+[[actions]]
+name = "change_print_format"
+tier = "T1"
+domain = "support"
+effect = "reversible"
+
+[[actions]]
+name = "unstick_worker_queue"
+tier = "T1"
+domain = "operations"
+effect = "reversible"
+
+[[actions]]
+name = "repost_stock_ledger"
+tier = "T2"
+domain = "operations"
+effect = "data_repair"
+
+[[actions]]
+name = "relink_customer_records"
+tier = "T2"
+domain = "support"
+effect = "data_repair"
+
+[[actions]]
+name = "install_app"
+tier = "T3"
+domain = "support"
+effect = "structural"
+
+[[actions]]
+name = "apply_customization_bundle"
+tier = "T3"
+domain = "operations"
+effect = "structural"

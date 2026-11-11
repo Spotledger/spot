@@ -1,0 +1,16 @@
+# mail_queue_pg codes: the PostgreSQL sent log of the outgoing mail queue (WP-PLT-11.T6). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# A read or a write that cannot be answered raises no code of its own: the port's failure is
+# `Unavailable`, which `spot-mail-queue` turns into `mail_queue.sent_log_unavailable` (fail closed:
+# the job retries instead of sending). This file's one code is the backend's own: `prepare` could
+# not create its table.
+
+[[entry]]
+code = "mail_queue_pg.migration_failed"
+class = "Internal"
+summary = "The sent log's table could not be created in the database."
+explanation_key = "error.mail_queue_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"

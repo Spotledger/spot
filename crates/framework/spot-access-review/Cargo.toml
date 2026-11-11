@@ -1,0 +1,32 @@
+[package]
+name = "spot-access-review"
+description = "The periodic access review campaign (WP-SEC-02, ADR-070 section 8 rule 3): snapshot items with last use and SoD overrides, keep-or-remove decisions by the named reviewer, deadline escalation or removal, audit events and an auditor report, as a pure state machine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public type, so the identity service can persist a
+# campaign between calls (the state machine is serde round-trippable).
+serde = { version = "1", features = ["derive"] }
+# The one error type, with stable machine-readable `review.*` codes.
+thiserror = "2"
+# `TenantId`: every store method is scoped by the caller's tenant.
+spot-tenancy = { path = "../spot-tenancy" }
+
+[features]
+# The `CampaignStore` contract suite (`contract::run_all`) that every backend must pass.
+testing = []
+
+[dev-dependencies]
+# Enables the contract suite for this crate's own tests (the memory fake must pass it).
+spot-access-review = { path = ".", features = ["testing"] }
+# The persistence round trip (a campaign serialised mid-flight reads back identical).
+serde_json = "1"
+# Property tests: any sequence of decisions and ticks keeps the state machine well-formed.
+proptest = "1"
+
+[lints]
+workspace = true

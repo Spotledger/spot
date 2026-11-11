@@ -1,0 +1,204 @@
+# form_effects codes: the UI effects protocol and the server-run form scripts (WP-UI-12.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The effect-diagnostic codes are problems the response carries next to a dropped effect, not
+# `AppError`s the request fails with, so their class is `none`. The script-failure codes name the
+# server-side record of a script that could not run; the client sees one safe message instead.
+
+[[entry]]
+code = "form_effects.protocol_version"
+class = "Validation"
+summary = "An effects batch names a protocol version this server does not speak."
+explanation_key = "error.form_effects.protocol_version"
+params = []
+remedy = "Upgrade the client or the server so both speak the same protocol version."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.effect_unknown"
+class = "none"
+summary = "An effect's kind is not one this protocol version knows."
+explanation_key = "error.form_effects.effect_unknown"
+params = []
+remedy = "Emit one of the effects the installed protocol version defines."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.effect_invalid"
+class = "none"
+summary = "An effect does not have the object shape its kind requires."
+explanation_key = "error.form_effects.effect_invalid"
+params = []
+remedy = "Give the effect the members its kind defines, using the builder in `ctx.effects`."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.path_invalid"
+class = "none"
+summary = "A field path is not a field or a table row path."
+explanation_key = "error.form_effects.path_invalid"
+params = []
+remedy = "Write the path as `field` or `table[idx].field` with idx counting from one."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.path_unknown"
+class = "none"
+summary = "The form's DocType has no such field, table, column or row."
+explanation_key = "error.form_effects.path_unknown"
+params = []
+remedy = "Name a field or row the form's metadata declares and the document actually has."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.path_unavailable"
+class = "none"
+summary = "The effect targets a field the triggering user may not see, or one the form does not have; the two answers are identical."
+explanation_key = "error.form_effects.path_unavailable"
+params = []
+remedy = "Drop the effect, or run the script as a user who may see the field; check the field name against the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.value_invalid"
+class = "none"
+summary = "The value does not fit the field's kind, scale, length or listed values."
+explanation_key = "error.form_effects.value_invalid"
+params = []
+remedy = "Send the field's exact wire value, with a decimal as its string and no rounding."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.field_not_writable"
+class = "none"
+summary = "The triggering user may not write the field, or the field is read-only."
+explanation_key = "error.form_effects.field_not_writable"
+params = []
+remedy = "Only set fields the user may update; presentation toggles remain available."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.option_invalid"
+class = "none"
+summary = "A select or link's candidate values are malformed, duplicated or too many."
+explanation_key = "error.form_effects.option_invalid"
+params = []
+remedy = "Offer distinct values that fit the field, each with a short optional label."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.label_invalid"
+class = "none"
+summary = "A label is empty or too long."
+explanation_key = "error.form_effects.label_invalid"
+params = []
+remedy = "Give the field a short non-empty label."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.message_invalid"
+class = "none"
+summary = "A message has neither text nor a catalogue key, or its text is too long."
+explanation_key = "error.form_effects.message_invalid"
+params = []
+remedy = "Give the message a short text or a dotted catalogue key."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.action_invalid"
+class = "none"
+summary = "An action's id or label is malformed."
+explanation_key = "error.form_effects.action_invalid"
+params = []
+remedy = "Use a lowercase id of letters, digits and safe punctuation, with a short label."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.dialog_unknown"
+class = "none"
+summary = "A dialog is not registered for this form."
+explanation_key = "error.form_effects.dialog_unknown"
+params = []
+remedy = "Open a dialog the form's metadata or app manifest registers."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.filter_invalid"
+class = "none"
+summary = "A filter expression does not parse, or the field it is set on is not a link."
+explanation_key = "error.form_effects.filter_invalid"
+params = []
+remedy = "Write a shared-expression-language expression over `doc` and target a link field."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.limit_exceeded"
+class = "Internal"
+summary = "A form script produced more effects, or larger ones, than the caps allow."
+explanation_key = "error.form_effects.limit_exceeded"
+params = []
+remedy = "Emit fewer and smaller effects; a form event is a small declarative answer."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.script_failed"
+class = "Internal"
+summary = "A form script failed for a reason the user must not see."
+explanation_key = "error.form_effects.script_failed"
+params = []
+remedy = "Read the server log for the script's name and cause, then fix the script."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.script_record_invalid"
+class = "Validation"
+summary = "A registered form script's record is missing or malformed."
+explanation_key = "error.form_effects.script_record_invalid"
+params = []
+remedy = "Give the script a name, a DocType, an event, a valid target and TypeScript source."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.missing_handler"
+class = "Validation"
+summary = "A form script does not export the handler its event needs."
+explanation_key = "error.form_effects.missing_handler"
+params = []
+remedy = "Export the function the event names, such as `on_change` for a field change."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.compile_failed"
+class = "Validation"
+summary = "A form script's TypeScript source did not compile."
+explanation_key = "error.form_effects.compile_failed"
+params = []
+remedy = "Fix the reported syntax or type error; the diagnostic names the line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.patch_invalid"
+class = "Internal"
+summary = "A form script returned a document patch that does not fit the DocType."
+explanation_key = "error.form_effects.patch_invalid"
+params = []
+remedy = "Patch fields the DocType declares, with values of the type the field expects."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.field_unavailable"
+class = "none"
+summary = "A form script returned a document patch naming a field the user may not change, may not see, or that the form does not have; the whole patch was rejected."
+explanation_key = "error.form_effects.field_unavailable"
+params = []
+remedy = "Patch only fields the triggering user may write; the problem does not name the field."
+since = "0.1.0"
+
+[[entry]]
+code = "form_effects.log_truncated"
+class = "none"
+summary = "A form script logged more lines than the per-event cap; the surplus lines were dropped."
+explanation_key = "error.form_effects.log_truncated"
+params = []
+remedy = "Log less, or raise the cap in the runner's limits."
+since = "0.1.0"

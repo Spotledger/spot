@@ -1,0 +1,51 @@
+# Credentials inside connection URLs; the scheme (and `@` after) stays.
+
+[[case]]
+input = 'postgres://admin:pa55w0rd@db.internal:5432/shop'
+expected = 'postgres://[redacted:credentials]@db.internal:5432/shop'
+class = 'connection_string'
+
+[[case]]
+input = 'https://user:secret99@host.example.com/'
+expected = 'https://[redacted:credentials]@host.example.com/'
+class = 'connection_string'
+
+[[case]]
+input = 'redis://:hunter2secret@10.0.0.9/'
+expected = 'redis://[redacted:credentials]@10.0.0.9/'
+class = 'connection_string'
+
+[[case]]
+input = 'mongodb+srv://root:pa55w0rd@cluster.mongo.net'
+expected = 'mongodb+srv://[redacted:credentials]@cluster.mongo.net'
+class = 'connection_string'
+
+[[case]]
+input = 'mysql://root@localhost/db'
+expected = 'mysql://root@localhost/db'
+class = 'connection_string'
+
+[[case]]
+input = 'amqps://guest:guest@rabbit.local:5672'
+expected = 'amqps://[redacted:credentials]@rabbit.local:5672'
+class = 'connection_string'
+
+[[case]]
+input = 'postgresql://scott:tiger@db.local/prod'
+expected = 'postgresql://[redacted:credentials]@db.local/prod'
+class = 'connection_string'
+
+[[case]]
+input = 'https://shop.example.com/checkout'
+expected = 'https://shop.example.com/checkout'
+class = 'connection_string'
+
+[[case]]
+input = 'https://example.com:8080/path'
+expected = 'https://example.com:8080/path'
+class = 'connection_string'
+
+[[case]]
+input = 'ftp://ftp.example.com/pub/'
+expected = 'ftp://ftp.example.com/pub/'
+class = 'connection_string'

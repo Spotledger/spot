@@ -1,0 +1,29 @@
+{#- Every {{ value }} is escaped by spot-template into a Typst string literal (#"..."). -#}
+#set document(title: [{{ title }}], author: "Spotledger test fixture")
+#set text(font: ("Noto Sans", "Noto Naskh Arabic"), size: 9pt)
+#set page(paper: "a4", margin: (x: 15mm, top: 15mm, bottom: 20mm),
+  footer: context align(center, text(8pt)[Page #counter(page).display() of #counter(page).final().first()]))
+#grid(columns: (1fr, auto), align: (left, right),
+  [#image("logo.svg", width: 32mm) \ *{{ seller.name }}* \ {{ seller.address }} \ NTN: {{ seller.ntn }} · STRN: {{ seller.strn }}],
+  [#text(15pt)[*SALES TAX INVOICE*] \ Invoice no. {{ number }} \ Date {{ date }}])
+#v(3mm)
+*Buyer:* {{ buyer.name }} \ {{ buyer.address }} \ NTN: {{ buyer.ntn }} · STRN: {{ buyer.strn }}
+#v(3mm)
+#table(columns: (auto, 1fr, auto, auto, auto, auto, auto, auto), inset: 5pt,
+  stroke: 0.4pt + luma(170), align: (x, y) => if x >= 3 { right } else { left },
+  table.header([*No.*], [*Description*], [*HS code*], [*Qty*], [*Rate*],
+    [*Value excl. ST*], [*ST 18%*], [*Value incl. ST*]),
+{%- for r in rows %}
+  [{{ r.no }}], [{{ r.desc }} \ #text(7.5pt, luma(90))[{{ r.detail }}]], [{{ r.hs }}], [{{ r.qty }}],
+  [{{ r.rate | number(2) }}], [{{ r.value | number(2) }}], [{{ r.tax | number(2) }}], [{{ r.total | number(2) }}],
+{%- endfor %}
+  table.cell(colspan: 5)[*Totals (PKR)*], [*{{ totals.value | number(2) }}*], [*{{ totals.tax | number(2) }}*], [*{{ totals.total | number(2) }}*],
+)
+#block(breakable: false)[
+  *Amount in words:* {{ totals.total | amount_in_words('PKR') }}
+  #v(4mm)
+  #grid(columns: (auto, 1fr), align: (left, right + bottom), gutter: 6mm,
+    image("qr.svg", width: 24mm),
+    [#line(length: 50mm, stroke: 0.5pt) \ Authorised signature and stamp])
+  #text(7.5pt)[QR payload is a synthetic fixture, not an FBR-issued invoice number.]
+]

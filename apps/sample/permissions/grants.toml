@@ -1,0 +1,107 @@
+# The sample app's DocType grants (WP-DX-05.T1).
+#
+# Three roles: `Project Manager` holds everything on all five DocTypes; `Team
+# Member` reads everything, creates and writes Tasks and Time Entries, with the
+# Time Entry rights only on their own rows (`if_owner`); `Viewer` reads.
+# The platform `Tenant Administrator` reference role needs no row: it holds every
+# right by name (ADR-070 §12).
+# The `select` right rides lookup rows: a role must hold it on an app DocType to
+# use its records in a link picker.
+
+# -- Project Manager: everything on all five -------------------------------
+
+[[entries]]
+role = "Project Manager"
+doctype = "project"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "Project Manager"
+doctype = "task"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "Project Manager"
+doctype = "time_entry"
+rights = ["read", "write", "create", "delete", "submit", "cancel", "correct", "report", "select"]
+
+[[entries]]
+role = "Project Manager"
+doctype = "label"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "Project Manager"
+doctype = "checklist_item"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "Project Manager"
+doctype = "label_pick"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+# -- Team Member: read all; create and write Tasks and Time Entries ---------
+
+# Read on `project` (the architecture owner, 2026-10-24): a Task's `project` link target must be
+# readable by the caller under the links rule (WP-DOC-06.T2). Project writes stay
+# the managers'.
+[[entries]]
+role = "Team Member"
+doctype = "project"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Team Member"
+doctype = "task"
+rights = ["read", "create", "write", "report", "select"]
+
+# Create rides no owner condition: a new Time Entry is the user's own the moment
+# they make it, and `if_owner` would refuse exactly that (no `created_by` yet).
+# The write and submit rights carry `if_owner`: edits and submissions land only
+# on rows the user created. Delete is the managers' right.
+[[entries]]
+role = "Team Member"
+doctype = "time_entry"
+rights = ["read", "create", "report", "select"]
+
+[[entries]]
+role = "Team Member"
+doctype = "time_entry"
+rights = ["read", "write", "submit", "report", "select"]
+if_owner = true
+
+# Write on other people's Time Entries is granted nowhere: an edit by a Team
+# Member on someone else's row is a plain denial (the `if_owner` row is the only
+# `write` source and does not apply).
+
+# -- Viewer: read only ------------------------------------------------------
+
+[[entries]]
+role = "Viewer"
+doctype = "project"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Viewer"
+doctype = "task"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Viewer"
+doctype = "time_entry"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Viewer"
+doctype = "label"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Viewer"
+doctype = "checklist_item"
+rights = ["read", "select"]
+
+[[entries]]
+role = "Viewer"
+doctype = "label_pick"
+rights = ["read", "select"]

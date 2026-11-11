@@ -1,0 +1,156 @@
+# The Windows operation modules' error codes (WP-ADM-05.T1).
+# Library-internal vocabulary: the agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_windows.api"
+class = "none"
+summary = "A Win32 or COM call behind the Windows modules failed."
+explanation_key = "error.agent_windows.api"
+params = []
+remedy = "Check the service account's rights and the Windows event log; the operation may need a privileged agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.invalid_argument"
+class = "none"
+summary = "An operation argument does not satisfy the Windows module's own rules."
+explanation_key = "error.agent_windows.invalid_argument"
+params = []
+remedy = "Correct the named parameter in the console or CLI and re-issue the command."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_service"
+class = "none"
+summary = "No Windows service with the requested name exists."
+explanation_key = "error.agent_windows.unknown_service"
+params = []
+remedy = "List the services with os.service.list and use a name it reports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.service_protected"
+class = "none"
+summary = "Stopping or restarting the agent, the runtime or another protected service needs the critical flag."
+explanation_key = "error.agent_windows.service_protected"
+params = []
+remedy = "Re-issue the command with allow_critical set, after confirming the agent can still be reached."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.service_timeout"
+class = "none"
+summary = "A Windows service did not reach the expected state within the timeout."
+explanation_key = "error.agent_windows.service_timeout"
+params = []
+remedy = "Raise the wait duration, or inspect the service's dependencies and error log."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_update"
+class = "none"
+summary = "No offered Windows Update has the requested id."
+explanation_key = "error.agent_windows.unknown_update"
+params = []
+remedy = "Search again with os.update.search and install an id it reports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.update_selection"
+class = "none"
+summary = "The update selection names neither ids nor a severity, or names both."
+explanation_key = "error.agent_windows.update_selection"
+params = []
+remedy = "Provide either the ids to install or one severity, never both and never neither."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.reboot_time_invalid"
+class = "none"
+summary = "The requested reboot instant is not a valid future whole second."
+explanation_key = "error.agent_windows.reboot_time_invalid"
+params = []
+remedy = "Re-issue os.update.schedule_reboot with an absolute Unix instant in the future."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_rule"
+class = "none"
+summary = "No Windows Firewall rule with the requested name exists."
+explanation_key = "error.agent_windows.unknown_rule"
+params = []
+remedy = "List the rules with os.firewall.list and use a name it reports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.rule_protected"
+class = "none"
+summary = "Adding or removing the agent's outbound rule or an RDP rule needs the critical flag."
+explanation_key = "error.agent_windows.rule_protected"
+params = []
+remedy = "Re-issue the command with allow_critical set, after confirming the change cannot cut remote access."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_profile"
+class = "none"
+summary = "No Windows Firewall profile has the requested name."
+explanation_key = "error.agent_windows.unknown_profile"
+params = []
+remedy = "Use one of the domain, private or public profiles."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_user"
+class = "none"
+summary = "No local account with the requested name exists."
+explanation_key = "error.agent_windows.unknown_user"
+params = []
+remedy = "List the accounts with os.user.list and use a name it reports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unknown_group"
+class = "none"
+summary = "No local group with the requested name exists."
+explanation_key = "error.agent_windows.unknown_group"
+params = []
+remedy = "List the groups with os.group.list and use a name it reports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.user_protected"
+class = "none"
+summary = "Changing a built-in account or a protected group needs the explicit allow-list flag."
+explanation_key = "error.agent_windows.user_protected"
+params = []
+remedy = "Re-issue the command with allow_protected set, after confirming the account change is intended."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.secret_delivery"
+class = "none"
+summary = "A freshly generated password could not be delivered on the sealed result channel."
+explanation_key = "error.agent_windows.secret_delivery"
+params = []
+remedy = "Restore the sealed result channel and reset the account's password again; the password was set but not delivered."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.unsupported"
+class = "none"
+summary = "The Windows modules cannot provide the requested feature on this host."
+explanation_key = "error.agent_windows.unsupported"
+params = []
+remedy = "Use an operation the host supports, or run the agent on a Windows host with the feature available."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows.verify_failed"
+class = "none"
+summary = "Verification after applying a Windows operation did not confirm the new state."
+explanation_key = "error.agent_windows.verify_failed"
+params = []
+remedy = "Inspect the operation's check detail and the Windows event log, then re-issue the command."
+since = "0.1.0"

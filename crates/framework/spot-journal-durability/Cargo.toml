@@ -1,0 +1,20 @@
+[package]
+name = "spot-journal-durability"
+description = "The journal durability policies (WP-JRN-04.T1, ADR-061 s4): a pure, input-driven state machine that decides when a commit may be acknowledged under local, replica-sync and remote-sync, and what happens when the object store cannot be reached"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The policy setting is stored by the control plane; the types serialise.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `journal_durability.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,191 @@
+# Help for the document error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "document.bad_default"
+what_happened = "A field's default value cannot be read as the field's type."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the default in the document type definition so it matches the field type.", "If it keeps happening, tell your administrator and quote the code document.bad_default."]
+audience = "operator"
+
+[[help]]
+code = "document.duplicate"
+what_happened = "Another document already holds this unique value or id."
+why = "Something with the same identity already exists."
+what_to_do = ["Change the value, or open the existing document instead.", "If it keeps happening, tell your administrator and quote the code document.duplicate."]
+audience = "user"
+
+[[help]]
+code = "document.internal_error"
+what_happened = "An internal check of the platform failed while a method of an app was running."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this to the app maintainers with the message and request id.", "If it keeps happening, tell your administrator and quote the code document.internal_error."]
+audience = "operator"
+
+[[help]]
+code = "document.invalid_link"
+what_happened = "A link points at a document that does not exist."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the link value or create the linked document.", "If it keeps happening, tell your administrator and quote the code document.invalid_link."]
+audience = "user"
+
+[[help]]
+code = "document.invalid_name"
+what_happened = "The metadata holds a name that the storage layer refuses as an identifier."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Correct the metadata definition; this is a metadata bug, not caller input.", "If it keeps happening, tell your administrator and quote the code document.invalid_name."]
+audience = "operator"
+
+[[help]]
+code = "document.invalid_option"
+what_happened = "A select value is not one of the field's options."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Pick one of the field's listed options.", "If it keeps happening, tell your administrator and quote the code document.invalid_option."]
+audience = "user"
+
+[[help]]
+code = "document.invalid_row"
+what_happened = "The same child row id appears twice in the patch."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give each changed row its own id, or remove the duplicate row.", "If it keeps happening, tell your administrator and quote the code document.invalid_row."]
+audience = "user"
+
+[[help]]
+code = "document.invalid_state"
+what_happened = "The requested action is not allowed in the document's state."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Move the document to a state that allows the action, or cancel it.", "If it keeps happening, tell your administrator and quote the code document.invalid_state."]
+audience = "user"
+
+[[help]]
+code = "document.invalid_state_value"
+what_happened = "A stored document state is not one of draft, posted or cancelled."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Repair the stored state through a data fix; this indicates corrupt storage.", "If it keeps happening, tell your administrator and quote the code document.invalid_state_value."]
+audience = "operator"
+
+[[help]]
+code = "document.invalid_value"
+what_happened = "A value does not fit its field."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Enter a value of the field's type and precision.", "If it keeps happening, tell your administrator and quote the code document.invalid_value."]
+audience = "user"
+
+[[help]]
+code = "document.linked"
+what_happened = "Other documents link to this one, so it cannot be cancelled or deleted."
+why = "Other records still depend on this one, so it cannot be removed."
+what_to_do = ["Remove or repoint the linking documents first.", "If it keeps happening, tell your administrator and quote the code document.linked."]
+audience = "user"
+
+[[help]]
+code = "document.not_found"
+what_happened = "No document with this id exists, or the caller may not see it."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the id and the caller's read permission.", "If it keeps happening, tell your administrator and quote the code document.not_found."]
+audience = "user"
+
+[[help]]
+code = "document.read_only_field"
+what_happened = "The caller set a field only the engine may set, such as doc_state."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove the field from the patch; the engine sets it.", "If it keeps happening, tell your administrator and quote the code document.read_only_field."]
+audience = "user"
+
+[[help]]
+code = "document.required"
+what_happened = "A required field or child table has no value."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fill the named field, or remove the row requirement in the document type.", "If it keeps happening, tell your administrator and quote the code document.required."]
+audience = "user"
+
+[[help]]
+code = "document.secret_not_writable"
+what_happened = "A secret field was set in a document instead of through the secrets service."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove the value and store the secret with the secrets service.", "If it keeps happening, tell your administrator and quote the code document.secret_not_writable."]
+audience = "user"
+
+[[help]]
+code = "document.conflict"
+what_happened = "Another change to a document this action needs kept happening while it ran, so the action was stopped and nothing was saved."
+why = "Several people changed the same item at the same moment."
+what_to_do = ["Try the same action again: nothing was changed.", "If it keeps happening, tell your administrator and quote the code document.conflict."]
+audience = "user"
+
+[[help]]
+code = "document.stale_version"
+what_happened = "The document changed since it was read; the submitted version is out of date."
+why = "Someone else changed the item after you opened it."
+what_to_do = ["Reload the document, reapply the change and submit the new version.", "If it keeps happening, tell your administrator and quote the code document.stale_version."]
+audience = "user"
+
+[[help]]
+code = "document.too_long"
+what_happened = "A text value is longer than the field's max_chars limit."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Shorten the text or raise the field's max_chars limit.", "If it keeps happening, tell your administrator and quote the code document.too_long."]
+audience = "user"
+
+[[help]]
+code = "document.unknown_child_doctype"
+what_happened = "A child table's document type is not defined in the metadata."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Define the missing document type or fix the table's target in the metadata.", "If it keeps happening, tell your administrator and quote the code document.unknown_child_doctype."]
+audience = "operator"
+
+[[help]]
+code = "document.unknown_field"
+what_happened = "The document holds a field the document type does not declare."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the field's spelling, or add it to the document type.", "If it keeps happening, tell your administrator and quote the code document.unknown_field."]
+audience = "user"
+
+[[help]]
+code = "document.validation_failed"
+what_happened = "One or more fields are invalid; the field errors name each one exactly."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix every field error listed in the error's fields.", "If it keeps happening, tell your administrator and quote the code document.validation_failed."]
+audience = "user"
+
+[[help]]
+code = "document.value_not_listed"
+what_happened = "A select value is not one of the field's currently listed values."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Pick a listed value, or re-add the value to the field's options.", "If it keeps happening, tell your administrator and quote the code document.value_not_listed."]
+audience = "user"
+
+[[help]]
+code = "document.wrong_doctype"
+what_happened = "A document was handed to a view built for another kind of document."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fetch the document through the view's document type; this is a programming error.", "If it keeps happening, tell your administrator and quote the code document.wrong_doctype."]
+audience = "operator"
+
+[[help]]
+code = "document.wrong_type"
+what_happened = "A field does not hold the type the reader expects."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Use the typed accessor that matches the field's declared type.", "If it keeps happening, tell your administrator and quote the code document.wrong_type."]
+audience = "operator"
+
+[[help]]
+code = "document.duplicate_name"
+what_happened = "Another document of this type already has this name."
+why = "Something with the same identity already exists."
+what_to_do = ["Choose a different name, or open the existing document instead.", "If it keeps happening, tell your administrator and quote the code document.duplicate_name."]
+audience = "user"
+
+[[help]]
+code = "document.name_not_assignable"
+what_happened = "The name of this document type is generated, so a caller cannot choose it."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Leave the name field empty; the system gives the document its name when it is created.", "If it keeps happening, tell your administrator and quote the code document.name_not_assignable."]
+audience = "user"
+
+[[help]]
+code = "document.name_not_renameable"
+what_happened = "The name of this document type is generated, so it cannot be renamed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the document instead; the system names the amended copy itself.", "If it keeps happening, tell your administrator and quote the code document.name_not_renameable."]
+audience = "user"

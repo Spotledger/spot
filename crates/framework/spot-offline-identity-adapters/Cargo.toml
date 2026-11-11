@@ -1,0 +1,35 @@
+[package]
+name = "spot-offline-identity-adapters"
+description = "The adapters and hardenings around spot-offline-identity (WP-IAM-09.T2, ADR-070 rule 12.13 c, d, h and i): a KeyReleasePort over spot-protected-keys' Hub::release, a QuarantinePort over the spot-quarantine item model that is idempotent on (node, journal_seq), and a Persistence that seals the epoch and lease state under the node's key and refuses a state sealed for another node, a tampered state and a rolled-back epoch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The ports this crate implements, the persisted state it seals and the queue item it places.
+spot-offline-identity = { path = "../spot-offline-identity" }
+# The key hierarchy: `Hub::release` behind the key-release port, and the locked key and the
+# associated-data binding the node state is sealed with.
+spot-protected-keys = { path = "../spot-protected-keys" }
+# The quarantine queue's item model (ids, states, reason codes) the offline queue stores.
+spot-quarantine = { path = "../spot-quarantine" }
+# The sender and record name a quarantine item is keyed by.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The persisted state and the queue items cross a file boundary as JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `offline_identity_adapters.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# A public key for the trust anchor of a store that never verifies a signature.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The journal genesis the sync integration test starts from.
+spot-audit-chain = { path = "../spot-audit-chain" }
+
+[lints]
+workspace = true

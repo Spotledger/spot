@@ -1,0 +1,182 @@
+# migration_conflicts codes: customisation conflict detection (spot-migration-conflicts,
+# WP-MIG-03). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "migration_conflicts.custom_field_collision"
+class = "none"
+summary = "The custom field {doctype}.{field} collides with a standard field the release adds to {doctype}."
+explanation_key = "error.migration_conflicts.custom_field_collision"
+params = ["doctype", "field"]
+remedy = "Rename the custom field, or remove it if the standard field replaces it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.custom_field_doctype_removed"
+class = "none"
+summary = "The custom field {doctype}.{field} is on a DocType the release removes."
+explanation_key = "error.migration_conflicts.custom_field_doctype_removed"
+params = ["doctype", "field"]
+remedy = "Remove the custom field, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.override_field_removed"
+class = "none"
+summary = "A property override on {doctype}.{field} targets a field the release removes or renames."
+explanation_key = "error.migration_conflicts.override_field_removed"
+params = ["doctype", "field"]
+remedy = "Point the override at another field, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.override_doctype_removed"
+class = "none"
+summary = "A property override targets the DocType {doctype}, which the release removes."
+explanation_key = "error.migration_conflicts.override_doctype_removed"
+params = ["doctype"]
+remedy = "Remove the override, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.override_options_conflict"
+class = "none"
+summary = "The options override on {doctype}.{field} no longer matches the field's new option list."
+explanation_key = "error.migration_conflicts.override_options_conflict"
+params = ["doctype", "field"]
+remedy = "Update the options override to add the new values and drop the removed ones."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.fixture_field_removed"
+class = "none"
+summary = "A fixture for {doctype} sets the field {field}, which the release removes."
+explanation_key = "error.migration_conflicts.fixture_field_removed"
+params = ["doctype", "field"]
+remedy = "Update the fixture, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.fixture_doctype_removed"
+class = "none"
+summary = "A fixture targets the DocType {doctype}, which the release removes."
+explanation_key = "error.migration_conflicts.fixture_doctype_removed"
+params = ["doctype"]
+remedy = "Remove the fixture, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.view_field_removed"
+class = "none"
+summary = "A view layer for {doctype} references the field {field}, which the release removes."
+explanation_key = "error.migration_conflicts.view_field_removed"
+params = ["doctype", "field"]
+remedy = "Point the view layer at another field, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.view_doctype_removed"
+class = "none"
+summary = "A view layer targets the DocType {doctype}, which the release removes."
+explanation_key = "error.migration_conflicts.view_doctype_removed"
+params = ["doctype"]
+remedy = "Remove the view layer, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.view_hidden_required"
+class = "none"
+summary = "A view layer hides the field {doctype}.{field}, which the release makes required with no default."
+explanation_key = "error.migration_conflicts.view_hidden_required"
+params = ["doctype", "field"]
+remedy = "Give the hidden field a default, or stop hiding it in the view."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.script_type_error"
+class = "none"
+summary = "The script {script} reads the field {doctype}.{field}, which the release removes from the new declarations."
+explanation_key = "error.migration_conflicts.script_type_error"
+params = ["doctype", "field", "script"]
+remedy = "Update the script to use another field, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.script_syntax_error"
+class = "none"
+summary = "The script {script} does not pass the save-time TypeScript checker."
+explanation_key = "error.migration_conflicts.script_syntax_error"
+params = ["script"]
+remedy = "Fix the script so it transpiles, then save it again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.script_doctype_removed"
+class = "none"
+summary = "The script {script} is bound to the DocType {doctype}, which the release removes."
+explanation_key = "error.migration_conflicts.script_doctype_removed"
+params = ["doctype", "script"]
+remedy = "Rebind the script to another DocType, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.rule_parse_error"
+class = "none"
+summary = "The expression {rule} no longer parses in the shared expression language."
+explanation_key = "error.migration_conflicts.rule_parse_error"
+params = ["rule"]
+remedy = "Fix the expression so it parses, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.rule_field_removed"
+class = "none"
+summary = "The expression {rule} reads the field {field}, which the release removes."
+explanation_key = "error.migration_conflicts.rule_field_removed"
+params = ["field", "rule"]
+remedy = "Update the expression to use another field, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.app_wit_world_mismatch"
+class = "none"
+summary = "The app {app} targets the WIT world {world}, which the new host does not serve."
+explanation_key = "error.migration_conflicts.app_wit_world_mismatch"
+params = ["app", "world"]
+remedy = "Update the app to a bundle that targets the new host's WIT world."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.app_doctype_removed"
+class = "none"
+summary = "The app {app} needs the DocType {doctype}, which the release removes."
+explanation_key = "error.migration_conflicts.app_doctype_removed"
+params = ["app", "doctype"]
+remedy = "Update the app, or keep the DocType in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.app_hook_removed"
+class = "none"
+summary = "The app {app} watches the field {doctype}.{field}, which the release removes."
+explanation_key = "error.migration_conflicts.app_hook_removed"
+params = ["app", "doctype", "field"]
+remedy = "Update the app so its hook no longer watches the field, or keep the field in the release."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.app_host_incompatible"
+class = "none"
+summary = "The app {app} does not accept the new host version {version}."
+explanation_key = "error.migration_conflicts.app_host_incompatible"
+params = ["app", "version"]
+remedy = "Update the app so its requires_host range admits the new host version."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_conflicts.declarations_error"
+class = "none"
+summary = "The new metadata does not generate TypeScript declarations: {message}."
+explanation_key = "error.migration_conflicts.declarations_error"
+params = ["message"]
+remedy = "Fix the new metadata so the declarations generate, then run the check again."
+since = "0.1.0"

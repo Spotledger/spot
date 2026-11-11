@@ -1,0 +1,5 @@
+================ Certificate 0 (locale this parser does not support) ================
+ NotBefore: 15 Jan 2024 00:00:00
+ NotAfter: 15 Jan 2026 23:59:59
+Subject: CN=spotledger-test
+Cert Hash(sha1): aabbccddeeff00112233445566778899aabbccdd

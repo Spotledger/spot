@@ -1,0 +1,88 @@
+# workload_routing codes: the `workload_routing.*` vocabulary of spot-workload-routing
+# (WP-PLT-20.T1, ADR-24). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The routing engine raises its own typed errors (`spot_workload_routing::Error`) and records most
+# fallbacks as metrics (`spot_workload_routing::RoutingEvent`), so these are library-internal
+# vocabulary: `class = "none"` describes what each code means, and a remedy states what an operator
+# does about it.
+
+[[entry]]
+code = "workload_routing.invalid_policy"
+class = "none"
+summary = "A routing policy document failed validation."
+explanation_key = "error.workload_routing.invalid_policy"
+params = []
+remedy = "Fix the policy document named in the message: every rule needs a matcher, a target and a positive budget."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.unknown_class"
+class = "none"
+summary = "A workload class or node role name is not one of the known values."
+explanation_key = "error.workload_routing.unknown_class"
+params = []
+remedy = "Use one of the documented class or role names; the message names the offending value."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.no_target"
+class = "none"
+summary = "A path rule matched but no node in the topology carries its target labels."
+explanation_key = "error.workload_routing.no_target"
+params = []
+remedy = "Add a node with the target role or label, or widen the rule; the request is served locally meanwhile."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.hop_limit"
+class = "none"
+summary = "A forward was refused because the request has used its whole hop budget."
+explanation_key = "error.workload_routing.hop_limit"
+params = []
+remedy = "Check the path rules for a loop or raise max_hops deliberately; the request is served locally meanwhile."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.forward_failed"
+class = "none"
+summary = "The forwarding transport failed to reach the target node."
+explanation_key = "error.workload_routing.forward_failed"
+params = []
+remedy = "Check the node's health and the network between the two nodes; the failure is recorded as a metric."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.replica_lag"
+class = "none"
+summary = "A replica was eligible, but its replication lag is over the rule's limit."
+explanation_key = "error.workload_routing.replica_lag"
+params = []
+remedy = "Check replication health, or raise the rule's max_lag_ms if the endpoint tolerates more staleness; the read uses the primary meanwhile."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.no_replica"
+class = "none"
+summary = "No replica was reachable or registered, so the read fell back to the primary."
+explanation_key = "error.workload_routing.no_replica"
+params = []
+remedy = "Register a replica, or accept that reads use the primary; this is not an error by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.write_to_replica"
+class = "none"
+summary = "A request that carries a write was refused a replica read and uses the primary."
+explanation_key = "error.workload_routing.write_to_replica"
+params = []
+remedy = "None: this is the required behaviour. A write always reads the primary."
+since = "0.1.0"
+
+[[entry]]
+code = "workload_routing.read_your_writes"
+class = "none"
+summary = "The session wrote recently and no replica has caught up to its high-water token."
+explanation_key = "error.workload_routing.read_your_writes"
+params = []
+remedy = "None: the read uses the primary until the window passes or a replica catches up."
+since = "0.1.0"

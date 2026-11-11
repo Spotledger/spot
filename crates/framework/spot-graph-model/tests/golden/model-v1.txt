@@ -1,0 +1,28 @@
+spot-graph-text-1
+meta_version 1
+node "order" label "order" posted false
+node "party" label "Party" posted false
+node "project" label "project" posted false
+edge "order.ref" dynamic_link_many_to_one ref -> "order" required false
+  source dynamic_link
+  to any_of 2
+    "party"
+    "project"
+edge "party.about" dynamic_link_many_to_one ref -> "party" required false
+  source dynamic_link
+  to dynamic
+edge "project.customer" many_to_one ref -> "project" required false
+  source link_field
+  to one "party"
+edge "project.manager" many_to_one ref -> "project" required false
+  source link_field
+  to one "party"
+edge "project.parent_project" many_to_one ref -> "project" required false
+  source link_field
+  to one "project"
+edge "project.watchers" many_to_many ref -> "project" required false
+  source table_multiselect
+  to one "party"
+edge "project_contains_project_task" one_to_many owned -> "project" required false
+  source table
+  to one "project_task"

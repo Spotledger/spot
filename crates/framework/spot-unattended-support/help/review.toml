@@ -1,0 +1,37 @@
+# Help for the review error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "review.campaign_closed"
+what_happened = "The campaign is completed, so no decision or escalation can change anything."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Decisions are final; open a new campaign for a different decision.", "If it keeps happening, tell your administrator and quote the code review.campaign_closed."]
+audience = "user"
+
+[[help]]
+code = "review.decision_invalid"
+what_happened = "The decision on this review item does not meet the rules for it."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the non-blank reason or note the rule requires, or decide an item that is still open.", "If it keeps happening, tell your administrator and quote the code review.decision_invalid."]
+audience = "user"
+
+[[help]]
+code = "review.item_invalid"
+what_happened = "This review item cannot be reviewed as it stands."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the item the detail names (a blank id or assignment, a duplicate id).", "If it keeps happening, tell your administrator and quote the code review.item_invalid."]
+audience = "user"
+
+[[help]]
+code = "review.not_authorized"
+what_happened = "You are not the person who may decide this review item."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Wait for the reviewer or, on an escalated item, the escalation target named in the error.", "If it keeps happening, tell your administrator and quote the code review.not_authorized."]
+audience = "user"
+
+[[help]]
+code = "review.spec_invalid"
+what_happened = "The campaign spec is not reviewable."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the condition the detail names (a past deadline, a missing escalation contact).", "If it keeps happening, tell your administrator and quote the code review.spec_invalid."]
+audience = "user"

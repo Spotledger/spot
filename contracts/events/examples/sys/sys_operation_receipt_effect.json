@@ -1,0 +1,13 @@
+{
+  "effect": {
+    "class": "mail",
+    "count": 1,
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "kind": "external",
+    "state": "delivered",
+    "step": "erp_selling:send_invoice",
+    "store_refs": ["msg:9f2"]
+  },
+  "operation": "post",
+  "undeclared": false
+}

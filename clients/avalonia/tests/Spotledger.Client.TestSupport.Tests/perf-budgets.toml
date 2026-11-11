@@ -1,0 +1,21 @@
+[[budget]]
+id = "support.render"
+metric = "p95"
+max = 50
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 3.0
+[runner.ci-windows]
+multiplier = 3.0
+[runner.reference]
+multiplier = 1.0
+
+# Present now, inactive while SPOT_CI_OS defaults to Linux only.
+[[budget]]
+id = "support.render.windows"
+metric = "p95"
+max = 50
+unit = "ms"
+runner = "ci-windows"

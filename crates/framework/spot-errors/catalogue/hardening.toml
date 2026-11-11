@@ -1,0 +1,75 @@
+# The hardening crate's error codes (WP-ADM-10.T1, blueprint WS22, ADR-44).
+# Library-internal vocabulary: the host agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "hardening.baseline_parse"
+class = "none"
+summary = "The baseline text does not parse or does not have the expected shape: {detail}."
+explanation_key = "error.hardening.baseline_parse"
+params = ["detail"]
+remedy = "Correct the baseline file named by the error and load it again."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.control_duplicate"
+class = "none"
+summary = "Two controls in one baseline share the id {id}."
+explanation_key = "error.hardening.control_duplicate"
+params = ["id"]
+remedy = "Give each control in the baseline a unique id."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.control_invalid"
+class = "none"
+summary = "The control {id} is not valid: {detail}."
+explanation_key = "error.hardening.control_invalid"
+params = ["detail", "id"]
+remedy = "Correct the control named by the error."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.check_invalid"
+class = "none"
+summary = "The check on control {id} is not valid: {detail}."
+explanation_key = "error.hardening.check_invalid"
+params = ["detail", "id"]
+remedy = "Correct the check named by the error."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.fact_invalid"
+class = "none"
+summary = "The fact {fact} is not valid: {detail}."
+explanation_key = "error.hardening.fact_invalid"
+params = ["detail", "fact"]
+remedy = "Correct the fact name or value named by the error."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.fact_unavailable"
+class = "none"
+summary = "The fact source could not read {fact}: {detail}."
+explanation_key = "error.hardening.fact_unavailable"
+params = ["detail", "fact"]
+remedy = "Check the agent's connection and the host it reads, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.remedy_invalid"
+class = "none"
+summary = "The remedy for control {id} is not valid: {detail}."
+explanation_key = "error.hardening.remedy_invalid"
+params = ["detail", "id"]
+remedy = "Correct the remedy so it names an operation and parameters the catalogue accepts."
+since = "0.1.0"
+
+[[entry]]
+code = "hardening.report_invalid"
+class = "none"
+summary = "A compliance report could not be read: {detail}."
+explanation_key = "error.hardening.report_invalid"
+params = ["detail"]
+remedy = "Read the report from a valid structured form, or regenerate it."
+since = "0.1.0"

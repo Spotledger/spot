@@ -1,0 +1,78 @@
+# Help for the metering error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "metering.basis_points_out_of_range"
+what_happened = "A usage limit fraction is set outside the allowed range."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set the fraction as basis points between 0 and 10000 (80% is 8000).", "If it keeps happening, tell your administrator and quote the code metering.basis_points_out_of_range."]
+audience = "user"
+
+[[help]]
+code = "metering.counter_overflow"
+what_happened = "The exact usage counter exceeds its integer range."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Investigate the producer amounts; do not replace the exact count with a saturated value.", "If it keeps happening, tell your administrator and quote the code metering.counter_overflow."]
+audience = "user"
+
+[[help]]
+code = "metering.invalid_period_spec"
+what_happened = "A metering period spec is inconsistent."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the period spec (an anniversary anchor must be a day of month in 1..=31).", "If it keeps happening, tell your administrator and quote the code metering.invalid_period_spec."]
+audience = "user"
+
+[[help]]
+code = "metering.malformed_event"
+what_happened = "A usage event does not match the kind of meter it was sent to and was refused."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send a member digest with a distinct-set meter (active users) and an amount with a counter or gauge; the event was not counted.", "If it keeps happening, tell your administrator and quote the code metering.malformed_event."]
+audience = "user"
+
+[[help]]
+code = "metering.period_unresolvable"
+what_happened = "A usage event could not be placed into a billing period."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Check the instant and the tenant's configured zone; the event was not bucketed.", "If it keeps happening, tell your administrator and quote the code metering.period_unresolvable."]
+audience = "user"
+
+[[help]]
+code = "metering.tenant_mismatch"
+what_happened = "The quota guard belongs to another tenant."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Select the guard bound to the current tenant.", "If it keeps happening, tell your administrator and quote the code metering.tenant_mismatch."]
+audience = "user"
+
+[[help]]
+code = "metering.unknown_zone"
+what_happened = "The metering period spec named an IANA time zone the build does not know."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use an IANA zone name the platform ships (for example Asia/Karachi), or leave the zone unset for UTC.", "If it keeps happening, tell your administrator and quote the code metering.unknown_zone."]
+audience = "user"
+[[help]]
+code = "metering.store_unavailable"
+what_happened = "The metering store is unavailable (); the call can be retried."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry later. Quota decisions keep using the last snapshot: a hard-block meter then refuses new metered documents once the snapshot is stale, and reads are never blocked.", "If it keeps happening, tell your administrator and quote the code metering.store_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "metering.late_beyond_horizon"
+what_happened = "A usage event belongs to a billing period that is past the late-arrival window, so it was refused and not counted."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Do not retry this event. Send late usage only within the window the metering store is configured with.", "If it keeps happening, tell your administrator and quote the code metering.late_beyond_horizon."]
+audience = "user"
+
+[[help]]
+code = "metering.batch_too_large"
+what_happened = "A batch of usage events was larger than the allowed size and was refused, so none of it was recorded."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send the backlog in several smaller calls. Recording is safe to repeat, so splitting a batch never changes the totals.", "If it keeps happening, tell your administrator and quote the code metering.batch_too_large."]
+audience = "user"
+
+[[help]]
+code = "metering.retention_horizon_too_short"
+what_happened = "The metering retention window was set shorter than the minimum, so the setting was refused."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set the window to at least the minimum. A shorter window would refuse usage that producers may still retry.", "If it keeps happening, tell your administrator and quote the code metering.retention_horizon_too_short."]
+audience = "admin"

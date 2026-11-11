@@ -1,0 +1,66 @@
+[package]
+name = "spot-bpm-documents"
+description = "Document nodes for the Business Process engine (WS8, WP-BPM-04.T1, ADR-49, ADR-080): the Document node handler that creates, updates, submits and cancels a document only through the document engine's lifecycle, and the Case file that links every touched document through the business graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The document engine's public lifecycle API (`DocumentService`), the `Invocation` a node runs
+# as, and the `Document`/`DocumentPatch` a node builds.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The node-handler contract, the open registry, the `IdempotencyKey` and the shared expression
+# bridge (`expr`) the mapping and the branch conditions use.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# `NodeId`, the node identifier the engine hands a handler and the Case file records.
+spot-dag = { path = "../spot-dag" }
+# `EdgeWriter` (the only way an edge is written), `Edge`, `PropValue` and the in-memory
+# reference writer the Case file records through.
+spot-edge-sync = { path = "../spot-edge-sync" }
+# `EdgeTypeId`: the stable id of the `bpm_case_file` edge type.
+spot-graph-model = { path = "../spot-graph-model" }
+# `Name`, `RecordId`, `Version`, `Value` and `NodeRef`: the edge ends and the field values.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The shared expression language (ADR-28): a mapping target is a `spot-expr` expression.
+spot-expr = { path = "../spot-expr" }
+# `TxParticipant`, `WriteRecord`: the seam that runs the Case-file edge write inside the
+# document's own transaction (WP-DOC-04.T3). The document engine is not a storage backend.
+spot-document = { path = "../spot-document" }
+# The PG alias
+# (feature `pg`) names the PostgreSQL edge writer and its transaction type.
+spot-edge-pg = { path = "../../backends/spot-edge-pg", optional = true }
+spot-postgres = { path = "../../backends/spot-postgres", optional = true }
+# `PermissionEngine` and `Principal`: the publish permission is asked of the engine (WP-BPM-04.T4).
+spot-permissions = { path = "../spot-permissions" }
+# Canonical JSON for the node output, the receipt and the Case-file edge property.
+serde_json = "1"
+
+[features]
+# `PgCaseFileParticipant`: the Case-file participant over the PostgreSQL edge writer. Off by
+# default so the crate's normal dependency tree holds no storage backend.
+pg = ["dep:spot-edge-pg", "dep:spot-postgres"]
+
+[dev-dependencies]
+# The real database: the Case-file edge commits and rolls back with the document on PostgreSQL.
+# Tests skip (print `SKIPPED:`) without `SPOT_TEST_PG_URL`.
+spot-edge-pg = { path = "../../backends/spot-edge-pg" }
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+time = { version = "0.3", default-features = false, features = ["std"] }
+# The real document engine and the in-memory storage fake: the scenario runs every operation
+# through `spot-document`'s lifecycle, exactly as a user's click would.
+spot-document = { path = "../spot-document" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The effective metadata the fixtures compile.
+spot-meta = { path = "../spot-meta" }
+# `ManualClock`: the engine reads time only through a clock.
+spot-core = { path = "../spot-core" }
+# The empty step registry the test engine runs with.
+spot-seams = { path = "../spot-seams" }
+# A compiled process, so one test drives the handler through the real engine and its registry.
+spot-bpm-model = { path = "../spot-bpm-model" }
+
+[lints]
+workspace = true

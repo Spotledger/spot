@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-BPM-07.T2: test runs, step-through and the execution history of the designer.
+       The project holds no model of its own: a run is what the server says it is, so every
+       question goes through IRunServer and every answer is a typed record here. The sample
+       data, the step-through controls, the per-node badges and the history panes are client
+       side, and every string a person reads comes from RunStrings, built from the ADR-080
+       run-label pair (bpm.run.singular / bpm.run.plural). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.FlowDesigner/Spotledger.Client.FlowDesigner.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+</Project>

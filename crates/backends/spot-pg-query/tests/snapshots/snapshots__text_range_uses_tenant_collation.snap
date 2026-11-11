@@ -1,0 +1,12 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE (("p"."name" COLLATE "spot_en" < $1 COLLATE "spot_en") AND ("p"."name" COLLATE "spot_en" <= $2 COLLATE "spot_en") AND ("p"."name" COLLATE "spot_en" > $3 COLLATE "spot_en") AND ("p"."name" COLLATE "spot_en" >= "p"."note" COLLATE "spot_en")) ORDER BY "p"."id" ASC OFFSET $4
+$1 = Text("M")
+$2 = Text("M")
+$3 = Text("A")
+$4 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

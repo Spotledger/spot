@@ -1,0 +1,375 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spotledger.Client.Shell"
+             xmlns:views="using:Spotledger.Client.Shell.Views"
+             xmlns:controls="using:Spotledger.Client.Controls"
+             xmlns:api="using:Spotledger.Client.Api"
+             x:Class="Spotledger.Client.Shell.Views.ShellView"
+             x:DataType="vm:ShellViewModel"
+             Background="{DynamicResource Color.Surface.Canvas}"
+             FlowDirection="{Binding FlowDirection}"
+             Focusable="True">
+  <UserControl.Resources>
+    <!-- Chrome geometry that the token scale does not carry: the launcher palette width
+         and its drop offset under the header. Documented in SHELL.md as the two sizes
+         outside the Space scale (no token exists for a 560-wide panel). -->
+    <x:Double x:Key="Chrome.Launcher.Width">560</x:Double>
+    <x:Double x:Key="Chrome.Launcher.OffsetY">72</x:Double>
+    <x:Double x:Key="Chrome.Icon.LineWidth">1.6</x:Double>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <!-- Chrome styling from tokens only: hairline separators, one spacing scale. -->
+    <Style Selector="Border.chrome">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    </Style>
+    <Style Selector="Border.tabItem">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+      <Setter Property="BorderThickness" Value="1,1,1,0" />
+      <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    </Style>
+    <Style Selector="Border.tabItem.active">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Canvas}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+    </Style>
+    <Style Selector="Border.launcherRow">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.launcherRowSelected">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.100}" />
+      <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Small}" />
+    </Style>
+    <Style Selector="Border.categoryChip">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Pill}" />
+      <Setter Property="Padding" Value="{views:ChromeThickness Left=Space.1, Right=Space.1}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.keyBadge">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Small}" />
+      <Setter Property="Padding" Value="{views:ChromeThickness Left=Space.1, Right=Space.1}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chromeButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Path.chromeGlyph">
+      <Setter Property="Stroke" Value="{DynamicResource Color.Text.Secondary}" />
+    </Style>
+    <Style Selector="TextBlock.chromeLabel">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Secondary}" />
+    </Style>
+    <Style Selector="Border.sidebarRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    </Style>
+    <Style Selector="Border.sidebarRow:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+    </Style>
+    <Style Selector="Border.sidebarRow.selected">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.100}" />
+    </Style>
+    <Style Selector="Border.badgeDot">
+      <Setter Property="Background" Value="{DynamicResource Color.Semantic.Danger}" />
+    </Style>
+  </UserControl.Styles>
+  <Panel>
+    <DockPanel LastChildFill="True">
+      <!-- Header row: logo, native menu bar, search (Ctrl+K), New, bell with count, user chip. -->
+      <Border DockPanel.Dock="Top" Classes="chrome" BorderThickness="0,0,0,1"
+              Padding="{views:ChromeThickness Left=Space.2, Right=Space.2}">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Height="{views:DoubleToken Space.11}">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{views:DoubleToken Space.1}"
+                      VerticalAlignment="Center" Name="LogoPanel">
+            <Path Name="LogoGlyph" Width="{views:DoubleToken Space.6}" Height="{views:DoubleToken Space.6}"
+                  Stroke="{DynamicResource Color.Brand.600}" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+            <TextBlock Text="Spot" FontWeight="{DynamicResource Font.Weight.Bold}"
+                       Foreground="{DynamicResource Color.Text.Primary}" VerticalAlignment="Center"
+                       FontSize="{DynamicResource Font.Size.Comfortable}" />
+            <TextBlock Text="ledger" FontWeight="{DynamicResource Font.Weight.Bold}"
+                       Foreground="{DynamicResource Color.Brand.600}" VerticalAlignment="Center"
+                       FontSize="{DynamicResource Font.Size.Comfortable}" />
+          </StackPanel>
+          <!-- The native menu bar is assembled from the command registry in code. -->
+          <ContentControl Grid.Column="1" Name="MenuBarHost" VerticalAlignment="Stretch"
+                          Margin="{views:ChromeThickness Left=Space.3}" />
+          <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="{views:DoubleToken Space.2}"
+                      VerticalAlignment="Center" Margin="{views:ChromeThickness Right=Space.1}">
+            <TextBox Name="SearchBox" PlaceholderText="Search (Ctrl+K)" MinWidth="180"
+                     AutomationProperties.Name="Search (Ctrl+K)" />
+            <Button Name="NewButton" Classes="accent" AutomationProperties.Name="New">
+              <StackPanel Orientation="Horizontal" Spacing="{views:DoubleToken Space.1}">
+                <Path Name="NewGlyph" Width="{views:DoubleToken Space.4}" Height="{views:DoubleToken Space.4}"
+                      StrokeThickness="2" Stroke="{DynamicResource Color.Neutral.0}" />
+                <TextBlock Text="New" />
+              </StackPanel>
+            </Button>
+            <Button Name="BellButton" Classes="flat" AutomationProperties.Name="Notifications">
+              <Panel>
+                <Path Name="BellGlyph" Width="{views:DoubleToken Space.6}" Height="{views:DoubleToken Space.6}"
+                      Classes="chromeGlyph" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+                <Border Name="BellBadge" Classes="badgeDot" CornerRadius="{controls:CornerRadiusToken Radius.Pill}"
+                        MinWidth="{views:DoubleToken Space.4}" Height="{views:DoubleToken Space.4}"
+                        IsVisible="False" HorizontalAlignment="Right" VerticalAlignment="Top">
+                  <TextBlock Name="BellCount" FontSize="{DynamicResource Font.Size.Caption}"
+                             FontWeight="{DynamicResource Font.Weight.Bold}"
+                             Foreground="{DynamicResource Color.Neutral.0}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+              </Panel>
+            </Button>
+            <Button Name="UserChip" Classes="flat" AutomationProperties.Name="User menu">
+              <StackPanel Orientation="Horizontal" Spacing="{views:DoubleToken Space.1}">
+                <Border CornerRadius="{controls:CornerRadiusToken Radius.Pill}"
+                        Background="{DynamicResource Color.Semantic.Success}"
+                        Width="{views:DoubleToken Space.7}" Height="{views:DoubleToken Space.7}">
+                  <TextBlock Name="UserInitials" FontSize="{DynamicResource Font.Size.Caption}"
+                             FontWeight="{DynamicResource Font.Weight.Semibold}"
+                             Foreground="{DynamicResource Color.Neutral.0}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Spacing="0" VerticalAlignment="Center">
+                  <TextBlock Name="UserNameText" FontSize="{DynamicResource Font.Size.Caption}"
+                             FontWeight="{DynamicResource Font.Weight.Medium}"
+                             Foreground="{DynamicResource Color.Text.Primary}" />
+                  <TextBlock Name="SiteText" FontSize="{DynamicResource Font.Size.Caption}"
+                             Foreground="{DynamicResource Color.Text.Secondary}" />
+                </StackPanel>
+                <Path Name="UserChevron" Width="{views:DoubleToken Space.4}" Height="{views:DoubleToken Space.4}"
+                      Classes="chromeGlyph" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Status bar. -->
+      <Border DockPanel.Dock="Bottom" Classes="chrome" BorderThickness="0,1,0,0"
+              Padding="{views:ChromeThickness Left=Space.3, Right=Space.3}"
+              Height="{views:DoubleToken Space.8}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Name="StatusText" VerticalAlignment="Center"
+                     FontSize="{DynamicResource Font.Size.Caption}"
+                     Foreground="{DynamicResource Color.Text.Secondary}" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{views:DoubleToken Space.3}"
+                      VerticalAlignment="Center">
+            <Path Name="ConnectionGlyph" Width="{views:DoubleToken Space.4}" Height="{views:DoubleToken Space.4}"
+                  Classes="chromeGlyph" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+            <TextBlock Name="ProfileText" FontSize="{DynamicResource Font.Size.Caption}"
+                       Foreground="{DynamicResource Color.Text.Secondary}" />
+            <TextBlock Name="DensityText" FontSize="{DynamicResource Font.Size.Caption}"
+                       Foreground="{DynamicResource Color.Text.Secondary}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Tab strip: document tabs, + button and a keyboard-reachable overflow control. -->
+      <Border DockPanel.Dock="Top" Classes="chrome" BorderThickness="0,0,0,1"
+              Padding="{views:ChromeThickness Left=Space.2}">
+        <DockPanel LastChildFill="True">
+          <!-- When the sidebar is hidden this restore toggle appears, so hiding the
+               sidebar always keeps a visible way back. -->
+          <Button DockPanel.Dock="Left" Name="SidebarRestoreButton" Classes="flat"
+                  VerticalAlignment="Center" IsVisible="False"
+                  ToolTip.Tip="Show sidebar · Ctrl+B"
+                  AutomationProperties.Name="Show sidebar">
+            <Path Name="RestoreGlyph" Width="{views:DoubleToken Space.5}" Height="{views:DoubleToken Space.5}"
+                  Classes="chromeGlyph" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+          </Button>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{views:DoubleToken Space.1}"
+                      VerticalAlignment="Center" Margin="{views:ChromeThickness Right=Space.1}">
+            <Button Name="NewTabButton" Classes="flat" Content="+" FontSize="{DynamicResource Font.Size.Comfortable}"
+                    AutomationProperties.Name="New tab" />
+            <Button Name="TabOverflowButton" Classes="flat" AutomationProperties.Name="Tab overflow">
+              <Path Name="MoreGlyph" Width="{views:DoubleToken Space.5}" Height="{views:DoubleToken Space.5}"
+                    Classes="chromeGlyph" StrokeThickness="2" />
+            </Button>
+          </StackPanel>
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                        Name="TabScroll">
+            <ItemsControl Name="TabStrip">
+              <!-- Horizontal tab strip (mockup): the ItemsControl default stacks vertically. -->
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- Body: collapsible icon sidebar + tab content. -->
+      <Grid ColumnDefinitions="Auto,*">
+        <Border Grid.Column="0" Classes="chrome" Name="SidebarBorder" BorderThickness="0,0,1,0"
+                Padding="{views:ChromeThickness Top=Space.1, Bottom=Space.1}">
+          <StackPanel Spacing="{views:DoubleToken Space.1}">
+            <Button Name="SidebarToggle" Classes="flat" HorizontalAlignment="Center"
+                    ToolTip.Tip="Toggle sidebar · Ctrl+B"
+                    AutomationProperties.Name="Toggle sidebar">
+              <Path Name="ToggleGlyph" Width="{views:DoubleToken Space.5}" Height="{views:DoubleToken Space.5}"
+                    Classes="chromeGlyph" StrokeThickness="{StaticResource Chrome.Icon.LineWidth}" />
+            </Button>
+            <ItemsControl Name="SidebarItems" />
+          </StackPanel>
+        </Border>
+        <Grid Grid.Column="1">
+          <ContentControl Name="TabContent" />
+        </Grid>
+      </Grid>
+    </DockPanel>
+
+    <!-- Ctrl+K launcher: floating panel under the header — a panel in the shell's own
+         layer, not a modal dialog and not the menu system. -->
+    <Border Name="LauncherPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+            BorderThickness="1" MaxHeight="420" Width="{StaticResource Chrome.Launcher.Width}"
+            VerticalAlignment="Top" HorizontalAlignment="Center"
+            Margin="{views:ChromeThickness Top=Space.11}"
+            IsVisible="False">
+      <DockPanel LastChildFill="True">
+        <TextBox DockPanel.Dock="Top" Name="LauncherInput"
+                 PlaceholderText="Type a command…" Margin="{views:ChromeThickness All=Space.3}"
+                 AutomationProperties.Name="Command search" />
+        <ScrollViewer Name="LauncherScroll">
+          <StackPanel Name="LauncherResults" Margin="{views:ChromeThickness Bottom=Space.2}" />
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <!-- Dirty-close dialog: Save / Discard / Cancel. -->
+    <Border Name="DialogPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+            BorderThickness="1" MaxWidth="420" Padding="{views:ChromeThickness All=Space.4}"
+            HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="False">
+      <StackPanel Spacing="{views:DoubleToken Space.3}">
+        <TextBlock Name="DialogMessage" FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Text.Primary}" TextWrapping="Wrap" />
+        <StackPanel Name="DialogButtons" Orientation="Horizontal" Spacing="{views:DoubleToken Space.2}"
+                    HorizontalAlignment="Right" />
+      </StackPanel>
+    </Border>
+
+    <!-- Mid-session re-sign-in modal (WP-UI-02.T3): over the current screen; cancelling
+         keeps the open tabs read-only until the user signs back in or closes them. -->
+    <Border Name="ReSignInPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+            BorderThickness="1" MaxWidth="420" Padding="{views:ChromeThickness All=Space.4}"
+            HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="False">
+      <StackPanel Spacing="{views:DoubleToken Space.3}">
+        <TextBlock Text="Your session has ended" FontSize="{DynamicResource Font.Size.Title}"
+                   FontWeight="{DynamicResource Font.Weight.Semibold}"
+                   Foreground="{DynamicResource Color.Text.Primary}" Name="ReSignInTitle" />
+        <TextBlock Text="Sign in again to keep working. Your open tabs are preserved."
+                   FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Text.Secondary}"
+                   TextWrapping="Wrap" Name="ReSignInSubtitle" />
+        <TextBlock Text="{Binding ReSignInUser, Mode=OneWay}" Name="ReSignInUserLabel"
+                   FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBox Name="ReSignInPasswordBox" PasswordChar="●" PlaceholderText="Password"
+                 Text="{Binding ReSignInPassword, Mode=TwoWay}"
+                 AutomationProperties.Name="Re-sign-in password" />
+        <TextBlock Text="{Binding ReSignInMessage}" IsVisible="{Binding HasReSignInMessage}"
+                   FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}"
+                   TextWrapping="Wrap" Name="ReSignInErrorText" />
+        <StackPanel Orientation="Horizontal" Spacing="{views:DoubleToken Space.2}"
+                    HorizontalAlignment="Right">
+          <Button Name="ReSignInSignInButton" Content="Sign in" Classes="accent"
+                  Command="{Binding ReSignInCommand}" />
+          <Button Name="ReSignInCancelButton" Content="Work read-only"
+                  Command="{Binding CancelReSignInCommand}" Classes="flat" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- Change-password dialog (contract v0.3.0 capability). The panel carries the
+         dialog's own data context, which UpdateSessionOverlays assigns. -->
+    <Border Name="ChangePasswordPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+            BorderThickness="1" MaxWidth="420" Padding="{views:ChromeThickness All=Space.4}"
+            HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="False"
+            x:DataType="vm:ChangePasswordViewModel">
+      <StackPanel Spacing="{views:DoubleToken Space.3}">
+        <TextBlock Text="Change password" FontSize="{DynamicResource Font.Size.Title}"
+                   FontWeight="{DynamicResource Font.Weight.Semibold}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBox Name="CurrentPasswordBox" PasswordChar="●" PlaceholderText="Current password"
+                 Text="{Binding CurrentPassword, Mode=TwoWay}" />
+        <TextBlock Text="{Binding CurrentFieldMessage}" IsVisible="{Binding HasCurrentFieldMessage}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}" TextWrapping="Wrap" />
+        <TextBox Name="NewPasswordBox" PasswordChar="●" PlaceholderText="New password"
+                 Text="{Binding NewPassword, Mode=TwoWay}" />
+        <TextBlock Text="{Binding NewFieldMessage}" IsVisible="{Binding HasNewFieldMessage}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding FormMessage}" IsVisible="{Binding HasFormMessage}"
+                   FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="{views:DoubleToken Space.2}"
+                    HorizontalAlignment="Right">
+          <Button Name="ChangePasswordSaveButton" Content="Save" Classes="accent"
+                  Command="{Binding SaveCommand}" />
+          <Button Name="ChangePasswordCancelButton" Content="Cancel" Classes="flat"
+                  Command="{Binding CancelCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- My sessions dialog (contract v0.3.0 capability). The panel carries the dialog's
+         own data context, which UpdateSessionOverlays assigns. -->
+    <Border Name="MySessionsPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+            BorderThickness="1" MaxWidth="520" MaxHeight="480" Padding="{views:ChromeThickness All=Space.4}"
+            HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="False"
+            x:DataType="vm:MySessionsViewModel">
+      <StackPanel Spacing="{views:DoubleToken Space.3}">
+        <TextBlock Text="My sessions" FontSize="{DynamicResource Font.Size.Title}"
+                   FontWeight="{DynamicResource Font.Weight.Semibold}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <ScrollViewer MaxHeight="320">
+          <ItemsControl Name="SessionsList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="api:ClientSessionSummary">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                  <StackPanel Grid.Column="0" Spacing="0">
+                    <TextBlock Text="{Binding UserAgent}" TextTrimming="CharacterEllipsis"
+                               FontSize="{DynamicResource Font.Size.Body}"
+                               Foreground="{DynamicResource Color.Text.Primary}" />
+                    <TextBlock FontSize="{DynamicResource Font.Size.Caption}"
+                               Foreground="{DynamicResource Color.Text.Secondary}">
+                      <TextBlock.Text>
+                        <MultiBinding StringFormat="{}Last used {0}">
+                          <Binding Path="LastUsedAt" />
+                        </MultiBinding>
+                      </TextBlock.Text>
+                    </TextBlock>
+                  </StackPanel>
+                  <TextBlock Text="This session" FontSize="{DynamicResource Font.Size.Caption}"
+                             Foreground="{DynamicResource Color.Semantic.Info}"
+                             IsVisible="{Binding Current}" VerticalAlignment="Center"
+                             HorizontalAlignment="Right" Margin="0,0,8,0" />
+                  <Button Grid.Column="1" Content="End session" Classes="flat" VerticalAlignment="Center"
+                          Command="{Binding $parent[ItemsControl].DataContext.EndSessionCommand}"
+                          CommandParameter="{Binding}"
+                          IsVisible="{Binding !Current}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <TextBlock Text="{Binding LoadError}" IsVisible="{Binding HasLoadError}"
+                   FontSize="{DynamicResource Font.Size.Body}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="{views:DoubleToken Space.2}"
+                    HorizontalAlignment="Right">
+          <Button Name="MySessionsCloseButton" Content="Close" Classes="flat"
+                  Command="{Binding CloseCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Panel>
+</UserControl>

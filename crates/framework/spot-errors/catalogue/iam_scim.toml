@@ -1,0 +1,165 @@
+# iam_scim codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The SCIM 2.0 server core (spot-iam-scim) raises these; the HTTP adapter maps them onto the
+# RFC 7644 error document, so they never ride an AppError and their class is `none`.
+
+[[entry]]
+code = "iam_scim.invalid_filter"
+class = "none"
+summary = "A filter does not parse, or names an attribute the resource does not have."
+explanation_key = "error.iam_scim.invalid_filter"
+params = []
+remedy = "Write a filter of the supported form over a known attribute."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.invalid_path"
+class = "none"
+summary = "A PATCH path names an attribute the resource does not have."
+explanation_key = "error.iam_scim.invalid_path"
+params = []
+remedy = "Write the path of an attribute this server serves."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.invalid_value"
+class = "none"
+summary = "A value does not fit the attribute it is written to."
+explanation_key = "error.iam_scim.invalid_value"
+params = []
+remedy = "Write the attribute with a value of its own type."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.invalid_syntax"
+class = "none"
+summary = "The request body is not a well-formed SCIM document."
+explanation_key = "error.iam_scim.invalid_syntax"
+params = []
+remedy = "Send a valid JSON resource or PatchOp body."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.no_target"
+class = "none"
+summary = "A remove operation names a path that holds nothing to remove."
+explanation_key = "error.iam_scim.no_target"
+params = []
+remedy = "Remove a value the resource actually has."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.uniqueness"
+class = "none"
+summary = "A userName or displayName is already taken."
+explanation_key = "error.iam_scim.uniqueness"
+params = []
+remedy = "Read the existing resource by its id instead of creating it again."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.mutability"
+class = "none"
+summary = "A read-only attribute was written."
+explanation_key = "error.iam_scim.mutability"
+params = []
+remedy = "Do not write id, meta or schemas."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.too_many"
+class = "none"
+summary = "The result set is larger than the page cap allows."
+explanation_key = "error.iam_scim.too_many"
+params = []
+remedy = "Narrow the filter or page through the results."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.not_found"
+class = "none"
+summary = "No such resource or endpoint."
+explanation_key = "error.iam_scim.not_found"
+params = []
+remedy = "Use an id this server returned, under /Users or /Groups."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.unauthorised"
+class = "none"
+summary = "The bearer credential is missing, expired or not for a service user."
+explanation_key = "error.iam_scim.unauthorised"
+params = []
+remedy = "Present the dedicated bearer credential of an enabled service user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.forbidden"
+class = "none"
+summary = "The credential may not act on this tenant or this resource."
+explanation_key = "error.iam_scim.forbidden"
+params = []
+remedy = "Use a credential for the tenant you are provisioning."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.rate_limited"
+class = "none"
+summary = "The credential has sent too many requests in the window."
+explanation_key = "error.iam_scim.rate_limited"
+params = []
+remedy = "Wait for the Retry-After seconds and send fewer requests."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.too_large"
+class = "none"
+summary = "The request body is larger than the endpoint's limit."
+explanation_key = "error.iam_scim.too_large"
+params = []
+remedy = "Send a smaller resource or PatchOp body."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.version_conflict"
+class = "none"
+summary = "An If-Match did not match the resource's current version."
+explanation_key = "error.iam_scim.version_conflict"
+params = []
+remedy = "Read the resource again and repeat the write with its current ETag."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.method"
+class = "none"
+summary = "The path does not allow the request's method."
+explanation_key = "error.iam_scim.method"
+params = []
+remedy = "Use the method the endpoint documents."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.unsupported"
+class = "none"
+summary = "The endpoint or filter feature is not served."
+explanation_key = "error.iam_scim.unsupported"
+params = []
+remedy = "Use a supported endpoint or filter."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.mapping"
+class = "none"
+summary = "A group-mapping row is invalid: an unknown role, an empty group or a bad scope."
+explanation_key = "error.iam_scim.mapping"
+params = []
+remedy = "Name an existing role and give the group a name and a scope with values."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.internal"
+class = "none"
+summary = "An internal invariant failed; the request was not the client's fault."
+explanation_key = "error.iam_scim.internal"
+params = []
+remedy = "Report this to the platform team with the request id."
+since = "0.1.0"

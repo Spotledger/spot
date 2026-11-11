@@ -1,0 +1,8 @@
+{
+  "attempts": 1,
+  "method": "api_key",
+  "sources": 1,
+  "threshold": 1,
+  "window_end": "2026-10-10T08:00:00Z",
+  "window_start": "2026-10-10T08:00:00Z"
+}

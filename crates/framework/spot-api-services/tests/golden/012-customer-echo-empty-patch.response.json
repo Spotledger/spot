@@ -1,0 +1,13 @@
+{
+  "data": {
+    "patch": {}
+  },
+  "messages": [
+    {
+      "code": "document.created",
+      "field": "customer_name",
+      "level": "info",
+      "message": "Customer selected."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# The support-case corpus: edge-sync, quarantine and BPM symptoms.
+
+[[case]]
+id = "edge-drift"
+symptom = "Edge sync shows a different number of edges than the source holds."
+evidence = ["edge.drift", "edge.count_mismatch"]
+remedy = "edge.repair_drift"
+outcome = "resolved"
+
+[case.params]
+edge = "customer-1"
+
+[[case]]
+id = "quarantine-held-batch"
+symptom = "Received items are held in quarantine and the stream is blocked behind them."
+evidence = ["quarantine.held", "stream.blocked"]
+remedy = "quarantine.retry_all"
+outcome = "mitigated"
+
+[[case]]
+id = "case-stuck"
+symptom = "A workflow case is stuck with no node running and none ready."
+evidence = ["case.stuck", "case.no_ready_node"]
+remedy = "case.unstick"
+outcome = "resolved"
+
+[case.params]
+case_id = "case-5"

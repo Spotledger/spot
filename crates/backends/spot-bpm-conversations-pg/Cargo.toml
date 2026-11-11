@@ -1,0 +1,43 @@
+[package]
+name = "spot-bpm-conversations-pg"
+description = "PostgreSQL ConversationStore for conversations between organisations (WP-BPM-12.T6, ADR-080): durable spot_bpm_conversation records with optimistic versioning and an idempotent create, a bounded per-link rejection memory, tenant-scoped, reached through the shared blocking bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `ConversationStore` trait, `ConversationRecord`, `ConversationError` and the rejection bound.
+spot-bpm-conversations = { path = "../../framework/spot-bpm-conversations" }
+# `OutcomeKind`, which the record's ending carries and the store spells out itself.
+spot-bpm-contract = { path = "../../framework/spot-bpm-contract" }
+# `TimeoutAction` and `RejectAction`, which a registered wait carries.
+spot-bpm-model = { path = "../../framework/spot-bpm-model" }
+# `Conversation`, `MessageId` and `RejectCode`, the record's keys.
+spot-link-exchange = { path = "../../framework/spot-link-exchange" }
+# `LinkId`, the record's link.
+spot-tenant-link = { path = "../../framework/spot-tenant-link" }
+# The one shared blocking bridge (ADR-082 addendum 1); this crate never writes its own `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool whose size the constructor validates the bridge against.
+deadpool-postgres = "0.14"
+# The driver: transactions, SQLSTATE codes and jsonb bindings.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+# The record body is stored as jsonb.
+serde_json = "1"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases and a raw client for the schema checks.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# Every setup code has a catalogue entry.
+spot-errors = { path = "../../framework/spot-errors" }
+# The setup runtime that prepares and inspects the scratch database from outside the bridge.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

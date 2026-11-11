@@ -1,0 +1,9 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name", "p"."version" AS "version" FROM "party" AS "p" ORDER BY "p"."id" ASC OFFSET $1
+$1 = Int8(0)
+columns = ["name", "version"]
+decode = [Text, Int]
+path = Transactional

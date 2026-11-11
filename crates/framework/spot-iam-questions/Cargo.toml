@@ -1,0 +1,55 @@
+[package]
+name = "spot-iam-questions"
+description = "Emergency access with controller review (the firefighter pattern) and the four answerable questions (what can this user do and why, who can do this, who can see this document, what changed between two dates) as permission-aware, audited queries over the decision core's explain (WP-IAM-08.T2, ADR-070 sections 8.5 and 9.1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The read model the four questions evaluate: `Assignment`, `Scope`, `RoleName`, `Source`,
+# `Registry`, the effective flattening and the snapshot input.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# The decision core whose `explain` every why-chain quotes, and its `Principal`, `Share`,
+# `FieldFacts` and `ProtectionGroup` types.
+spot-permissions = { path = "../spot-permissions" }
+# The permission query machinery `who_can_see` compiles the read filter with.
+spot-perm-query = { path = "../spot-perm-query" }
+# The query IR (`Expr`, `Value`) the compiled filter is written in and evaluated against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Effective metadata (DocTypes and fields) the engine snapshot is built from.
+spot-meta = { path = "../spot-meta" }
+# The grant-approval launcher, approval state machine and permission-change audit of T1: the
+# emergency approval is the same Process on the BPM engine, never a private workflow.
+spot-iam-governance = { path = "../spot-iam-governance" }
+# The shared timer port an unconfirmed review escalates through.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# `NodeId`, for the review's timer slot on the engine's `TimerPort`.
+spot-dag = { path = "../spot-dag" }
+# The shared session-recording component API (frames, hash chain) the emergency session
+# records through, behind this crate's own trait.
+spot-break-glass = { path = "../spot-break-glass" }
+# The SoD rules the read model carries, for the emergency grant's context.
+spot-sod = { path = "../spot-sod" }
+# The lifecycle operation enum the action mapping names.
+spot-events-contract = { path = "../../../contracts/events" }
+# Stable, derive-based serde on every wire and persisted type.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for the recorded session frames and the audit payloads.
+serde_json = "1"
+# Instants are passed in; nothing here reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+# The one error type, with stable machine-readable `iam_questions.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The `ProcessVersion` type the approval launcher trait names.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The random-model property tests that check each question against a brute-force oracle.
+proptest = "1"
+
+[lints]
+workspace = true

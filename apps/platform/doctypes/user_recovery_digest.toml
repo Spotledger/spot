@@ -1,0 +1,30 @@
+name = "user_recovery_digest"
+label = "User Recovery Digest"
+app = "platform"
+module = "identity"
+is_child = true
+
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[fields]]
+name = "digest"
+label = "Digest"
+type = "secret"
+protection_group = "credential"
+classification = ["secret"]
+
+[[fields]]
+name = "issued_at"
+label = "Issued At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "used_at"
+label = "Used At"
+type = "datetime"
+read_only = true

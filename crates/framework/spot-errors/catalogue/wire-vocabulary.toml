@@ -1,0 +1,64 @@
+# wire-vocabulary codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "capabilities.doctypes"
+class = "none"
+summary = "Manifest vocabulary: the capabilities key naming DocType-level access lists (not an error)."
+explanation_key = "error.capabilities.doctypes"
+params = []
+remedy = "Manifest vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "spot.v1"
+class = "none"
+summary = "Wire vocabulary: the realtime websocket subprotocol name (not an error)."
+explanation_key = "error.spot.v1"
+params = []
+remedy = "Wire vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "service.instance.id"
+class = "none"
+summary = "Telemetry vocabulary: the OTLP resource attribute carrying the node id (not an error)."
+explanation_key = "error.service.instance.id"
+params = []
+remedy = "Telemetry vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "stub.test"
+class = "none"
+summary = "Test-harness vocabulary: the fixed site name the test harness invokes with (not an error)."
+explanation_key = "error.stub.test"
+params = []
+remedy = "Test vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.tx"
+class = "none"
+summary = "Trace vocabulary: the span around one storage transaction (not an error)."
+explanation_key = "error.storage.tx"
+params = []
+remedy = "Trace vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.query"
+class = "none"
+summary = "Trace vocabulary: the span around one storage statement (not an error)."
+explanation_key = "error.storage.query"
+params = []
+remedy = "Trace vocabulary; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "job.run"
+class = "none"
+summary = "Trace vocabulary: the span around one job attempt (not an error)."
+explanation_key = "error.job.run"
+params = []
+remedy = "Trace vocabulary; no action."
+since = "0.1.0"

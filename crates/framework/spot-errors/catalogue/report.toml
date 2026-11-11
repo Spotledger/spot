@@ -1,0 +1,123 @@
+# report codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# `report.not_found` and `report.bad_argument` are the native API contract's runtime codes.
+# The rest are load-time refusals the report engine raises while compiling a definition, plus
+# the non-fatal `report.columns_removed` message; they never reach a client under their own
+# code.
+
+[[entry]]
+code = "report.not_found"
+class = "none"
+summary = "No report with this name is installed, or you may not run it: {name}."
+explanation_key = "error.report.not_found"
+params = ["name"]
+remedy = "Check the report name or install the app that declares it."
+since = "0.1.0"
+
+[[entry]]
+code = "report.bad_argument"
+class = "none"
+summary = "A report argument is unknown or does not fit its parameter type; the message names the parameter, never its value."
+explanation_key = "error.report.bad_argument"
+params = []
+remedy = "Send only the parameters the report describes, each in its parameter's type."
+since = "0.1.0"
+
+[[entry]]
+code = "report.invalid_definition"
+class = "none"
+summary = "A report definition is malformed or inconsistent (a bad name, a duplicate, no columns, an unknown aggregate, a limit above the maximum)."
+explanation_key = "error.report.invalid_definition"
+params = []
+remedy = "Fix the report's TOML: the message names the offending key."
+since = "0.1.0"
+
+[[entry]]
+code = "report.base_missing"
+class = "none"
+summary = "The report's base DocType, or a joined one, is not in the loading site's metadata."
+explanation_key = "error.report.base_missing"
+params = []
+remedy = "Install the app that declares the DocType, or point the report at one the site has."
+since = "0.1.0"
+
+[[entry]]
+code = "report.unknown_field"
+class = "none"
+summary = "A column, group, sort or computed field names a field the DocType does not have."
+explanation_key = "error.report.unknown_field"
+params = []
+remedy = "Use a field the DocType declares, or a custom field the site added."
+since = "0.1.0"
+
+[[entry]]
+code = "report.unknown_parameter"
+class = "none"
+summary = "A filter binds to a parameter the report does not declare."
+explanation_key = "error.report.unknown_parameter"
+params = []
+remedy = "Declare the parameter, or bind the filter to a declared one."
+since = "0.1.0"
+
+[[entry]]
+code = "report.unknown_join"
+class = "none"
+summary = "A field path names an alias that is neither the base nor a declared join."
+explanation_key = "error.report.unknown_join"
+params = []
+remedy = "Declare the join, or drop the alias from the field path."
+since = "0.1.0"
+
+[[entry]]
+code = "report.duplicate"
+class = "none"
+summary = "Two things share a name: two reports in the registry, two parameters, or two columns."
+explanation_key = "error.report.duplicate"
+params = []
+remedy = "Rename one of them; the message names both owners for a registry clash."
+since = "0.1.0"
+
+[[entry]]
+code = "report.bad_type"
+class = "none"
+summary = "A parameter's type does not fit the field it filters, a literal does not fit its field, or an aggregate's argument type is wrong."
+explanation_key = "error.report.bad_type"
+params = []
+remedy = "Use a parameter type that matches the field, or change the field or aggregate."
+since = "0.1.0"
+
+[[entry]]
+code = "report.expression"
+class = "none"
+summary = "A computed column's expression does not parse, reads a path that is not a column, or fails to evaluate."
+explanation_key = "error.report.expression"
+params = []
+remedy = "Write the expression over `doc.<column>` paths in the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "report.too_large"
+class = "none"
+summary = "The compiled query exceeds an ADR-069 limit: expression depth, node count, a list length, or the number of select, group or order columns."
+explanation_key = "error.report.too_large"
+params = []
+remedy = "Split or simplify the report's filters, joins or columns."
+since = "0.1.0"
+
+[[entry]]
+code = "report.join_limit"
+class = "none"
+summary = "The report declares more joins than the storage query IR allows (ADR-069)."
+explanation_key = "error.report.join_limit"
+params = []
+remedy = "Reduce the number of joined DocTypes."
+since = "0.1.0"
+
+[[entry]]
+code = "report.columns_removed"
+class = "none"
+summary = "One or more columns the caller may not report on were removed from the result."
+explanation_key = "error.report.columns_removed"
+params = []
+remedy = "The count is reported without naming the columns; ask an administrator for access."
+since = "0.1.0"

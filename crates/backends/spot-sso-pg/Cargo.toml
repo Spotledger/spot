@@ -1,0 +1,32 @@
+[package]
+name = "spot-sso-pg"
+description = "PostgreSQL ReplayStore (WP-IAM-05.T6): a single-use identifier is claimed in one statement, so an expired id may be claimed again and a live one never, and a claim survives a restart and is seen by every node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `ReplayStore` port, `Claim` and the fail-closed `ReplayError` this store reports.
+spot-sso = { path = "../../framework/spot-sso" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its one table.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# The migrator the replay table must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The backend-independent `ReplayStore` contract suite (`contract::run_all`).
+spot-sso = { path = "../../framework/spot-sso", features = ["testing"] }
+# `#[tokio::test]` and the multi-thread runtime for the restart and racing cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

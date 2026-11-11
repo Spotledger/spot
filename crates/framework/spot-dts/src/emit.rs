@@ -1,0 +1,387 @@
+//! The emitter: definitions into deterministic `.d.ts` text, a section at a time.
+//!
+//! Ordering is part of the contract ([`Generated`]'s fingerprint): DocTypes sorted by name,
+//! fields in definition order, sections in a fixed order. Every line the emitter writes goes
+//! through [`Generator`], which owns the namespace checks and the reference walk.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use spot_meta::{Definition, FieldSpec, FieldType};
+
+use crate::error::{DtsError, DtsErrorKind};
+use crate::naming::{interface_name, property_name};
+
+/// The interface every generated document interface extends: the standard fields every document
+/// has. The names are the wire names the document API emits (spot-http `encode_document`:
+/// `id`, `version`, `_state`); `name` is the human-readable document number field the storage
+/// contract gives every parent record. A script never sees more or less.
+pub const DOCUMENT_BASE: &str = "DocumentBase";
+
+/// The emitted `DocumentBase`. Written once, ahead of every DocType interface.
+const DOCUMENT_BASE_TEXT: &str = r#"/**
+ * The standard fields every document has, alongside its own.
+ */
+interface DocumentBase {
+  /** The record id (a UUIDv7). */
+  id?: string;
+  /** The version; absent before the first save. */
+  version?: number;
+  /** The lifecycle state of a posted DocType ("draft" | "posted" | "cancelled"). */
+  _state?: string;
+}
+"#;
+
+/// What one `Secret` field becomes on the interface: nothing but a JSDoc note, unless the
+/// bridge exposes the stand-in (ADR-068 §2: the value never travels in a document).
+const SECRET_NOTE: &str = "The secret's value never reaches a script (ADR-068 section 2).";
+
+/// The generated declaration file and its fingerprint.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Generated {
+    /// The `.d.ts` text, byte-stable for the same input.
+    pub text: String,
+    /// The SHA-256 hex digest of [`Generated::text`].
+    pub fingerprint: String,
+}
+
+/// Builds one file's text. Collects errors; callers turn them into the public result.
+pub(crate) struct Emitter<'a> {
+    /// The input definitions, keyed by storage name.
+    definitions: BTreeMap<&'a str, &'a Definition>,
+    /// Interface names taken so far, with their source names, for collision errors.
+    interfaces: BTreeMap<String, String>,
+    /// The lines of the file so far.
+    lines: Vec<String>,
+}
+
+impl<'a> Emitter<'a> {
+    /// An emitter over `definitions`.
+    pub(crate) fn new(definitions: &'a [Definition]) -> Self {
+        let map = definitions.iter().map(|d| (d.name.as_str(), d)).collect();
+        Self {
+            definitions: map,
+            interfaces: BTreeMap::new(),
+            lines: Vec::new(),
+        }
+    }
+
+    /// Reserves `source`'s interface name, or names the collision.
+    fn reserve_interface(&mut self, source: &str) -> Result<String, DtsError> {
+        let ident = interface_name(source)?;
+        match self.interfaces.get(&ident) {
+            Some(taken) => Err(DtsError::new(
+                DtsErrorKind::Collision,
+                format!("two names map onto the interface `{ident}`: `{source}` and `{taken}`"),
+            )
+            .about_name(source)),
+            None => {
+                self.interfaces.insert(ident.clone(), source.to_owned());
+                Ok(ident)
+            }
+        }
+    }
+
+    /// The whole file: header, `DocumentBase`, the DocType interfaces sorted by name, the
+    /// `spot` namespace. `scopes` limits which DocTypes are emitted; referenced DocTypes not
+    /// in `scopes` are still emitted as needed by [`crate::lib::generate_for`]'s caller.
+    pub(crate) fn emit(mut self, emit: &[&'a Definition]) -> Result<Generated, Vec<DtsError>> {
+        let mut errors = Vec::new();
+        let mut sorted = emit.to_vec();
+        sorted.sort_by(|a, b| a.name.cmp(&b.name));
+        for d in &sorted {
+            if let Err(e) = self.reserve_interface(&d.name) {
+                errors.push(e);
+            }
+        }
+        if errors.is_empty() {
+            self.file_header();
+            self.lines.push(DOCUMENT_BASE_TEXT.to_owned());
+            for d in &sorted {
+                match self.interface(d) {
+                    Ok(text) => self.lines.push(text),
+                    Err(mut es) => errors.append(&mut es),
+                }
+            }
+            match self.spot_namespace(&sorted) {
+                Ok(text) => self.lines.push(text),
+                Err(mut es) => errors.append(&mut es),
+            }
+        }
+        if errors.is_empty() {
+            let text = self.lines.join("\n");
+            let fingerprint = crate::fingerprint(&text);
+            Ok(Generated { text, fingerprint })
+        } else {
+            errors.sort_by(|a, b| a.message.cmp(&b.message));
+            Err(errors)
+        }
+    }
+
+    /// The file header: what generated this and the rules it follows.
+    fn file_header(&mut self) {
+        self.lines.push(
+            "/// Generated by spot-dts from the site's effective DocType metadata. \
+             Do not edit; regenerate."
+                .to_owned(),
+        );
+        self.lines.push("/* eslint-disable */".to_owned());
+    }
+
+    /// One DocType's interface. Errors accumulate into `Vec<DtsError>`.
+    fn interface(&mut self, def: &Definition) -> Result<String, Vec<DtsError>> {
+        let ident = match interface_name(&def.name) {
+            Ok(i) => i,
+            Err(e) => return Err(vec![e]),
+        };
+        let mut out = String::new();
+        let mut errors = Vec::new();
+        if def.is_child {
+            out.push_str("/** A child-table row of ");
+            out.push_str(&js_label(def));
+            out.push_str(". */\n");
+        } else {
+            out.push_str("/** ");
+            out.push_str(&js_label(def));
+            out.push_str(". */\n");
+        }
+        out.push_str("export interface ");
+        out.push_str(&ident);
+        out.push_str(if def.is_child {
+            " {"
+        } else {
+            " extends DocumentBase {"
+        });
+        out.push('\n');
+        for field in &def.fields {
+            match self.property(def, field) {
+                Ok(text) => out.push_str(&text),
+                Err(e) => errors.push(e),
+            }
+        }
+        out.push_str("}\n");
+        if errors.is_empty() {
+            Ok(out)
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// One property, `?` when not required and `readonly` when read-only, with a JSDoc label.
+    fn property(&self, def: &Definition, field: &FieldSpec) -> Result<String, DtsError> {
+        let mut out = String::new();
+        out.push_str("  /** ");
+        out.push_str(&js_label_field(field));
+        out.push_str(" */\n");
+        if matches!(field.ty, FieldType::Secret) {
+            out.push_str("  /** ");
+            out.push_str(SECRET_NOTE);
+            out.push_str(" */\n");
+            return Ok(out);
+        }
+        if field.read_only {
+            out.push_str("  readonly ");
+        } else {
+            out.push_str("  ");
+        }
+        out.push_str(&property_name(&field.name));
+        if !field.required {
+            out.push('?');
+        }
+        let ty = self
+            .field_type(def, field)
+            .map_err(|e| e.about_name(&def.name))?;
+        out.push_str(": ");
+        out.push_str(&ty);
+        out.push_str(";\n");
+        Ok(out)
+    }
+
+    /// The TypeScript type of one field. `def` is the owning DocType, for error context.
+    fn field_type(&self, def: &Definition, field: &FieldSpec) -> Result<String, DtsError> {
+        let unknown = |name: &str| {
+            DtsError::new(
+                DtsErrorKind::UnknownDocType,
+                format!(
+                    "field `{}` of `{}` references `{name}`, which is not part of the input",
+                    field.name, def.name
+                ),
+            )
+            .about_name(&def.name)
+        };
+        match field.ty {
+            FieldType::Bool => Ok("boolean".to_owned()),
+            FieldType::Int => Ok("number".to_owned()),
+            // An exact decimal travels as its exact string; it never becomes a float
+            // (ADR-068 section 2: no floats for money or quantities).
+            FieldType::Decimal => Ok("string".to_owned()),
+            FieldType::Text
+            | FieldType::LongText
+            | FieldType::Link
+            | FieldType::DynamicLink
+            | FieldType::Date
+            | FieldType::DateTime
+            | FieldType::Attach
+            | FieldType::Time => {
+                // A link names a target DocType the input must contain (so the generated
+                // DocOf/getDoc types stay closed); the other string kinds carry no reference.
+                if matches!(field.ty, FieldType::Link)
+                    && !field.options.as_deref().is_some_and(|o| o.is_empty())
+                {
+                    let target = field.options.as_deref().unwrap_or_default();
+                    self.definitions
+                        .get(target)
+                        .ok_or_else(|| unknown(target))?;
+                }
+                Ok("string".to_owned())
+            }
+            // A position and a range have no script-side shape yet: `unknown`, like `json`.
+            FieldType::Json | FieldType::Bytes | FieldType::Geo | FieldType::Range => {
+                Ok("unknown".to_owned())
+            }
+            // Handled by `property` (the value never reaches a script; no property).
+            FieldType::Secret => Ok(String::new()),
+            FieldType::Select => select_union(field),
+            FieldType::Table | FieldType::TableMultiselect => {
+                let child = field.options.as_deref().unwrap_or_default();
+                if child.is_empty() {
+                    return Err(DtsError::new(
+                        DtsErrorKind::InvalidName,
+                        format!(
+                            "field `{}` of `{}` is a table without a child DocType",
+                            field.name, def.name
+                        ),
+                    )
+                    .about_name(&def.name));
+                }
+                self.definitions.get(child).ok_or_else(|| unknown(child))?;
+                let child_ident = interface_name(child)?;
+                Ok(format!("{child_ident}[]"))
+            }
+        }
+    }
+
+    /// The `declare namespace spot` section: the DocType union, the `DocOf` conditional and the
+    /// `getDoc` host function the bridge exposes. Errors accumulate into `Vec<DtsError>`.
+    fn spot_namespace(&mut self, emit: &[&Definition]) -> Result<String, Vec<DtsError>> {
+        let mut names = Vec::new();
+        for d in emit {
+            match interface_name(&d.name) {
+                Ok(i) => names.push((i, d.name.clone())),
+                Err(e) => return Err(vec![e]),
+            }
+        }
+        // Parents only: a child row is never fetched as a document.
+        let parents: Vec<_> = names
+            .iter()
+            .filter(|(_, src)| {
+                self.definitions
+                    .get(src.as_str())
+                    .is_some_and(|d| !d.is_child)
+            })
+            .collect();
+        if parents.is_empty() {
+            return Err(vec![DtsError::new(
+                DtsErrorKind::InvalidName,
+                "no parent DocTypes to declare getDoc for".to_owned(),
+            )]);
+        }
+        let mut out = String::new();
+        out.push_str("/** The document host functions a script may call. */\n");
+        out.push_str("declare namespace spot {\n");
+        out.push_str("  /** Every DocType the site defines (parents only). */\n");
+        out.push_str("  type DocTypeName =\n");
+        for (i, (ident, _)) in parents.iter().enumerate() {
+            out.push_str("    | \"");
+            out.push_str(ident);
+            out.push('"');
+            out.push_str(if i + 1 == parents.len() { ";" } else { "" });
+            out.push('\n');
+        }
+        out.push_str("  /** The interface of one DocType, selected by its name. */\n");
+        out.push_str("  type DocOf<N extends DocTypeName> = {\n");
+        for (ident, _) in parents {
+            out.push_str("    \"");
+            out.push_str(ident);
+            out.push_str("\": ");
+            out.push_str(ident);
+            out.push_str(";\n");
+        }
+        out.push_str("  }[N];\n");
+        out.push_str("  /** Loads a document as its interface, or null when there is none. */\n");
+        out.push_str(
+            "  function getDoc<N extends DocTypeName>(doctype: N, id: string): DocOf<N> | null;\n",
+        );
+        out.push_str("}\n");
+        Ok(out)
+    }
+}
+
+/// The JSDoc label of a DocType: `js_label` escapes `*` sequences and trailing closers.
+fn js_label(def: &Definition) -> String {
+    sanitize_jsdoc(def.label_or_name())
+}
+
+/// The JSDoc label of a field.
+fn js_label_field(field: &FieldSpec) -> String {
+    sanitize_jsdoc(field.label_or_name())
+}
+
+/// Makes `text` safe inside a `/** ... */` comment: closes any `*/` and strips trailing `*`.
+fn sanitize_jsdoc(text: &str) -> String {
+    text.replace("*/", "*\u{200b}/")
+}
+
+/// The union of string literals of one select field, or `string` with none listed.
+fn select_union(field: &FieldSpec) -> Result<String, DtsError> {
+    let mut values = field.select_values();
+    values.sort();
+    values.dedup();
+    if values.is_empty() {
+        return Ok("string".to_owned());
+    }
+    let mut out = String::new();
+    for (i, v) in values.iter().enumerate() {
+        if i > 0 {
+            out.push_str(" | ");
+        }
+        out.push('"');
+        out.push_str(&escape_string(v));
+        out.push('"');
+    }
+    Ok(out)
+}
+
+/// The JSON string literal of `text` (the inside of the quotes; callers add them).
+fn escape_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// The set of DocType names `root` references directly: table children and link targets.
+pub(crate) fn direct_references(def: &Definition) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for field in &def.fields {
+        match field.ty {
+            FieldType::Table | FieldType::TableMultiselect
+                if field.options.as_deref().is_some_and(|o| !o.is_empty()) =>
+            {
+                out.insert(field.options.clone().unwrap_or_default());
+            }
+            FieldType::Link if field.options.as_deref().is_some_and(|o| !o.is_empty()) => {
+                out.insert(field.options.clone().unwrap_or_default());
+            }
+            _ => {}
+        }
+    }
+    out
+}

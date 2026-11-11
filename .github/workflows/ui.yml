@@ -1,0 +1,188 @@
+# UI budgets and pixels for the exported tree (WP-OSS-03.T2, the project process notes).
+# Ported from the private ui.yml: GitHub-hosted runners, triggers are push to main and a manual
+# run (no pull_request, no schedule, no secrets). Dropped: the ui_scope.py step that skipped the
+# job for pull requests that touched no UI input (there are no pull requests, so it always ran),
+# and the vars.SPOT_CI_OS / SPOT_RUNNER* / SPOT_UI_BROWSER_VISUAL repository variables. Linux is
+# the default; a manual run may name Windows in the os input (JSON list, for example
+# ["windows-latest"]) and may render baselines (generate_baselines) or run the browser visual job.
+name: ui
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      # A generation run renders new screenshot baselines instead of comparing. It never commits:
+      # it uploads the PNGs for review, and the reviewer commits them.
+      generate_baselines:
+        description: 'Render and upload screenshot baselines for this platform (no comparison)'
+        type: boolean
+        default: false
+      os:
+        description: 'JSON OS list for this run, e.g. ["windows-latest"]; empty means ubuntu-latest'
+        type: string
+        default: ''
+      browser_visual:
+        description: 'Run the opt-in browser visual regression job'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ui:
+    # lint-allow: no-postgres the headless UI tests and the budget gates use no database.
+    name: UI budgets and pixels (${{ matrix.os }})
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && github.event.inputs.os != '' && github.event.inputs.os || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPOT_PERF_RUNNER: ${{ matrix.os == 'windows-latest' && 'ci-windows' || 'ci-linux' }}
+      # The performance budgets come from the reference machine; shared hosted VMs measured 7 to 36
+      # times the allowed frame times on the first run. Breaches are recorded as WARNING in the perf
+      # report here; missing results and every other failure still fail the job. Reference-hardware
+      # runs (private repository) stay strict.
+      SPOT_PERF_ADVISORY: '1'
+      SPOT_UPDATE_SHOTS: '0'
+      # Baselines are per platform: font rasterization differs, so the Windows row compares with
+      # Baselines/windows/ and never falls back to the Linux images.
+      SPOT_SHOTS_PLATFORM: ${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}
+      UPDATE_BASELINES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.generate_baselines == 'true' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 1 }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: '3.12' }
+      - name: initialize per-run evidence paths and runner policy
+        env:
+          UI_ARTIFACT_ROOT: ${{ runner.temp }}/spot-ui-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.os }}
+          UI_RUNNER_KIND: hosted
+        run: |
+          printf '%s\n' "SPOT_UI_OUT=$UI_ARTIFACT_ROOT" "SPOT_PERF_OUT=$UI_ARTIFACT_ROOT/perf" "SPOT_SHOTS_OUT=$UI_ARTIFACT_ROOT/shots" "SPOT_RUNNER_KIND=$UI_RUNNER_KIND" >> "$GITHUB_ENV"
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      # Cheapest possible failure first: every case that other platforms commit must have a
+      # reviewed baseline here too, and the message names the exact command that creates it.
+      - if: env.UPDATE_BASELINES == '0'
+        name: verify the screenshot baseline inventory for this platform
+        run: python tools/ci/ui/screenshot_baselines.py --platform "$SPOT_SHOTS_PLATFORM" --check
+      - name: build client with warnings as errors
+        run: python tools/ci/dotnet_build.py clients/avalonia/Spotledger.Client.sln
+      - name: headless tests (all solution test projects)
+        run: dotnet test clients/avalonia/Spotledger.Client.sln -c Release --no-build --logger trx --results-directory "$SPOT_UI_OUT/trx"
+      # A generation run renders every baseline under Baselines/<platform>/ and then proves the
+      # fresh files compare cleanly; the artefacts are uploaded for review and the reviewer commits.
+      - if: env.UPDATE_BASELINES == '1'
+        name: baseline generation run - report the platform and refuse to commit anything
+        run: |
+          echo "GENERATION RUN: rendering $SPOT_SHOTS_PLATFORM baselines under UPDATE_BASELINES=1." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Nothing is committed. Download the ui-${{ matrix.os }}-${{ github.run_attempt }} artefact, review every PNG, and commit it." | tee -a "$GITHUB_STEP_SUMMARY"
+          git status --short
+          {
+            echo "### Screenshot baseline generation ($SPOT_SHOTS_PLATFORM)"
+            echo '```'
+            git status --short
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: env.UPDATE_BASELINES == '1'
+        name: generate the screenshot baselines for this platform
+        run: |
+          dotnet test clients/avalonia/tests/Spotledger.Client.TestSupport.Tests -c Release --no-build \
+            --filter FullyQualifiedName~CommittedPrimitiveMatrix
+          python tools/ci/ui/screenshot_baselines.py --platform "$SPOT_SHOTS_PLATFORM" --check
+          mkdir -p "$SPOT_SHOTS_OUT/generated-baselines"
+          cp -R "clients/avalonia/tests/Spotledger.Client.TestSupport.Tests/Baselines/$SPOT_SHOTS_PLATFORM/." "$SPOT_SHOTS_OUT/generated-baselines/"
+          git status --short clients/avalonia/tests/Spotledger.Client.TestSupport.Tests/Baselines
+      - if: env.UPDATE_BASELINES == '1'
+        name: prove the freshly generated baselines compare cleanly
+        env:
+          UPDATE_BASELINES: '0'
+          SPOT_UPDATE_SHOTS: '0'
+        run: |
+          dotnet test clients/avalonia/tests/Spotledger.Client.TestSupport.Tests -c Release --no-build \
+            --filter FullyQualifiedName~CommittedPrimitiveMatrix
+      - name: gate unit tests
+        if: always()
+        run: python -m unittest discover -s tools/ci/ui -p 'test_*.py'
+      - name: aggregate budgets (missing results are errors)
+        if: always()
+        run: python tools/ci/ui/perf_gate.py --budget-root clients/avalonia/tests --results "$SPOT_PERF_OUT"
+      - name: upload perf, test results and screenshot reviews
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ${{ env.SPOT_UI_OUT }}
+          if-no-files-found: warn
+          retention-days: 14
+
+  # The browser screenshot row. Opt-in: a manual run with browser_visual: true. The baselines are
+  # Chromium- and font-sensitive on Linux and are regenerated deliberately with
+  # `bash tools/browser-visual/run.sh --update`. Playwright and Chromium are installed in the job.
+  browser-visual:
+    # lint-allow: no-postgres the browser visual comparison uses no database.
+    name: browser visual baselines (linux, opt-in)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.browser_visual == 'true'
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPOT_BROWSER_PUBLISH: artifacts/browser-publish/wwwroot
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 1 }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
+      # The `runner` context does not exist at job level; set the path in a step.
+      - name: choose the output directory
+        run: echo "SPOT_BROWSER_VISUAL_OUT=$RUNNER_TEMP/spot-browser-visual-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: '20' }
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - name: comparator unit tests (no browser)
+        run: python -m unittest discover -s tools/browser-visual/tests -v
+      - name: install the pinned Playwright package and Chromium with its system libraries
+        working-directory: tools/browser-budgets
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm ci --no-audit --no-fund
+          npx --no-install playwright install --with-deps chromium
+      - name: install the WebAssembly workload
+        run: dotnet workload install wasm-tools
+      - name: publish the browser head (interpreted, Release)
+        run: dotnet publish clients/avalonia/src/Spotledger.Client.Browser -c Release -p:SpotBrowserAot=false -o artifacts/browser-publish
+      - name: capture and compare the browser baselines
+        run: bash tools/browser-visual/run.sh
+      - name: upload the captures, the review images and the manifest
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-visual-${{ github.run_attempt }}
+          path: ${{ env.SPOT_BROWSER_VISUAL_OUT }}
+          if-no-files-found: warn
+          retention-days: 14

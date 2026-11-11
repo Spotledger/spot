@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- net10.0, not netstandard: a component renders an Avalonia Control, so the contract
+         cannot avoid the UI toolkit. It depends on no application code: only Avalonia and
+         the design-token library (Spotledger.Client.Theme), never Shell/Core/Metadata/Api. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Spotledger.Component.Contract</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+</Project>

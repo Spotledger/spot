@@ -1,0 +1,85 @@
+# Browser target of the Avalonia client for the exported tree (WP-OSS-03.T2,
+# the project process notes): AOT publish of the Browser head, the integrity and size check of
+# the published folder (tools/ci/browser/check_publish.py) and the quick browser budgets
+# (tools/browser-budgets/run.sh). The private workflow also ran on push and on pull requests;
+# an AOT WebAssembly publish is heavy, so here it runs on the same nightly schedule as the
+# private one and on demand, Linux only (the budgets need the Linux Chromium; the Windows
+# exemption is recorded in tools/ci/matrix/gates.toml). Playwright and Chromium are installed
+# in the job. No pull_request trigger, no secrets.
+name: browser
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * *" # as the private browser.yml
+permissions:
+  contents: read
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    # lint-allow: no-postgres the browser publish and budget run use a loopback stub backend, no database.
+    name: browser publish and budgets (linux)
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPOT_PERF_RUNNER: ci-linux
+    steps:
+      - name: output folder
+        run: echo "BROWSER_OUT=$RUNNER_TEMP/spot-browser-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 1 }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: '20' }
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - name: gate unit tests
+        run: python -m unittest discover -s tools/ci/browser -p 'test_*.py'
+      - name: install the pinned Playwright package and Chromium with its system libraries
+        working-directory: tools/browser-budgets
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm ci --no-audit --no-fund
+          npx --no-install playwright install --with-deps chromium
+      - name: install the WebAssembly workload
+        run: dotnet workload install wasm-tools
+      - name: publish the browser head (AOT, Release)
+        run: |
+          start=$(date +%s)
+          dotnet publish clients/avalonia/src/Spotledger.Client.Browser -c Release -o artifacts/browser-publish
+          echo "publish wall clock: $(( $(date +%s) - start )) s"
+      - name: verify the published folder
+        run: |
+          mkdir -p "$BROWSER_OUT"
+          python3 tools/ci/browser/check_publish.py artifacts/browser-publish/wwwroot --report "$BROWSER_OUT/publish-size.json"
+          cp artifacts/browser-publish/wwwroot/assets.json "$BROWSER_OUT/assets.json"
+      # Informational, as in the private workflow: the signed-in measures could not all run in CI
+      # when it was written (WP-UI-09.T4). The verdict is printed and the results are uploaded.
+      - name: browser budgets (quick; informational until sign-in measures run in CI)
+        continue-on-error: true
+        env:
+          SPOT_BROWSER_PUBLISH: artifacts/browser-publish/wwwroot
+          SPOT_PERF_OUT: ${{ env.BROWSER_OUT }}/budgets/perf
+          SPOT_BUDGET_RAW: ${{ env.BROWSER_OUT }}/budgets/raw
+        run: bash tools/browser-budgets/run.sh --quick
+      - name: upload size report, assets.json and budget results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-${{ github.run_attempt }}
+          path: ${{ env.BROWSER_OUT }}
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,26 @@
+[package]
+name = "spot-journal-manifest"
+description = "The signed journal manifest (WP-JRN-03.T2, ADR-061 s5 and s8): the ordered list of a source's sealed segments with their positions and hashes, fork records that keep a forked generation's history, a documented deterministic canonical encoding with golden vectors, Ed25519 signing and verification with key rotation over manifest generations, the append-only growth rule and the findings that compare the manifest with the segments storage holds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Ed25519 for the manifest signature (same version and features as spot-audit-chain).
+# Keys are always supplied by the caller; this crate reads no randomness.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# SHA-256 for the canonical manifest hash and the signature's message.
+sha2 = "0.10"
+# Derives so a backend can carry manifests, segments and forks; the canonical bytes never
+# depend on serde.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `journal_manifest.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

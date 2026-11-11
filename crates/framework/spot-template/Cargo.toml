@@ -1,0 +1,25 @@
+[package]
+name = "spot-template"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Template engine (WP-PLT-12). Only MiniJinja 2; the `json` feature is deliberately
+# absent so no float code path can carry money (ADR-12); `fuel` enables the
+# instruction-budget sandbox limit.
+minijinja = { version = "2.24", features = ["fuel"] }
+# Exact decimal amounts. Never converted to f64 in this crate.
+rust_decimal = "1.43"
+# Dates and datetimes become custom objects (`std` is the only feature needed).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# Plain (non-float) context data entry points.
+serde_json = "1"
+# Typed errors (ADR-26) are hand-implemented in `error.rs`: the Display
+# formatting needs engine-side context (source line text, output limits) a
+# derive macro cannot express, so no error-derive dependency is used.
+
+[lints]
+workspace = true

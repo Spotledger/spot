@@ -1,0 +1,176 @@
+# False-positive guards: ordinary values an over-eager scanner would ruin.
+
+[[case]]
+input = 'id 550e8400-e29b-41d4-a716-446655440000 resolved'
+expected = 'id 550e8400-e29b-41d4-a716-446655440000 resolved'
+class = 'false_positive'
+
+[[case]]
+input = 'commit e29b7c4d8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6'
+expected = 'commit e29b7c4d8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6'
+class = 'false_positive'
+
+[[case]]
+input = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAA'
+expected = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAA'
+class = 'false_positive'
+
+[[case]]
+input = 'order 2026100512345678 printed'
+expected = 'order 2026100512345678 printed'
+class = 'false_positive'
+
+[[case]]
+input = 'order 1234567890123456 rejected'
+expected = 'order 1234567890123456 rejected'
+class = 'false_positive'
+
+[[case]]
+input = 'GB29NWBK60161331926818 refused by validation'
+expected = 'GB29NWBK60161331926818 refused by validation'
+class = 'false_positive'
+
+[[case]]
+input = 'the [redacted:token] marker stays intact'
+expected = 'the [redacted:token] marker stays intact'
+class = 'false_positive'
+
+[[case]]
+input = 'markers [redacted:header] and [redacted:session] stay'
+expected = 'markers [redacted:header] and [redacted:session] stay'
+class = 'false_positive'
+
+[[case]]
+input = '{"user": "j.doe", "room": 42, "tag": "v1.2.3"}'
+expected = '{"user": "j.doe", "room": 42, "tag": "v1.2.3"}'
+class = 'false_positive'
+
+[[case]]
+input = 'postgres://db.internal:5432/shop'
+expected = 'postgres://db.internal:5432/shop'
+class = 'false_positive'
+
+[[case]]
+input = 'https://shop.example.com/checkout?order=o-2026-42'
+expected = 'https://shop.example.com/checkout?order=o-2026-42'
+class = 'false_positive'
+
+[[case]]
+input = 'x-api-keyless header handling'
+expected = 'x-api-keyless header handling'
+class = 'false_positive'
+
+[[case]]
+input = 'session of the committee ended'
+expected = 'session of the committee ended'
+class = 'false_positive'
+
+[[case]]
+input = 'the password policy forbids 3-character secrets'
+expected = 'the password policy forbids 3-character secrets'
+class = 'false_positive'
+
+[[case]]
+input = 'tokenization is not a secret'
+expected = 'tokenization is not a secret'
+class = 'false_positive'
+
+[[case]]
+input = 'Bearer abcdefg too short'
+expected = 'Bearer abcdefg too short'
+class = 'false_positive'
+
+[[case]]
+input = 'eyJjustonepart'
+expected = 'eyJjustonepart'
+class = 'false_positive'
+
+[[case]]
+input = 'JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0. is not here'
+expected = 'JWT [redacted:jwt] is not here'
+class = 'false_positive'
+
+[[case]]
+input = 'amounts EUR 1.234,56 and USD 9.10'
+expected = 'amounts EUR 1.234,56 and USD 9.10'
+class = 'false_positive'
+
+[[case]]
+input = 'ip 192.168.1.1 logged'
+expected = 'ip 192.168.1.1 logged'
+class = 'false_positive'
+
+[[case]]
+input = 'ref 4111111111111121'
+expected = 'ref 4111111111111121'
+class = 'false_positive'
+
+[[case]]
+input = 'the word passwordly appears in prose'
+expected = 'the word passwordly appears in prose'
+class = 'false_positive'
+
+[[case]]
+input = 'secret=suspiciously_long_value_without_separator is still a secret'
+expected = 'secret=[redacted:parameter] is still a secret'
+class = 'false_positive'
+
+[[case]]
+input = 'user=admin logged in at 12:00'
+expected = 'user=admin logged in at 12:00'
+class = 'false_positive'
+
+# The provider-token rules must not eat ordinary upper-case identifiers.
+[[case]]
+input = 'ORDER_STATUS_PENDING and HTTP_STATUS_OK and MAX_RETRIES'
+expected = 'ORDER_STATUS_PENDING and HTTP_STATUS_OK and MAX_RETRIES'
+class = 'false_positive'
+
+[[case]]
+input = 'AKIA_LIKE_TEXT_IN_A_SCREAMING_SNAKE_CONSTANT'
+expected = 'AKIA_LIKE_TEXT_IN_A_SCREAMING_SNAKE_CONSTANT'
+class = 'false_positive'
+
+# A base32 secret-shaped value is not one of the provider shapes.
+[[case]]
+input = 'totp seed MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U enrolled'
+expected = 'totp seed MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U enrolled'
+class = 'false_positive'
+
+# A twenty-character product code.
+[[case]]
+input = 'product PRD2026XK4M7Q2BHT5ZZ shipped'
+expected = 'product PRD2026XK4M7Q2BHT5ZZ shipped'
+class = 'false_positive'
+
+# `AKIA` inside a longer token: guarded on both length and boundary.
+[[case]]
+input = 'batch AKIAIOSFODNN7EXAMPLEX done'
+expected = 'batch AKIAIOSFODNN7EXAMPLEX done'
+class = 'false_positive'
+
+[[case]]
+input = 'batch AWS_AKIAIOSFODNN7EXAMPLE done'
+expected = 'batch AWS_AKIAIOSFODNN7EXAMPLE done'
+class = 'false_positive'
+
+# Another script is text, not a token: no rule may fire on it.
+[[case]]
+input = 'Заказ 42 отклонён, повторите попытку'
+expected = 'Заказ 42 отклонён, повторите попытку'
+class = 'false_positive'
+
+[[case]]
+input = '注文は処理できませんでした'
+expected = '注文は処理できませんでした'
+class = 'false_positive'
+
+[[case]]
+input = 'تم رفض الطلب رقم ٤٢'
+expected = 'تم رفض الطلب رقم ٤٢'
+class = 'false_positive'
+
+[[case]]
+input = 'आदेश अस्वीकार कर दिया गया'
+expected = 'आदेश अस्वीकार कर दिया गया'
+class = 'false_positive'

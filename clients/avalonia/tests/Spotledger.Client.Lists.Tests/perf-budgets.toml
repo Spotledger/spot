@@ -1,0 +1,35 @@
+# Perf budgets for WP-UI-03.T2 (read by BudgetTests through the TestSupport Budget; WP-UI-16 reads this
+# file too). The frame budget is the grid's own (WP-UI-08.T2). Measured on the reference runner
+# (Fedora 44, 6 slow cores, .NET 10); a CI runner applies the TestSupport multiplier.
+# The workload (100,000 rows, 300 scroll steps, a fake server at 20 ms latency) is in BudgetTests.
+
+# First page of a 100,000-row list rendered from the response (median of 5 runs).
+[[budget]]
+id = "lists.first-page"
+metric = "p50"
+max = 150.0
+unit = "ms"
+runner = "reference"
+
+# A filter change shows new rows with the fake server at 20 ms (median of 5 runs).
+[[budget]]
+id = "lists.filter-change"
+metric = "p50"
+max = 120.0
+unit = "ms"
+runner = "reference"
+
+# Slowest frame while scrolling 100,000 rows in 300 steps.
+[[budget]]
+id = "lists.scroll-frame"
+metric = "max"
+max = 8.0
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 3.0
+[runner.ci-windows]
+multiplier = 3.0
+[runner.reference]
+multiplier = 1.0

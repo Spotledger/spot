@@ -1,0 +1,145 @@
+# journal_segment codes: the sealed journal segment format of spot-journal-segment (WP-JRN-03.T1): writer and reader refusals and the chain verifier's failure codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_segment.config_invalid"
+class = "none"
+summary = "The segment writer configuration is unusable: an empty source id, a zero block size or an out-of-range compression level."
+explanation_key = "error.journal_segment.config_invalid"
+params = []
+remedy = "Give a non-empty source id, a block target above zero and a compression level zstd accepts."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.entry_invalid"
+class = "none"
+summary = "A journal entry line is not one line of valid UTF-8, or is larger than a segment entry may be."
+explanation_key = "error.journal_segment.entry_invalid"
+params = []
+remedy = "Serialise the envelope as one JSON line with no newline and keep it below the entry size limit."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.position_out_of_order"
+class = "none"
+summary = "An entry position is not strictly after the previous position in the segment."
+explanation_key = "error.journal_segment.position_out_of_order"
+params = []
+remedy = "Append entries in position order, each exactly once."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.position_gap"
+class = "none"
+summary = "An entry position skips a sequence number inside the segment."
+explanation_key = "error.journal_segment.position_gap"
+params = []
+remedy = "Append every sequence number of the generation without leaving holes; seal and start a new segment only at a contiguous boundary."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.generation_mismatch"
+class = "none"
+summary = "An entry belongs to a different generation than the segment being written."
+explanation_key = "error.journal_segment.generation_mismatch"
+params = []
+remedy = "Seal the segment and open a new one for the new generation."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.format_invalid"
+class = "none"
+summary = "The bytes are not a well-formed journal segment: bad magic, truncation or an inconsistent block index."
+explanation_key = "error.journal_segment.format_invalid"
+params = []
+remedy = "Fetch the segment again from the object store; if it persists, treat the object as damaged and restore it from another copy."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.unsupported_version"
+class = "none"
+summary = "The segment has a format version this build cannot read."
+explanation_key = "error.journal_segment.unsupported_version"
+params = []
+remedy = "Upgrade the reader to a build that supports the segment format version."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.checksum_mismatch"
+class = "none"
+summary = "A header, footer or block checksum of the segment does not match its bytes."
+explanation_key = "error.journal_segment.checksum_mismatch"
+params = []
+remedy = "The segment was altered or damaged; restore it from another copy and run the chain verifier."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.compression"
+class = "none"
+summary = "A segment block could not be compressed or decompressed."
+explanation_key = "error.journal_segment.compression"
+params = []
+remedy = "If decompression fails the block is damaged: restore the segment from another copy."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.range_invalid"
+class = "none"
+summary = "A requested sequence range is reversed."
+explanation_key = "error.journal_segment.range_invalid"
+params = []
+remedy = "Ask for a range whose first sequence number is not after its last."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_altered"
+class = "none"
+summary = "A segment fails its own checks, or the segment after it was chained to different bytes."
+explanation_key = "error.journal_segment.chain_altered"
+params = []
+remedy = "Restore the named segment from another copy; do not replay the journal past it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_missing"
+class = "none"
+summary = "One or more segments are missing from the chain before the named segment."
+explanation_key = "error.journal_segment.chain_missing"
+params = []
+remedy = "Fetch the missing segments from the object store or another copy before verifying again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_reordered"
+class = "none"
+summary = "A segment is out of order in the chain."
+explanation_key = "error.journal_segment.chain_reordered"
+params = []
+remedy = "Order the segments by position before verifying."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_position_gap"
+class = "none"
+summary = "The positions of a segment leave a gap or overlap with the segment before it."
+explanation_key = "error.journal_segment.chain_position_gap"
+params = []
+remedy = "Remove the duplicated segment or fetch the missing one, then verify again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_generation_mismatch"
+class = "none"
+summary = "A segment has a lower generation than the segment before it."
+explanation_key = "error.journal_segment.chain_generation_mismatch"
+params = []
+remedy = "Check the segment ordering and the generation history of the source."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_segment.chain_source_mismatch"
+class = "none"
+summary = "A segment in the chain comes from a different source than its predecessor."
+explanation_key = "error.journal_segment.chain_source_mismatch"
+params = []
+remedy = "Verify one source at a time; remove segments of other sources from the list."
+since = "0.1.0"

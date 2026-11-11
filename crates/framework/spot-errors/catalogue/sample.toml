@@ -1,0 +1,47 @@
+# sample codes: raised by the framework's acceptance app, spot-sample-app
+# (WP-DX-05.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sample.hours_out_of_range"
+class = "Validation"
+summary = "A Time Entry books {hours} hours, but the app accepts {low} to {high}."
+explanation_key = "error.sample.hours_out_of_range"
+params = ["high", "hours", "low"]
+remedy = "Book between a quarter hour and a full day, or split the work into two entries."
+since = "0.1.0"
+
+[[entry]]
+code = "sample.hours_required"
+class = "none"
+summary = "A Time Entry needs its hours before it can be saved."
+explanation_key = "error.sample.hours_required"
+params = []
+remedy = "Fill the hours field; the host refuses the save until it is set."
+since = "0.1.0"
+
+[[entry]]
+code = "sample.invalid_name"
+class = "Internal"
+summary = "A compiled-in sample constant is not a valid storage name: {detail}."
+explanation_key = "error.sample.invalid_name"
+params = ["detail"]
+remedy = "Report this: the app's constants are checked in and validated by its tests, so a failure here is a build bug."
+since = "0.1.0"
+
+[[entry]]
+code = "sample.owner_from_project"
+class = "none"
+summary = "The task's project owner was filled from the linked project."
+explanation_key = "error.sample.owner_from_project"
+params = []
+remedy = "None needed; set the field on the task itself to override the derivation before saving."
+since = "0.1.0"
+
+[[entry]]
+code = "sample.roll_up_no_version"
+class = "Internal"
+summary = "The linked task has no stored version for the hours roll-up to update against: {detail}."
+explanation_key = "error.sample.roll_up_no_version"
+params = ["detail"]
+remedy = "Report this: a saved task always carries a version, so the roll-up never sees one missing."
+since = "0.1.0"

@@ -1,0 +1,30 @@
+# npm tokens: `npm_` plus thirty-six token characters, anchored on word boundaries.
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = '[redacted:npm_token]'
+class = 'npm_token'
+
+[[case]]
+input = 'npm publish rejected token npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = 'npm publish rejected token [redacted:npm_token]'
+class = 'npm_token'
+
+# Too short to be a token.
+[[case]]
+input = 'npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345'
+expected = 'npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345'
+class = 'npm_token'
+
+# Upper-case lookalike.
+[[case]]
+input = 'NPM_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = 'NPM_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+class = 'npm_token'
+
+# No word boundary on the left.
+[[case]]
+input = 'anpm_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = 'anpm_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+class = 'npm_token'

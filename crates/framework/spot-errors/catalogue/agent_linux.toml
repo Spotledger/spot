@@ -1,0 +1,129 @@
+# The Linux operation modules' error codes (WP-ADM-04.T1, blueprint WS22, ADR-44).
+# Library-internal vocabulary: the host agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_linux.unsupported"
+class = "none"
+summary = "The host's distribution or firewall backend is not one this module can drive."
+explanation_key = "error.agent_linux.unsupported"
+params = []
+remedy = "Target a supported distribution (Fedora, a RHEL-compatible distribution or Ubuntu LTS) or install a supported firewall backend."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.unavailable"
+class = "none"
+summary = "A tool, file or account the operation needs is not present on the host."
+explanation_key = "error.agent_linux.unavailable"
+params = []
+remedy = "Install the missing tool or create the missing account, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.invalid_argument"
+class = "none"
+summary = "An argument failed the module's own validation after the catalogue's schema check."
+explanation_key = "error.agent_linux.invalid_argument"
+params = []
+remedy = "Correct the named parameter and resubmit the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.command_spawn"
+class = "none"
+summary = "A management command could not be spawned on the host."
+explanation_key = "error.agent_linux.command_spawn"
+params = []
+remedy = "Check that the tool exists and is executable on the agent host, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.command_failed"
+class = "none"
+summary = "A management command ran and exited with a non-zero status."
+explanation_key = "error.agent_linux.command_failed"
+params = []
+remedy = "Read the command's error output on the host and correct the underlying problem."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.command_timeout"
+class = "none"
+summary = "A management command did not finish within its timeout and was killed."
+explanation_key = "error.agent_linux.command_timeout"
+params = []
+remedy = "Check the host's load and locks, then retry when it is responsive."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.output_too_large"
+class = "none"
+summary = "A management command produced more output than the agent's cap allows."
+explanation_key = "error.agent_linux.output_too_large"
+params = []
+remedy = "Narrow the operation so its command produces less output."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.package_locked"
+class = "none"
+summary = "The package manager is busy because another transaction holds its lock."
+explanation_key = "error.agent_linux.package_locked"
+params = []
+remedy = "Wait for the running package transaction to finish, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.protected_unit"
+class = "none"
+summary = "The unit is protected (the agent or the runtime) and the call did not carry the critical flag."
+explanation_key = "error.agent_linux.protected_unit"
+params = []
+remedy = "Resubmit the operation with the critical flag if taking the unit down is truly intended."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.protected_uid"
+class = "none"
+summary = "The account's UID is below the normal-user floor and is not allow-listed."
+explanation_key = "error.agent_linux.protected_uid"
+params = []
+remedy = "Allow-list the UID in the agent's configuration if managing this system account is intended."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.lockout_guard"
+class = "none"
+summary = "Closing the firewall rule would cut management access and the call did not carry the critical flag."
+explanation_key = "error.agent_linux.lockout_guard"
+params = []
+remedy = "Resubmit the operation with the critical flag if removing management access is truly intended."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.io"
+class = "none"
+summary = "A filesystem read the operation needs failed."
+explanation_key = "error.agent_linux.io"
+params = []
+remedy = "Check the path's permissions on the host, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.parse"
+class = "none"
+summary = "A management tool's output could not be parsed."
+explanation_key = "error.agent_linux.parse"
+params = []
+remedy = "Check the tool's version and output format on the host, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux.verify_failed"
+class = "none"
+summary = "Verification after an apply found that the desired state was not reached."
+explanation_key = "error.agent_linux.verify_failed"
+params = []
+remedy = "Inspect the host's state for the operation and correct the underlying problem."
+since = "0.1.0"

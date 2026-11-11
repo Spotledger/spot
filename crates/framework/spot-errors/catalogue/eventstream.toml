@@ -1,0 +1,64 @@
+# eventstream codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "eventstream.consumer_not_found"
+class = "none"
+summary = "No consumer with this name belongs to the caller."
+explanation_key = "error.eventstream.consumer_not_found"
+params = []
+remedy = "Check the consumer name, or register the consumer first."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.consumer_busy"
+class = "none"
+summary = "Another connection holds this consumer's lease, or the lease sent has been replaced."
+explanation_key = "error.eventstream.consumer_busy"
+params = []
+remedy = "Close the other connection, or retry after Retry-After once the lease lapses."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.resync_required"
+class = "none"
+summary = "The checkpoint or position is no longer held, so events were lost to retention."
+explanation_key = "error.eventstream.resync_required"
+params = []
+remedy = "Rebuild from a snapshot, then restart the partition from a position you hold."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.window_full"
+class = "none"
+summary = "The consumer has its in-flight window of delivered but unacknowledged events."
+explanation_key = "error.eventstream.window_full"
+params = []
+remedy = "Acknowledge the events already applied before pulling more."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.position_invalid"
+class = "none"
+summary = "The position is malformed, forged, or was issued for another consumer."
+explanation_key = "error.eventstream.position_invalid"
+params = []
+remedy = "Use a position this consumer was given."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.ack_refused"
+class = "none"
+summary = "The acknowledgement was beyond what was delivered, not a delivered batch's own position, behind the checkpoint, or from a holder that lost its lease."
+explanation_key = "error.eventstream.ack_refused"
+params = []
+remedy = "Acknowledge the next_position of a batch you hold the lease for."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.spec_invalid"
+class = "none"
+summary = "The consumer definition is invalid, or changes something fixed for the life of the consumer such as the partition count."
+explanation_key = "error.eventstream.spec_invalid"
+params = []
+remedy = "Fix the named fields, or register a new consumer for a different partition count."
+since = "0.1.0"

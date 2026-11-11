@@ -1,0 +1,292 @@
+# Break-glass access codes (WP-ADM-11.T1, blueprint WS22, ADR-44, ADR-070 section 9).
+# The crate is a library: it raises these refusals and decision codes itself and the host
+# bridges them onto the wire, so every class is `none`. Every code here is defined by
+# spot-break-glass's `BreakGlassError::code` (or its `ALLOW` constant).
+
+[[entry]]
+code = "break_glass.not_opted_in"
+class = "none"
+summary = "The tenant has not opted in to break-glass support access."
+explanation_key = "error.break_glass.not_opted_in"
+params = []
+remedy = "The tenant administrator enables break-glass in the tenant's support policy, or the vendor uses a normal typed operation instead."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.reason_required"
+class = "none"
+summary = "A break-glass request has no reason."
+explanation_key = "error.break_glass.reason_required"
+params = []
+remedy = "The requester states why the session is needed and resubmits."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.ticket_required"
+class = "none"
+summary = "A break-glass request has no support ticket id."
+explanation_key = "error.break_glass.ticket_required"
+params = []
+remedy = "The requester names the support ticket the session is against and resubmits."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.requester_blank"
+class = "none"
+summary = "A break-glass request names no requester."
+explanation_key = "error.break_glass.requester_blank"
+params = []
+remedy = "The requester signs in and names their identity, then resubmits."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.window_invalid"
+class = "none"
+summary = "The break-glass window is not a valid half-open range."
+explanation_key = "error.break_glass.window_invalid"
+params = []
+remedy = "The requester sets a start not before the request and an end after the start, then resubmits."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.duration_over_policy"
+class = "none"
+summary = "The break-glass window is longer than the policy or tenant setting allows."
+explanation_key = "error.break_glass.duration_over_policy"
+params = []
+remedy = "The requester shortens the window to the stated cap, or the tenant administrator raises the setting within the deployment ceiling."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.wrong_state"
+class = "none"
+summary = "The transition does not apply in the session's current state."
+explanation_key = "error.break_glass.wrong_state"
+params = []
+remedy = "Read the session's current state and apply a transition it allows."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.approver_blank"
+class = "none"
+summary = "An approver has no identity."
+explanation_key = "error.break_glass.approver_blank"
+params = []
+remedy = "Record the approval with the approver's named identity."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.approver_not_vendor"
+class = "none"
+summary = "An approval came from a principal who is not a vendor-side person."
+explanation_key = "error.break_glass.approver_not_vendor"
+params = []
+remedy = "Collect the two-person approval from two distinct vendor-side people; the customer consents separately."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.requester_cannot_approve"
+class = "none"
+summary = "The requester tried to approve their own break-glass request."
+explanation_key = "error.break_glass.requester_cannot_approve"
+params = []
+remedy = "Have two other vendor-side people approve the request; the requester's own approval does not count."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.duplicate_approver"
+class = "none"
+summary = "One approver approved a break-glass request twice."
+explanation_key = "error.break_glass.duplicate_approver"
+params = []
+remedy = "Collect the second approval from a different vendor-side person."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.not_enough_approvers"
+class = "none"
+summary = "A break-glass session has fewer than the required distinct approvals."
+explanation_key = "error.break_glass.not_enough_approvers"
+params = []
+remedy = "Collect the missing distinct vendor-side approvals, or the required customer consent, before activating the session."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.customer_consent_required"
+class = "none"
+summary = "The tenant's policy requires customer consent and none was recorded."
+explanation_key = "error.break_glass.customer_consent_required"
+params = []
+remedy = "The customer approves the request with a signed consent receipt, then the session may activate."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.consent_mismatch"
+class = "none"
+summary = "The recorded customer consent does not cover this session."
+explanation_key = "error.break_glass.consent_mismatch"
+params = []
+remedy = "Record the consent from a customer-side principal for this exact session."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.grant_refused"
+class = "none"
+summary = "The composed grant refused the session."
+explanation_key = "error.break_glass.grant_refused"
+params = []
+remedy = "Read the composed refusal from deep-access or support-session and correct the request before retrying."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.grant_mismatch"
+class = "none"
+summary = "The composed grant covers another tenant or a wider window than the request."
+explanation_key = "error.break_glass.grant_mismatch"
+params = []
+remedy = "Compose the grant for the requested tenant and a window within the request."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.unknown_session"
+class = "none"
+summary = "No break-glass session has that id."
+explanation_key = "error.break_glass.unknown_session"
+params = []
+remedy = "Use the session id the request returned."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.not_started"
+class = "none"
+summary = "The break-glass session has not started yet."
+explanation_key = "error.break_glass.not_started"
+params = []
+remedy = "Wait until the session's start time, or open a session that starts now."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.expired"
+class = "none"
+summary = "The break-glass session has expired."
+explanation_key = "error.break_glass.expired"
+params = []
+remedy = "Open a new, separately approved break-glass session if the work is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.revoked"
+class = "none"
+summary = "The break-glass session was revoked."
+explanation_key = "error.break_glass.revoked"
+params = []
+remedy = "Open a new, separately approved break-glass session if the work is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.recording_io"
+class = "none"
+summary = "The recording could not be read or written."
+explanation_key = "error.break_glass.recording_io"
+params = []
+remedy = "Restore the recording storage and retry; a session that cannot be recorded must not run."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.recording_tampered"
+class = "none"
+summary = "The recording was altered and its hash chain does not verify."
+explanation_key = "error.break_glass.recording_tampered"
+params = []
+remedy = "Treat the recording as evidence of tampering; retrieve an independent copy from the customer-held chain and investigate."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.recording_not_found"
+class = "none"
+summary = "No recording exists for that session."
+explanation_key = "error.break_glass.recording_not_found"
+params = []
+remedy = "Check the session id, or the customer's archive, for the recording."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.frame_invalid"
+class = "none"
+summary = "The recording carries a malformed frame."
+explanation_key = "error.break_glass.frame_invalid"
+params = []
+remedy = "The recording cannot be trusted; retrieve an independent copy and investigate."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.manifest_invalid"
+class = "none"
+summary = "The recording manifest is malformed or disagrees with the recording."
+explanation_key = "error.break_glass.manifest_invalid"
+params = []
+remedy = "Recompute the manifest from the recording; a manifest that disagrees is treated as tampering."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.recording_full"
+class = "none"
+summary = "The recording reached its size cap and is truncated."
+explanation_key = "error.break_glass.recording_full"
+params = []
+remedy = "The truncation marker records that the session outran its cap; raise the cap or open a fresh session if more is needed."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.vendor_delete_refused"
+class = "none"
+summary = "A vendor-side caller tried to delete a customer recording."
+explanation_key = "error.break_glass.vendor_delete_refused"
+params = []
+remedy = "Recordings are the customer's evidence and are never deleted by the vendor; leave the recording in place."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.append_only"
+class = "none"
+summary = "Deletion was asked of an append-only recording archive."
+explanation_key = "error.break_glass.append_only"
+params = []
+remedy = "Recordings are append-only and are never deleted in place; use retention policy at the customer's direction instead."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.pty_unavailable"
+class = "none"
+summary = "No interactive terminal is available."
+explanation_key = "error.break_glass.pty_unavailable"
+params = []
+remedy = "Check the host's terminal support and retry; a break-glass session without a terminal cannot run."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.audit_unavailable"
+class = "none"
+summary = "The customer audit log could not record the transition."
+explanation_key = "error.break_glass.audit_unavailable"
+params = []
+remedy = "Restore the audit chain's storage and retry; the session refuses to proceed without evidence."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.clock_went_backwards"
+class = "none"
+summary = "The monotonic clock went backwards between two observations."
+explanation_key = "error.break_glass.clock_went_backwards"
+params = []
+remedy = "Check the host's clock; the session fails closed rather than extend a window."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.allow"
+class = "none"
+summary = "A break-glass transition was permitted."
+explanation_key = "error.break_glass.allow"
+params = []
+remedy = "No action needed; this is a decision code the customer view records."
+since = "0.1.0"

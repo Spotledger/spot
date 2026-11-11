@@ -1,0 +1,26 @@
+name = "invoice_line"
+label = "Invoice Line"
+app = "sample_app"
+module = "billing"
+is_child = true
+
+[[fields]]
+name = "item"
+label = "Item"
+type = "text"
+required = true
+
+[[fields]]
+name = "qty"
+label = "Quantity"
+type = "decimal"
+scale = 3
+required = true
+default = "1"
+
+[[fields]]
+name = "amount"
+label = "Amount"
+type = "decimal"
+scale = 2
+precision = 20

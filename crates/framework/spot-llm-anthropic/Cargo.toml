@@ -1,0 +1,22 @@
+[package]
+name = "spot-llm-anthropic"
+description = "Anthropic Messages API provider for spot-llm: request/response mapping, SSE streaming, prompt-caching markers and typed error mapping, tested on recorded exchanges (WP-AI-03.T2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+# `raw_value` embeds the pre-formatted temperature decimal as a bare JSON number
+# without a float ever crossing this crate.
+serde_json = { version = "1", features = ["raw_value"] }
+spot-llm = { path = "../spot-llm" }
+
+[dev-dependencies]
+# `#[tokio::test]` and the current-thread runtime for the async provider paths.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

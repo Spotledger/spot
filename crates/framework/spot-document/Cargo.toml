@@ -1,0 +1,78 @@
+[package]
+name = "spot-document"
+description = "The document engine: the value layer (WP-DOC-01.T1: defaults, coercion, validation, the Document <-> storage mapping) and the lifecycle host of the app API over the storage contract (WP-DOC-04.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, `AppError`, `FieldPath` and the prelude types (`Name`, `Value`, `Decimal`, `Date`, ...).
+spot-app-api = { path = "../../../contracts/app-api" }
+# Effective metadata: the definitions that carry defaults, select options and decimal precision.
+spot-meta = { path = "../spot-meta" }
+# The storage side of the mapping (`DocumentData`), and the transaction the engine runs in.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The lifecycle events the engine writes to the outbox (`PayloadDocument`, `Operation`).
+spot-events-contract = { path = "../../../contracts/events" }
+# Which steps run at each hook point, with overrides applied, and which provider answers a seam.
+spot-seams = { path = "../spot-seams" }
+# The permission decision core (WP-PLT-03.T1): the engine's one dependency on permissions is its
+# `Authorizer`, whose production implementation wraps this engine (ADR-070 section 12).
+spot-permissions = { path = "../spot-permissions" }
+# The permission filter compiled onto the storage query IR (WP-PLT-04.T1): list reads are
+# filtered, checked and column-restricted through it.
+spot-perm-query = { path = "../spot-perm-query" }
+# `Clock`: the engine reads time only through it.
+spot-core = { path = "../spot-core" }
+# Sealing, opening and blind-indexing `secret` field values (WP-SEC-03.T3). The engine holds a
+# `SecretBox` behind the `SecretVault` trait and is the only place a credential is sealed.
+spot-secrets = { path = "../spot-secrets" }
+# Naming a new document from its DocType's naming property, with gapless numbers from the
+# transaction's own sequences (WP-DOC-05.T2).
+spot-naming = { path = "../spot-naming" }
+# The compiled naming plan (`NamingPlan`) the snapshot holds per DocType.
+spot-plan = { path = "../spot-plan" }
+# Link validation, where-used and the typed delete/cancel/rename refusals (WP-DOC-06.T2).
+spot-links = { path = "../spot-links" }
+# SHA-256 for the digest of the rows an effect touched (`rows_digest`, WP-DOC-12.T1).
+sha2 = "0.10"
+# Job and event payloads are JSON in the native API value encoding.
+serde_json = "1"
+# Zeroes the plaintext bytes the blind index is computed over.
+zeroize = "1"
+# RFC 3339 timestamps in job payloads, as the native API encodes instants.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+# Backoff between retries of a transaction.
+tokio = { version = "1", default-features = false, features = ["time"] }
+# Spans of the pipeline (WP-PLT-15.T3): `doc.op`, `doc.phase`, `doc.step`, names and counts only.
+tracing = "0.1"
+
+[features]
+# `SecretCaller::Test`, so tests can build a `SecretAccess`. Never enabled in a product build.
+testing = []
+
+[dev-dependencies]
+# The tests build a `SecretAccess` as `SecretCaller::Test`.
+spot-document = { path = ".", features = ["testing"] }
+# The property test over arbitrary secret bytes.
+proptest = "1"
+# Round trips: what `to_storage` writes, `from_storage` reads back.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The PostgreSQL backend and its per-test scratch-database harness: the contract and L3 suites
+# run on PostgreSQL too.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+# The L3 document behaviour suite (WP-TST-10.T1), run on both backends.
+spot-l3-documents = { path = "../../../harness/rust/l3-documents" }
+# The journal capture invariant checker (WP-JRN-02.T2): the PostgreSQL capture test compares the
+# real change feed with the real `doc_state` events through it.
+spot-capture-invariant = { path = "../spot-capture-invariant" }
+# The authz matrix is a TOML table, read with the same parser the permission model uses.
+toml = "0.8"
+# The capture layer of the pipeline span tests.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

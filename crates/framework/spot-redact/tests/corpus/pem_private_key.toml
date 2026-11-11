@@ -1,0 +1,44 @@
+# PEM private key blocks; everything between BEGIN/END goes, in one replacement.
+
+[[case]]
+input = '''leak:
+-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQ
+m0secret123
+-----END PRIVATE KEY-----
+end'''
+expected = '''leak:
+[redacted:private_key]
+end'''
+class = 'pem_private_key'
+
+[[case]]
+input = '-----BEGIN RSA PRIVATE KEY-----Ym9keQ==more2body/983-----END RSA PRIVATE KEY-----trailing'
+expected = '[redacted:private_key]trailing'
+class = 'pem_private_key'
+
+[[case]]
+input = '''-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEII
+-----END EC PRIVATE KEY-----'''
+expected = '[redacted:private_key]'
+class = 'pem_private_key'
+
+[[case]]
+input = '''-----BEGIN CERTIFICATE-----
+MIIBkQIBAzCBAq8GCSqGSIb3DQE
+-----END CERTIFICATE-----'''
+expected = '''-----BEGIN CERTIFICATE-----
+MIIBkQIBAzCBAq8GCSqGSIb3DQE
+-----END CERTIFICATE-----'''
+class = 'pem_private_key'
+
+[[case]]
+input = '-----BEGIN PRIVATE KEY----- without an end marker'
+expected = '-----BEGIN PRIVATE KEY----- without an end marker'
+class = 'pem_private_key'
+
+[[case]]
+input = 'pre -----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC9rZXk+MTIz-----END OPENSSH PRIVATE KEY----- post'
+expected = 'pre [redacted:private_key] post'
+class = 'pem_private_key'

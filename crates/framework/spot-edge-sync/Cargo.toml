@@ -1,0 +1,42 @@
+[package]
+name = "spot-edge-sync"
+description = "The business graph's edge set maintained atomically from a document's Link fields (WS8, WP-DAG-04.T1, ADR-50): edges_of from the effective metadata, the document diff, the object-safe EdgeWriter, the invariant checker and repair, and the post-write lifecycle hook that writes edges in the document's own transaction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The document handle the edge set is derived from and the child rows a table link lives in.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The effective metadata: the DocTypes, their fields and the edge types derived from them.
+spot-meta = { path = "../spot-meta" }
+# The derived graph model: which Link fields are edges, which relation DocTypes carry typed
+# edges with properties, and the stable `EdgeTypeId` of every edge type.
+spot-graph-model = { path = "../spot-graph-model" }
+# `NodeRef`, `Name`, `RecordId` and `Value`: the concrete edge ends and the values an edge
+# carries.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Typed errors with stable `edge_sync.*` codes.
+thiserror = "2"
+
+# The engine's `TxParticipant` seam (WP-DOC-04.T3): `EdgeParticipant` implements it, so a
+# document's edges are written in the engine's own transaction. The dependency rules allow a
+# framework crate to use the engine (the same edge `spot-bpm-*` and `spot-links` take).
+spot-document = { path = "../spot-document" }
+
+[dev-dependencies]
+# Property tests: the invariant holds after any random sequence of changes.
+proptest = "1"
+# The in-memory storage backend: the engine tests run on it.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The engine test fixtures: the clock the engine reads time through, the (empty) step and seam
+# registry, an async test runtime and the business time of an invocation.
+spot-core = { path = "../spot-core" }
+spot-seams = { path = "../spot-seams" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+time = { version = "0.3.55", default-features = false }
+
+[lints]
+workspace = true

@@ -1,0 +1,8 @@
+# Environment variables for spot.service (systemd EnvironmentFile format).
+#
+# Empty by default. The daemon's own configuration belongs in spot.toml; use
+# this file only for deployment-specific variables such as RUST_LOG or a proxy
+# setting. One KEY=VALUE per line, no `export`, no shell quoting.
+#
+# If a value is a secret, set the file mode to 0600 root:spot. Never commit a
+# populated copy of this file.

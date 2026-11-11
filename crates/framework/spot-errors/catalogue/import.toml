@@ -1,0 +1,199 @@
+# import codes: the data import engine of spot-import (WP-DOC-09). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "import.file_not_found"
+class = "none"
+summary = "The import file does not exist or cannot be opened."
+explanation_key = "error.import.file_not_found"
+params = []
+remedy = "Check the file path and that the file may be read."
+since = "0.1.0"
+
+[[entry]]
+code = "import.file_too_large"
+class = "none"
+summary = "The import file is larger than the configured maximum size."
+explanation_key = "error.import.file_too_large"
+params = []
+remedy = "Split the file or raise the import file-size limit."
+since = "0.1.0"
+
+[[entry]]
+code = "import.too_many_rows"
+class = "none"
+summary = "The import file has more rows than the configured maximum."
+explanation_key = "error.import.too_many_rows"
+params = []
+remedy = "Split the file into smaller imports or raise the row limit."
+since = "0.1.0"
+
+[[entry]]
+code = "import.too_many_columns"
+class = "none"
+summary = "A row has more columns than the configured maximum."
+explanation_key = "error.import.too_many_columns"
+params = []
+remedy = "Remove the extra columns or raise the column limit."
+since = "0.1.0"
+
+[[entry]]
+code = "import.cell_too_long"
+class = "none"
+summary = "A cell is longer than the maximum cell length."
+explanation_key = "error.import.cell_too_long"
+params = []
+remedy = "Shorten the cell value or raise the cell-length limit."
+since = "0.1.0"
+
+[[entry]]
+code = "import.unknown_sheet"
+class = "none"
+summary = "The requested sheet is not in the workbook."
+explanation_key = "error.import.unknown_sheet"
+params = []
+remedy = "Name a sheet that exists in the workbook."
+since = "0.1.0"
+
+[[entry]]
+code = "import.not_a_workbook"
+class = "none"
+summary = "The file is not the format its name or content claims."
+explanation_key = "error.import.not_a_workbook"
+params = []
+remedy = "Save the file again as a valid XLSX or CSV file."
+since = "0.1.0"
+
+[[entry]]
+code = "import.bad_encoding"
+class = "none"
+summary = "A CSV value is not valid UTF-8."
+explanation_key = "error.import.bad_encoding"
+params = []
+remedy = "Save the CSV file as UTF-8 and import it again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.no_header"
+class = "none"
+summary = "The file holds no header row."
+explanation_key = "error.import.no_header"
+params = []
+remedy = "Add a header row naming each column."
+since = "0.1.0"
+
+[[entry]]
+code = "import.meta_error"
+class = "none"
+summary = "The metadata is inconsistent, for example a table points at an undefined child DocType."
+explanation_key = "error.import.meta_error"
+params = []
+remedy = "Fix the DocType definition, then import again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.bad_value"
+class = "none"
+summary = "A cell's text does not convert to its field's type."
+explanation_key = "error.import.bad_value"
+params = []
+remedy = "Correct the cell to a value the field accepts."
+since = "0.1.0"
+
+[[entry]]
+code = "import.ambiguous_date"
+class = "none"
+summary = "A date cell matches two configured formats with different results."
+explanation_key = "error.import.ambiguous_date"
+params = []
+remedy = "Name the date format explicitly in the import settings."
+since = "0.1.0"
+
+[[entry]]
+code = "import.orphan_row"
+class = "none"
+summary = "A child row has no parent row above it."
+explanation_key = "error.import.orphan_row"
+params = []
+remedy = "Place the child row under its parent row, or add the parent."
+since = "0.1.0"
+
+[[entry]]
+code = "import.key_missing"
+class = "none"
+summary = "A document to update has no value in the field the import keys on."
+explanation_key = "error.import.key_missing"
+params = []
+remedy = "Fill the key column on the parent row, or import in insert mode."
+since = "0.1.0"
+
+[[entry]]
+code = "import.key_not_found"
+class = "none"
+summary = "The key value names no existing document and this import mode does not create one."
+explanation_key = "error.import.key_not_found"
+params = []
+remedy = "Use the upsert mode, or import the missing records first."
+since = "0.1.0"
+
+[[entry]]
+code = "import.missing_key_index"
+class = "none"
+summary = "An update or upsert import was started without the key index it needs to find documents."
+explanation_key = "error.import.missing_key_index"
+params = []
+remedy = "Give the import a key index of the target DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "import.spool_full"
+class = "none"
+summary = "Validating an all-or-nothing import needed more buffered documents than the spool allows."
+explanation_key = "error.import.spool_full"
+params = []
+remedy = "Raise the spool cap, or import with the skip-bad-rows policy that streams."
+since = "0.1.0"
+
+[[entry]]
+code = "import.too_many_errors"
+class = "none"
+summary = "The import stopped after the configured number of failed documents."
+explanation_key = "error.import.too_many_errors"
+params = []
+remedy = "Fix the reported rows and import again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.duplicate_key"
+class = "none"
+summary = "The same key value appears in more than one row of an update or upsert file."
+explanation_key = "error.import.duplicate_key"
+params = []
+remedy = "Remove or merge the repeated rows so each key appears once."
+since = "0.1.0"
+
+[[entry]]
+code = "import.config_batch_label"
+class = "none"
+summary = "A real import was started without a unique batch label."
+explanation_key = "error.import.config_batch_label"
+params = []
+remedy = "Give the import a unique batch label, such as a job id or a digest of the file."
+since = "0.1.0"
+
+[[entry]]
+code = "import.idempotency_conflict"
+class = "none"
+summary = "The host answered a create with an earlier, different document, so nothing was created."
+explanation_key = "error.import.idempotency_conflict"
+params = []
+remedy = "Use a unique batch label for this import and run it again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.config_command_id"
+class = "none"
+summary = "The import could not build a valid command id for a write."
+explanation_key = "error.import.config_command_id"
+params = []
+remedy = "Shorten the batch label and run the import again."
+since = "0.1.0"

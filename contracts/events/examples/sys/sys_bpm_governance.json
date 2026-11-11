@@ -1,0 +1,16 @@
+{
+  "actor": "user:0192f1c0-0000-7000-8000-000000000043",
+  "at": 1793608157957000,
+  "kind": "bpm.governance.outside_process",
+  "masked": true,
+  "on_behalf_of": null,
+  "payload": {
+    "command_id": {"Text": "cmd-77"},
+    "company": {"Text": "Acme Trading"},
+    "doctype": {"Text": "sales_invoice"},
+    "mode": {"Text": "governed"},
+    "policy": {"Text": "bpm.governance.policy"},
+    "reason": {"Text": "Customer collected goods before the request was approved"}
+  },
+  "subject": {"doctype": "sales_invoice", "id": "0192f1c0-0000-7000-8000-000000000042"}
+}

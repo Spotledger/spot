@@ -1,0 +1,85 @@
+# docaudit codes: the tamper-evident document audit of spot-doc-audit (WP-SEC-06.T1): the audit
+# event that cannot be written, a DocType that must not opt out, a lane configuration that
+# changed without a new epoch, the chain and the field guard. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "docaudit.outbox_write"
+class = "Unavailable"
+summary = "The document audit event could not be written to the outbox, so the operation failed closed and nothing was changed."
+explanation_key = "error.docaudit.outbox_write"
+params = []
+remedy = "Check the outbox and the database connection, then retry the operation with the same command id."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.audit_off"
+class = "Validation"
+summary = "A business DocType was marked audit off; only a framework-internal DocType audited elsewhere may opt out."
+explanation_key = "error.docaudit.audit_off"
+params = []
+remedy = "Remove the opt-out from the DocType; the audit-off list is fixed in the framework crate."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.lane_epoch"
+class = "Validation"
+summary = "The lane count or epoch of a site checkpoint does not match the configured lanes, so the chains cannot be bound."
+explanation_key = "error.docaudit.lane_epoch"
+params = []
+remedy = "Changing the lane count needs a new epoch; sign a fresh site checkpoint under the new epoch."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.encoding"
+class = "Internal"
+summary = "A document audit event, a diff or a checkpoint could not be encoded or decoded."
+explanation_key = "error.docaudit.encoding"
+params = []
+remedy = "This is a platform defect; capture the record shape and report it, do not retry blindly."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.chain"
+class = "Internal"
+summary = "Appending a document audit event to its lane chain, or verifying a chain, failed."
+explanation_key = "error.docaudit.chain"
+params = []
+remedy = "Check the audit store; a verification failure means the chain was altered and must be restored from a trusted copy."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.unknown_doctype"
+class = "UnknownDocType"
+summary = "The field guard has no protection facts for the DocType, so the audit cannot tell which values to mask."
+explanation_key = "error.docaudit.unknown_doctype"
+params = []
+remedy = "Register the DocType's protection facts in the effective metadata before auditing its documents."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.guard"
+class = "Internal"
+summary = "The field guard refused while building or reading a document audit diff."
+explanation_key = "error.docaudit.guard"
+params = []
+remedy = "Check the protection facts and the trace sink; a full trace queue with fail-closed withholds the diff."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.double_registration"
+class = "none"
+summary = "The audit participant and an audit step are both registered for the same DocType, so every write would be audited twice."
+explanation_key = "error.docaudit.double_registration"
+params = []
+remedy = "Register the audit participant or the audit step for a DocType, never both; remove the audit step the error names."
+since = "0.1.0"
+
+[[entry]]
+code = "docaudit.denial_not_recorded"
+class = "none"
+summary = "A refused operation could not be written to the document audit; the refusal itself stands and is counted."
+explanation_key = "error.docaudit.denial_not_recorded"
+params = []
+remedy = "Check the outbox and the database connection; the count of unrecorded denials is in the audit status."
+since = "0.1.0"

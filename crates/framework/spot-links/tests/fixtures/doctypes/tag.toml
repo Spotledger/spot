@@ -1,0 +1,6 @@
+name = "tag"
+label = "Tag"
+title_field = "name"
+fields = [
+  { name = "name", type = "text", required = true },
+]

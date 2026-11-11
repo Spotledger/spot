@@ -1,0 +1,109 @@
+# capture_invariant codes: the findings and errors of spot-capture-invariant (ADR-061 s3, s8). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "capture_invariant.stream_out_of_order"
+class = "none"
+summary = "A stream delivered a position that does not increase."
+explanation_key = "error.capture_invariant.stream_out_of_order"
+params = []
+remedy = "Feed each stream in strictly increasing position order."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.feed_duplicate"
+class = "none"
+summary = "The change feed holds two entries for one document version."
+explanation_key = "error.capture_invariant.feed_duplicate"
+params = []
+remedy = "Check the feed reader: a transaction yields one net entry per document."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.window_invalid"
+class = "none"
+summary = "The checker window is zero."
+explanation_key = "error.capture_invariant.window_invalid"
+params = []
+remedy = "Pass a window of at least one tracked document version."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.exclusion_invalid"
+class = "none"
+summary = "An exclusion is incomplete or declared twice."
+explanation_key = "error.capture_invariant.exclusion_invalid"
+params = []
+remedy = "Give every exclusion an entity, an owner and a reason, once per entity."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.report_encoding"
+class = "none"
+summary = "The capture invariant report could not be encoded as JSON."
+explanation_key = "error.capture_invariant.report_encoding"
+params = []
+remedy = "Report this as a defect; the report types always encode."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.missing_state_event"
+class = "none"
+summary = "A change-feed entry has no doc_state event of the same document and version."
+explanation_key = "error.capture_invariant.missing_state_event"
+params = []
+remedy = "Find the write that bypassed the document engine's capture path and route it through that path."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.duplicate_state_event"
+class = "none"
+summary = "A document version has more than one doc_state event."
+explanation_key = "error.capture_invariant.duplicate_state_event"
+params = []
+remedy = "Find the second capture of the transaction; the write path emits one event per document per transaction."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.orphan_state_event"
+class = "none"
+summary = "A doc_state event has no change-feed entry."
+explanation_key = "error.capture_invariant.orphan_state_event"
+params = []
+remedy = "Check that the event was not emitted for a rolled-back or foreign write."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.op_mismatch"
+class = "none"
+summary = "The change feed and the doc_state event disagree on the operation."
+explanation_key = "error.capture_invariant.op_mismatch"
+params = []
+remedy = "Compare the net operation of the transaction with the captured one."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.version_mismatch"
+class = "none"
+summary = "The change feed and the doc_state event name the same document at different versions."
+explanation_key = "error.capture_invariant.version_mismatch"
+params = []
+remedy = "Check which version the capture path read at commit."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.derived_without_projector"
+class = "none"
+summary = "A derived entity is flagged in the catalog with no registered projector."
+explanation_key = "error.capture_invariant.derived_without_projector"
+params = []
+remedy = "Register a projector for the entity, or remove the derived flag."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant.out_of_window"
+class = "none"
+summary = "An entry found no counterpart inside the checker window."
+explanation_key = "error.capture_invariant.out_of_window"
+params = []
+remedy = "Enlarge the window beyond the longest commit-to-journal lag, or treat it as a missed capture."
+since = "0.1.0"

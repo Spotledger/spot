@@ -1,0 +1,32 @@
+[package]
+name = "spot-channel-leakcheck"
+description = "End-to-end proof (WP-SEC-04.T3) that every real producer of data (export, report, version history, ...) calls the field guard: one test per Channel of spot-field-guard that drives the producing crate through its public entry point with protected values planted, runs the leak harness over everything that leaves, and fails when a Channel has no test. Test code only; no production crate may depend on it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Channel`, the guard and the leak harness this crate exists to prove the producers use.
+spot-field-guard = { path = "../../../crates/framework/spot-field-guard" }
+
+[dev-dependencies]
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+spot-meta = { path = "../../../crates/framework/spot-meta" }
+spot-permissions = { path = "../../../crates/framework/spot-permissions" }
+spot-core = { path = "../../../crates/framework/spot-core" }
+# The producers under test.
+spot-bulk-data = { path = "../../../crates/framework/spot-bulk-data" }
+spot-reports = { path = "../../../crates/framework/spot-reports" }
+spot-doc-audit = { path = "../../../crates/framework/spot-doc-audit" }
+spot-audit-chain = { path = "../../../crates/framework/spot-audit-chain" }
+spot-activity = { path = "../../../crates/framework/spot-activity" }
+rust_decimal = "1"
+serde_json = "1"
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

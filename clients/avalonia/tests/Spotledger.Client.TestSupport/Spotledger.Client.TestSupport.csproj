@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <!-- WP-UI-16.T3: the matrix's variant dimension is a ThemeVariantKind and a variant capture
+         reads the palette's canvas token. Theme is already reached through Controls; it is named
+         explicitly so this helper states the dependency it actually uses. -->
+    <ProjectReference Include="../../src/Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+  </ItemGroup>
+</Project>

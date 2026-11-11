@@ -1,0 +1,66 @@
+# The deploy wizard's error codes (WP-ADM-13.T1, blueprint WS22, ADR-44).
+# Library-internal vocabulary: the console bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "deploy_wizard.topology"
+class = "none"
+summary = "The deployment topology breaks {count} rule(s); the first is: {first}."
+explanation_key = "error.deploy_wizard.topology"
+params = ["count", "first"]
+remedy = "Fix each listed rule in the Add server wizard; every broken rule carries its own fix."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.preflight"
+class = "none"
+summary = "Pre-flight found {count} blocking check(s); the first is: {first}."
+explanation_key = "error.deploy_wizard.preflight"
+params = ["count", "first"]
+remedy = "Fix the named blocking checks on the server and run the check again before deploying."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.plan"
+class = "none"
+summary = "The deployment plan is invalid: {detail}."
+explanation_key = "error.deploy_wizard.plan"
+params = ["detail"]
+remedy = "Rebuild the plan from the topology; a plan that fails its own rules is never run."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.journal"
+class = "none"
+summary = "The progress journal cannot be used for this plan: {detail}."
+explanation_key = "error.deploy_wizard.journal"
+params = ["detail"]
+remedy = "Resume the deployment it was written for, or start a new deployment with a fresh journal."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.step_failed"
+class = "none"
+summary = "Step {step} ({title}) failed: {detail}."
+explanation_key = "error.deploy_wizard.step_failed"
+params = ["detail", "step", "title"]
+remedy = "Fix the cause named by the step, then resume the deployment; the journal retries that step."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.command"
+class = "none"
+summary = "Step {step} ({title}) could not be commanded: {detail}."
+explanation_key = "error.deploy_wizard.command"
+params = ["detail", "step", "title"]
+remedy = "Check the console's signing key and the step's parameters, then resume the deployment."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy_wizard.estimate"
+class = "none"
+summary = "The deployment time estimate overflowed: {detail}."
+explanation_key = "error.deploy_wizard.estimate"
+params = ["detail"]
+remedy = "Split the deployment into smaller topologies; the estimate stays in whole seconds."
+since = "0.1.0"

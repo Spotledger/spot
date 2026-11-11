@@ -1,0 +1,104 @@
+# tenancy_adapters codes: the real adapters behind the control plane's ports (WP-CTL-01.T3).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# Every code is a port step's fixed `reason`, so none carries free text: an adapter failure must
+# never echo a licence key, a credential or a raw SQL statement.
+
+[[entry]]
+code = "tenancy_adapters.schema_failed"
+class = "none"
+summary = "The tenant schema step failed."
+explanation_key = "error.tenancy_adapters.schema_failed"
+params = []
+remedy = "Resume the provisioning run to retry the step; if the schema is foreign, drop it by hand first."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.seed_failed"
+class = "none"
+summary = "The tenant baseline or seed step failed."
+explanation_key = "error.tenancy_adapters.seed_failed"
+params = []
+remedy = "Resume the provisioning run to retry the baseline; the planner applies only what is left."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.backup_failed"
+class = "none"
+summary = "The tenant's final backup could not be taken."
+explanation_key = "error.tenancy_adapters.backup_failed"
+params = []
+remedy = "Check the snapshot provider and the backup destination, then retry the archive step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.backup_unverified"
+class = "none"
+summary = "The tenant's final backup did not verify."
+explanation_key = "error.tenancy_adapters.backup_unverified"
+params = []
+remedy = "Take a fresh final backup and verify it before deleting any tenant data."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.licence_failed"
+class = "none"
+summary = "The tenant licence could not be issued."
+explanation_key = "error.tenancy_adapters.licence_failed"
+params = []
+remedy = "Check the issuer key, the tenant edition and the validity window, then retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.licence_store_failed"
+class = "none"
+summary = "The licence store failed."
+explanation_key = "error.tenancy_adapters.licence_store_failed"
+params = []
+remedy = "Check the licence store's storage and retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.approval_unavailable"
+class = "none"
+summary = "The tenant's approvers could not be resolved."
+explanation_key = "error.tenancy_adapters.approval_unavailable"
+params = []
+remedy = "Configure the tenant's approver roles and their members; without them a deletion cannot be approved."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.audit_failed"
+class = "none"
+summary = "The audit trail could not append the record."
+explanation_key = "error.tenancy_adapters.audit_failed"
+params = []
+remedy = "Check the audit chain's store and retry; the step must not proceed unaudited."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.telemetry_failed"
+class = "none"
+summary = "The telemetry step failed."
+explanation_key = "error.tenancy_adapters.telemetry_failed"
+params = []
+remedy = "Check the telemetry registry and retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.iam_failed"
+class = "none"
+summary = "The user provisioning step failed."
+explanation_key = "error.tenancy_adapters.iam_failed"
+params = []
+remedy = "Check the user provisioning source and retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_adapters.not_configured"
+class = "none"
+summary = "The adapter is not configured."
+explanation_key = "error.tenancy_adapters.not_configured"
+params = []
+remedy = "Wire a real implementation for this port; an unconfigured adapter never succeeds."
+since = "0.1.0"

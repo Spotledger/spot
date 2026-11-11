@@ -1,0 +1,21 @@
+doctype = "item"
+kind = "list"
+title = "Item"
+
+[[columns]]
+field = "item_code"
+
+[[columns]]
+field = "item_group"
+
+[[columns]]
+field = "status"
+
+[[columns]]
+field = "opening_balance"
+
+[[columns]]
+field = "reorder_level"
+
+[sort]
+field = "item_code"

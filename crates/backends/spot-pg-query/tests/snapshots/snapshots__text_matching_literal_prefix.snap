@@ -1,0 +1,10 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(&c)
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE starts_with("p"."name" COLLATE "C", $1 COLLATE "C") ORDER BY "p"."id" ASC OFFSET $2
+$1 = Text("50%_\\off")
+$2 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

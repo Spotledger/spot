@@ -1,0 +1,15 @@
+# idempotency_pg codes: the PostgreSQL Idempotency-Key store (WP-PLT-05.T7). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+#
+# A reservation that cannot be answered raises no code of its own: it is the `server.unavailable`
+# of the native API (503 with Retry-After, fail closed), so the client sees one code whichever
+# store is behind the port.
+
+[[entry]]
+code = "idempotency_pg.migration_failed"
+class = "Internal"
+summary = "The idempotency store's table could not be created in the database."
+explanation_key = "error.idempotency_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"

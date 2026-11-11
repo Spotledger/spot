@@ -1,0 +1,47 @@
+# auditstore codes: the PostgreSQL audit store (WP-AI-11.T2). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "auditstore.unavailable"
+class = "none"
+summary = "The audit store could not complete the call: the database or its connection pool failed, or an audited action was refused because its record could not be written."
+explanation_key = "error.auditstore.unavailable"
+params = []
+remedy = "Check the database connection and retry; a fail-closed refusal means the audit channel was full."
+since = "0.1.0"
+
+[[entry]]
+code = "auditstore.tables_missing"
+class = "none"
+summary = "The audit chain guard could not be installed because an audit chain table does not exist; the migration plan has not run."
+explanation_key = "error.auditstore.tables_missing"
+params = []
+remedy = "Run the migration (spot migrate) so the audit chain tables exist, then install the guard."
+since = "0.1.0"
+
+[[entry]]
+code = "auditstore.protection_incomplete"
+class = "none"
+summary = "The audit chain is not fully protected: a table, the append-only trigger or the application role's restrictions are missing, so the site refuses to serve."
+explanation_key = "error.auditstore.protection_incomplete"
+params = []
+remedy = "Run the migration (spot migrate), which installs the guard, then start the site again."
+since = "0.1.0"
+
+[[entry]]
+code = "auditstore.event_conflict"
+class = "none"
+summary = "The audit appender state already holds a different lane and sequence for an event id, so the event was chained twice or its index entry was edited; the stored entry was kept."
+explanation_key = "error.auditstore.event_conflict"
+params = []
+remedy = "Do not retry; report it to the platform team, because an audit event may be chained twice or the event index was altered outside the appender."
+since = "0.1.0"
+
+[[entry]]
+code = "auditstore.appender_tables_missing"
+class = "none"
+summary = "A table of the audit appender state (bookmarks, event index, document index or site checkpoint) is missing or has other columns, so the site refuses to serve."
+explanation_key = "error.auditstore.appender_tables_missing"
+params = []
+remedy = "Run the migration (spot migrate) so the audit appender tables exist, then start the site again."
+since = "0.1.0"

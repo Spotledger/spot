@@ -1,0 +1,38 @@
+{
+  "name": "desktop",
+  "altMenus": true,
+  "bindings": [
+    {
+      "chord": "Ctrl+K",
+      "commandId": "shell.launcher"
+    },
+    {
+      "chord": "Ctrl+S",
+      "commandId": "document.save"
+    },
+    {
+      "chord": "Ctrl+B",
+      "commandId": "view.sidebar"
+    },
+    {
+      "chord": "Ctrl+Tab",
+      "commandId": "tab.next"
+    },
+    {
+      "chord": "Ctrl+Shift+Tab",
+      "commandId": "tab.previous"
+    },
+    {
+      "chord": "Ctrl+W",
+      "commandId": "tab.close"
+    },
+    {
+      "chord": "Ctrl+Shift+L",
+      "commandId": "tab.overflow"
+    },
+    {
+      "chord": "F1",
+      "commandId": "help.keymap"
+    }
+  ]
+}

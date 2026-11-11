@@ -1,0 +1,109 @@
+# function codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "function.not_found"
+class = "MethodNotFound"
+summary = "No function with this key exists, or it is hidden from an anonymous caller."
+explanation_key = "error.function.not_found"
+params = []
+remedy = "Check the function key, or sign in to call it."
+since = "0.1.0"
+
+[[entry]]
+code = "function.verb_not_allowed"
+class = "MethodNotFound"
+summary = "The function exists but does not answer this HTTP verb; the Allow set lists what it answers."
+explanation_key = "error.function.verb_not_allowed"
+params = []
+remedy = "Use one of the verbs in the Allow set."
+since = "0.1.0"
+
+[[entry]]
+code = "function.auth_required"
+class = "PermissionDenied"
+summary = "The function answers this verb only to signed-in callers."
+explanation_key = "error.function.auth_required"
+params = []
+remedy = "Sign in and retry with credentials."
+since = "0.1.0"
+
+[[entry]]
+code = "function.rate_limited"
+class = "Unavailable"
+summary = "The caller has spent this function's rate limit."
+explanation_key = "error.function.rate_limited"
+params = []
+remedy = "Wait the retry_after time before calling again."
+since = "0.1.0"
+
+[[entry]]
+code = "function.bad_arguments"
+class = "Validation"
+summary = "The arguments do not match the function's argument schema."
+explanation_key = "error.function.bad_arguments"
+params = []
+remedy = "Send arguments matching the function's declared schema."
+since = "0.1.0"
+
+[[entry]]
+code = "function.duplicate"
+class = "none"
+summary = "Two installed apps declare the same function key."
+explanation_key = "error.function.duplicate"
+params = []
+remedy = "Uninstall or rename one of the declaring apps; this fails at install time."
+since = "0.1.0"
+
+[[entry]]
+code = "function.override_unknown"
+class = "none"
+summary = "An override targets a function nobody declares, names an invalid app, or carries no reason."
+explanation_key = "error.function.override_unknown"
+params = []
+remedy = "Fix the override row to target a declared function with a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "function.override_duplicate"
+class = "none"
+summary = "Two apps override the same function; overrides do not stack."
+explanation_key = "error.function.override_duplicate"
+params = []
+remedy = "Keep one override and have the other app register a better handler instead."
+since = "0.1.0"
+
+[[entry]]
+code = "function.override_chain"
+class = "none"
+summary = "An app tries to override its own function through the override table."
+explanation_key = "error.function.override_chain"
+params = []
+remedy = "Register the better handler directly instead of chaining an override."
+since = "0.1.0"
+
+[[entry]]
+code = "function.verb_empty"
+class = "none"
+summary = "A function declares http access but its verb set is empty."
+explanation_key = "error.function.verb_empty"
+params = []
+remedy = "List at least one HTTP verb in the manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "function.guest_verbs"
+class = "none"
+summary = "A guest-callable function does not declare its explicit verb list."
+explanation_key = "error.function.guest_verbs"
+params = []
+remedy = "List the exact verbs guests may call in the manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "function.foreign_app"
+class = "none"
+summary = "An app declares a function key outside its own app prefix."
+explanation_key = "error.function.foreign_app"
+params = []
+remedy = "Declare the function under the app's own prefix."
+since = "0.1.0"

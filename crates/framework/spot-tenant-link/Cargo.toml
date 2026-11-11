@@ -1,0 +1,37 @@
+[package]
+name = "spot-tenant-link"
+description = "The tenant link core (WP-CTL-09.T1, ADR-058 rules 3 and 6-14, ADR-080 section 5): the pairwise link record, the signed propose/accept/key-exchange/activate handshake with both-sides consent, grants per topic with direction, schema range, expiry and peer-region requirement, immediate revocation, sender-side field lists, residency through a RegionOracle, audit on both sides and a LinkStore trait with an in-memory implementation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `TenantId`: a link party that is a platform tenant is the same checked id CTL-01 uses.
+spot-tenancy = { path = "../spot-tenancy" }
+# `Region`, `Clause`, `Refusal` and `Classification`: residency and field metadata vocabulary.
+spot-data-policy = { path = "../spot-data-policy" }
+# `StepUpPolicy`, `AuthMethod` and `OperationName`: a consent carries a step-up proof checked
+# against the tenant's IAM policy, not a second notion of step-up invented here.
+spot-iam-access = { path = "../spot-iam-access" }
+# `AuditRecord` and its payload: this crate writes exactly the records the audit chain stores.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Ed25519 handshake signatures, the same primitive and version as spot-agent-enroll and
+# spot-bundle-signing. Keys are supplied by the caller; this crate reads no randomness.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# SHA-256 for the transcript chain, message digests and grants digests.
+sha2 = "0.10"
+# `LinkId` is a UUIDv7 like `TenantId`, built from caller-supplied time and entropy.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7", "serde"] }
+# Stable serde on the persisted link and the wire messages (a transport carries them as JSON).
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `tenant_link.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Round-trip the wire and persisted types through JSON, as the transport and store will.
+serde_json = "1"
+
+[lints]
+workspace = true

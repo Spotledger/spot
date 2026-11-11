@@ -1,0 +1,38 @@
+# Stripe secret and restricted keys: `sk_live_`, `sk_test_` and `rk_live_` plus a
+# token body. Publishable keys (`pk_`) are not secrets and stay.
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'sk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+expected = '[redacted:stripe_key]'
+class = 'stripe_key'
+
+[[case]]
+input = '''sk_test_51NxAbCdEfGhIjKlMnOpQrStUv
+rk_live_51NxAbCdEfGhIjKlMnOpQrStUv'''
+expected = '''[redacted:stripe_key]
+[redacted:stripe_key]'''
+class = 'stripe_key'
+
+[[case]]
+input = 'stripe charge declined with sk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+expected = 'stripe charge declined with [redacted:stripe_key]'
+class = 'stripe_key'
+
+# A publishable key is public by design and stays readable.
+[[case]]
+input = 'pk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+expected = 'pk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+class = 'stripe_key'
+
+# Too short to be a key.
+[[case]]
+input = 'sk_live_short'
+expected = 'sk_live_short'
+class = 'stripe_key'
+
+# No word boundary on the left.
+[[case]]
+input = 'xsk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+expected = 'xsk_live_51NxAbCdEfGhIjKlMnOpQrStUv'
+class = 'stripe_key'

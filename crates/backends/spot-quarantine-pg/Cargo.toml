@@ -1,0 +1,39 @@
+[package]
+name = "spot-quarantine-pg"
+description = "PostgreSQL QuarantineStore (WP-EDG-06.T4, ADR-062): held items with a write-once received-record payload, the open item by sender, record name and version, filtered listing in insertion order, and a queue that survives a restart"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The QuarantineStore trait, the item types and the error this store reports.
+spot-quarantine = { path = "../../framework/spot-quarantine" }
+# `ReceivedRecord`: the payload image this store keeps as JSON and rebuilds on read.
+spot-replica-apply = { path = "../../framework/spot-replica-apply" }
+# The sender and the record name an item is keyed by.
+spot-sync-protocol = { path = "../../framework/spot-sync-protocol" }
+# The storage `Name` a record's topic is validated as when it is read back.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its two tables.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# The test guard `AllowAll`, which exists only with the `testing` feature.
+spot-quarantine = { path = "../../framework/spot-quarantine", features = ["testing"] }
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# Per-test scratch databases and a raw client for the immutability tests.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The in-memory storage backend the intake scenarios apply against.
+spot-storage-fake = { path = "../spot-storage-fake" }
+# The acting principal of the admin operations (`Principal::system()`).
+spot-permissions = { path = "../../framework/spot-permissions" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

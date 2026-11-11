@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# Nothing is started, restarted or enabled here, on remove or on purge: the
+# package owns the unit file, not the administrator's decision to run it. A
+# purge deletes the package's own files through dpkg and nothing else; state
+# under /var/lib/spot belongs to the site and is left in place.
+#
+# #DEBHELPER# marks where debhelper's own snippets are inserted when this
+# directory is built through debian/rules; tools/packaging/build.py copies the
+# file as it is, so the token stays a comment and no snippet runs.
+#DEBHELPER#
+
+exit 0

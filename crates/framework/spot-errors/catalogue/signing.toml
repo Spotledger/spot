@@ -1,0 +1,190 @@
+# signing codes: app bundle signing, publisher certificates and revocation (WP-STR-02.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "signing.key_malformed"
+class = "none"
+summary = "A public key is not a valid Ed25519 key."
+explanation_key = "error.signing.key_malformed"
+params = []
+remedy = "Re-issue the publisher certificate with a valid public key."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.signature_malformed"
+class = "none"
+summary = "A signature or key id is not in its expected form."
+explanation_key = "error.signing.signature_malformed"
+params = []
+remedy = "Re-download the signature file, or re-sign the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.document_malformed"
+class = "none"
+summary = "A signing document (certificate, signature file or revocation list) does not parse."
+explanation_key = "error.signing.document_malformed"
+params = []
+remedy = "Check the file is the expected format and version, with no unknown fields."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.key_mismatch"
+class = "none"
+summary = "The signing key is not the key in the publisher certificate."
+explanation_key = "error.signing.key_mismatch"
+params = []
+remedy = "Sign with the key pair the certificate names."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.unknown_root"
+class = "none"
+summary = "The certificate or revocation list is issued by a root this store does not trust."
+explanation_key = "error.signing.unknown_root"
+params = []
+remedy = "Ask the store operator to add the issuing root to the trust anchor, or re-issue under a trusted root."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.root_outside_window"
+class = "none"
+summary = "The issuing root is outside its validity window at this time."
+explanation_key = "error.signing.root_outside_window"
+params = []
+remedy = "Use a root that is valid now, or ask the store operator to renew the root."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.certificate_signature_invalid"
+class = "none"
+summary = "The publisher certificate's signature does not verify under the root it names."
+explanation_key = "error.signing.certificate_signature_invalid"
+params = []
+remedy = "Re-issue the certificate under the root it names; it may have been altered."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.certificate_not_yet_valid"
+class = "none"
+summary = "The publisher certificate is not yet valid."
+explanation_key = "error.signing.certificate_not_yet_valid"
+params = []
+remedy = "Wait for its validity to start, or re-issue with a window that covers now."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.certificate_expired"
+class = "none"
+summary = "The publisher certificate has expired."
+explanation_key = "error.signing.certificate_expired"
+params = []
+remedy = "Ask the publisher to renew the certificate and re-sign the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.signed_outside_certificate_window"
+class = "none"
+summary = "The signature's signing time is outside the publisher certificate's validity window."
+explanation_key = "error.signing.signed_outside_certificate_window"
+params = []
+remedy = "Re-sign the bundle with a current certificate, at a time inside the certificate's validity window."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.publisher_mismatch"
+class = "none"
+summary = "The signature names a different publisher from its certificate."
+explanation_key = "error.signing.publisher_mismatch"
+params = []
+remedy = "Re-sign the bundle with the publisher's own certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.publisher_revoked"
+class = "none"
+summary = "The publisher was revoked before this bundle was signed."
+explanation_key = "error.signing.publisher_revoked"
+params = []
+remedy = "The publisher must be re-admitted, or the bundle must be withdrawn."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.key_revoked"
+class = "none"
+summary = "The signing key was revoked before this bundle was signed."
+explanation_key = "error.signing.key_revoked"
+params = []
+remedy = "Sign with a current key; the publisher issues a new key and certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.key_compromised"
+class = "none"
+summary = "The signing key is revoked as compromised; every signature it made is refused."
+explanation_key = "error.signing.key_compromised"
+params = []
+remedy = "The publisher must issue a new key and re-sign every bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.signature_key_mismatch"
+class = "none"
+summary = "The signature names a different key from its certificate's."
+explanation_key = "error.signing.signature_key_mismatch"
+params = []
+remedy = "Re-sign the bundle with the key the certificate names."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.bundle_revoked"
+class = "none"
+summary = "This exact bundle is on the revocation list."
+explanation_key = "error.signing.bundle_revoked"
+params = []
+remedy = "Do not install this bundle; install a later signed version."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.signature_invalid"
+class = "none"
+summary = "The signature does not verify over this bundle, app id and version."
+explanation_key = "error.signing.signature_invalid"
+params = []
+remedy = "The bundle or its signature was altered; re-download the bundle and its signature."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.app_mismatch"
+class = "none"
+summary = "The signature was made for a different app than the manifest names."
+explanation_key = "error.signing.app_mismatch"
+params = []
+remedy = "Use the signature file that belongs to this app."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.version_mismatch"
+class = "none"
+summary = "The signature was made for a different version than the manifest names."
+explanation_key = "error.signing.version_mismatch"
+params = []
+remedy = "Use the signature file that belongs to this version."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.revocation_signature_invalid"
+class = "none"
+summary = "The revocation list's signature does not verify under its issuing root."
+explanation_key = "error.signing.revocation_signature_invalid"
+params = []
+remedy = "Re-fetch the revocation list from the store; it may have been altered."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.stale_revocation_list"
+class = "none"
+summary = "The revocation list is older than the one already held."
+explanation_key = "error.signing.stale_revocation_list"
+params = []
+remedy = "Fetch the current revocation list from the store."
+since = "0.1.0"

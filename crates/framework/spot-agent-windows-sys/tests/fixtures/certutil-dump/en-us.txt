@@ -1,0 +1,7 @@
+================ Certificate 0 ================
+Serial Number: 1a2b3c4d5e6f
+Issuer: CN=spotledger-test-ca
+ NotBefore: 1/15/2024 12:00:00 AM
+ NotAfter: 1/15/2026 11:59:59 PM
+Subject: CN=spotledger-test
+Cert Hash(sha1): aabbccddeeff00112233445566778899aabbccdd

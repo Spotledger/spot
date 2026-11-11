@@ -1,0 +1,37 @@
+# Help for the function error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "function.auth_required"
+what_happened = "The function answers this verb only to signed-in callers."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Sign in and retry with credentials.", "If it keeps happening, tell your administrator and quote the code function.auth_required."]
+audience = "user"
+
+[[help]]
+code = "function.bad_arguments"
+what_happened = "The arguments do not match the function's argument schema."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send arguments matching the function's declared schema.", "If it keeps happening, tell your administrator and quote the code function.bad_arguments."]
+audience = "user"
+
+[[help]]
+code = "function.not_found"
+what_happened = "No function with this key exists, or it is hidden from an anonymous caller."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the function key, or sign in to call it.", "If it keeps happening, tell your administrator and quote the code function.not_found."]
+audience = "user"
+
+[[help]]
+code = "function.rate_limited"
+what_happened = "The caller has spent this function's rate limit."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait the retry_after time before calling again.", "If it keeps happening, tell your administrator and quote the code function.rate_limited."]
+audience = "admin"
+
+[[help]]
+code = "function.verb_not_allowed"
+what_happened = "The function exists but does not answer this HTTP verb; the Allow set lists what it answers."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Use one of the verbs in the Allow set.", "If it keeps happening, tell your administrator and quote the code function.verb_not_allowed."]
+audience = "user"

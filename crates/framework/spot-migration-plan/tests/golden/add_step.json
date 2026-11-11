@@ -1,0 +1,71 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "behaviour/party/step_added/validate_save/erp_selling:check_credit_limit",
+      "area": "behaviour",
+      "kind": "step_added",
+      "rule": "behaviour/step_added",
+      "target": "party validate_save erp_selling:check_credit_limit",
+      "description": "Step `erp_selling:check_credit_limit` is added at `validate_save` of `party`.",
+      "before": "absent",
+      "after": "registered",
+      "risk": "additive",
+      "blocking": "online"
+    }
+  ],
+  "risk": "additive",
+  "estimate": {
+    "low": 2,
+    "expected": 5,
+    "high": 10,
+    "per_change": [
+      {
+        "change_id": "behaviour/party/step_added/validate_save/erp_selling:check_credit_limit",
+        "low": 2,
+        "expected": 5,
+        "high": 10,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "online",
+    "unknown": false
+  },
+  "plan_digest": "2eb7080ce977eed068cfae5e251ac22bc29683b6d27cb1a4b3bfeb67b9091b20",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [
+      {
+        "doctype": "party",
+        "point": "validate_save",
+        "step": "erp_selling:check_credit_limit",
+        "priority": 500,
+        "overridden": null
+      }
+    ],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

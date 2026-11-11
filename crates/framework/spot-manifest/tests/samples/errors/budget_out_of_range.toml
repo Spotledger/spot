@@ -1,0 +1,9 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[events]]
+doctype = "Sales Invoice"
+event = "load"
+step = "erp_selling:run"
+budget_ms = 90000

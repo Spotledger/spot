@@ -1,0 +1,46 @@
+[package]
+name = "spot-import"
+description = "The data import engine (WP-DOC-09): streaming CSV and XLSX readers, column mapping against effective metadata, typed conversion without floating point, row-level error report, and the writer that applies the validated stream through a DocumentService in bounded memory (WP-DOC-09.T2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, `AppError`, `FieldPath` and the prelude types (`Name`, `Value`, `Decimal`, ...).
+spot-app-api = { path = "../../../contracts/app-api" }
+# Effective metadata: field types, labels and select options drive mapping and conversion.
+spot-meta = { path = "../spot-meta" }
+# `defaults::apply`, `coerce::normalise` and `validate::check` run on every built document.
+spot-document = { path = "../spot-document" }
+# RFC 4180 CSV, read record by record from a `Read` (never the whole file).
+csv = "1"
+# XLSX: streams worksheet XML cell by cell; shared strings are the only in-memory table.
+calamine = "0.38"
+# ZIP reading for the XLSX bomb guard (counts the bytes actually inflated). Already in
+# Cargo.lock as calamine's own dependency, the single `zip 9.5.1` entry (no second copy).
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# Exact decimals (ADR-12): `from_str_exact` keeps every digit, never a float.
+rust_decimal = "1"
+# Date and datetime values and the explicit format list (`parse_strftime_borrowed`).
+time = { version = "0.3", default-features = false, features = ["parsing", "formatting"] }
+# Idempotency keys: SHA-256 over site, actor, DocType, batch label and row (already in the
+# workspace tree: spot-airgap, spot-agent-enroll, spot-pg-migrate).
+sha2 = "0.10"
+# Typed errors with stable `import.*` codes.
+thiserror = "2"
+
+[features]
+# Test doubles (e.g. a permission probe) for use by this crate's tests and by callers' tests.
+testing = []
+
+[dev-dependencies]
+# Property tests: CSV round-trips of arbitrary cell text.
+proptest = "1"
+# The apply tests implement the app API's `DocumentService` (to model the engine's command-id
+# dedupe and a failing write), whose `call_method` signature names `serde_json::Value`.
+serde_json = "1"
+
+[lints]
+workspace = true

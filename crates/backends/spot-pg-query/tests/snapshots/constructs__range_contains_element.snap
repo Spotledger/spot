@@ -1,0 +1,9 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(& ok(& stay_with(RangeTest::Contains(a.clone())), & range_cat()))"
+---
+SELECT "x"."unit" AS "unit" FROM "stay" AS "x" WHERE ("x"."during" @> $1) ORDER BY "x"."id" ASC OFFSET $2
+$1 = Date(2026-11-02)
+$2 = Int8(0)
+columns = ["unit"]
+decode = [Text]

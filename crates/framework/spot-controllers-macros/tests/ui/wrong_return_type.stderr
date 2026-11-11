@@ -1,0 +1,5 @@
+error: a whitelisted method returns `AppResult<Out>` (or `Result<Out, AppError>`)
+  --> tests/ui/wrong_return_type.rs:21:57
+   |
+21 |     async fn go(&self, _ctx: &mut dyn MethodContext) -> String { String::new() }
+   |                                                         ^^^^^^

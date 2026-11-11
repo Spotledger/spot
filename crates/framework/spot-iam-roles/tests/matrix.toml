@@ -1,0 +1,188 @@
+# The role and assignment matrix (tests/matrix.rs reads this file).
+#
+# kind = "rights": the flattened rights of `role` on `doctype` (unconditional grants).
+# kind = "active": the assignments in force at `at` (seconds from the fixed base instant),
+#                  per user, by id. `valid_from` / `valid_to` are seconds too.
+# kind = "can":    the permission engine over the snapshot input at instant 0: `scope` lists
+#                  customers (c1..c3) the assignment is limited to; each check asks one action
+#                  on an invoice of one customer.
+
+[[scenario]]
+name = "viewer reads invoices"
+kind = "rights"
+role = "Accounting Viewer"
+doctype = "sales_invoice"
+rights = ["read"]
+
+[[scenario]]
+name = "viewer reads customers"
+kind = "rights"
+role = "Accounting Viewer"
+doctype = "customer"
+rights = ["read"]
+
+[[scenario]]
+name = "manager inherits read and adds edit and post"
+kind = "rights"
+role = "Accounting Manager"
+doctype = "sales_invoice"
+rights = ["read","write","create","submit"]
+
+[[scenario]]
+name = "manager inherits customer read"
+kind = "rights"
+role = "Accounting Manager"
+doctype = "customer"
+rights = ["read"]
+
+[[scenario]]
+name = "senior adds cancel on top of the manager"
+kind = "rights"
+role = "Senior Accountant"
+doctype = "sales_invoice"
+rights = ["read","write","create","submit","cancel"]
+
+[[scenario]]
+name = "senior still reads customers three levels up"
+kind = "rights"
+role = "Senior Accountant"
+doctype = "customer"
+rights = ["read"]
+
+[[scenario]]
+name = "clerk edits but cannot post"
+kind = "rights"
+role = "Clerk"
+doctype = "sales_invoice"
+rights = ["read","write","create"]
+
+[[scenario]]
+name = "clerk has nothing on customers"
+kind = "rights"
+role = "Clerk"
+doctype = "customer"
+rights = []
+
+[[scenario]]
+name = "a reference role resolves like any other"
+kind = "rights"
+role = "Core Viewer"
+doctype = "sales_invoice"
+rights = ["read"]
+
+[[scenario]]
+name = "the owner-only role has no unconditional grant"
+kind = "rights"
+role = "Own Invoices"
+doctype = "sales_invoice"
+rights = []
+
+[[scenario]]
+name = "an open assignment is active"
+kind = "active"
+at = 0
+assignments = [{ id = "a1", user = "u1", role = "Clerk" }]
+active = { u1 = ["a1"] }
+
+[[scenario]]
+name = "an assignment is not active before it starts"
+kind = "active"
+at = 99
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 100, valid_to = 200 }]
+active = {}
+
+[[scenario]]
+name = "valid_from is inclusive"
+kind = "active"
+at = 100
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 100, valid_to = 200 }]
+active = { u1 = ["a1"] }
+
+[[scenario]]
+name = "valid_to is exclusive"
+kind = "active"
+at = 200
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 100, valid_to = 200 }]
+active = {}
+
+[[scenario]]
+name = "the last instant before valid_to is active"
+kind = "active"
+at = 199
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 100, valid_to = 200 }]
+active = { u1 = ["a1"] }
+
+[[scenario]]
+name = "an assignment without an end never expires"
+kind = "active"
+at = 100000
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 100 }]
+active = { u1 = ["a1"] }
+
+[[scenario]]
+name = "two users keep their own lists"
+kind = "active"
+at = 0
+assignments = [{ id = "a1", user = "u1", role = "Clerk" }, { id = "a2", user = "u2", role = "Accounting Viewer" }, { id = "a3", user = "u1", role = "Accounting Viewer" }]
+active = { u1 = ["a1","a3"], u2 = ["a2"] }
+
+[[scenario]]
+name = "only the unexpired of one user's assignments remain"
+kind = "active"
+at = 150
+assignments = [{ id = "a1", user = "u1", role = "Clerk", valid_from = 0, valid_to = 100 }, { id = "a2", user = "u1", role = "Accounting Viewer", valid_from = 0, valid_to = 300 }]
+active = { u1 = ["a2"] }
+
+[[scenario]]
+name = "manager everywhere may post"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Manager", scope = [] }]
+can = [{ action = "post", customer = "c1", state = "draft", allowed = true }]
+
+[[scenario]]
+name = "manager for c1 only: c2 is outside"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Manager", scope = ["c1"] }]
+can = [{ action = "update", customer = "c1", state = "draft", allowed = true }, { action = "update", customer = "c2", state = "draft", allowed = false }]
+
+[[scenario]]
+name = "viewer for c2 reads c2 and cannot write it"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Viewer", scope = ["c2"] }]
+can = [{ action = "read", customer = "c2", state = "draft", allowed = true }, { action = "update", customer = "c2", state = "draft", allowed = false }]
+
+[[scenario]]
+name = "a clerk cannot post"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Clerk", scope = [] }]
+can = [{ action = "update", customer = "c1", state = "draft", allowed = true }, { action = "post", customer = "c1", state = "draft", allowed = false }]
+
+[[scenario]]
+name = "a senior accountant cancels a posted invoice"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Senior Accountant", scope = [] }]
+can = [{ action = "cancel", customer = "c1", state = "posted", allowed = true }]
+
+[[scenario]]
+name = "a manager cannot cancel"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Manager", scope = [] }]
+can = [{ action = "cancel", customer = "c1", state = "posted", allowed = false }]
+
+[[scenario]]
+name = "two scopes in one role: both customers"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Viewer", scope = ["c1","c2"] }]
+can = [{ action = "read", customer = "c1", state = "draft", allowed = true }, { action = "read", customer = "c2", state = "draft", allowed = true }, { action = "read", customer = "c3", state = "draft", allowed = false }]
+
+[[scenario]]
+name = "the owner-only role gives nothing on someone else's invoice"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Own Invoices", scope = [] }]
+can = [{ action = "read", customer = "c1", state = "draft", allowed = false }]
+
+[[scenario]]
+name = "A manager and B viewer on one user"
+kind = "can"
+assignments = [{ id = "a", user = "u", role = "Accounting Manager", scope = ["c1"] }, { id = "b", user = "u", role = "Accounting Viewer", scope = ["c2"] }]
+can = [{ action = "post", customer = "c1", state = "draft", allowed = true }, { action = "post", customer = "c2", state = "draft", allowed = false }, { action = "read", customer = "c2", state = "draft", allowed = true }, { action = "read", customer = "c3", state = "draft", allowed = false }]

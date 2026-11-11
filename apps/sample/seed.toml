@@ -1,0 +1,213 @@
+# The sample app's demo seed (WP-DX-05.T1).
+#
+# 2 projects, 6 tasks, 8 labels, 5 time entries — as drafts. Ids are placeholders
+# the installer (WP-PRD-01.T2 `spot install-app --seed`) replaces with real record
+# ids at import; names resolve through the `ref` values, which name a row's `code`
+# or `name` within the same file. The Time Entries stay drafts, so the controller
+# roll-up has not run and `task.logged_hours` is still null everywhere a save has
+# not touched it.
+
+[[labels]]
+id = "lbl_core"
+name = "Core"
+colour = "#3388cc"
+
+[[labels]]
+id = "lbl_ops"
+name = "Ops"
+colour = "#22aa66"
+
+[[labels]]
+id = "lbl_ui"
+name = "UI"
+colour = "#cc7722"
+
+[[labels]]
+id = "lbl_docs"
+name = "Docs"
+colour = "#8855cc"
+
+[[labels]]
+id = "lbl_rust"
+name = "Rust"
+colour = "#cc4455"
+
+[[labels]]
+id = "lbl_urgent"
+name = "Urgent"
+colour = "#dd3322"
+
+[[labels]]
+id = "lbl_followup"
+name = "Follow-up"
+colour = "#2277dd"
+
+[[labels]]
+id = "lbl_internal"
+name = "Internal"
+colour = "#667788"
+
+[[projects]]
+id = "prj_platform"
+code = "PRJ-2026.-.0001"
+title = "Platform acceptance run"
+status = "Active"
+owner = "user_ama"
+start_date = "2026-10-01"
+end_date = "2026-12-18"
+budget = "25000.00"
+currency = "USD"
+description = "Prove the platform end to end: definitions, documents, permissions and the sample controller."
+labels = ["lbl_core", "lbl_docs"]
+
+[[projects]]
+id = "prj_rollout"
+code = "PRJ-2026.-.0002"
+title = "Pilot rollout"
+status = "Planning"
+owner = "user_bilal"
+start_date = "2026-11-02"
+end_date = "2027-01-20"
+budget = "15000.00"
+currency = "PKR"
+description = "First customer pilot: onboarding materials, training and follow-up."
+labels = ["lbl_ops", "lbl_followup"]
+
+[[tasks]]
+id = "tsk_1"
+subject = "Model the five DocTypes"
+project = "prj_platform"
+assignee = "user_ama"
+priority = "High"
+due_date = "2026-10-12"
+estimated_hours = "12.00"
+status = "Done"
+checklist = [
+  { text = "Draft the definitions", done = true },
+  { text = "Wire the lookups", done = true },
+]
+details = "Open questions for the managers only: the label multi-pick shares one child across both pickers."
+labels = ["lbl_core", "lbl_rust"]
+
+[[tasks]]
+id = "tsk_2"
+subject = "Hours roll-up through the controller"
+project = "prj_platform"
+assignee = "user_ama"
+priority = "Urgent"
+due_date = "2026-10-11"
+estimated_hours = "8.00"
+status = "Blocked"
+blocked_reason = "Waiting for the stub host's nested-write review (WP-DOC-10)."
+checklist = [
+  { text = "Submit adds hours", done = true },
+  { text = "Cancel subtracts hours", done = false },
+]
+details = "Confidential: the interim totals differ from the ledger the ERP will keep; the sample shows the shape, not the accounting."
+related_type = "project"
+related_to = "prj_rollout"
+labels = ["lbl_rust", "lbl_urgent"]
+
+[[tasks]]
+id = "tsk_3"
+subject = "Permission decision table"
+project = "prj_platform"
+assignee = "user_chandra"
+priority = "Medium"
+due_date = "2026-10-15"
+estimated_hours = "6.00"
+status = "In Progress"
+details = "Confidential scope review: the manager-scoped assignment covers only its own project's rows."
+labels = ["lbl_core"]
+
+[[tasks]]
+id = "tsk_4"
+subject = "Seed data for demos"
+project = "prj_platform"
+assignee = "user_bilal"
+priority = "Low"
+due_date = "2026-10-20"
+estimated_hours = "4.00"
+status = "Open"
+checklist = [
+  { text = "Two projects", done = true },
+  { text = "Six tasks", done = true },
+  { text = "Eight labels", done = true },
+  { text = "Five time entries", done = true },
+]
+labels = ["lbl_docs"]
+
+[[tasks]]
+id = "tsk_5"
+subject = "Pilot onboarding checklist"
+project = "prj_rollout"
+assignee = "user_bilal"
+priority = "Medium"
+due_date = "2026-11-05"
+estimated_hours = "10.00"
+status = "Open"
+checklist = [
+  { text = "Welcome pack", done = false },
+  { text = "Training session", done = false },
+]
+labels = ["lbl_ops"]
+
+[[tasks]]
+id = "tsk_6"
+subject = "Follow-up call notes"
+project = "prj_rollout"
+assignee = "user_chandra"
+priority = "Low"
+due_date = "2026-11-12"
+estimated_hours = "2.00"
+status = "Open"
+details = "Confidential pricing conversations from the pilot call live here, visible to managers only."
+labels = ["lbl_followup", "lbl_internal"]
+
+[[time_entries]]
+id = "te_1"
+entry_no = "TE-2026.-.00001"
+task = "tsk_1"
+person = "user_ama"
+work_date = "2026-10-08"
+hours = "5.50"
+billable = true
+note = "Definition pass and first lint run."
+
+[[time_entries]]
+id = "te_2"
+entry_no = "TE-2026.-.00002"
+task = "tsk_1"
+person = "user_chandra"
+work_date = "2026-10-09"
+hours = "3.25"
+billable = false
+note = "Review of the field formats."
+
+[[time_entries]]
+id = "te_3"
+entry_no = "TE-2026.-.00003"
+task = "tsk_2"
+person = "user_ama"
+work_date = "2026-10-09"
+hours = "2.00"
+billable = true
+
+[[time_entries]]
+id = "te_4"
+entry_no = "TE-2026.-.00004"
+task = "tsk_3"
+person = "user_chandra"
+work_date = "2026-10-10"
+hours = "1.75"
+billable = false
+
+[[time_entries]]
+id = "te_5"
+entry_no = "TE-2026.-.00005"
+task = "tsk_5"
+person = "user_bilal"
+work_date = "2026-10-10"
+hours = "4.00"
+billable = true
+note = "Draft outline of the welcome pack."

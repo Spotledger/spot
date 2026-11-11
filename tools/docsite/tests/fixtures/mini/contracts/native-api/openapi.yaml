@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: Mini Contract
+  version: 0.1.0
+  description: |
+    A tiny contract for the docsite tests. Health first, then `ping`.
+servers:
+  - url: /api/v1
+    description: Same-origin.
+x-spot-error-codes:
+  mini.bad_request: [400, false, "The request is malformed."]
+  mini.retry: [429, true, "Slow down and try again."]
+components:
+  headers:
+    ETag:
+      description: The document version.
+      schema: {$ref: "#/components/schemas/ETag"}
+  responses:
+    Error:
+      description: Any error; the codes follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+          examples:
+            bad:
+              value:
+                error:
+                  code: mini.bad_request
+                  message: "Nope."
+                  request_id: req-1
+            slow:
+              value:
+                error:
+                  code: mini.retry
+                  message: "Too fast."
+                  request_id: req-2
+  schemas:
+    ETag:
+      type: string
+      description: A quoted etag, e.g. `"W/3"`.
+      examples: ["W/3"]
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string, description: Dotted lower-case code.}
+        message: {type: string}
+        request_id: {type: string}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: {$ref: "#/components/schemas/Error"}
+    PingIn:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Who is pinging.
+          pattern: "^[a-z]{1,16}$"
+    PingOut:
+      type: object
+      required: [pong]
+      properties:
+        pong: {const: true}
+    RealtimeClientMessage:
+      oneOf:
+        - type: object
+          required: [type]
+          properties:
+            type: {const: ping}
+            seq: {type: integer}
+        - type: object
+          required: [type]
+          properties:
+            type: {const: pong}
+            seq: {type: integer}
+      description: What the client sends.
+    RealtimeServerMessage:
+      oneOf:
+        - type: object
+          required: [type]
+          properties:
+            type: {const: ready}
+            rooms: {type: array, items: {type: string}}
+        - type: object
+          required: [type]
+          properties:
+            type: {const: joined}
+            room: {type: string}
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      operationId: health_get
+      summary: Liveness probe.
+      responses:
+        "200": {description: "Healthy."}
+  /api/v1/ping:
+    post:
+      tags: [resource]
+      operationId: ping_post
+      summary: Ping the runtime.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PingIn"}
+            example: {name: tester}
+      responses:
+        "200":
+          description: Pong.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PingOut"}
+              examples:
+                ok: {value: {pong: true}}
+        default: {$ref: "#/components/responses/Error"}

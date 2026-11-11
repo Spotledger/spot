@@ -1,0 +1,6 @@
+[package]
+name = "app-one"
+version = "0.1.0"
+edition = "2021"
+[dev-dependencies]
+framework-core = { path = "../../framework/core" }

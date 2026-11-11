@@ -1,0 +1,119 @@
+# iamassign codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The assignment reconciler (spot-iam-assign) raises these; the API layer maps them.
+
+[[entry]]
+code = "iamassign.bad_expression"
+class = "none"
+summary = "A rule's condition or scope value does not parse: {detail}."
+explanation_key = "error.iamassign.bad_expression"
+params = ["detail"]
+remedy = "Fix the expression; conditions and scope values use the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.condition_not_boolean"
+class = "none"
+summary = "The condition of the rule can never be true or false."
+explanation_key = "error.iamassign.condition_not_boolean"
+params = []
+remedy = "Write a comparison or a logical expression, for example facts.department == 'Sales'."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.scope_not_link"
+class = "none"
+summary = "A scope value of the rule can never be a record id or a list of them."
+explanation_key = "error.iamassign.scope_not_link"
+params = []
+remedy = "Use a text value or a list of texts, for example facts.company."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.duplicate_rule"
+class = "none"
+summary = "Two assignment rules, or two group mappings, share an id or a (group, role) pair."
+explanation_key = "error.iamassign.duplicate_rule"
+params = []
+remedy = "Give each rule a unique id and map each group to a role once."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.invalid_rule"
+class = "none"
+summary = "A rule or group mapping has an empty id, name, group or link, or a duration that is not positive."
+explanation_key = "error.iamassign.invalid_rule"
+params = []
+remedy = "Fill in the missing text and use a positive time box."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.unknown_role"
+class = "none"
+summary = "A rule or group mapping gives a role that does not exist."
+explanation_key = "error.iamassign.unknown_role"
+params = []
+remedy = "Name an existing role, or create the role first."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.emergency_role"
+class = "none"
+summary = "A rule or group mapping would assign an emergency-only role."
+explanation_key = "error.iamassign.emergency_role"
+params = []
+remedy = "Emergency roles come only through emergency access; choose another role."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.eval_failed"
+class = "none"
+summary = "A rule could not be evaluated for a user, so nothing was changed for them."
+explanation_key = "error.iamassign.eval_failed"
+params = []
+remedy = "Fix the user's data or the rule; the user's current rule assignments stay as they are."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.idp_managed"
+class = "none"
+summary = "The role is managed by the identity provider and cannot be changed manually."
+explanation_key = "error.iamassign.idp_managed"
+params = []
+remedy = "Change the user's group membership in the identity provider instead."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.not_owner"
+class = "none"
+summary = "The assignment belongs to another source and this source cannot change it."
+explanation_key = "error.iamassign.not_owner"
+params = []
+remedy = "Change it through the source that gave it: administrator, rule, identity provider or emergency access."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.source_edit"
+class = "none"
+summary = "The source of an assignment cannot be edited."
+explanation_key = "error.iamassign.source_edit"
+params = []
+remedy = "End the assignment and create a new one under the right source."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.emergency_end"
+class = "none"
+summary = "An emergency assignment ends only through the emergency process or by expiry."
+explanation_key = "error.iamassign.emergency_end"
+params = []
+remedy = "End the emergency access grant instead of the assignment, or wait for it to expire."
+since = "0.1.0"
+
+[[entry]]
+code = "iamassign.wrong_source"
+class = "none"
+summary = "An assignment can only be added or changed under the actor's own source."
+explanation_key = "error.iamassign.wrong_source"
+params = []
+remedy = "Use the source that matches who is making the change."
+since = "0.1.0"

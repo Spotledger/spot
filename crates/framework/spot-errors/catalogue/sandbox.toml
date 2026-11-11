@@ -1,0 +1,100 @@
+# sandbox codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sandbox.invalid_plan"
+class = "none"
+summary = "The sandbox plan was refused before any work started."
+explanation_key = "error.sandbox.invalid_plan"
+params = []
+remedy = "Give the sandbox its own tenant name, a snapshot from the source tenant, and a policy whose tags are distinct identifiers."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.policy"
+class = "none"
+summary = "The masking policy could not be loaded or is not usable."
+explanation_key = "error.sandbox.policy"
+params = []
+remedy = "Fix the policy TOML, or raise scan_min_chars so short values are not indexed for the leak scan."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.state"
+class = "none"
+summary = "A sandbox step was asked for in a state that does not allow it."
+explanation_key = "error.sandbox.state"
+params = []
+remedy = "Run the steps in order: snapshot, restore, mask, scan, activate."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.snapshot"
+class = "none"
+summary = "The production snapshot could not be taken or does not belong to the source tenant."
+explanation_key = "error.sandbox.snapshot"
+params = []
+remedy = "Check the snapshot provider and its source tenant; a sandbox may only clone the tenant named in the plan."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.restore"
+class = "none"
+summary = "The snapshot could not be restored into the sandbox tenant."
+explanation_key = "error.sandbox.restore"
+params = []
+remedy = "Check the snapshot manifest and the target tenant; the tenant stays closed and the sandbox is not activated."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.tenant"
+class = "none"
+summary = "The tenant could not be provisioned, opened, or was already open."
+explanation_key = "error.sandbox.tenant"
+params = []
+remedy = "Check the control plane and its tenant registry; a sandbox tenant is opened only once, after the leak scan passes."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.store"
+class = "none"
+summary = "The sandbox store could not be read or written."
+explanation_key = "error.sandbox.store"
+params = []
+remedy = "Check the restored tenant database and retry masking; nothing is activated while the store fails."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.mask"
+class = "none"
+summary = "Masking could not complete, including a ledger amount that changed."
+explanation_key = "error.sandbox.mask"
+params = []
+remedy = "Fix the key or the store, and keep financial numeric fields out of masking: amounts must never change."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.scan_missing"
+class = "none"
+summary = "The leak scan was asked for before masking indexed any source value."
+explanation_key = "error.sandbox.scan_missing"
+params = []
+remedy = "Run masking first; the scan compares the sandbox against the values masking recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.leak"
+class = "none"
+summary = "The leak scan found unmasked original values, so the sandbox stays closed."
+explanation_key = "error.sandbox.leak"
+params = []
+remedy = "Read the scan report, fix the copy the leak names (an unclassified field, a cache or a job), and mask and scan again."
+since = "0.1.0"
+
+[[entry]]
+code = "sandbox.effects"
+class = "none"
+summary = "The outbound lock is missing or too weak to keep a sandbox silent."
+explanation_key = "error.sandbox.effects"
+params = []
+remedy = "Install the discard-mode side-effect hold and the deny-all egress policy for the sandbox tenant before activating."
+since = "0.1.0"

@@ -1,0 +1,44 @@
+[package]
+name = "spot-updater"
+description = "The signed update manifest with its canonical bytes, the update trust anchor with windows and revocation, signature and digest verification, and the pure update decision (downgrade refused)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Semantic versions of the installed build and of an offered update.
+semver = "1"
+# SHA-256 over the payload, each file, and the manifest bytes.
+sha2 = "0.10"
+# The one cryptographic dependency (same version and features as spot-license): Ed25519.
+# `std` only; keys are always supplied by the caller.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Standard base64 for keys and signatures in the file forms.
+base64 = "0.22"
+# The `update.toml` manifest and the `update.sig` signature documents.
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+# Canonical, domain-separated JSON bytes: the exact bytes a signature covers.
+serde_json = "1"
+# Typed errors with stable `updater.*` codes.
+thiserror = "2"
+# The update archive is read as a ZIP (the same crate and features as spot-bundle): read only.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# The `Clock` trait (time is an argument to the engine; adapters read a clock and pass it in).
+spot-core = { path = "../spot-core" }
+
+[dev-dependencies]
+# Property tests: `decide` never applies an older version and never panics on arbitrary input.
+proptest = "1"
+# A real temporary directory for the `StdFileSystem` test.
+tempfile = "3"
+
+[lints]
+workspace = true
+
+[features]
+# The in-memory `FileSystem`, `ServiceControl` and `DataHooks` fakes with failure and power-cut
+# injection, for the crate's own tests and any caller that wants to rehearse an update.
+testing = []

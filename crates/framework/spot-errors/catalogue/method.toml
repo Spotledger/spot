@@ -1,0 +1,10 @@
+# method codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "method.not_found"
+class = "MethodNotFound"
+summary = "No method, function or seam with this name exists at this version."
+explanation_key = "error.method.not_found"
+params = []
+remedy = "Check the name and version, or install the app that provides it."
+since = "0.1.0"

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Spotledger.Component.TestKit</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- A library of reusable contract tests: xUnit facts live in the base class and are
+         discovered through the concrete test class in the consuming test project. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <!-- A library, not a test project: the xUnit build targets (entry point, runner) are not
+         needed here, only the attributes, Assert and the headless fact support. -->
+    <PackageReference Include="xunit.v3" ExcludeAssets="build;buildTransitive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+  </ItemGroup>
+</Project>

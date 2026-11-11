@@ -1,0 +1,8 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[overrides]]
+target = "erp_accounts:post_gl"
+kind = "wrap"
+reason = "x"

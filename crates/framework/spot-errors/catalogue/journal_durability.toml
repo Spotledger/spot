@@ -1,0 +1,37 @@
+# journal_durability codes: the durability policy gate of spot-journal-durability (WP-JRN-04.T1, ADR-061 s4). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_durability.halted"
+class = "none"
+summary = "Commits are refused because the tenant's durability policy is remote-sync with on_unreachable halt and the journal object store cannot be reached."
+explanation_key = "error.journal_durability.halted"
+params = []
+remedy = "Retry once the journal object store is reachable; the gate resumes by itself. Choose on_unreachable degrade if stopping is worse than a temporary off-site gap."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.outcome_unknown"
+class = "none"
+summary = "The commit is durable locally but the object-store acknowledgement did not arrive before the deadline, so whether it is off-site is not yet known."
+explanation_key = "error.journal_durability.outcome_unknown"
+params = []
+remedy = "Retry with the same command id (Idempotency-Key): the retry queries the outcome and never commits a second time."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.rpo_breach"
+class = "none"
+summary = "Commits were acknowledged locally while the journal object store was unreachable and have not been shipped within the grace period."
+explanation_key = "error.journal_durability.rpo_breach"
+params = []
+remedy = "Restore access to the journal object store; the backlog is re-shipped and the alarm clears once it is durable off-site."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.config_invalid"
+class = "none"
+summary = "The tenant's durability setting cannot be applied, for example remote-sync with no journal target configured."
+explanation_key = "error.journal_durability.config_invalid"
+params = []
+remedy = "Configure a journal target before choosing remote-sync, or choose local or replica-sync."
+since = "0.1.0"

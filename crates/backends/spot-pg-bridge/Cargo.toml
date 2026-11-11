@@ -1,0 +1,33 @@
+[package]
+name = "spot-pg-bridge"
+description = "The one shared, bounded blocking bridge from synchronous code to PostgreSQL (WP-CON-01.T5, ADR-082 addendum 1): refuses calls from async threads, bounds work in flight, puts a deadline on every call and cancels the statement on timeout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The pool the bridge borrows connections from (`PgBackend::pool()` returns this type) and the
+# object it hands to the caller's closure.
+deadpool-postgres = "0.14"
+# The driver: `Client`, the cancel token and the TLS traits the cancel request needs.
+tokio-postgres = "0.7"
+# The bridge's own runtime, its semaphore and its timers.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync", "net", "macros"] }
+# The metric facade `spot-telemetry` installs a Prometheus recorder for; names live in `metrics.rs`.
+metrics = "0.24"
+# `PgBackend`: `Bridge::for_backend` takes the backend's pool and, when the pool uses TLS, its
+# cancel connector in one call, so a host cannot forget `with_cancel_tls`. Default features are
+# off: the bridge needs the backend, not its `testing` helpers (those stay in the dev-dependency).
+spot-postgres = { path = "../spot-postgres", default-features = false }
+
+[dev-dependencies]
+# The recorder the metrics test installs and the rendering it reads back.
+spot-telemetry = { path = "../../framework/spot-telemetry" }
+# Per-test scratch databases for the real PostgreSQL tests.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

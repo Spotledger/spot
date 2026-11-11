@@ -1,0 +1,24 @@
+[package]
+name = "spot-dts"
+description = "TypeScript declaration generator from effective DocType metadata (WP-EXT-09.T1): deterministic .d.ts text for the scripted tier (ADR-054), with a change fingerprint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The effective definition model (`Definition`, `FieldSpec`, `FieldType`): custom fields are
+# merged into it by spot-meta; this crate never asks where a field came from.
+spot-meta = { path = "../spot-meta" }
+# SHA-256 of the generated text (the change fingerprint).
+sha2 = "0.10"
+
+[dev-dependencies]
+# Snapshot tests of the generated declarations.
+insta = "1"
+# Random field names never panic and always produce valid identifiers or quoted names.
+proptest = "1"
+
+[lints]
+workspace = true

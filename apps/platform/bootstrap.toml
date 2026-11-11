@@ -1,0 +1,34 @@
+# Records every site starts with (WP-IAM-02.T2). `bootstrap::seed` writes them once, by fixed
+# id, so running it again changes nothing. No password and no secret appears here: the
+# Administrator is created `invited`, with no credential, and the site tool issues the one-time
+# first sign-in secret through the secrets service.
+
+[administrator]
+id = "01990000-0000-7000-8000-000000000001"
+user_name = "administrator"
+full_name = "Administrator"
+user_type = "internal"
+state = "invited"
+# The role the Administrator holds, and the id of that assignment.
+role = "Tenant Administrator"
+assignment_id = "01990000-0000-7000-8000-000000000101"
+
+[[roles]]
+id = "01990000-0000-7000-8000-000000000011"
+name = "Tenant Administrator"
+description = "Holds every right, including every protected field. An ordinary assignable role (ADR-070 section 12, rule 4)."
+
+[[roles]]
+id = "01990000-0000-7000-8000-000000000012"
+name = "System Manager"
+description = "Manages roles, role assignments and linked identities, and reads sessions, API keys and sign-in attempts. Reads no credential."
+
+[[roles]]
+id = "01990000-0000-7000-8000-000000000013"
+name = "User Manager"
+description = "Creates and edits users and their role assignments and linked identities. Reads no credential."
+
+[[roles]]
+id = "01990000-0000-7000-8000-000000000014"
+name = "Webhook Manager"
+description = "Reads webhooks and their delivery log. Reads no signing secret and no endpoint address, and writes nothing."

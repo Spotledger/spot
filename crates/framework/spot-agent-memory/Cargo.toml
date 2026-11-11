@@ -1,0 +1,41 @@
+[package]
+name = "spot-agent-memory"
+description = "Agent memory model and logic (WP-AI-09.T1, WS13, ADR-26): tiered episodic, procedural and deployment-fact stores behind traits with embeddings, a sanitiser that keeps business data out of the memory namespace, recall over vector similarity and structured filters, retention with deterministic compaction, legal-hold and tenant export/deletion, and a learning loop whose candidate remedies stay unusable until CI promotes them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The T0 to T3 ladder: every memory entry records the tier that produced it and every
+# procedure read is gated by the reading agent's tier.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# `EmbeddingProvider` and `cosine`: the vector port types and the one similarity kernel,
+# reused rather than re-declared here.
+spot-retrieval = { path = "../spot-retrieval" }
+# `Redactor`, `RedactionPolicy`, `Patterns` and `DEFAULT_FIELD_NAMES`: the pii, financial and
+# secret field classes the sanitiser scans content with.
+spot-redact = { path = "../spot-redact" }
+# The remedy spec format a candidate is written in (`RemedyId`, `RemedyMeta`, `Risk`,
+# `UndoKind`, `ParamSchema`) and the scenario vocabulary its self-test skeleton mirrors.
+spot-remedies = { path = "../spot-remedies" }
+# The deployment-fact epoch a fact is keyed by.
+spot-deployment-model = { path = "../spot-deployment-model" }
+# Legal holds: a hold suspends every retention action for the entries it covers.
+spot-data-policy = { path = "../spot-data-policy" }
+# Derives on every public data type, so the store backend (T2) and the export can persist them.
+serde = { version = "1", features = ["derive"] }
+# The candidate bundle's spec and scenario files are JSON-shaped data rendered as TOML, and the
+# tenant export is JSON.
+serde_json = "1"
+# The candidate queue writes TOML files an author edits by hand.
+toml = "0.8"
+# Typed errors with stable `agent_memory.*` codes.
+thiserror = "2"
+# The numeric-amount patterns the sanitiser scans for (the same linear-time engine
+# `spot-redact` uses; no catastrophic backtracking).
+regex = "1.13"
+
+[lints]
+workspace = true

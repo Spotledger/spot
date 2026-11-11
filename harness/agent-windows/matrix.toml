@@ -1,0 +1,117 @@
+# Windows module conformance matrix (WP-ADM-05.T3).
+#
+# WP-ADM-05's acceptance is "module suite green on Windows Server, Windows 10 and 11".
+# This file is the checked-in definition of that claim: the target operating systems the
+# real suite must run on, the capabilities each target must offer before a test may run,
+# and the real-system tests `run.ps1` executes on each target.
+#
+# The matrix is data. `orchestrator.py` reads it, decides which target/test pairs are
+# allowed to run (a test whose capabilities a target does not offer is skipped, never
+# silently passed) and prints it; `run.ps1` runs one target on a disposable Windows VM.
+# Both read this file, so there is one definition of "what the suite covers".
+
+schema = 1
+module = "spot-agent-windows"
+wp = "WP-ADM-05"
+
+# The capabilities a target can offer. `run.ps1` probes each on the machine with code of
+# its own (`Test-Capability`); the `probe` text below says what that code checks, so the
+# matrix stays readable without a command string the runner would have to execute.
+[capabilities.admin]
+description = "The suite runs elevated: it can create and delete a service, a local user and a firewall rule."
+probe = "the process token is elevated (WindowsPrincipal.IsInRole(Administrator))"
+
+[capabilities.vss]
+description = "The Volume Shadow Copy service is present and can take a shadow of the system volume."
+probe = "the VSS service is installed and can create a shadow of C:"
+
+[capabilities.update_service]
+description = "The Windows Update Agent (wuauserv) is present and reachable."
+probe = "the wuauserv service exists and the Update Session COM object can be created"
+
+[capabilities.firewall]
+description = "The Windows Firewall policy object (HNetCfg.FwPolicy2) can be opened."
+probe = "the MPSSVC service is running and INetFwPolicy2 can be created"
+
+[capabilities.netapi]
+description = "Local users and groups can be enumerated through NetAPI."
+probe = "the local user and group enumerations return without error"
+
+# The target operating systems. Each is one machine the real suite runs on; `run.ps1`
+# refuses a target whose declared capabilities its machine does not offer. The runner
+# labels name the disposable Windows VM the suite runs on (`windows-vm`).
+[[targets]]
+name = "windows-server-2022"
+os = "Windows Server"
+version = "2022"
+edition = "Datacenter (evaluation)"
+image = "windows-server-2022-eval"
+runner_labels = ["Windows", "windows-vm"]
+capabilities = ["admin", "vss", "update_service", "firewall", "netapi"]
+
+[[targets]]
+name = "windows-server-2025"
+os = "Windows Server"
+version = "2025"
+edition = "Datacenter (evaluation)"
+image = "windows-server-2025-eval"
+runner_labels = ["Windows", "windows-vm"]
+capabilities = ["admin", "vss", "update_service", "firewall", "netapi"]
+
+[[targets]]
+name = "windows-10-22h2"
+os = "Windows 10"
+version = "22H2"
+edition = "Enterprise (evaluation)"
+image = "windows-10-22h2-eval"
+runner_labels = ["Windows", "windows-vm"]
+capabilities = ["admin", "vss", "update_service", "firewall", "netapi"]
+
+[[targets]]
+name = "windows-11"
+os = "Windows 11"
+version = "24H2"
+edition = "Enterprise (evaluation)"
+image = "windows-11-eval"
+runner_labels = ["Windows", "windows-vm"]
+capabilities = ["admin", "vss", "update_service", "firewall", "netapi"]
+
+# The real-system tests. Each `name` is a cargo integration-test target in
+# `tests-real/tests/<name>.rs`; `file` is that file; `capabilities` are the ones the
+# target must offer. The tests create only throw-away objects carrying the runner's
+# unique `SPOT_HARNESS_PREFIX` and remove them on every path, including a panic.
+[[tests]]
+name = "services"
+file = "tests-real/tests/services.rs"
+description = "Create a throw-away service, then read, start-type, recovery and stop it through the real Service Control Manager; delete it."
+capabilities = ["admin"]
+
+[[tests]]
+name = "updates"
+file = "tests-real/tests/updates.rs"
+description = "Read reboot-required state and search the real Windows Update Agent; never installs an update and never reboots."
+capabilities = ["update_service"]
+
+[[tests]]
+name = "firewall"
+file = "tests-real/tests/firewall.rs"
+description = "Read the real firewall profiles and add, read back and remove a throw-away rule through INetFwPolicy2."
+capabilities = ["admin", "firewall"]
+
+[[tests]]
+name = "users"
+file = "tests-real/tests/users.rs"
+description = "Create a throw-away local account, disable it, reset its password and set its groups through NetAPI; delete it."
+capabilities = ["admin", "netapi"]
+
+[[tests]]
+name = "vss"
+file = "tests-real/tests/vss.rs"
+description = "Take a real shadow copy of the system volume, list and expose it read-only, then delete it."
+capabilities = ["admin", "vss"]
+
+[[tests]]
+name = "certificates"
+file = "tests-real/tests/certificates.rs"
+description = "List and parse the real LocalMachine Root certificate store; read-only, never imports or removes a certificate."
+capabilities = ["admin"]

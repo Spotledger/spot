@@ -1,0 +1,69 @@
+# graph projection codes: the optional one-way projection of the business graph to an external
+# graph engine (WP-GRA-07.T1, ADR-50).
+# The projection is a read projection fed from the outbox; these codes report a refusing sink, a
+# stream hole, a mis-addressed event, an undecodable payload, a failing checkpoint store, a
+# failing rebuild source and an outbox generation restart. They ride no AppError, so their class
+# is `none`.
+
+[[entry]]
+code = "graph_projection.sink"
+class = "none"
+summary = "The graph sink refused the batch: {reason}."
+explanation_key = "error.graph_projection.sink"
+params = ["reason"]
+remedy = "Fix the sink failure and reprocess the batch from the last checkpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.gap"
+class = "none"
+summary = "Graph {graph} missed events: expected sequence {expected} but got {got}."
+explanation_key = "error.graph_projection.gap"
+params = ["expected", "got", "graph"]
+remedy = "Rebuild the projection from its source; the sink is behind its stream until then."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.wrong_graph"
+class = "none"
+summary = "An edge event names graph {got} but the sink is {expected}."
+explanation_key = "error.graph_projection.wrong_graph"
+params = ["expected", "got"]
+remedy = "Route the event to the sink for the graph it names."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.decode"
+class = "none"
+summary = "An edge event could not be decoded: {reason}."
+explanation_key = "error.graph_projection.decode"
+params = ["reason"]
+remedy = "Emit a sys_graph_edge event (the retired doc_edge is still read) whose payload is a well-formed edge with a known schema version."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.checkpoint"
+class = "none"
+summary = "The projection checkpoint failed: {reason}."
+explanation_key = "error.graph_projection.checkpoint"
+params = ["reason"]
+remedy = "Fix the checkpoint store failure and reprocess the feed from the last saved position."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.source"
+class = "none"
+summary = "The projection source failed: {reason}."
+explanation_key = "error.graph_projection.source"
+params = ["reason"]
+remedy = "Fix the source failure and rebuild the projection again."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_projection.resync"
+class = "none"
+summary = "The outbox stream restarted at generation {generation}: the projection must be rebuilt."
+explanation_key = "error.graph_projection.resync"
+params = ["generation"]
+remedy = "Rebuild the projection from its source; the stored checkpoint is from another generation."
+since = "0.1.0"

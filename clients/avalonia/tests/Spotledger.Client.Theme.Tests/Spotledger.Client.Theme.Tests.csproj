@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Avalonia.Headless.XUnit 12 brings xunit v3; do not also reference xunit 2. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <!-- Real rasterizer and HarfBuzz shaping for the no-tofu check and the screen
+         matrix: Avalonia.Skia and Avalonia.HarfBuzz arrive through Avalonia.Desktop,
+         the same platform package the Desktop host runs on. No new version pins. -->
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../design/Spotledger.TokenGenerator.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+    <!-- The decimal input is the control the numerals round trip runs through, and the
+         screen matrix renders the real controls rather than stand-ins. -->
+    <ProjectReference Include="../../src/Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Grid/Spotledger.Client.Grid.csproj" />
+    <!-- WP-UI-16.T1's baseline tooling (ScreenshotAssert/ScreenshotMatrix). -->
+    <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,41 @@
+[package]
+name = "spot-journal-rebuild"
+description = "The journal rebuild executor (WP-JRN-05.T3, ADR-061 s6): runs a RebuildPlan against the journal store for one tenant, streaming the base snapshot and then the planned segment ranges in position order, upcasting each state image to the current schema and handing it, with its recorded version and position, to an apply sink that runs no business logic and enqueues no events; checks tenancy, ordering, completeness and versions as it goes, and refuses before applying anything when the journal does not verify or an upcaster is missing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The plan the executor runs: Base, Step, ForkPoint, RebuildPlan.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# The object-store seam, the key layout and the tenant id.
+spot-journal-store = { path = "../spot-journal-store" }
+# The signed manifest: the authority for which segments a generation holds and their hashes.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The segment reader (one block at a time) and the segment hash.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The base snapshot reader.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The light verification run before anything is read for the rebuild.
+spot-journal-verify = { path = "../spot-journal-verify" }
+# The upcaster registry and the document image.
+spot-image-upcast = { path = "../spot-image-upcast" }
+# The event envelope and the feed position.
+spot-events-contract = { path = "../../../contracts/events" }
+# The outcome and the plan summary are plain data a recovery report can store.
+serde = { version = "1", features = ["derive"] }
+# Entry payloads are JSON.
+serde_json = "1"
+# Typed errors with stable `journal_rebuild.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Roll-forward over generated journals equals a model.
+proptest = "1"
+# Signs the test manifests (the manifest crate takes an Ed25519 signing key and re-exports none).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

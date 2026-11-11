@@ -1,0 +1,91 @@
+# offline_identity_adapters codes: the refusals of the adapters around spot-offline-identity (WP-IAM-09.T2, ADR-070 rule 12.13 c, d, h and i). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "offline_identity_adapters.quarantine_read"
+class = "none"
+summary = "The quarantine store could not be read, so the queue cannot be rebuilt."
+explanation_key = "error.offline_identity_adapters.quarantine_read"
+params = []
+remedy = "Check the quarantine store and its disk; a queue that cannot be rebuilt is not used, so nothing is stored twice."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.quarantine_write"
+class = "none"
+summary = "The quarantine store refused the item, so the offline write was not placed."
+explanation_key = "error.offline_identity_adapters.quarantine_write"
+params = []
+remedy = "Check the quarantine store and its disk, then sync the node's journal again; an item the queue cannot take is never acknowledged."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.quarantine_corrupt"
+class = "none"
+summary = "A stored quarantine envelope is not a readable item, or two envelopes share a node and journal position."
+explanation_key = "error.offline_identity_adapters.quarantine_corrupt"
+params = []
+remedy = "A person must inspect the quarantine store; the queue refuses to reindex it rather than risk storing a duplicate."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.quarantine_conflict"
+class = "none"
+summary = "The quarantine queue already holds a different payload for node {node} at journal position {journal_seq}."
+explanation_key = "error.offline_identity_adapters.quarantine_conflict"
+params = ["journal_seq", "node"]
+remedy = "A person must review the held item and the new one; a held payload is immutable and is never replaced."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.item_id"
+class = "none"
+summary = "A node id cannot key a quarantine item, because it is not a valid queue source id or record name."
+explanation_key = "error.offline_identity_adapters.item_id"
+params = []
+remedy = "Give the node an id that is a valid queue source id (lower-case host name characters) before it syncs."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.state_read"
+class = "none"
+summary = "The sealed node state could not be read, or the epoch fence has no state beside it."
+explanation_key = "error.offline_identity_adapters.state_read"
+params = []
+remedy = "Check the node's store; the node starts with no snapshot and denies offline work until the hub sends a fresh one."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.state_write"
+class = "none"
+summary = "The sealed node state could not be written, so nothing was accepted."
+explanation_key = "error.offline_identity_adapters.state_write"
+params = []
+remedy = "Check the node's store and its disk, then sync with the hub again."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.state_tampered"
+class = "none"
+summary = "The sealed node state did not authenticate: it was altered, or it was sealed for another node."
+explanation_key = "error.offline_identity_adapters.state_tampered"
+params = []
+remedy = "Treat the node as damaged: it starts with no snapshot and denies offline work until the hub sends a fresh one."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.state_rollback"
+class = "none"
+summary = "The stored epoch {stored} is lower than the epoch {seen} this node has already seen."
+explanation_key = "error.offline_identity_adapters.state_rollback"
+params = ["seen", "stored"]
+remedy = "Do not restore an older node state; the highest epoch only ever rises, and a lower one is refused."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_adapters.state_malformed"
+class = "none"
+summary = "The unsealed node state is not a Persisted of this format."
+explanation_key = "error.offline_identity_adapters.state_malformed"
+params = []
+remedy = "Check the node's version and state store; the node denies offline work until the hub sends a fresh snapshot."
+since = "0.1.0"

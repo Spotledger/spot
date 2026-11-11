@@ -1,0 +1,13 @@
+{
+  "name": "desktop",
+  "altMenus": true,
+  "bindings": [
+    { "chord": "Ctrl+K", "commandId": "shell.launcher" },
+    { "chord": "Ctrl+B", "commandId": "view.sidebar" },
+    { "chord": "Ctrl+Tab", "commandId": "tab.next" },
+    { "chord": "Ctrl+Shift+Tab", "commandId": "tab.previous" },
+    { "chord": "Ctrl+W", "commandId": "tab.close" },
+    { "chord": "Ctrl+Shift+T", "commandId": "tab.duplicate" },
+    { "chord": "F10", "commandId": "window.menu" }
+  ]
+}

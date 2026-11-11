@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-DX-06.T2: the designer's headless tests. They drive the real view-models over an
+       in-memory server that behaves like spot-nocode-model's draft, so the tests prove the
+       commands the UI issues rather than the client's own idea of the design. No window, no
+       network, and no real server. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Designer/Spotledger.Designer.csproj" />
+  </ItemGroup>
+</Project>

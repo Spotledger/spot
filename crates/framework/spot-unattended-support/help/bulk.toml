@@ -1,0 +1,23 @@
+# Help for the bulk error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "bulk.export_denied"
+what_happened = "The caller does not hold the export right on the document type."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask an administrator for the export right on this document type, or use a list view instead.", "If it keeps happening, tell your administrator and quote the code bulk.export_denied."]
+audience = "user"
+
+[[help]]
+code = "bulk.spec_invalid"
+what_happened = "The export specification is not usable: no columns, a duplicate column, or an order key that is not a plain field."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Name at least one column and order by plain fields of the document type.", "If it keeps happening, tell your administrator and quote the code bulk.spec_invalid."]
+audience = "user"
+
+[[help]]
+code = "bulk.storage"
+what_happened = "The storage backend failed while a page of the export was being read."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Retry the export; if it keeps failing, check the backend's health.", "If it keeps happening, tell your administrator and quote the code bulk.storage."]
+audience = "operator"

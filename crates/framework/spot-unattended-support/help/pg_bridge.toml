@@ -1,0 +1,44 @@
+# Help for the pg_bridge error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "pg_bridge.wrong_thread"
+what_happened = "The bridge was called from a thread inside an async runtime."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Tell your administrator: this is a programming error in the service.", "If it keeps happening, tell your administrator and quote the code pg_bridge.wrong_thread."]
+audience = "operator"
+
+[[help]]
+code = "pg_bridge.busy"
+what_happened = "The database bridge is busy and refused the call."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait a moment and try again.", "If it keeps happening, tell your administrator and quote the code pg_bridge.busy."]
+audience = "operator"
+
+[[help]]
+code = "pg_bridge.timeout"
+what_happened = "The database did not answer in time and the call was cancelled."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check whether the action took effect before trying again.", "If it keeps happening, tell your administrator and quote the code pg_bridge.timeout."]
+audience = "operator"
+
+[[help]]
+code = "pg_bridge.closed"
+what_happened = "The database bridge is shut down."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait for the service to restart, then try again.", "If it keeps happening, tell your administrator and quote the code pg_bridge.closed."]
+audience = "operator"
+
+[[help]]
+code = "pg_bridge.connect"
+what_happened = "No database connection was available."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check that the database is reachable, then try again.", "If it keeps happening, tell your administrator and quote the code pg_bridge.connect."]
+audience = "operator"
+
+[[help]]
+code = "pg_bridge.config"
+what_happened = "The database bridge settings are not valid."
+why = "The settings do not meet the rules."
+what_to_do = ["Correct the bridge settings (pool size and in-flight limit) and restart.", "If it keeps happening, tell your administrator and quote the code pg_bridge.config."]
+audience = "operator"

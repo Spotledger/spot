@@ -1,0 +1,170 @@
+name = "webhook"
+label = "Webhook"
+app = "platform"
+module = "integrations"
+title_field = "name"
+
+# Two protection groups; a field in a group is closed by default, so only a role granted the
+# group may read it (WP-INT-01.T7).
+#   secret: the signing secret and the custom headers (a header can carry an `Authorization` or
+#           API-key value typed as plain text). No grant opens it; the delivery handler reads
+#           both as the system principal.
+#   config: where and how a delivery goes (`url` can carry a token in its query, `condition`,
+#           `field_allowlist`). No shipped field grant opens it either (see webhook_grants.toml).
+[[protection_groups]]
+name = "secret"
+label = "Secret"
+trace = true
+sync_class_hint = "home_only"
+
+[[protection_groups]]
+name = "config"
+label = "Configuration"
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+required = true
+unique = true
+max_chars = 200
+in_list_view = true
+description = "Human-readable name for the webhook."
+
+[[fields]]
+name = "enabled"
+label = "Enabled"
+type = "bool"
+default = "true"
+in_list_view = true
+in_standard_filter = true
+description = "Whether the webhook is active and will receive deliveries."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "active\npaused\ndisabled\ndead_letter"
+required = true
+default = "active"
+in_list_view = true
+in_standard_filter = true
+description = "Current state of the webhook: active, paused, disabled or dead_letter."
+
+[[fields]]
+name = "url"
+label = "URL"
+type = "text"
+required = true
+max_chars = 2048
+format = "url"
+protection_group = "config"
+description = "The target URL for webhook deliveries; http or https only."
+
+[[fields]]
+name = "doctype"
+label = "DocType"
+type = "text"
+required = true
+max_chars = 100
+in_list_view = true
+in_standard_filter = true
+description = "The DocType this webhook listens to (its storage name)."
+
+[[fields]]
+name = "events"
+label = "Events"
+type = "json"
+required = true
+description = "The event names that trigger this webhook: create, update, delete, post, cancel, rename, updated_posted."
+
+[[fields]]
+name = "condition"
+label = "Condition"
+type = "long_text"
+format = "code"
+syntax = "spot-expr"
+protection_group = "config"
+description = "Optional condition expression (spot-expr) evaluated on the event's after-image; parsed on save. An evaluation error is a recorded non-delivery, not a retry."
+
+[[fields]]
+name = "payload_mode"
+label = "Payload Mode"
+type = "select"
+options = "ids\nfields\nfull"
+required = true
+default = "full"
+in_list_view = true
+description = "ids: only the id and version; fields: the allow-listed fields; full: every field the owner may read."
+
+[[fields]]
+name = "field_allowlist"
+label = "Field Allowlist"
+type = "json"
+protection_group = "config"
+description = "The fields to include in 'fields' payload mode (a JSON list of field names)."
+
+[[fields]]
+name = "secret"
+label = "Signing Secret"
+type = "secret"
+protection_group = "secret"
+classification = ["secret"]
+description = "HMAC-SHA256 signing secret, sealed; opened at each delivery attempt and never stored in a delivery record."
+
+[[fields]]
+name = "headers"
+label = "Custom Headers"
+type = "json"
+protection_group = "secret"
+description = "Custom headers (a JSON list of {name, value, is_secret}); a secret value is the sealed form."
+
+[[fields]]
+name = "timeout_secs"
+label = "Timeout (seconds)"
+type = "int"
+required = true
+default = "30"
+in_list_view = true
+description = "Request timeout in seconds."
+
+[[fields]]
+name = "max_attempts"
+label = "Max Attempts"
+type = "int"
+required = true
+default = "5"
+in_list_view = true
+description = "Maximum delivery attempts before dead-letter."
+
+[[fields]]
+name = "created_at"
+label = "Created At"
+type = "datetime"
+read_only = true
+no_copy = true
+in_list_view = true
+
+[[fields]]
+name = "updated_at"
+label = "Updated At"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "last_delivery"
+label = "Last Delivery"
+type = "json"
+read_only = true
+no_copy = true
+description = "A summary of the last delivery attempt (status, error class, duration); no response body beyond the cap and no secrets."
+
+[[fields]]
+name = "state_reason"
+label = "State Reason"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 500
+description = "Why the webhook is disabled or dead-lettered."

@@ -1,0 +1,29 @@
+[package]
+name = "l3-journal-sync"
+description = "L3 journal/sync cluster test harness (WP-RTB-01.T1): a small Cluster of real `spot serve` processes, each with its own PostgreSQL scratch database, root and journal folder, with lifecycle controls, fault-injection helpers and read-only query helpers for the hosted journal/sync tasks (WP-RTB-01 and later)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The product host: site creation, app install and the `serve` assembly this harness starts.
+spot-cli = { path = "../../../crates/framework/spot-cli" }
+# A scratch PostgreSQL database per node, its drop guard and the leaked-database sweep.
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+# Password policy and the one-time first sign-in secret, for the Administrator's set-password.
+spot-auth = { path = "../../../crates/framework/spot-auth" }
+# The JournalStore trait FlakyStore wraps and the FolderStore layout tamper reads.
+spot-journal-store = { path = "../../../crates/framework/spot-journal-store" }
+
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "fs"] }
+# Only to name the type `spot_postgres::testing::TestDb::raw_client` returns, for the read-only
+# SQL helpers (`read_conditions`, `read_audit`, `fingerprint`); no feature beyond the plain
+# driver is needed since every query here passes `&str`/`&[&str]` parameters. Not a new
+# capability: spot-postgres already depends on it (see its Cargo.toml) for the same version.
+tokio-postgres = "0.7"
+
+[lints]
+workspace = true

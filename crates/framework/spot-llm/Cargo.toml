@@ -1,0 +1,50 @@
+[package]
+name = "spot-llm"
+description = "Provider-agnostic model interface: messages, tools, streaming, typed errors, capabilities, a scripted mock provider and HTTP transport seams (WP-AI-03.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# `egress`-gated: the real [`transport::EgressTransport`] HTTP client, which authorises every
+# request and redirect hop through the egress guard and dials the pinned addresses only.
+# Providers (T2, T3) build on it; everything else — the interface, the mock provider and
+# recorded replay — stays dependency-light and works without any network stack.
+egress = ["dep:spot-egress", "dep:futures-util", "dep:http", "dep:url"]
+
+[dependencies]
+futures-core = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+zeroize = "1"
+spot-secrets = { path = "../spot-secrets" }
+# `egress`-gated: the guard and the HTTP sender that dials the pinned addresses (TLS on rustls).
+spot-egress = { path = "../spot-egress", optional = true }
+# `egress`-gated: hands a buffered body back as the transport's chunk stream.
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+# `egress`-gated: the header and status types of the egress request and response.
+http = { version = "1", optional = true }
+# `egress`-gated: the URL type of the egress request.
+url = { version = "2", optional = true }
+
+[dev-dependencies]
+proptest = "1"
+# The egress transport's tests run under the plain `cargo test -p spot-llm`: the crate enables
+# its own feature for its tests.
+spot-llm = { path = ".", features = ["egress"] }
+# The tests build a guard (a clock) and a scripted sender (`async_trait`, `http`).
+spot-core = { path = "../spot-core" }
+async-trait = "0.1"
+http = "1"
+url = "2"
+# `#[tokio::test]`, the current-thread runtime, and `test-util` for the paused clock that
+# makes the mock provider's pause steps instant under test.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync", "time", "test-util"] }
+
+[lints]
+workspace = true

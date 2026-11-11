@@ -1,0 +1,23 @@
+[package]
+name = "spot-ts"
+description = "The embedded JavaScript engine for TypeScript scripts: QuickJS via rquickjs, one runtime per execution, hard limits, bytecode cache, closed host bridge (WP-EXT-08.T1, ADR-054)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The engine (ADR-054). Pinned with `=`.
+rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "loader"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["rt", "sync"] }
+# `AppError` and the prelude types, for the documented mapping of a script's validation error.
+spot-app-api = { path = "../../../contracts/app-api" }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,36 @@
+[package]
+name = "spot-sync-hub-adapters"
+description = "Adapters between the hub relay and the sync policy crates (WP-SYN-02.T8, ADR-063 section 3): the master-data DestinationScope, a destination is entitled to a stream entry exactly when its spot-sync-master Subscription covers the change, scope taken from the hub registry only, any doubt answers no - no network, clock, randomness or database"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `DestinationScope` and `StreamEntry`: the seam this crate implements.
+spot-sync-hub = { path = "../spot-sync-hub" }
+# `Subscription`, `MasterChange`, `Doctype`, `ScopeKey`: the scope rules themselves.
+spot-sync-master = { path = "../spot-sync-master" }
+# The closure's `RecordKey` (entity, id) that the hub traits speak.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# `NodeId` and `RecordName`.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# `SyncPolicy::excludes`: the rule of what is excluded.
+spot-sync-policy = { path = "../spot-sync-policy" }
+# The journal image the `Redactor` works on is a JSON value.
+serde_json = "1"
+# Named in the brief; typed error for the scope-key text form.
+thiserror = "2"
+
+[dev-dependencies]
+# `Document` and `outgoing_view` model, to prove the JSON redactor equals the Document one.
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Real relay tick in the end-to-end test.
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+spot-sync-skew = { path = "../spot-sync-skew" }
+proptest = "1"
+
+[lints]
+workspace = true

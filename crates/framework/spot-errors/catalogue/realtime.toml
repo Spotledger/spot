@@ -1,0 +1,19 @@
+# realtime codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "realtime.unknown_room"
+class = "none"
+summary = "The websocket asked to join a room that is not one of the contract's rooms: {room}."
+explanation_key = "error.realtime.unknown_room"
+params = ["room"]
+remedy = "Join only rooms the realtime contract declares."
+since = "0.1.0"
+
+[[entry]]
+code = "realtime.too_many_rooms"
+class = "none"
+summary = "The connection is already in its maximum number of rooms ({limit})."
+explanation_key = "error.realtime.too_many_rooms"
+params = ["limit"]
+remedy = "Leave a room before joining another."
+since = "0.1.0"

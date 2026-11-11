@@ -1,0 +1,25 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "panels": [
+    {
+      "id": "sample.task_overview",
+      "origin": "app:sample",
+      "label": "Overview",
+      "slot": "doc.sidepanel",
+      "doctype": "project",
+      "order": 0,
+      "permission": "project:read",
+      "blocks": [
+        {
+          "type": "stat",
+          "query": "sample.ghost",
+          "label": "N",
+          "format": "int"
+        }
+      ]
+    }
+  ],
+  "$comment": "expect: uiext.unknown_query. The query is not declared."
+}

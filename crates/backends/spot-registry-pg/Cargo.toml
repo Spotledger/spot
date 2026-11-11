@@ -1,0 +1,41 @@
+[package]
+name = "spot-registry-pg"
+description = "PostgreSQL implementation of the app registry index (WP-STR-03.T2, ADR-082 class C): publishers, ownership, releases, transfers and catalogue search in the control schema, reached through the shared blocking bridge."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `IndexStore` trait, the release/ownership/transfer model and the `registry.*` errors.
+spot-registry = { path = "../../framework/spot-registry" }
+# Signing types the stored evidence is rebuilt into (`BundleSignature`, `CertificateChain`).
+spot-bundle-signing = { path = "../../framework/spot-bundle-signing" }
+# Manifest types a stored release carries (`Capabilities`, `AppDependency`, `Endpoint`).
+spot-manifest = { path = "../../framework/spot-manifest" }
+# `Name`: the dependency app name inside `AppDependency`.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The one shared blocking bridge (ADR-082 addendum 1); this crate never writes its own `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool whose size the constructor validates the bridge against.
+deadpool-postgres = "0.14"
+# The driver: transactions, SQLSTATE codes.
+tokio-postgres = "0.7"
+# The stored evidence document is built by hand as JSON; no second serde model of the release.
+serde_json = "1"
+# The search cursor binds the query and the index revision with the same hash the in-memory index uses.
+sha2 = "0.10"
+# The constructor asks the ambient runtime flavor (a current-thread runtime is refused).
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
+[dev-dependencies]
+# Real, signed bundles for the fixtures (the same ones the registry crate's own tests use).
+spot-bundle = { path = "../../framework/spot-bundle" }
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The setup runtime that prepares and inspects the scratch database from outside the bridge.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,85 @@
+{
+  "client": "okta",
+  "description": "An Okta-style provisioning transcript, written from public behaviour: create a user with an externalId, pre-check it by userName, deactivate it with a no-path replace whose value is an object, reactivate it, create a group with a member, add a member, then remove the member by value filter.",
+  "steps": [
+    {
+      "name": "create user",
+      "method": "POST",
+      "path": "/Users",
+      "capture": "alice",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "externalId": "okta-alice-1",
+        "userName": "alice@example.com",
+        "name": { "givenName": "Alice", "familyName": "Jones" },
+        "displayName": "Alice Jones",
+        "emails": [{ "value": "alice@example.com", "type": "work", "primary": true }],
+        "active": true
+      },
+      "expect": { "status": 201, "active": true }
+    },
+    {
+      "name": "pre-check by userName",
+      "method": "GET",
+      "path": "/Users",
+      "query": { "filter": "userName eq \"alice@example.com\"" },
+      "expect": { "status": 200, "totalResults": 1 }
+    },
+    {
+      "name": "deactivate with a no-path replace",
+      "method": "PATCH",
+      "path": "/Users/{{alice}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [{ "op": "replace", "value": { "active": false } }]
+      },
+      "expect": { "status": 200, "active": false }
+    },
+    {
+      "name": "reactivate by path",
+      "method": "PATCH",
+      "path": "/Users/{{alice}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [{ "op": "replace", "path": "active", "value": true }]
+      },
+      "expect": { "status": 200, "active": true }
+    },
+    {
+      "name": "create group with a member",
+      "method": "POST",
+      "path": "/Groups",
+      "capture": "platform",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "displayName": "Platform",
+        "members": [{ "value": "{{alice}}", "display": "Alice Jones" }]
+      },
+      "expect": { "status": 201 }
+    },
+    {
+      "name": "add another member",
+      "method": "PATCH",
+      "path": "/Groups/{{platform}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [
+          { "op": "add", "path": "members", "value": [{ "value": "{{alice}}" }] }
+        ]
+      },
+      "expect": { "status": 200 }
+    },
+    {
+      "name": "remove the member by value filter",
+      "method": "PATCH",
+      "path": "/Groups/{{platform}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [
+          { "op": "remove", "path": "members[value eq \"{{alice}}\"]" }
+        ]
+      },
+      "expect": { "status": 200 }
+    }
+  ]
+}

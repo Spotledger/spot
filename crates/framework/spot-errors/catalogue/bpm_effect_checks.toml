@@ -1,0 +1,23 @@
+# bpm_effect_checks codes (WP-BPM-15.T3). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# These errors are raised on the host-driven design-time and publish path of a process; they never
+# ride an `AppError`, so they have no error class.
+
+[[entry]]
+code = "bpm_effect_checks.too_large"
+class = "none"
+summary = "A process or a test run is larger than the effect checks accept."
+explanation_key = "error.bpm_effect_checks.too_large"
+params = []
+remedy = "Split the process, or preview a shorter test run."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effect_checks.publish_refused"
+class = "none"
+summary = "A process version has error-level effect problems and was not published."
+explanation_key = "error.bpm_effect_checks.publish_refused"
+params = []
+remedy = "Fix the listed problems in the designer (declare a compensation, a revision or a reversal, or remove the undo edge) and publish again."
+since = "0.1.0"

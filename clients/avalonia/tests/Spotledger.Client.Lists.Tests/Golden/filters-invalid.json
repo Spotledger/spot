@@ -1,0 +1,97 @@
+[
+ {
+  "name": "integer text",
+  "field": "qty",
+  "op": "Equals",
+  "values": [
+   "1.5"
+  ]
+ },
+ {
+  "name": "decimal letters",
+  "field": "amount",
+  "op": "Equals",
+  "values": [
+   "abc"
+  ]
+ },
+ {
+  "name": "decimal exponent",
+  "field": "amount",
+  "op": "Equals",
+  "values": [
+   "1e5"
+  ]
+ },
+ {
+  "name": "date wrong",
+  "field": "due",
+  "op": "Equals",
+  "values": [
+   "23/10/2026"
+  ]
+ },
+ {
+  "name": "select unknown",
+  "field": "status",
+  "op": "OneOf",
+  "values": [
+   "Nope"
+  ]
+ },
+ {
+  "name": "contains empty",
+  "field": "title",
+  "op": "Contains",
+  "values": [
+   ""
+  ]
+ },
+ {
+  "name": "operator not offered",
+  "field": "title",
+  "op": "Between",
+  "values": [
+   "a",
+   "b"
+  ]
+ },
+ {
+  "name": "missing value",
+  "field": "title",
+  "op": "Equals",
+  "values": []
+ },
+ {
+  "name": "bool bad",
+  "field": "paid",
+  "op": "Is",
+  "values": [
+   "maybe"
+  ]
+ },
+ {
+  "name": "unfilterable kind",
+  "field": "notes",
+  "op": "Contains",
+  "values": [
+   "x"
+  ]
+ },
+ {
+  "name": "child table",
+  "field": "items",
+  "op": "Contains",
+  "values": [
+   "x"
+  ]
+ },
+ {
+  "name": "wrong field name",
+  "field": "Title; drop",
+  "op": "Contains",
+  "values": [
+   "x"
+  ]
+ }
+]

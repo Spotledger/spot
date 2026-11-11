@@ -1,0 +1,36 @@
+[package]
+name = "spot-sync-hub"
+description = "The hub relay of sync (WP-SYN-02.T1, ADR-062 section 3, ADR-063 section 5): per-destination stream views from scope, closure bundles per destination, the mandatory lane first, hold filtering for version skew and a per-destination send queue with backpressure isolation, over traits - no network, clock or database"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Dependency closure and bundles: what is built for each destination.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# `Lane`, `Pending` and `lane_order`: the mandatory lane is served before bulk data.
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+# Hub-side hold filtering for version skew (`filter_outgoing`, `release_for_upgrade`, `HoldSet`).
+spot-sync-skew = { path = "../spot-sync-skew" }
+# The acknowledgement ledger (`AckLedger::on_ack`, `StreamHead`): acks are bounded by the hub's head.
+spot-sync-acks = { path = "../spot-sync-acks" }
+# The ledger's audit sink bound (`AuditSink`) for the `AckBook` impl.
+spot-conditions = { path = "../spot-conditions" }
+# Clamped stamp check (`find_violations_clamped`, `Bounds`, `HubPostedAt`): posting time never from a node offset.
+spot-sync-freshness = { path = "../spot-sync-freshness" }
+# Catch-up planning over a scoped gap (`scope_for_node`, `plan`).
+spot-sync-catchup = { path = "../spot-sync-catchup" }
+# Stable serde on every public type so the relay state can be persisted by the caller.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `sync_hub.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property run: per-record position order for any entry sequence and scope.
+proptest = "1"
+serde_json = "1"
+
+[lints]
+workspace = true

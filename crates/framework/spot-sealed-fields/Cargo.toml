@@ -1,0 +1,59 @@
+[package]
+name = "spot-sealed-fields"
+description = "Sync classes and sealed fields on branch and offline nodes (WP-SEC-10.T2, ADR-070 rule 12.13 a, f, h): a per-tenant sync class for every protection group, sealed values a node writes and can never read back, lease-bound encrypted reads, home-only fields, the online-only audited reveal, and the channel exclusion rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# A branch or offline node build: the `hub` module (the private sealing key and `unseal`) is
+# compiled out entirely, so a node binary holds no unseal code. A hub build is simply the
+# absence of this feature.
+node = []
+
+[dependencies]
+# The key hierarchy: group data keys, per-node wrapping keys, lease-bound release, the field
+# cipher and its associated data.
+spot-protected-keys = { path = "../spot-protected-keys" }
+# The permission core: `field_access`, `explain_field`, the field facts and the principal.
+spot-permissions = { path = "../spot-permissions" }
+# The audit record shape a reveal is written as.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The typed settings schema the sync-class table is stored through.
+spot-settings = { path = "../spot-settings" }
+# Zeroising secret bytes for a value released by a reveal or decrypted under a lease.
+spot-secrets = { path = "../spot-secrets" }
+# X25519 for the anonymous-sender public-key box. The same version ed25519-dalek already pulls
+# into the workspace; no new curve implementation.
+curve25519-dalek = "4"
+# The AEAD family the rest of the platform uses; never a hand-rolled cipher.
+chacha20poly1305 = "0.10"
+# HKDF-SHA-256 is built from these two, which the key hierarchy already uses.
+hmac = "0.12"
+sha2 = "0.10"
+# Fresh ephemeral keys come from the operating system CSPRNG.
+rand = "0.9"
+# Private key material and plaintext are wiped on drop.
+zeroize = "1"
+# Stable serde on the sealed blob, the class table and the audit entry.
+serde = { version = "1", features = ["derive"] }
+# The sync-class table is a small TOML document in one tenant setting.
+toml = "0.8"
+# Typed errors with stable `sealed_fields.*` codes.
+thiserror = "2"
+# Sync-class decisions log ids and classes only, never a value.
+tracing = "0.1"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# Build real effective metadata for the permission snapshot the reveal tests use.
+spot-meta = { path = "../spot-meta" }
+spot-app-api = { path = "../../../contracts/app-api" }
+serde_json = "1"
+
+[lints]
+workspace = true

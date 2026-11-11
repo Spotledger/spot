@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-18.T1: the demo mock backend. It stands in for the server (corrections 1)
+       and is named Mock* everywhere. No UI reference: no Avalonia, no Theme, no Controls. -->
+</Project>

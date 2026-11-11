@@ -1,0 +1,65 @@
+name = "role_assignment"
+label = "Role Assignment"
+app = "platform"
+module = "identity"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "role"
+label = "Role"
+type = "link"
+options = "role"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "source"
+label = "Source"
+type = "select"
+options = "manual\nrule\nidp\nemergency"
+required = true
+default = "manual"
+in_standard_filter = true
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "active\nended\nexpired"
+required = true
+default = "active"
+in_standard_filter = true
+
+[[fields]]
+name = "valid_from"
+label = "Valid From"
+type = "datetime"
+
+[[fields]]
+name = "valid_to"
+label = "Valid To"
+type = "datetime"
+
+[[fields]]
+name = "reason"
+label = "Reason"
+type = "long_text"
+
+[[fields]]
+name = "scope"
+label = "Scope"
+type = "table"
+options = "role_assignment_scope"
+description = "Value restrictions that belong to this assignment, never to the user."
+
+[[indexes]]
+fields = ["user", "role", "source"]

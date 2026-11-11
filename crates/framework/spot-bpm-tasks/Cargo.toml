@@ -1,0 +1,50 @@
+[package]
+name = "spot-bpm-tasks"
+description = "Decision nodes and the task inbox (WS8, WP-BPM-05, ADR-49, ADR-080): the Decision node handler, the human task with its claim/release/complete/delegate/reassign actions and immutable audit events, permission-filtered inbox queries, per-node SLA reminders and escalation through a timer port, segregation-of-duties and creator-distinctness gates, and notifications that never carry more than ids and titles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The Case engine contract this crate plugs into: the node handler, its context and outcome,
+# the `WaitSpec::HumanTask` wait, the timer port and the Case id.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The run-label pair (`bpm.run.singular`/`bpm.run.plural`, ADR-080) and the typed node configs.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `OffsetDateTime` and the app error/result carried by the ports.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `NodeId`, for adapting the engine's `signal` to the task service.
+spot-dag = { path = "../spot-dag" }
+# The permission engine the inbox filter consults so a user sees only tasks they may act on or
+# supervise (WP-PLT-03, ADR-070).
+spot-permissions = { path = "../spot-permissions" }
+# The segregation-of-duties analysis the completion gate consults (WP-SEC-02, ADR-070 section 8).
+spot-sod = { path = "../spot-sod" }
+# Stable, derive-based serde on every public type, so a host can persist tasks and their events.
+serde = { version = "1", features = ["derive"] }
+# The form payload and the canonical JSON a completion hands the engine.
+serde_json = "1"
+# The one error type, with stable machine-readable `bpm_tasks.*` codes.
+thiserror = "2"
+
+[dependencies.spot-mail]
+# The outgoing e-mail transport the feature-gated `MailNotifier` adapter sends through.
+path = "../spot-mail"
+optional = true
+
+[features]
+# Enables the `MailNotifier` adapter that delivers notifications through `spot-mail`.
+mail = ["dep:spot-mail"]
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# Build the minimal metadata and permission snapshot the inbox-filter tests evaluate against.
+spot-meta = { path = "../spot-meta" }
+# The DAG execution statuses the Decision-node engine tests assert on.
+spot-dag-exec = { path = "../spot-dag-exec" }
+
+[lints]
+workspace = true

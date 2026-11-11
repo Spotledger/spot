@@ -1,0 +1,113 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "patch/2026_02_add_note",
+      "area": "patch",
+      "kind": "patch_added",
+      "rule": "patch/added",
+      "target": "2026_02_add_note",
+      "description": "Run patch `2026_02_add_note` (intent: schema).",
+      "before": "not applied",
+      "after": "applied",
+      "risk": "additive",
+      "blocking": "brief_lock"
+    },
+    {
+      "id": "patch/2026_01_rename_price_list/missing",
+      "area": "patch",
+      "kind": "patch_missing",
+      "rule": "patch/missing",
+      "target": "2026_01_rename_price_list",
+      "description": "Patch `2026_01_rename_price_list` is applied but absent from the new system (a downgrade).",
+      "before": "applied",
+      "after": "absent",
+      "risk": "destructive",
+      "reason": "a downgrade must be requested explicitly and may need a down-step",
+      "alternative": "keep the patch in the new system, or provide a down-step before removing it",
+      "blocking": "maintenance_window"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 30,
+    "expected": 60,
+    "high": 120,
+    "per_change": [
+      {
+        "change_id": "patch/2026_01_rename_price_list/missing",
+        "low": 15,
+        "expected": 30,
+        "high": 60,
+        "blocking": "maintenance_window",
+        "unknown": false
+      },
+      {
+        "change_id": "patch/2026_02_add_note",
+        "low": 15,
+        "expected": 30,
+        "high": 60,
+        "blocking": "brief_lock",
+        "unknown": false
+      }
+    ],
+    "blocking": "maintenance_window",
+    "unknown": false
+  },
+  "plan_digest": "e91377dc0c4904e89a4ac095f45690257e9e8bbe677959a5d1268d63573b2be4",
+  "to": {
+    "apps": [
+      {
+        "name": "erp_selling",
+        "version": "0.2.0",
+        "manifest": {
+          "events": [],
+          "schedules": [],
+          "patches": [
+            {
+              "id": "2026_02_add_note",
+              "intent": "schema",
+              "reversible": false,
+              "idempotent": true,
+              "deps": []
+            }
+          ],
+          "overrides": [],
+          "capabilities": {
+            "network": [],
+            "email": false,
+            "files": "",
+            "doctypes_read": [],
+            "doctypes_write": []
+          }
+        }
+      }
+    ],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [
+      "2026_01_rename_price_list"
+    ],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

@@ -1,0 +1,91 @@
+[Unit]
+Description=Spotledger site host
+Documentation=https://spotledger.example/docs/operations/
+# A single node serves local sites and (optionally) a bundled PostgreSQL that
+# runs under its own supervisor. Network is needed for remote PostgreSQL and
+# for the native HTTP API.
+After=network-online.target
+Wants=network-online.target
+# Bounded restart policy (ADR-068 A3): a crash loop is stopped, not hidden.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+# sd_notify is not implemented by spot-cli (checked at WP-PRD-09.T1); the
+# binary only handles SIGINT/SIGTERM. Type=simple is therefore correct, and
+# readiness is observed through GET /api/health/ready rather than the service
+# manager. When sd_notify lands, switch this to Type=notify and add NotifyAccess=main.
+Type=simple
+User=spot
+Group=spot
+UMask=0027
+
+# One writable state tree, one configuration tree, journal logging and a
+# private runtime directory. systemd creates and owns all of them.
+StateDirectory=spot
+StateDirectoryMode=0750
+ConfigurationDirectory=spot
+ConfigurationDirectoryMode=0755
+LogsDirectory=spot
+LogsDirectoryMode=0750
+RuntimeDirectory=spot
+RuntimeDirectoryMode=0750
+
+EnvironmentFile=-/etc/spot/environment
+# The CLI reads <root>/common.toml, the package installs /etc/spot/spot.toml
+# (decision P1, 31 Oct 2026): link the two before every start. Nothing is
+# overwritten: an operator-written regular file, or a link the operator pointed
+# elsewhere, wins and the journal says which file is used. Runs as User=spot;
+# /var/lib/spot is the state directory.
+ExecStartPre=/bin/sh -c 'f=/var/lib/spot/common.toml; if test -L "$$f" || test -e "$$f"; then echo "spot: configuration is $$f (not replaced); /etc/spot/spot.toml is used only if it is linked there"; else ln -s /etc/spot/spot.toml "$$f" && echo "spot: configuration is /etc/spot/spot.toml via $$f"; fi'
+ExecStart=/usr/bin/spot serve --root /var/lib/spot
+
+# Logs go to the journal; there is no file log to rotate (see README).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spot
+
+Restart=on-failure
+RestartSec=2s
+# Graceful stop budget: server.shutdown_grace defaults to 30 s, so allow ten
+# extra seconds for the final flush and pool close (ADR-076 part 2).
+TimeoutStopSec=40s
+TimeoutStartSec=90s
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Sandboxing. The service needs no privileges at all: it binds 127.0.0.1,
+# talks to PostgreSQL over TCP/Unix sockets and writes only /var/lib/spot.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# MemoryDenyWriteExecute is deliberately NOT set. The WASM host (wasmtime)
+# and the JavaScript engine (QuickJS) both compile to executable memory at
+# runtime, so a W^X policy would abort script and app execution. Re-test this
+# before ever enabling it; see packaging/linux/README.md.
+# ReadWritePaths is explicit even though StateDirectory already grants it; the
+# only writable path outside the automatically managed directories is state.
+ReadWritePaths=/var/lib/spot
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+[package]
+name = "spot-bi-views"
+description = "Curated, typed, versioned PostgreSQL reporting views for direct BI access, generated from the storage catalogue and a BI policy, with a read-only BI role and the checks that no protected column is reachable (WP-PRD-07.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-permissions = { path = "../../framework/spot-permissions" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+thiserror = "2"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

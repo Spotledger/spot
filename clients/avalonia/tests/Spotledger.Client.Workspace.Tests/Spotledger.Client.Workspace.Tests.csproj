@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+    <!-- Test names are sentences with underscores; the tests use no cancellation. -->
+    <NoWarn>$(NoWarn);CA1707;CA1861;xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.Workspace/Spotledger.Client.Workspace.csproj" />
+    <!-- The workflows drive the real list view over a fake server (lead decision, 2026-10-24), and the
+         report workflow is skipped with a note when the report project is absent. -->
+    <ProjectReference Include="../../src/Spotledger.Client.Lists/Spotledger.Client.Lists.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Reports/Spotledger.Client.Reports.csproj" />
+    <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,135 @@
+# access_review_pg codes: the PostgreSQL access review and SoD stores (WP-SEC-02.T3). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# A refusal of the state machine keeps its own `review.*` / `sod.*` code; only storage-level
+# outcomes are listed here. No message carries a value: only fixed sentences.
+#
+# Each code carries the class a caller can act on (the host raises it as an AppError of that
+# class, or maps it onto its own); `corrupt_state` and `sod_corrupt_rules` are Internal
+# because only an operator can repair stored data.
+
+[[entry]]
+code = "access_review_pg.migration_failed"
+class = "Internal"
+summary = "The access review and SoD tables could not be created in the database."
+explanation_key = "error.access_review_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, triggers and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.not_found"
+class = "NotFound"
+summary = "No such access review campaign in this tenant."
+explanation_key = "error.access_review_pg.not_found"
+params = []
+remedy = "Check the campaign id and the tenant; a campaign of another tenant is reported exactly like a missing one."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.already_exists"
+class = "Duplicate"
+summary = "This tenant already has a campaign with that id."
+explanation_key = "error.access_review_pg.already_exists"
+params = []
+remedy = "Open the campaign under a new id; a campaign is never overwritten."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.version_conflict"
+class = "StaleVersion"
+summary = "The review item changed since it was read."
+explanation_key = "error.access_review_pg.version_conflict"
+params = []
+remedy = "Reload the campaign and decide again against the item's current version."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.input_invalid"
+class = "Validation"
+summary = "An access review input is out of bounds: an id, text, item count or page size is too large or too small."
+explanation_key = "error.access_review_pg.input_invalid"
+params = []
+remedy = "Shorten the input or reduce the page size to the documented limit; nothing was stored."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.corrupt_state"
+class = "Internal"
+summary = "The stored campaign contradicts itself and was refused."
+explanation_key = "error.access_review_pg.corrupt_state"
+params = []
+remedy = "Do not edit the tables by hand; restore the campaign from backup and report the damage."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.unavailable"
+class = "Unavailable"
+summary = "The access review store could not answer; nothing was changed."
+explanation_key = "error.access_review_pg.unavailable"
+params = []
+remedy = "Retry once the database is reachable; a decision that failed with this code was not recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_not_found"
+class = "NotFound"
+summary = "No such override in this tenant."
+explanation_key = "error.access_review_pg.sod_not_found"
+params = []
+remedy = "Check the override position and the tenant; another tenant's override is reported exactly like a missing one."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_version_conflict"
+class = "StaleVersion"
+summary = "The SoD rule set changed since it was read."
+explanation_key = "error.access_review_pg.sod_version_conflict"
+params = []
+remedy = "Reload the rule set and submit the change again against its current version."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_override_active"
+class = "Duplicate"
+summary = "An active override already covers this rule, user and scope."
+explanation_key = "error.access_review_pg.sod_override_active"
+params = []
+remedy = "Revoke the active override or wait for its expiry before recording another."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_override_revoked"
+class = "InvalidState"
+summary = "The override was already revoked."
+explanation_key = "error.access_review_pg.sod_override_revoked"
+params = []
+remedy = "Nothing to do; a revocation is final and the override stays as evidence."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_input_invalid"
+class = "Validation"
+summary = "An SoD input is refused: a blank or oversize field, an unknown rule, a missing rule set, a self-granted override or an expiry that is not in the future."
+explanation_key = "error.access_review_pg.sod_input_invalid"
+params = []
+remedy = "Fix the field the message class names and submit again; nothing was stored."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_corrupt_rules"
+class = "Internal"
+summary = "The stored SoD rule set no longer validates and was refused."
+explanation_key = "error.access_review_pg.sod_corrupt_rules"
+params = []
+remedy = "Store a corrected rule set as a new version; the damaged version is never served."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_pg.sod_unavailable"
+class = "Unavailable"
+summary = "The SoD store could not answer; nothing was changed."
+explanation_key = "error.access_review_pg.sod_unavailable"
+params = []
+remedy = "Retry once the database is reachable; an override that failed with this code was not recorded."
+since = "0.1.0"

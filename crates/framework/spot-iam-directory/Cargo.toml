@@ -1,0 +1,30 @@
+[package]
+name = "spot-iam-directory"
+description = "The user directory's decision logic (WP-IAM-02.T1, ADR-070 sections 1 and 6): user model, enable and disable with leaver actions, last-administrator protection, anonymisation, invitations and recovery rules, as a pure core that returns what must happen next as data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Actor` (who caused a change) and the `RecordId` / `Name` re-exports.
+spot-events-contract = { path = "../../../contracts/events" }
+# `RecordId`, the stable user id.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `ResolvedRole`, `RoleKind`: the portal rule (ADR-083 Barrier 3) is checked on a resolved role.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# Stable, derive-based serde on every public type, so the directory can be persisted and sent.
+serde = { version = "1", features = ["derive"] }
+# Instants are passed in; the crate never reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+thiserror = "2"
+
+[dev-dependencies]
+# `ManualClock`: invitation expiry is tested without sleeping.
+spot-core = { path = "../spot-core" }
+proptest = "1"
+toml = "0.8"
+
+[lints]
+workspace = true

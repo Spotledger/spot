@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(&\nok(&\nslot_with(\"at\", RangeTest::Overlaps\n{\n    start: Value::DateTime(t0), end:\n    Value::DateTime(t0 + time::Duration::hours(2)),\n}), & cat))"
+---
+SELECT $1 AS "one" FROM "slot" AS "x" WHERE ("x"."at" && tstzrange($2, $3, '[)')) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Int8(1)
+$2 = TimestampTz(1970-01-01 0:00:00.0 +00:00:00)
+$3 = TimestampTz(1970-01-01 2:00:00.0 +00:00:00)
+$4 = Int8(0)
+columns = ["one"]
+decode = [Int]

@@ -1,0 +1,20 @@
+[package]
+name = "spot-sample-guest"
+description = "The reference guest for the SDK conformance harness (WP-STR-07.T1): the sample app's Time Entry behaviour over the spot-wasm test world, built for wasm32-unknown-unknown and componentized without WASI so it links on the no-WASI host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The bindings generator for the world in `wit/world.wit`.
+wit-bindgen = "0.57"
+
+[profile.release]
+opt-level = "s"
+strip = true
+
+# This template is a standalone crate, not a spot workspace member: an app author copies it out.
+[workspace]

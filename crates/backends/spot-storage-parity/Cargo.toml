@@ -1,0 +1,22 @@
+[package]
+name = "spot-storage-parity"
+description = "The storage semantic parity rules and the table-driven matrix that runs every rule on the in-memory fake and on PostgreSQL (WP-STO-10.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../spot-storage-fake" }
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

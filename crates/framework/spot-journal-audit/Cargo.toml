@@ -1,0 +1,24 @@
+[package]
+name = "spot-journal-audit"
+description = "The journal audit comparison and the per-tenant recovery report (WP-JRN-07.T1, ADR-061 s8 and s9): record summaries compared as sorted streaming iterators with per-entity counts and the first differing record, the exact financial fingerprint compare, the recovery time objective against the tenant's tier target, and the recovery report that answers whether the tenant could be recovered"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The audit result, the condition and the recovery report are plain data for a console and the
+# conditions framework (ADR-067).
+serde = { version = "1", features = ["derive"] }
+# The digest of a record's canonical content, the 32-byte value both sides are compared on.
+sha2 = "0.10"
+# Typed errors with stable `journal_audit.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property: the streaming compare agrees with a naive in-memory compare on random inputs.
+proptest = "1"
+
+[lints]
+workspace = true

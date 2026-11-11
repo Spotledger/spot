@@ -1,0 +1,119 @@
+# bi codes (WP-PRD-07.T1): the BI reporting views. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Raised by crates/backends/spot-bi-views, which returns them as its own error type: class "none".
+
+[[entry]]
+code = "bi.policy_parse"
+class = "none"
+summary = "The BI policy is not valid TOML, or it has a key this version does not know."
+explanation_key = "error.bi.policy_parse"
+params = []
+remedy = "Fix the policy file's syntax, or remove the unknown key."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.policy_invalid"
+class = "none"
+summary = "A BI policy value is out of range or badly formed, for example a version below 1 or a bad name."
+explanation_key = "error.bi.policy_invalid"
+params = []
+remedy = "Correct the named value in the BI policy and generate the views again."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.unknown_entity"
+class = "none"
+summary = "The BI policy names an entity the storage catalogue does not have."
+explanation_key = "error.bi.unknown_entity"
+params = []
+remedy = "Check the entity name against the catalogue, or remove it from the BI policy."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.unknown_column"
+class = "none"
+summary = "The BI policy names a field the entity does not have."
+explanation_key = "error.bi.unknown_column"
+params = []
+remedy = "Check the field name against the entity, or remove it from the BI policy."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.protected_column"
+class = "none"
+summary = "The BI policy asks for a protected, secret or system-internal field, which no BI view may show."
+explanation_key = "error.bi.protected_column"
+params = []
+remedy = "Remove the field from the BI policy; protected fields are never exposed to BI tools."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.unsupported_type"
+class = "none"
+summary = "The BI policy asks for a field whose storage type has no BI representation."
+explanation_key = "error.bi.unsupported_type"
+params = []
+remedy = "Remove the field from the BI policy; JSON and binary fields are not exposed to BI tools."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.reserved_name"
+class = "none"
+summary = "A BI view would use a name in the platform's reserved namespace."
+explanation_key = "error.bi.reserved_name"
+params = []
+remedy = "Expose the application's own entities only; platform tables are never exposed."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.posted_marker"
+class = "none"
+summary = "The posted-only filter cannot be applied to an entity without a usable posting field."
+explanation_key = "error.bi.posted_marker"
+params = []
+remedy = "Add an integer posting field that is not protected, or set posted_only to false for this entity."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.name_too_long"
+class = "none"
+summary = "A generated BI view name is longer than PostgreSQL's identifier limit."
+explanation_key = "error.bi.name_too_long"
+params = []
+remedy = "Shorten the entity or child table name, which the view name is built from."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.name_collision"
+class = "none"
+summary = "Two generated BI objects would have the same name."
+explanation_key = "error.bi.name_collision"
+params = []
+remedy = "Rename one of the entities or fields so that the generated names differ."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.breaking_change"
+class = "none"
+summary = "Applying the BI plan would remove, retype or reorder a column of a view that already exists."
+explanation_key = "error.bi.breaking_change"
+params = []
+remedy = "Raise the entity's version in the BI policy so that a new view is created beside the old one."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.not_a_view"
+class = "none"
+summary = "An object with a planned BI view name exists in the bi schema and is not a view."
+explanation_key = "error.bi.not_a_view"
+params = []
+remedy = "Rename or remove the conflicting object in the bi schema, then apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "bi.database"
+class = "none"
+summary = "The database refused a BI view statement or check, and the SQLSTATE is in the message."
+explanation_key = "error.bi.database"
+params = []
+remedy = "Read the SQLSTATE in the message and the database log, fix the cause, and apply again."
+since = "0.1.0"

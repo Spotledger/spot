@@ -1,0 +1,25 @@
+[package]
+name = "l3-http"
+description = "L3 HTTP behaviour suite (WP-TST-10.T2): the framework's behaviour over the real stack, the real server binary path, HTTP, sessions, permissions and PostgreSQL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The product host: site creation, app install and seed, the `serve` assembly and reload.
+spot-cli = { path = "../../../crates/framework/spot-cli" }
+# A scratch PostgreSQL database per run, its drop guard and the leaked-database sweep.
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+# Sign-in windows the fixture shortens so a lockout is provable without sleeping.
+spot-login = { path = "../../../crates/framework/spot-login" }
+spot-sessions = { path = "../../../crates/framework/spot-sessions" }
+# Password policy, verifiers and the one-time first sign-in secret.
+spot-auth = { path = "../../../crates/framework/spot-auth" }
+
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "fs"] }
+
+[lints]
+workspace = true

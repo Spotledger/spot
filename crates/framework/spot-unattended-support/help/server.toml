@@ -1,0 +1,16 @@
+# Help for the server error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "server.conflict_retry_exhausted"
+what_happened = "Concurrent changes kept conflicting until the host ran out of retries."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry the whole operation later, when contention has settled.", "If it keeps happening, tell your administrator and quote the code server.conflict_retry_exhausted."]
+audience = "admin"
+
+[[help]]
+code = "server.unavailable"
+what_happened = "The service is temporarily busy or unreachable; the same request may succeed later."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry later with the same request id.", "If it keeps happening, tell your administrator and quote the code server.unavailable."]
+audience = "admin"

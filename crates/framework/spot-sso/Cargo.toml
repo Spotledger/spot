@@ -1,0 +1,60 @@
+[package]
+name = "spot-sso"
+description = "Single sign-on: the tenant sign-in policy (local, optional, required) with break-glass administrators, and OIDC authorization-code sign-in with PKCE as a sans-I/O state machine (WP-IAM-05.T1, ADR-070 sections 5 and 7)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent `ReplayStore` contract suite (`contract::run_all`) and its test
+# helpers, public so the PostgreSQL store (WP-IAM-05.T6) runs the same cases.
+testing = []
+
+[dependencies]
+# `LinkedIdentity`, `IdentityKey`, `check_identity_unique`, `SignInMethod`,
+# `validate_sign_in_method` and `UserType`: the directory vocabulary the sign-in decision uses.
+spot-iam-directory = { path = "../spot-iam-directory" }
+# `AuthMethod`, `MethodGuard` and `TargetSignIn`: the no-weaker-method ladder this crate joins.
+spot-iam-access = { path = "../spot-iam-access" }
+# `RecordId`, the stable user id an identity resolves to.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# RSA-PKCS1 and ECDSA P-256 verification, SHA-256 digests and constant-time comparison: the
+# one cryptographic dependency, no JWT or OpenID framework.
+ring = "0.17"
+# Read-only XML DOM for SAML 2.0 (WP-IAM-05.T2): no external entities and no DTD processing by
+# default, which is exactly the safety posture SAML needs. Canonicalisation is implemented in
+# `saml/c14n.rs` over this tree, not delegated to a crate.
+roxmltree = "0.21"
+# X.509 parsing for the pinned SAML signing certificates: extract the `SubjectPublicKeyInfo`
+# to verify a signature, never to trust an unsigned `KeyInfo` in a message.
+x509-parser = "0.18"
+# Raw DEFLATE for the SAML HTTP-Redirect binding only (`SAMLRequest`/`SAMLResponse` are raw
+# DEFLATE, then Base64, then URL-encoded). No zlib/gzip framing.
+flate2 = "1.1"
+# Base64url without padding for JOSE segments and JWK members.
+base64 = "0.22"
+# Exact URL parsing and construction for the authorization, token and logout URLs.
+url = "2"
+# Stable, derive-based serde on every public type, so pending state round-trips.
+serde = { version = "1", features = ["derive"] }
+# The ID token header and claim set, read as JSON.
+serde_json = "1"
+# The one error type per question, with stable machine-readable codes.
+thiserror = "2"
+# Invitation expiries arrive as instants (types only; the crate never reads a clock).
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+
+[dev-dependencies]
+# The contract suite and `block_on` (`testing` feature) for the integration tests.
+spot-sso = { path = ".", features = ["testing"] }
+# The property test: arbitrary token strings never panic and never verify.
+proptest = "1"
+# Throwaway self-signed certificates for the fake SAML identity providers: the crate must not
+# ship a private key, so every test generates its own. Already in the workspace lock via
+# spot-mail's dev-dependencies; test-only, never used by the shipped crate.
+rcgen = "0.14"
+
+[lints]
+workspace = true

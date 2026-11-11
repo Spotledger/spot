@@ -1,0 +1,34 @@
+[package]
+name = "spot-fleet-health"
+description = "Fleet health and monitoring (WP-CTL-03.T1): tenant and node telemetry normalised into observations, data-driven three-colour health rules with a plain-language sentence, freshness that never reports green without recent data, deduplicated alerting with hysteresis, silences and escalation, and a bounded-cardinality series budget"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public type, so observations and rules can be
+# persisted or shipped between the node and the control plane as data.
+serde = { version = "1", features = ["derive"] }
+# The health rules are data (`rules/*.toml`), not code scattered across services.
+toml = "0.8"
+# The one error type, with stable machine-readable `fleet_health.*` codes.
+thiserror = "2"
+
+[dependencies.spot-mail]
+# The feature-gated `MailAlertSink` adapter delivers alert summaries through `spot-mail`.
+path = "../spot-mail"
+optional = true
+
+[features]
+default = []
+# Enables the `MailAlertSink` adapter that sends alert notifications through `spot-mail`.
+mail = ["dep:spot-mail"]
+
+[dev-dependencies]
+# Assert every raised `fleet_health.*` code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

@@ -1,0 +1,2 @@
+# Help for the nocode_builders error codes. These codes are library-internal (class "none"),
+# so no user-visible entry is required; see crates/framework/spot-errors/catalogue/nocode_builders.toml.

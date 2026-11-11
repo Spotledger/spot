@@ -1,0 +1,56 @@
+# expand_contract codes: expand/contract enforcement (spot-expand-contract, WP-MIG-09).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "expand_contract.bad_object"
+class = "none"
+summary = "The object name {name} is not a table or a table.column name."
+explanation_key = "error.expand_contract.bad_object"
+params = ["name"]
+remedy = "Use the storage name of a table, or of one column written as `table.column`."
+since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.bad_manifest"
+class = "none"
+summary = "A usage manifest could not be read: {message}."
+explanation_key = "error.expand_contract.bad_manifest"
+params = ["message"]
+remedy = "Correct the TOML: one release label and a list of objects, each `table` or `table.column`."
+since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.bad_release"
+class = "none"
+summary = "The release label is not usable: {message}."
+explanation_key = "error.expand_contract.bad_release"
+params = ["message"]
+remedy = "Use a non-empty release tag with no whitespace, such as a version or a date."
+since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.contract_too_early"
+class = "none"
+summary = "The contract step on {object} ships in the same release as the code that stops using it; the earliest allowed release is {earliest}."
+explanation_key = "error.expand_contract.contract_too_early"
+params = ["earliest", "object"]
+remedy = "Ship the removal one release later: stop using the object now, and contract it after the release that stopped."
+since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.contract_while_used"
+class = "none"
+summary = "The contract step removes {object}, which release {release} still reads or writes."
+explanation_key = "error.expand_contract.contract_while_used"
+params = ["object", "release"]
+remedy = "Stop reading and writing the object first, then contract it one release later."
+since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.contract_object_missing"
+class = "none"
+summary = "The contract step on {target} names no usable table or column."
+explanation_key = "error.expand_contract.contract_object_missing"
+params = ["target"]
+remedy = "Name the object as `table` or `table.column` so the gate can check it against the previous release."
+since = "0.1.0"

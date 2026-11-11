@@ -1,0 +1,50 @@
+[package]
+name = "spot-nocode-builders"
+description = "The no-code report and dashboard builder's server model (WP-DX-07.T1): report drafts over the storage query IR with link joins, filters, grouping, aggregates, totals and charts, permission-aware field offers, dashboards with shared filters and refresh policies, a bounded preview, publish through spot-reports, and the approval-workflow starter that builds a BPM process from the approval-with-escalation template"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The report engine the draft compiles to and the published report runs on.
+spot-reports = { path = "../spot-reports" }
+# The query IR the compiled report builds and the catalog it is validated against (ADR-45,
+# ADR-069).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The app API's metadata view (`DocTypeDef`, `FieldDef`, `FieldKind`).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The effective metadata a report's fields and a dashboard's tiles resolve against.
+spot-meta = { path = "../spot-meta" }
+# The permission decisions and the field set a builder may offer its author.
+spot-permissions = { path = "../spot-permissions" }
+# The process model, its compiler and its validation for the approval starter.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# Drafts, ops, charts and dashboards are plain serde values the client can carry.
+serde = { version = "1", features = ["derive"] }
+# Report definitions, filter literals and dashboard definitions are TOML.
+toml = "0.9"
+# A preview's sample rows are the contract's JSON values.
+serde_json = "1"
+# Typed errors with stable `nocode_builders.*` codes.
+thiserror = "2"
+# SHA-256 over a publish's provenance digest.
+sha2 = "0.10"
+
+[dev-dependencies]
+# The in-memory backend the golden report and the preview run on.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The field guard the report runner enforces viewer rights with.
+spot-field-guard = { path = "../spot-field-guard" }
+# A manual clock for the field guard's trace records.
+spot-core = { path = "../spot-core" }
+# The undo/redo property test.
+proptest = "1"
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync"] }
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+# Calendar dates in the fixtures and the golden report.
+time = { version = "0.3", features = ["macros"] }
+
+[lints]
+workspace = true

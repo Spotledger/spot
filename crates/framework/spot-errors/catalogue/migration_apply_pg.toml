@@ -1,0 +1,115 @@
+# migration_apply_pg codes: the `migration_apply_pg.*` vocabulary of spot-migration-apply-pg
+# (WP-MIG-07.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The PostgreSQL wiring raises its own typed errors (`spot_migration_apply_pg::Error`), so these
+# are library-internal vocabulary: `class = "none"` describes what each code means, and a remedy
+# states what an operator does about it. The engine's own outcomes (a failed verification, a
+# restored old version) are not errors and have no entry here.
+
+[[entry]]
+code = "migration_apply_pg.control_unavailable"
+class = "none"
+summary = "The control schema could not be read or written during {operation}: {message}."
+explanation_key = "error.migration_apply_pg.control_unavailable"
+params = ["message", "operation"]
+remedy = "Check that the control schema exists and the database is reachable; the site stays closed."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.journal_sequence"
+class = "none"
+summary = "Journal sequence {seq} is not the next one ({expected}) for site {site}."
+explanation_key = "error.migration_apply_pg.journal_sequence"
+params = ["expected", "seq", "site"]
+remedy = "Read the journal and continue from its head; never rewrite a sequence number by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.journal_record"
+class = "none"
+summary = "Journal record {seq} does not parse: {message}."
+explanation_key = "error.migration_apply_pg.journal_record"
+params = ["message", "seq"]
+remedy = "Treat the journal as corrupt, keep the site closed and inspect the record before recovering."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.gate_unreadable"
+class = "none"
+summary = "The maintenance gate could not be read: {message}."
+explanation_key = "error.migration_apply_pg.gate_unreadable"
+params = ["message"]
+remedy = "Restore the gate row or the database connection; the gate stays closed until it can be read."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.step_out_of_plan"
+class = "none"
+summary = "Step {index} is outside the {steps}-step plan."
+explanation_key = "error.migration_apply_pg.step_out_of_plan"
+params = ["index", "steps"]
+remedy = "Recover the run against the plan it was approved for; never run a step the plan does not name."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.step_failed"
+class = "none"
+summary = "Step {index} ({id}) failed: {message}."
+explanation_key = "error.migration_apply_pg.step_failed"
+params = ["id", "index", "message"]
+remedy = "Read the reason, fix the step and start the apply again; the old version is restored."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.step_unsupported"
+class = "none"
+summary = "The non-schema step {kind} has no handler in this build."
+explanation_key = "error.migration_apply_pg.step_unsupported"
+params = ["kind"]
+remedy = "Wire the metadata, patch or behaviour handler before applying a plan that contains this step."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.snapshot_failed"
+class = "none"
+summary = "The snapshot operation {operation} failed: {message}."
+explanation_key = "error.migration_apply_pg.snapshot_failed"
+params = ["message", "operation"]
+remedy = "Check the provider, the destination and the target; the site stays closed."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.snapshot_unknown"
+class = "none"
+summary = "Snapshot {snapshot} is not one this site took."
+explanation_key = "error.migration_apply_pg.snapshot_unknown"
+params = ["snapshot"]
+remedy = "Take a snapshot of this site before applying and use the id the take returned."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.timing_failed"
+class = "none"
+summary = "A timing measurement could not be recorded: {message}."
+explanation_key = "error.migration_apply_pg.timing_failed"
+params = ["message"]
+remedy = "Check the timing table and the runtime; measurements never change the apply outcome."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.progress_failed"
+class = "none"
+summary = "A migration progress notification could not be published: {message}."
+explanation_key = "error.migration_apply_pg.progress_failed"
+params = ["message"]
+remedy = "Check the realtime bus; progress is best effort and the journal remains authoritative."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply_pg.progress_room"
+class = "none"
+summary = "The migration progress room could not be built: {message}."
+explanation_key = "error.migration_apply_pg.progress_room"
+params = ["message"]
+remedy = "Fix the room name; a room is a validated structured name, never a free string."
+since = "0.1.0"

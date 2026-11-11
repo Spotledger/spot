@@ -1,0 +1,11 @@
+{
+  "diagnostics": [
+    {
+      "code": "ts.function_constructor_not_allowed",
+      "line": 1,
+      "column": 51,
+      "end_line": 1,
+      "end_column": 74
+    }
+  ]
+}

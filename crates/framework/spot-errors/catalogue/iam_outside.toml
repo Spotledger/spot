@@ -1,0 +1,31 @@
+# iam_outside codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Barrier 3 of ADR-083 (WP-IAM-11.T4): a portal user may hold only a portal role whose every
+# duty is marked outside-exposed. The identity crates (spot-iam-roles, spot-iam-directory,
+# spot-iam-assign, spot-iam-governance, spot-iam-scim) raise these; none rides an AppError.
+
+[[entry]]
+code = "iam_outside.role_kind"
+class = "none"
+summary = "A portal user can hold only a portal role, and every role it inherits from must be one."
+explanation_key = "error.iam_outside.role_kind"
+params = []
+remedy = "Give the portal user a portal role, or make the user an internal user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_outside.duty_not_exposed"
+class = "none"
+summary = "A portal role includes a duty, or a direct right, that is not marked outside-exposed."
+explanation_key = "error.iam_outside.duty_not_exposed"
+params = []
+remedy = "Remove the duty from the portal role, or mark the duty outside-exposed after review."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_outside.role_edit_refused"
+class = "none"
+summary = "The edit would give a role held by portal users a desk kind, an unexposed duty or a direct right."
+explanation_key = "error.iam_outside.role_edit_refused"
+params = []
+remedy = "Make the change on a copy of the role, or move the portal holders to another role first."
+since = "0.1.0"

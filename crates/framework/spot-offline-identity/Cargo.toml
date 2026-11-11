@@ -1,0 +1,33 @@
+[package]
+name = "spot-offline-identity"
+description = "Offline identity for branch nodes (WP-IAM-09.T1, ADR-070 rule 12.13 b, c, d, h, i): a signed permission snapshot with epoch and per-tier bounds, a lease persisted across reboots that a restart can never extend, fail-closed authorisation per tier with an audited bounded override, node certificate and key-release gating, and offline-write stamps in a hash-chained journal that the hub classifies into accepted, flagged or quarantined"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Public keys, key ids and Ed25519 verification: the signing primitives of the platform.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The tamper-evident chain the offline journal is built on, and the audit record type.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# SHA-256 for the snapshot hash that detects a fork (same epoch, different content).
+sha2 = "0.10"
+# Derives so the transport and the persistence layer can carry the types; hashes and
+# signatures never depend on serde.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `offline_identity.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The test signers: the production signers (offline root, online snapshot key) sit behind the
+# `Signer` trait, and this crate reads no randomness.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The property tests of the lease rules.
+proptest = "1"
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

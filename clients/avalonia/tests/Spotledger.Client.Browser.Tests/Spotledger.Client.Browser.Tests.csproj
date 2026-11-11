@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-09.T1: headless tests of the browser head. The head itself targets net10.0-browser and cannot
+       be loaded by a test host, so the pure logic of the head (Logic/ and Build/AssetManifest.cs) is
+       compiled into this project from its source files: what is tested is the code that ships. The
+       JavaScript interop files are not linked; they are thin and are covered by the browser budget
+       scripts (WP-UI-09.T3). The expression conformance corpus is read from the Rust crate. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Spotledger.Client.Browser.Tests</RootNamespace>
+    <!-- AssetManifest.cs also holds the MSBuild task; the tests compile only the library part. -->
+    <DefineConstants>$(DefineConstants);SPOT_MANIFEST_NO_TASK</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/Spotledger.Client.Browser/Logic/**/*.cs" LinkBase="Head/Logic" />
+    <Compile Include="../../src/Spotledger.Client.Browser/Build/AssetManifest.cs" LinkBase="Head/Build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- calc.mjs integrity check, run under node by CalcIntegrityTests. The script imports calc.mjs by its
+         output-relative path (../calc.mjs), so both are copied with that layout. -->
+    <None Include="Js/calc-integrity.mjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Spotledger.Client.Browser/wwwroot/calc.mjs" Link="calc.mjs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+  </ItemGroup>
+</Project>

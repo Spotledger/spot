@@ -1,0 +1,40 @@
+[package]
+name = "spot-migration-approval"
+description = "Review and approval of a release plan (WP-MIG-04.T1): the plan digest with a domain prefix, per-site approval policy by risk class, approval records and store, and the only path to the ApplyTicket the apply engine requires, so apply runs exactly what was approved"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The plan type, its risk classes and its canonical text (`ReleasePlan::json`), reused as is.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# Every approval action is written as an `AuditRecord` for the tamper-evident chain.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Plain serde values for the policy (kept in settings) and the approval records.
+serde = { version = "1", features = ["derive"] }
+# The policy's settings value and the CLI's structured output.
+serde_json = "1"
+# SHA-256 over the domain prefix and the plan's canonical text.
+sha2 = "0.10"
+# Typed errors with stable `migration_approval.*` codes.
+thiserror = "2"
+
+# The adapters are optional (WP-MIG-04.T2) so the crate stays light by default. `audit-chain`
+# needs nothing extra: `spot-audit-chain` is already a dependency for `AuditRecord`.
+spot-sod = { path = "../spot-sod", optional = true }
+spot-signed-command = { path = "../spot-signed-command", optional = true }
+spot-settings = { path = "../spot-settings", optional = true }
+# A signature on an approval is an Ed25519 signature; the hook rebuilds it from its bytes.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"], optional = true }
+
+[features]
+default = []
+sod = ["dep:spot-sod"]
+signed-command = ["dep:spot-signed-command", "dep:ed25519-dalek"]
+settings = ["dep:spot-settings"]
+audit-chain = []
+
+[lints]
+workspace = true

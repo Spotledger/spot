@@ -1,0 +1,18 @@
+<Project>
+  <!-- Runs the already-built token generator assembly directly (no nested restore or
+       build). The MSBuild-built assembly path comes from the build-order-only
+       ProjectReference (ReferenceOutputAssembly="false", OutputItemType set) in
+       Spotledger.Client.Theme.csproj, so no output path is assumed here. -->
+  <Target Name="CheckGeneratedThemeTokens"
+          BeforeTargets="CoreCompile"
+          Condition="'$(MSBuildProjectName)' == 'Spotledger.Client.Theme'">
+    <PropertyGroup>
+      <TokenGeneratorAssemblyPath>@(TokenGeneratorAssembly->'%(FullPath)')</TokenGeneratorAssemblyPath>
+    </PropertyGroup>
+    <Error Condition="'$(TokenGeneratorAssemblyPath)' == ''"
+           Text="Token generator assembly path could not be resolved; the design generator reference in Spotledger.Client.Theme.csproj is missing or broken." />
+    <Error Condition="'$(TokenGeneratorAssemblyPath)' != '' And !Exists('$(TokenGeneratorAssemblyPath)')" Text="Token generator assembly '$(TokenGeneratorAssemblyPath)' does not exist on disk." />
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)"
+          Command="dotnet &quot;$(TokenGeneratorAssemblyPath)&quot; --check" />
+  </Target>
+</Project>

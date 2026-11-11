@@ -1,0 +1,42 @@
+[package]
+name = "spot-support-eval"
+description = "Support evaluation harness (WP-AI-12.T1): an incident corpus, fault injection over the in-memory stack, prompt-injection tests, scripted and LLM agent drivers through the fix pipeline, metrics and the zero-harm release gate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+# `bin/` directories are git-ignored in this repository, so the binary lives under `src/cli/`.
+[[bin]]
+name = "spot-support-eval"
+path = "src/cli/main.rs"
+
+[dependencies]
+# The tier ladder, agent identity and authoriser every evaluated action runs behind.
+spot-agent-tiers = { path = "../../crates/framework/spot-agent-tiers" }
+# The remedy catalogue, its typed ports and the support-case matcher the scripted agent uses.
+spot-remedies = { path = "../../crates/framework/spot-remedies" }
+# Plan, rehearse, apply, verify, roll back: every evaluated fix goes through this pipeline.
+spot-fix-pipeline = { path = "../../crates/framework/spot-fix-pipeline" }
+# The fingerprint and invariant report types the pipeline's evidence carries.
+spot-rehearsal = { path = "../../crates/framework/spot-rehearsal" }
+# The provider-agnostic model interface the optional LLM driver speaks.
+spot-llm = { path = "../../crates/framework/spot-llm" }
+# The task router a real-provider run goes through (never in CI).
+spot-llm-router = { path = "../../crates/framework/spot-llm-router" }
+# The corpus and the result artefact are TOML/JSON, serde-stable.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+# Typed, explained errors.
+thiserror = "2"
+# The optional LLM driver blocks on the provider future outside CI.
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+
+[dev-dependencies]
+# The in-memory provider the router test scripts.
+tokio = { version = "1", default-features = false, features = ["rt", "time", "macros"] }
+
+[lints]
+workspace = true

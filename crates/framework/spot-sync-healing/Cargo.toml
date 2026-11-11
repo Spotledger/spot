@@ -1,0 +1,31 @@
+[package]
+name = "spot-sync-healing"
+description = "The self-healing repair driver (WP-SYN-09.T4, ADR-067 sections 3 and 4): reconciliation findings turned into rate-limited, backed-off, journaled repair actions that never run against a frozen scope and never go from a mirror to its owner, with the RECONCILE_DIVERGENCE condition raised when a repair gives up"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `ReconcileReport`, `Finding`, `Repair`, `NodeRole`, `Scope` and `plan_repairs`: the findings
+# this driver executes and the direction rule it obeys.
+spot-sync-reconcile = { path = "../spot-sync-reconcile" }
+# `Millis` (the caller's clock), `ConditionParams` and the engine the condition signals are
+# applied to.
+spot-conditions = { path = "../spot-conditions" }
+# Stable derive-based serde on the journal entry, so a deployment can export the evidence.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `sync_healing.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# `Name` and `Version` build the findings the tests feed in (the types the findings carry).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The one-minute-window property.
+proptest = "1"
+
+[lints]
+workspace = true

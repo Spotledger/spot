@@ -1,0 +1,39 @@
+[package]
+name = "spot-migration-plan"
+description = "The release plan engine (WP-MIG-01.T1): the diff of schema, effective metadata, patches and behaviour between two app sets, the risk classes (additive, needs review, destructive), a duration estimate from table statistics and a deterministic plan document that a human and the apply engine both read"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The effective metadata model (`Definition`, `FieldSpec`, `FieldType`, `MaskSpec`,
+# `ProtectionGroupSpec`) that the two systems are described with.
+spot-meta = { path = "../spot-meta" }
+# The graph model (WP-STO-07.T5): a Link field is traversable exactly when the model derives an
+# edge over it, so `traversal_model::state_from_model` reads the model instead of a flag.
+spot-graph-model = { path = "../spot-graph-model" }
+# The live-database schema planner (WP-STO-11): its `MigrationPlan` is mapped into this plan
+# through `SchemaPlanSource`; the diff itself is never duplicated here.
+spot-pg-migrate = { path = "../../backends/spot-pg-migrate" }
+# Plain serde values for the input `SystemDescription` and the plan document.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON of the plan document and its digest.
+serde_json = "1"
+# SHA-256 over the plan's canonical form (the `plan_digest`).
+sha2 = "0.10"
+# The risk rule table and the cost model are TOML-loadable; defaults are compiled in.
+toml = "0.8"
+# Typed errors with stable `migplan.*` codes.
+thiserror = "1"
+
+[dev-dependencies]
+# `plan(a, a)` is empty and applying `plan(a, b)` to `a` gives `b`.
+proptest = "1"
+# The storage catalogue the backend planner diffs against, to prove this crate maps the real
+# `spot-pg-migrate` output (and never duplicates its diff) with no database.
+spot-storage-contract = { path = "../../../contracts/storage" }
+
+[lints]
+workspace = true

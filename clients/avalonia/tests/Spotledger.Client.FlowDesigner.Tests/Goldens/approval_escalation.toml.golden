@@ -1,0 +1,62 @@
+# Spotledger process definition (spot-bpm-model). Canonical: keys sorted, one scalar per line.
+name = "approval_escalation"
+app = "workflow"
+title = "Approval with escalation"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+trigger = "manual"
+
+[[nodes]]
+id = "first"
+kind = "decision"
+assignee = "role:manager"
+outcomes = ["approve", "reject"]
+title = "Approve the request?"
+
+[[nodes]]
+id = "escalate"
+kind = "decision"
+assignee = "role:director"
+outcomes = ["approve", "reject"]
+title = "Escalated approval"
+
+[[nodes]]
+id = "approved"
+kind = "logic"
+join = "any"
+terminal = true
+logic = "branch"
+
+[[nodes]]
+id = "rejected"
+kind = "logic"
+terminal = true
+logic = "branch"
+
+[[edges]]
+from = "start"
+to = "first"
+
+[[edges]]
+from = "first"
+to = "approved"
+condition = "doc.approved == true"
+
+[[edges]]
+from = "first"
+to = "escalate"
+default = true
+
+[[edges]]
+from = "escalate"
+to = "approved"
+condition = "doc.escalated_approved == true"
+
+[[edges]]
+from = "escalate"
+to = "rejected"
+default = true

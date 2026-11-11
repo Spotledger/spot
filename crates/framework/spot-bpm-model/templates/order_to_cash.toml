@@ -1,0 +1,73 @@
+name = "order_to_cash"
+app = "selling"
+title = "Order to Cash"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+trigger = "document_event"
+doctype = "Sales Order"
+event = "post"
+
+[[nodes]]
+id = "create_delivery"
+kind = "document"
+action = "create"
+doctype = "Delivery Note"
+
+[[nodes]]
+id = "post_delivery"
+kind = "document"
+action = "post"
+doctype = "Delivery Note"
+operation = "post"
+
+[[nodes]]
+id = "approve"
+kind = "decision"
+title = "Approve the delivery?"
+assignee = "role:sales_manager"
+outcomes = ["approve", "hold"]
+
+[[nodes]]
+id = "notify"
+kind = "integration"
+connector = "email"
+action = "send"
+endpoint = "customer"
+terminal = true
+
+[[nodes]]
+id = "hold"
+kind = "wait"
+wait = "event"
+event = "payment_received"
+terminal = true
+
+[[edges]]
+from = "start"
+to = "create_delivery"
+
+[[edges]]
+from = "create_delivery"
+to = "post_delivery"
+
+[[edges]]
+from = "post_delivery"
+to = "approve"
+
+[[edges]]
+from = "approve"
+to = "notify"
+rule = "high_value"
+
+[[edges]]
+from = "approve"
+to = "hold"
+default = true
+
+[[rules]]
+id = "high_value"
+expression = "doc.total > 1000"

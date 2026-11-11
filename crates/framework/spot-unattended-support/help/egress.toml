@@ -1,0 +1,30 @@
+# Help for the egress error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "egress.invalid_config"
+what_happened = "The egress policy configuration is invalid."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the policy configuration and fix any syntax errors.", "If it keeps happening, tell your administrator and quote the code egress.invalid_config."]
+audience = "operator"
+
+[[help]]
+code = "egress.invalid_url"
+what_happened = "The request URL is malformed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the URL for syntax errors.", "If it keeps happening, tell your administrator and quote the code egress.invalid_url."]
+audience = "operator"
+
+[[help]]
+code = "egress.resolution_mixed"
+what_happened = "A DNS lookup returned a mix of allowed and denied addresses (possible attack)."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["The DNS record may be misconfigured; check with your DNS provider.", "If it keeps happening, tell your administrator and quote the code egress.resolution_mixed."]
+audience = "operator"
+
+[[help]]
+code = "egress.pinned_required"
+what_happened = "The egress guard authorised the destination but returned no address to dial."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the egress policy and the destination's DNS records; nothing was sent.", "If it keeps happening, tell your administrator and quote the code egress.pinned_required."]
+audience = "operator"

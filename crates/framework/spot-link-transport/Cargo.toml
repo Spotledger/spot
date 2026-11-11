@@ -1,0 +1,47 @@
+[package]
+name = "spot-link-transport"
+description = "Carriers for tenant links (WP-CTL-10.T2, ADR-058 rule 11, ADR-080): the direct carrier (the sender dials the peer's inbound endpoint over mutual TLS) and the pull carrier (the side that cannot accept inbound connections long-polls the peer's mailbox), with link-bound transport identity, per-link rate, size and concurrency limits, deadlines, retries, a per-link circuit breaker and stuck-peer conditions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The exchange: `Inbox::receive`, `Outbox::next_batch` and `Outbox::on_receipt` do all the work
+# on a message; this crate only moves bytes to them and answers.
+spot-link-exchange = { path = "../spot-link-exchange" }
+# `Link`, `Party`, `LinkStore`, `AuditSink`, `IdentitySigner`: the link and who is who.
+spot-tenant-link = { path = "../spot-tenant-link" }
+# The sync binding's transport seam, TLS configs, client certificate and ADR-072 kit are reused
+# rather than rebuilt: one mutual-TLS listener and one breaker/jitter/sleeper vocabulary.
+spot-sync-http = { path = "../spot-sync-http" }
+# `Clock`: every instant the server and client use comes through it (time is an argument).
+spot-core = { path = "../spot-core" }
+# `Condition`, `Severity`: the plain-language shape the health surface consumes.
+spot-quarantine = { path = "../spot-quarantine" }
+# The same axum edge `spot-sync-http` serves.
+axum = { version = "0.8.9", features = ["http2"] }
+tokio = { version = "1.47", features = ["macros", "rt", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util"] }
+spot-tenancy = { path = "../spot-tenancy" }
+spot-iam-access = { path = "../spot-iam-access" }
+# `Region`, for the peer-region cases.
+spot-data-policy = { path = "../spot-data-policy" }
+spot-audit-chain = { path = "../spot-audit-chain" }
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# Throwaway CA, server and client certificates for the 127.0.0.1 mutual-TLS tests (test-only,
+# as in spot-sync-http).
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+time = "0.3"
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

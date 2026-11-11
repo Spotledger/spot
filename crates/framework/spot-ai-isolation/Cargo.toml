@@ -1,0 +1,23 @@
+[package]
+name = "spot-ai-isolation"
+description = "AI workload isolation (WP-AI-05.T1): a dedicated `ai` role and connection-pool budget, per-agent and per-tenant quotas, per-call and per-session deadlines, circuit breakers, weighted fair queueing and human-traffic-first admission, so twenty parallel agents cannot degrade interactive users"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Clock` is the only time source; time is always an argument, never read here.
+spot-core = { path = "../spot-core" }
+# Cluster-wide token-bucket counters (`Coordinator::take`) and the `RateLimit` shape.
+spot-coordinator = { path = "../spot-coordinator" }
+# The typed settings schema the dedicated pool budget is declared in.
+spot-settings = { path = "../spot-settings" }
+
+[dev-dependencies]
+# `#[tokio::test]` for the cluster-rate path through `InProcessCoordinator`.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

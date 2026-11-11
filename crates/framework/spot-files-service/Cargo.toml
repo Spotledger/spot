@@ -1,0 +1,36 @@
+[package]
+name = "spot-files-service"
+description = "The file service over spot-files: streaming upload and download for the native API `/api/v1/files`, the File record, attachment to documents, private and public access by document permission, content-type and size policy, range requests and orphan cleanup (WP-PLT-10.T3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Byte storage behind FileStore, the validated FileKey and the Body stream type.
+spot-files = { path = "../spot-files" }
+# SiteId and the Clock the service reads the time through.
+spot-core = { path = "../spot-core" }
+# RecordId, the file record id and the record keys.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Async streaming of uploads and downloads; the Body is a tokio AsyncRead.
+tokio = { version = "1", default-features = false, features = ["io-util"] }
+# File record timestamps.
+time = { version = "0.3", default-features = false, features = ["std"] }
+# The stable error vocabulary.
+thiserror = "2"
+# Lifecycle traces for uploads, downloads and orphan purges.
+tracing = "0.1"
+# Site settings and the test fakes load from TOML.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[dev-dependencies]
+# #[tokio::test] for the async service cases.
+tokio = { version = "1", default-features = false, features = ["io-util", "macros", "rt-multi-thread"] }
+# A scratch root for the local-provider case.
+tempfile = "3"
+
+[lints]
+workspace = true

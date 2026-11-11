@@ -1,0 +1,151 @@
+[package]
+name = "spot-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "spot"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+spot-core = { path = "../spot-core" }
+spot-http = { path = "../spot-http" }
+spot-api-services = { path = "../spot-api-services" }
+spot-document = { path = "../spot-document" }
+spot-meta = { path = "../spot-meta" }
+spot-auth = { path = "../spot-auth" }
+spot-telemetry = { path = "../spot-telemetry", features = ["otlp"] }
+spot-seams = { path = "../spot-seams" }
+spot-postgres = { path = "../../backends/spot-postgres" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-manifest = { path = "../spot-manifest" }
+# `spot install-app <bundle>`: the one verify the installer calls, and the publisher trust types it takes
+# (anchor, certificate, signature, revocation list). No other bundle crate is a direct dependency.
+spot-pack = { path = "../spot-pack" }
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+spot-permissions = { path = "../spot-permissions" }
+spot-perm-query = { path = "../spot-perm-query" }
+spot-platform-app = { path = "../spot-platform-app" }
+spot-login = { path = "../spot-login" }
+spot-sessions = { path = "../spot-sessions" }
+spot-pg-migrate = { path = "../../backends/spot-pg-migrate" }
+spot-sample-app = { path = "../../apps/spot-sample-app" }
+spot-controllers = { path = "../spot-controllers" }
+spot-app-permissions = { path = "../spot-app-permissions" }
+spot-files = { path = "../spot-files" }
+spot-files-service = { path = "../spot-files-service" }
+spot-mail = { path = "../spot-mail" }
+spot-mail-queue = { path = "../spot-mail-queue" }
+spot-mail-queue-pg = { path = "../../backends/spot-mail-queue-pg" }
+spot-egress = { path = "../spot-egress" }
+spot-print = { path = "../spot-print" }
+spot-template = { path = "../spot-template" }
+spot-realtime = { path = "../spot-realtime" }
+spot-realtime-bridge = { path = "../spot-realtime-bridge" }
+spot-meta-live = { path = "../spot-meta-live", features = ["storage"] }
+spot-customise = { path = "../spot-customise", features = ["postgres"] }
+spot-jobs = { path = "../spot-jobs" }
+spot-scheduler = { path = "../spot-scheduler" }
+spot-coordinator = { path = "../spot-coordinator" }
+spot-jobs-pg = { path = "../../backends/spot-jobs-pg" }
+spot-coordinator-pg = { path = "../../backends/spot-coordinator-pg" }
+# Bulk export and incremental extraction (WP-INT-03.T2): the plan, the stream, the cursors; and the
+# one field guard every export passes.
+spot-bulk-data = { path = "../spot-bulk-data" }
+# The event stream (WP-INT-02.T4): the engine, its durable consumer store, the outbox envelope
+# and the one field guard every subscription passes.
+spot-event-stream = { path = "../spot-event-stream" }
+spot-event-stream-pg = { path = "../../backends/spot-event-stream-pg" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-field-guard = { path = "../spot-field-guard" }
+# Reports (WP-PLT-14.T2): the report engine the report service hosts.
+spot-reports = { path = "../spot-reports" }
+spot-doc-audit = { path = "../spot-doc-audit" }
+spot-audit-chain = { path = "../spot-audit-chain" }
+spot-audit-store = { path = "../../backends/spot-audit-store" }
+spot-partition = { path = "../spot-partition" }
+spot-partition-pg = { path = "../../backends/spot-partition-pg" }
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+spot-edge-sync = { path = "../spot-edge-sync" }
+spot-edge-pg = { path = "../../backends/spot-edge-pg" }
+spot-secrets = { path = "../spot-secrets" }
+# Module-level whitelisted functions (WP-PLT-17.T2): the registry the `function` hosting module builds
+# per site from the installed apps' manifests and the native handlers of `natives.rs`.
+spot-functions = { path = "../spot-functions" }
+# LAN discovery (WP-PRD-06.T2): the host's optional mDNS advertisement and the `spot discover`
+# client command.
+spot-discovery = { path = "../spot-discovery" }
+# Workload routing (WP-PLT-20.T2): the policy engine `workload_routing.rs` hosts — queue
+# affinity, report-path routing and replica-read decisions.
+spot-workload-routing = { path = "../spot-workload-routing" }
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+tracing = "0.1"
+time = { version = "0.3", features = ["parsing", "macros", "formatting"] }
+# Conditions hosting (WP-RTB-01.T2): the condition engine `services/conditions.rs` hosts, its
+# durable PostgreSQL store, and the journal/sync catalogue it loads at start.
+spot-conditions = { path = "../spot-conditions" }
+spot-conditions-pg = { path = "../../backends/spot-conditions-pg" }
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+
+# Node role record (WP-RTB-03.T1): stored by the storage crate of WP-RTB-03.T5, so this crate holds no SQL.
+spot-node-role-pg = { path = "../../backends/spot-node-role-pg" }
+
+# Unattended-support basics (WP-PRD-13.T3): offline help, opt-in crash reporting, and the
+# redaction every exit point goes through.
+spot-unattended-support = { path = "../spot-unattended-support" }
+spot-redact = { path = "../spot-redact" }
+# The support bundle's ZIP container (already a workspace dependency of spot-bundle,
+# spot-custom-bundle and spot-updater, same version and features).
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# Process engine hosting (WP-BPM-02.T4): the engine over its PostgreSQL Case store and the
+# durable definition store it loads published processes from.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+spot-bpm-pg = { path = "../../backends/spot-bpm-pg" }
+spot-bpm-definitions = { path = "../spot-bpm-definitions" }
+spot-bpm-defs-pg = { path = "../../backends/spot-bpm-defs-pg" }
+spot-dag-exec = { path = "../spot-dag-exec" }
+# The timer port's fencing lease needs the scheduler's clock type.
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+# Process engine counters (Runs started/completed/failed, steps run, resume backlog).
+metrics = "0.24"
+# Integration node hosting (WP-BPM-06.T3): the node handlers themselves and the wire types the
+# hosted egress client, the SMTP transport and the raw webhook post need.
+spot-bpm-integration = { path = "../spot-bpm-integration" }
+async-trait = "0.1"
+http = "1"
+url = "2"
+# Document node hosting (WP-BPM-04.T6): the Document node handler, the Case file and the
+# service-principal policy this module wires to the live document engine and IAM.
+spot-bpm-documents = { path = "../spot-bpm-documents", features = ["pg"] }
+# `NodeId`: the engine hands a node its id; the service-principal audit trail names it.
+spot-dag = { path = "../spot-dag" }
+# `EdgeTypeId`: the stable id of the service-principal audit edge type this module writes.
+spot-graph-model = { path = "../spot-graph-model" }
+
+[dev-dependencies]
+spot-node-role-pg = { path = "../../backends/spot-node-role-pg", features = ["testing"] }
+tokio = { version = "1", features = ["net", "io-util"] }
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+spot-site-masker = { path = "../spot-site-masker" }
+spot-activity = { path = "../spot-activity" }
+# tests/process.rs: a direct pool per tenant, the model text parser, and `NodeId` for reading
+# back a Case's node attempts.
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1"] }
+spot-bpm-model = { path = "../spot-bpm-model" }
+spot-dag = { path = "../spot-dag" }
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "spot-capture-invariant"
+description = "The journal capture invariant checker (WP-JRN-02.T1, ADR-061 s3 and s8): every change-feed entry has exactly one doc_state event of the same document and version - pure comparison of two position-ordered streams in bounded memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on the findings and the report.
+serde = { version = "1", features = ["derive"] }
+# The report's stable JSON form.
+serde_json = "1"
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property test: shuffling events within a transaction does not change the verdict.
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,97 @@
+# The seeded SoD rules for the integration tests, in the crate's own TOML shape.
+# Realistic ERP duty pairs, written in our own words (ADR-070 section 8; no vendor text).
+
+[[rules]]
+id = "sod.vendor-master.payments"
+title = "Maintain suppliers vs approve payments"
+description = "Who maintains the supplier master must not approve the payments to those suppliers: one person could route money to a vendor they created."
+severity = "critical"
+scope = "same_scope"
+[[rules.sides]]
+duties = ["Maintain supplier master"]
+[[rules.sides]]
+duties = ["Approve payment run"]
+
+[[rules]]
+id = "sod.purchase-order.approval"
+title = "Create purchase orders vs approve purchase orders"
+description = "Who raises a purchase order must not approve it: approval is the check on the order, not a second signature by the same hand."
+severity = "high"
+scope = "same_scope"
+[[rules.sides]]
+duties = ["Create purchase order"]
+[[rules.sides]]
+duties = ["Approve purchase order"]
+
+[[rules]]
+id = "sod.bank-details.release"
+title = "Maintain bank details vs release payments"
+description = "Who edits the bank accounts money is sent to must not release the payments themselves: changed bank details plus a release is theft with two steps and one person."
+severity = "critical"
+scope = "any_scope"
+[[rules.sides]]
+duties = ["Maintain bank details"]
+[[rules.sides]]
+duties = ["Release payment"]
+
+[[rules]]
+id = "sod.admin.user-security"
+title = "User administration vs security administration"
+description = "Who administers users must not administer security policy (ADR-070 section 11, rule 2): granting oneself access and rewriting the policy that watches it must not land with one person."
+severity = "high"
+scope = "any_scope"
+[[rules.sides]]
+duties = ["Administer users"]
+[[rules.sides]]
+duties = ["Administer security"]
+
+[[rules]]
+id = "sod.journal-entry.reconciliation"
+title = "Post journal entries vs reconcile ledgers"
+description = "Who posts journal entries must not reconcile the ledgers those entries land in: reconciliation exists to catch posting errors and posting fraud."
+severity = "medium"
+scope = "same_scope"
+[[rules.sides]]
+duties = ["Post journal entry"]
+[[rules.sides]]
+duties = ["Reconcile ledger"]
+
+[[rules]]
+id = "sod.master-data.stock-count"
+title = "Maintain item master vs approve stock counts"
+description = "Who maintains item master data (including unit costs) must not approve the stock counts that are checked against it."
+severity = "low"
+scope = "same_scope"
+[[rules.sides]]
+duties = ["Maintain item master"]
+[[rules.sides]]
+duties = ["Approve stock count"]
+
+[[rules]]
+id = "sod.expense.roles"
+title = "Submit expenses vs approve expenses (over roles for convenience)"
+description = "The expense submitter role and the expense approver role must not sit with one person; the rule names the roles for convenience, so a held role satisfies its side even before the catalogue expands it."
+severity = "medium"
+scope = "same_scope"
+[[rules.sides]]
+duties = ["Submit expense"]
+roles = ["Expense Submitter"]
+[[rules.sides]]
+duties = ["Approve expense"]
+roles = ["Expense Approver"]
+
+[[rules]]
+id = "sod.payroll.mixed"
+title = "Run payroll vs approve payroll (duty on one side, role on the other)"
+description = "The payroll officer duty conflicts with holding the Payroll Approver role, whichever way the two arrive."
+severity = "high"
+scope = "any_scope"
+[[rules.sides]]
+duties = ["Run payroll"]
+[[rules.sides]]
+duties = ["Approve payroll"]
+roles = ["Payroll Approver"]
+
+# The reference roles of the delivered pack (ADR-070 section 2): a pure decision core reads
+# the catalogue the caller passes; the tests build two, a clean one and one with the
+# Workday finding. This file carries the rules only; tests/roles.toml carries the catalogue.

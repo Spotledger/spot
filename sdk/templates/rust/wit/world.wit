@@ -1,0 +1,26 @@
+// The TEST world the spot-wasm host and its fixtures are proven against (WP-EXT-05.T1).
+// It is not the product world: that is WP-EXT-05.T2, and this file must not grow into it.
+package spotledger:test@0.1.0;
+
+world test-world {
+    /// Log levels, lowest first.
+    enum level { debug, info, warn, error }
+
+    /// An error an app returns on purpose.
+    record error {
+        code: string,
+        message: string,
+    }
+
+    /// Writes a log line; the host decides where it goes.
+    import log: func(level: level, message: string);
+
+    /// The time of the invocation, in microseconds since the Unix epoch. The only clock an app has.
+    import now: func() -> s64;
+
+    /// A document as JSON text, or none. Needs read access to the DocType.
+    import get-doc: func(doctype: string, id: string) -> option<string>;
+
+    /// Handles an event.
+    export on-event: func(event: string) -> result<string, error>;
+}

@@ -1,0 +1,91 @@
+# platform codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "platform.phase_violation"
+class = "Internal"
+summary = "A lifecycle hook did something the {phase} phase does not allow (ADR-51): {what}."
+explanation_key = "error.platform.phase_violation"
+params = ["phase", "what"]
+remedy = "Fix the hook: derive in before_*, check in validate_*, change documents in after_*, call out in *_committed."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.invalid_name"
+class = "Internal"
+summary = "A name the platform stored or received is not a valid storage identifier: {name}."
+explanation_key = "error.platform.invalid_name"
+params = ["name"]
+remedy = "Report this with the name; inputs are validated before reaching here."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.invalid_step_name"
+class = "Internal"
+summary = "A step name is not of the <app>:<step> form: {name}."
+explanation_key = "error.platform.invalid_step_name"
+params = ["name"]
+remedy = "Declare step names as <app>:<step>."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.unknown_step"
+class = "Internal"
+summary = "A controller was asked to run a step it does not declare: {step}."
+explanation_key = "error.platform.unknown_step"
+params = ["step"]
+remedy = "Register the step, or fix the pipeline's step list."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.event"
+class = "Internal"
+summary = "A lifecycle event payload failed to encode for the outbox: {error}."
+explanation_key = "error.platform.event"
+params = ["error"]
+remedy = "Check the event payload against the topic's schema."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.invalid_job_name"
+class = "Internal"
+summary = "A job name is not of the <app>:<job> form: {name}."
+explanation_key = "error.platform.invalid_job_name"
+params = ["name"]
+remedy = "Name jobs as <app>:<job>."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.reserved_topic"
+class = "Internal"
+summary = "An app tried to publish on a platform-reserved topic: {topic}."
+explanation_key = "error.platform.reserved_topic"
+params = ["topic"]
+remedy = "Publish under the app's own topic prefix."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.unsupported"
+class = "Internal"
+summary = "The host does not implement this operation."
+explanation_key = "error.platform.unsupported"
+params = []
+remedy = "Use a full host; the stub host implements the contract's core only."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.seam_encoding"
+class = "Internal"
+summary = "A seam result failed to encode to JSON for the caller: {error}."
+explanation_key = "error.platform.seam_encoding"
+params = ["error"]
+remedy = "Check the seam provider's return shape."
+since = "0.1.0"
+
+[[entry]]
+code = "platform.stub"
+class = "Internal"
+summary = "The stub host received a malformed internal result."
+explanation_key = "error.platform.stub"
+params = []
+remedy = "Report this; it indicates a stub-internal bug."
+since = "0.1.0"

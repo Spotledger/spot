@@ -1,0 +1,8 @@
+# systemd-tmpfiles(8) entries for the Spotledger service.
+# State and log directories are also declared by the unit (StateDirectory=,
+# LogsDirectory=), but tmpfiles creates them at boot before the service starts
+# so recovery tools and the first start find the right ownership. The runtime
+# directory lives on tmpfs and is owned by the service while it runs.
+d /var/lib/spot 0750 spot spot -
+d /var/log/spot 0750 spot spot -
+d /run/spot 0750 spot spot -

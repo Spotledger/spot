@@ -1,0 +1,55 @@
+# throttle_coordinator codes: the coordinator-backed sign-in throttle of spot-throttle-coordinator (WP-IAM-11.T7). The file name sets the prefix, so these are not `throttle.*` (that is throttle.toml). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "throttle_coordinator.unavailable"
+class = "none"
+summary = "The sign-in throttle could not count the attempt because the coordinator failed, so the attempt is refused."
+explanation_key = "error.throttle_coordinator.unavailable"
+params = []
+remedy = "Check that the coordinator (database or Redis) is reachable and healthy, then try the attempt again."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle_coordinator.rate_limited"
+class = "none"
+summary = "Too many attempts for this account, source, destination or tenant in the current window."
+explanation_key = "error.throttle_coordinator.rate_limited"
+params = []
+remedy = "Wait for the time the response gives, then try again; repeated attempts only extend the wait."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle_coordinator.bad_policy"
+class = "none"
+summary = "The throttle policy or salt was rejected: a limit is zero, the tenant ceiling is slower than the per-source limit, or the salt is shorter than 16 bytes."
+explanation_key = "error.throttle_coordinator.bad_policy"
+params = []
+remedy = "Give every limit a capacity and a window above zero, set the tenant limit at least as fast as the per-source limit, and supply a salt of at least 16 secret bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle_coordinator.bad_attempt"
+class = "none"
+summary = "The attempt could not be counted: a tenant that is not a plain id, an empty or over-long value, a kind missing the account name or destination it needs, or a source with no address and no connection id."
+explanation_key = "error.throttle_coordinator.bad_attempt"
+params = []
+remedy = "Pass the tenant id, the account name as typed, the destination for code requests, and either a peer address or a connection id."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle_coordinator.salt_unavailable"
+class = "none"
+summary = "The throttle salt could not be obtained from its source, so the attempt could not be counted and is refused."
+explanation_key = "error.throttle_coordinator.salt_unavailable"
+params = []
+remedy = "Check that the secrets key provider can derive its key (a reachable keyring, a key version that has not been retired) and that the tenant id is a plain id, then try the attempt again."
+since = "0.1.0"
+
+[[entry]]
+code = "throttle_coordinator.bad_rotation"
+class = "none"
+summary = "A throttle salt rotation was refused because it names the salt already in force or comes before one full window of the longest bucket has passed."
+explanation_key = "error.throttle_coordinator.bad_rotation"
+params = []
+remedy = "Rotate to a salt that is actually new, and wait until every limit the previous salt named has refilled (one window of the longest bucket) before rotating again."
+since = "0.1.0"

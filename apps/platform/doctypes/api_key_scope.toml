@@ -1,0 +1,13 @@
+name = "api_key_scope"
+label = "API Key Scope"
+app = "platform"
+module = "identity"
+is_child = true
+
+[[fields]]
+name = "scope"
+label = "Scope"
+type = "text"
+required = true
+max_chars = 140
+description = "A right the key holds; never wider than its owner's."

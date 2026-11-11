@@ -1,0 +1,32 @@
+# Seed setting for runtime.http.listen_address. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "runtime.http.listen_address"
+title = "HTTP Listen Address"
+summary = "The address and port the HTTP server binds to."
+description = "The address and port the HTTP server binds to. Use `0.0.0.0` for all interfaces or `127.0.0.1` for localhost only."
+scopes = [
+    "fleet",
+    "group",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "network",
+    "http",
+]
+help_url = "https://docs.example.com/settings/runtime.http.listen_address"
+
+[value.Text]
+max_len = 64
+pattern = '^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$'
+
+[default]
+Text = "0.0.0.0:8080"
+
+[restart]
+type = "service"
+name = "http"

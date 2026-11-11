@@ -1,0 +1,77 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.project_health",
+      "origin": "app:sample",
+      "props": [
+        {
+          "name": "open",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "total",
+          "type": "int",
+          "required": true
+        }
+      ],
+      "slots": [
+        "footer"
+      ],
+      "body": {
+        "node": "column",
+        "title": "Project health",
+        "children": [
+          {
+            "node": "control",
+            "control": "heading",
+            "text": "Project health"
+          },
+          {
+            "node": "when",
+            "test": "doc.total > 0",
+            "then": {
+              "node": "control",
+              "control": "progress",
+              "value": "doc.total - doc.open"
+            }
+          },
+          {
+            "node": "control",
+            "control": "number",
+            "value": "doc.open"
+          },
+          {
+            "node": "slot",
+            "name": "footer"
+          }
+        ]
+      }
+    }
+  ],
+  "tiles": [
+    {
+      "id": "sample.health_tile",
+      "origin": "app:sample",
+      "label": "Project health",
+      "icon": "chart",
+      "slot": "home.tiles",
+      "order": 5,
+      "component": "sample.project_health",
+      "props": {
+        "open": {
+          "query": "sample.open_tasks"
+        },
+        "total": {
+          "query": "sample.task_count"
+        }
+      },
+      "open": {
+        "destination": "sample.projects"
+      }
+    }
+  ]
+}

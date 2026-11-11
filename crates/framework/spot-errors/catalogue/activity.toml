@@ -1,0 +1,73 @@
+# activity codes: the `ActivityError` vocabulary of spot-activity and the timeline summary keys it emits. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "activity.assignment_duplicate"
+class = "none"
+summary = "The document already has an open assignment for this assignee."
+explanation_key = "error.activity.assignment_duplicate"
+params = []
+remedy = "Close or reassign the existing open assignment instead of opening a second one."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.assignment_transition_invalid"
+class = "none"
+summary = "The assignment action is not allowed for the assignment's current status."
+explanation_key = "error.activity.assignment_transition_invalid"
+params = []
+remedy = "Check the assignment status first; only the actions its status accepts can be applied."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.path_invalid"
+class = "none"
+summary = "A field path used by a diff or timeline builder is not usable."
+explanation_key = "error.activity.path_invalid"
+params = []
+remedy = "Pass a well-formed dotted field path that names a field of the document."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.record_id_invalid"
+class = "none"
+summary = "The text is not a valid activity record id."
+explanation_key = "error.activity.record_id_invalid"
+params = []
+remedy = "Use the id exactly as the activity API returned it."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.version_changed"
+class = "none"
+summary = "Timeline summary key: a document version changed fields."
+explanation_key = "error.activity.version_changed"
+params = []
+remedy = "Not an error; render the version entry from its summary parameters."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.commented"
+class = "none"
+summary = "Timeline summary key: someone commented on the document."
+explanation_key = "error.activity.commented"
+params = []
+remedy = "Not an error; render the comment entry from its summary parameters."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.assignment.assigned"
+class = "none"
+summary = "Timeline summary key: the document was assigned to someone."
+explanation_key = "error.activity.assignment.assigned"
+params = []
+remedy = "Not an error; render the assignment entry from its summary parameters."
+since = "0.1.0"
+
+[[entry]]
+code = "activity.shared"
+class = "none"
+summary = "Timeline summary key: the document was shared with a grantee."
+explanation_key = "error.activity.shared"
+params = []
+remedy = "Not an error; render the share entry from its summary parameters."
+since = "0.1.0"

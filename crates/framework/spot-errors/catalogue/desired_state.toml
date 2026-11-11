@@ -1,0 +1,168 @@
+# desired_state codes: the `desired_state.*` vocabulary of spot-desired-state (WP-ADM-08.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The crate raises its own typed errors (`spot_desired_state::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy
+# states what an operator or caller does about it.
+
+[[entry]]
+code = "desired_state.duplicate_layer"
+class = "none"
+summary = "The desired-state scope {layer} is described twice."
+explanation_key = "error.desired_state.duplicate_layer"
+params = ["layer"]
+remedy = "Merge the two layers at the same scope and group into one."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.empty_group"
+class = "none"
+summary = "A desired-state layer names no group."
+explanation_key = "error.desired_state.empty_group"
+params = []
+remedy = "Give every layer the group of servers and tenants it governs."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.invalid_key"
+class = "none"
+summary = "The setting key {key} is not a valid dotted lower-case key: {reason}."
+explanation_key = "error.desired_state.invalid_key"
+params = ["key", "reason"]
+remedy = "Use the settings schema's dotted lower-case key form, for example runtime.logging.level."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.unknown_setting"
+class = "none"
+summary = "The desired setting {key} is not registered in the settings schema."
+explanation_key = "error.desired_state.unknown_setting"
+params = ["key"]
+remedy = "Register the setting in the typed schema, or correct the key in the desired state."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.scope_not_allowed"
+class = "none"
+summary = "The setting {key} cannot be set at the {scope} scope."
+explanation_key = "error.desired_state.scope_not_allowed"
+params = ["key", "scope"]
+remedy = "Set the value at one of the scopes the setting's spec allows."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.read_only"
+class = "none"
+summary = "The setting {key} is observed, never set."
+explanation_key = "error.desired_state.read_only"
+params = ["key"]
+remedy = "Remove the read-only setting from the desired state; it is reported, not managed."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.secret_setting"
+class = "none"
+summary = "The setting {key} is a secret and is never part of a desired state."
+explanation_key = "error.desired_state.secret_setting"
+params = ["key"]
+remedy = "Remove the secret setting from the desired state; manage it through the secret store."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.invalid_value"
+class = "none"
+summary = "The value for {key} fails its setting type: {reason}."
+explanation_key = "error.desired_state.invalid_value"
+params = ["key", "reason"]
+remedy = "Correct the value so it satisfies the setting's declared type and bounds."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.group_mismatch"
+class = "none"
+summary = "Group {group} is described by scope {scope}."
+explanation_key = "error.desired_state.group_mismatch"
+params = ["group", "scope"]
+remedy = "Name the same group in the layer and in its group scope."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.unsupported_scope"
+class = "none"
+summary = "The scope {scope} is not covered by desired state."
+explanation_key = "error.desired_state.unsupported_scope"
+params = ["scope"]
+remedy = "Use fleet, group, server or tenant scope; company and user state is not managed here."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.invalid_operation"
+class = "none"
+summary = "The operation id {id} is not a catalogue id."
+explanation_key = "error.desired_state.invalid_operation"
+params = ["id"]
+remedy = "Use a dotted lower-case operation id from the management catalogue, for example os.service.start."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.empty_plan"
+class = "none"
+summary = "The bulk plan has no step."
+explanation_key = "error.desired_state.empty_plan"
+params = []
+remedy = "Build the plan from at least one drift, or do not run an empty plan."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.not_approved"
+class = "none"
+summary = "The plan has not been approved: {decision}."
+explanation_key = "error.desired_state.not_approved"
+params = ["decision"]
+remedy = "Obtain the approvals the policy requires, then authorise the plan again."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.plan_changed"
+class = "none"
+summary = "The approval or rehearsal proof is for a different plan."
+explanation_key = "error.desired_state.plan_changed"
+params = []
+remedy = "Approve and rehearse the changed plan; an old approval never authorises a new plan."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.rehearsal_failed"
+class = "none"
+summary = "The rehearsal found {problems} problem(s)."
+explanation_key = "error.desired_state.rehearsal_failed"
+params = ["problems"]
+remedy = "Fix the named structural problems in the plan and rehearse it again."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.invalid_exemption"
+class = "none"
+summary = "The exemption is not usable: {reason}."
+explanation_key = "error.desired_state.invalid_exemption"
+params = ["reason"]
+remedy = "Give the exemption a reason, an acknowledger and an expiry later than now."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.rollout"
+class = "none"
+summary = "The wave state machine refused or failed: {message}."
+explanation_key = "error.desired_state.rollout"
+params = ["message"]
+remedy = "Fix the rollout plan or its state, then start or resume the run."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.unknown_server"
+class = "none"
+summary = "The plan names server {server}, which no wave covers."
+explanation_key = "error.desired_state.unknown_server"
+params = ["server"]
+remedy = "Widen the wave selectors so every server in the plan is scheduled, or remove its step."
+since = "0.1.0"

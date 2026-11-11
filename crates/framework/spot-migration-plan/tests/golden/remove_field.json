@@ -1,0 +1,65 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "metadata/party/field_removed/note",
+      "area": "metadata",
+      "kind": "field_removed",
+      "rule": "metadata/field_removed",
+      "target": "party.note",
+      "description": "Field `party.note` is removed.",
+      "before": "Text",
+      "after": "absent",
+      "risk": "destructive",
+      "reason": "removing a field discards its values and may be a rename without a hint",
+      "alternative": "if this is a rename, add a rename hint; otherwise stop using the field first and drop it later",
+      "blocking": "maintenance_window"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 1,
+    "expected": 2,
+    "high": 4,
+    "per_change": [
+      {
+        "change_id": "metadata/party/field_removed/note",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "maintenance_window",
+        "unknown": false
+      }
+    ],
+    "blocking": "maintenance_window",
+    "unknown": false
+  },
+  "plan_digest": "5bf6ad83c94ae202882c19ce19c776d0044eafa535d9c8602a4ed4745d17c3a1",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

@@ -1,0 +1,383 @@
+# Record ids, links, versions, unique keys, and child rows.
+
+[[case]]
+id = "ids-01-order-by-id"
+rule = "SEM-IDS-01"
+title = "sorting by id is creation order, descending is the reverse"
+setup = ['a code="t:a"', 'b code="t:b"', 'c code="t:c"']
+op = "query"
+query = { select = ["id", "code"], order = ["id desc"] }
+expect = { rows = [["id:c", "t:c"], ["id:b", "t:b"], ["id:a", "t:a"]] }
+
+[[case]]
+id = "ids-01-id-comparison"
+rule = "SEM-IDS-01"
+title = "comparing an id with a literal id follows the byte order"
+setup = ['a code="t:a"', 'b code="t:b"', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = '(< id "id:b")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "ids-01-id-equality"
+rule = "SEM-IDS-01"
+title = "equality on ids finds one record"
+setup = ['a code="t:a"', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = '(= id "id:b")' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "ids-01-link-roundtrip"
+rule = "SEM-IDS-01"
+title = "a link value reads back as the same id"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"']
+op = "load"
+doc = "b"
+fields = ["ref"]
+expect = { rows = [["id:a"]] }
+
+[[case]]
+id = "ids-01-min-max-of-ids"
+rule = "SEM-IDS-01"
+title = "Min and Max of ids follow the byte order"
+setup = ['a code="t:a"', 'b code="t:b"', 'c code="t:c"']
+op = "query"
+query = { select = ["(min id)", "(max id)"] }
+expect = { rows = [["id:a", "id:c"]] }
+
+[[case]]
+id = "ids-01-in-list-of-ids"
+rule = "SEM-IDS-01"
+title = "In over ids"
+setup = ['a code="t:a"', 'b code="t:b"', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = '(in id "id:a" "id:c")' }
+expect = { rows = [["t:a"], ["t:c"]] }
+
+[[case]]
+id = "ids-02-duplicate-id"
+rule = "SEM-IDS-02"
+title = "inserting an id that exists fails with AlreadyExists"
+setup = ['a code="t:a"']
+op = "write"
+write = ['insert a code="t:other"']
+expect = { error = "already_exists" }
+
+[[case]]
+id = "ids-03-missing-link-target"
+rule = "SEM-IDS-03"
+title = "a link to a record that does not exist is a ReferenceViolation by commit"
+op = "write"
+write = ['insert a code="t:a" ref="id:ghost"']
+expect = { error = "reference_violation" }
+
+[[case]]
+id = "ids-03-any-save-order"
+rule = "SEM-IDS-03"
+title = "the linking record can be saved before its target in one transaction"
+setup = ['b code="t:b" ref="id:a"', 'a code="t:a"']
+op = "query"
+query = { select = ["code", "(null? ref)"], order = ["code"] }
+expect = { rows = [["t:a", "b:true"], ["t:b", "b:false"]] }
+
+[[case]]
+id = "ids-03-self-link"
+rule = "SEM-IDS-03"
+title = "a record can link to itself"
+setup = ['a code="t:a" ref="id:a"']
+op = "load"
+doc = "a"
+fields = ["ref"]
+expect = { rows = [["id:a"]] }
+
+[[case]]
+id = "ids-03-cycle-in-one-transaction"
+rule = "SEM-IDS-03"
+title = "two records can link to each other in one transaction"
+setup = ['a code="t:a" ref="id:b"', 'b code="t:b" ref="id:a"']
+op = "query"
+query = { select = ["code", "ref"], order = ["code"] }
+expect = { rows = [["t:a", "id:b"], ["t:b", "id:a"]] }
+
+[[case]]
+id = "ids-03-update-to-missing-target"
+rule = "SEM-IDS-03"
+title = "updating a link to a missing record fails"
+setup = ['a code="t:a"']
+op = "write"
+write = ['update a ref="id:ghost"']
+expect = { error = "reference_violation" }
+
+[[case]]
+id = "ids-04-delete-linked-record"
+rule = "SEM-IDS-04"
+title = "deleting a record that another still links to is refused"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"']
+op = "write"
+write = ['delete a']
+expect = { error = "reference_violation" }
+
+[[case]]
+id = "ids-04-delete-the-linking-record"
+rule = "SEM-IDS-04"
+title = "deleting the record that links is allowed"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"']
+op = "write"
+write = ['delete b']
+expect = { ok = true }
+
+[[case]]
+id = "ids-04-unlink-then-delete"
+rule = "SEM-IDS-04"
+title = "after the link is removed the target can be deleted"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"', 'update b ref=null']
+op = "write"
+write = ['delete a']
+expect = { ok = true }
+
+[[case]]
+id = "ids-05-first-version"
+rule = "SEM-IDS-05"
+title = "a document has version 1 after insert"
+setup = ['a code="t:a"']
+op = "load"
+doc = "a"
+fields = ["@version"]
+expect = { rows = [["i:1"]] }
+
+[[case]]
+id = "ids-05-version-rises-per-update"
+rule = "SEM-IDS-05"
+title = "two updates make version 3"
+setup = ['a code="t:a"', 'update a note="t:1"', 'update a note="t:2"']
+op = "load"
+doc = "a"
+fields = ["@version", "note"]
+expect = { rows = [["i:3", "t:2"]] }
+
+[[case]]
+id = "ids-05-stale-update"
+rule = "SEM-IDS-05"
+title = "an update expecting another version fails with StaleVersion"
+setup = ['a code="t:a"']
+op = "write"
+write = ['update a note="t:x" @expected=7']
+expect = { error = "stale_version" }
+
+[[case]]
+id = "ids-05-stale-delete"
+rule = "SEM-IDS-05"
+title = "a delete expecting another version fails with StaleVersion"
+setup = ['a code="t:a"', 'update a note="t:x"']
+op = "write"
+write = ['delete a @expected=1']
+expect = { error = "stale_version" }
+
+[[case]]
+id = "ids-05-version-column"
+rule = "SEM-IDS-05"
+title = "the version system column reads in a query"
+setup = ['a code="t:a"', 'update a note="t:x"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "version"], order = ["code"] }
+expect = { rows = [["t:a", "i:2"], ["t:b", "i:1"]] }
+
+[[case]]
+id = "ids-06-ties-by-id"
+rule = "SEM-IDS-06"
+title = "equal sort keys come in id order"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b" qty=i:1', 'c code="t:c" qty=i:2', 'd code="t:d" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["qty"] }
+expect = { rows = [["t:b"], ["t:d"], ["t:a"], ["t:c"]] }
+
+[[case]]
+id = "ids-06-ties-descending"
+rule = "SEM-IDS-06"
+title = "a descending sort still breaks ties by ascending id"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b" qty=i:1', 'c code="t:c" qty=i:2', 'd code="t:d" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["qty desc"] }
+expect = { rows = [["t:a"], ["t:c"], ["t:b"], ["t:d"]] }
+
+[[case]]
+id = "ids-06-no-order-is-id-order"
+rule = "SEM-IDS-06"
+title = "without any order, rows come in id order"
+setup = ['c code="t:c"', 'a code="t:a"', 'b code="t:b"']
+op = "query"
+query = { select = ["code"] }
+expect = { rows = [["t:c"], ["t:a"], ["t:b"]] }
+
+[[case]]
+id = "ids-06-collation-ties"
+rule = "SEM-IDS-06"
+title = "texts that tie in the collation and in code point come in id order"
+setup = ['a code="t:x1" note="t:same"', 'b code="t:x2" note="t:same"', 'c code="t:x3" note="t:same"']
+op = "query"
+query = { select = ["code"], order = ["note"] }
+expect = { rows = [["t:x1"], ["t:x2"], ["t:x3"]] }
+
+[[case]]
+id = "ids-07-unique-insert"
+rule = "SEM-IDS-07"
+title = "a second record with the same code is a UniqueViolation"
+setup = ['a code="t:a"']
+op = "write"
+write = ['insert b code="t:a"']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "ids-07-unique-update"
+rule = "SEM-IDS-07"
+title = "updating to another record's code is a UniqueViolation"
+setup = ['a code="t:a"', 'b code="t:b"']
+op = "write"
+write = ['update b code="t:a"']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "ids-07-unique-pair"
+rule = "SEM-IDS-07"
+title = "the same (short, qty) pair is a UniqueViolation"
+setup = ['a code="t:a" short="t:s" qty=i:1']
+op = "write"
+write = ['insert b code="t:b" short="t:s" qty=i:1']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "ids-07-unique-pair-differs"
+rule = "SEM-IDS-07"
+title = "a pair that differs in one part is fine"
+setup = ['a code="t:a" short="t:s" qty=i:1']
+op = "write"
+write = ['insert b code="t:b" short="t:s" qty=i:2']
+expect = { ok = true }
+
+[[case]]
+id = "ids-07-unique-within-one-transaction"
+rule = "SEM-IDS-07"
+title = "two inserts of one code in a single transaction conflict"
+op = "write"
+write = ['insert a code="t:dup"', 'insert b code="t:dup"']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "chd-01-order-preserved"
+rule = "SEM-CHD-01"
+title = "child rows come back in the order written, not sorted"
+setup = ['a code="t:a"', 'a.lines label="t:c"', 'a.lines label="t:a"', 'a.lines label="t:b"']
+op = "children"
+doc = "a"
+fields = ["label"]
+expect = { rows = [["t:c"], ["t:a"], ["t:b"]] }
+
+[[case]]
+id = "chd-01-idx-column"
+rule = "SEM-CHD-01"
+title = "idx is the 1-based position and parent is the document's id"
+setup = ['a code="t:a"', 'a.lines label="t:c"', 'a.lines label="t:a"', 'a.lines label="t:b"']
+op = "query"
+query = { from = "item_line", select = ["idx", "label", "parent"], order = ["idx"] }
+expect = { rows = [["i:1", "t:c", "id:a"], ["i:2", "t:a", "id:a"], ["i:3", "t:b", "id:a"]] }
+
+[[case]]
+id = "chd-01-interleaved-writes"
+rule = "SEM-CHD-01"
+title = "children of two documents added alternately keep each document's order"
+setup = ['a code="t:a"', 'b code="t:b"', 'a.lines label="t:a1"', 'b.lines label="t:b1"', 'a.lines label="t:a2"', 'b.lines label="t:b2"']
+op = "query"
+query = { from = "item_line", select = ["parent", "idx", "label"], order = ["parent", "idx"] }
+expect = { rows = [["id:a", "i:1", "t:a1"], ["id:a", "i:2", "t:a2"], ["id:b", "i:1", "t:b1"], ["id:b", "i:2", "t:b2"]] }
+
+[[case]]
+id = "chd-01-parent-field-column"
+rule = "SEM-CHD-01"
+title = "parent_field names the child table"
+setup = ['a code="t:a"', 'a.lines label="t:x"']
+op = "query"
+query = { from = "item_line", select = ["parent_field"] }
+expect = { rows = [["t:lines"]] }
+
+[[case]]
+id = "chd-02-update-replaces"
+rule = "SEM-CHD-02"
+title = "an update with a new list replaces the child rows and sets their order"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'a.lines label="t:z"', 'clear a.lines', 'a.lines label="t:z"', 'a.lines label="t:x"', 'update a note="t:u"']
+op = "children"
+doc = "a"
+fields = ["label"]
+expect = { rows = [["t:z"], ["t:x"]] }
+
+[[case]]
+id = "chd-02-removed-rows-are-gone"
+rule = "SEM-CHD-02"
+title = "rows left out of an update no longer exist in the child table"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'a.lines label="t:z"', 'clear a.lines', 'a.lines label="t:q"', 'update a note="t:u"']
+op = "query"
+query = { from = "item_line", select = ["label"] }
+expect = { rows = [["t:q"]] }
+
+[[case]]
+id = "chd-02-update-to-empty"
+rule = "SEM-CHD-02"
+title = "an update with no child rows removes them all"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'clear a.lines', 'update a note="t:u"']
+op = "query"
+query = { from = "item_line", select = ["(count)"] }
+expect = { rows = [["i:0"]] }
+
+[[case]]
+id = "chd-03-child-scale-refused"
+rule = "SEM-CHD-03"
+title = "a child decimal with an extra digit is refused"
+op = "write"
+write = ['insert a code="t:a"', 'a.lines amount="d:1.005"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "chd-03-child-decimal-roundtrip"
+rule = "SEM-CHD-03"
+title = "child decimals and nulls round-trip like parent ones"
+setup = ['a code="t:a"', 'a.lines label="t:x" amount="d:1.50"', 'a.lines label=null amount=null']
+op = "children"
+doc = "a"
+fields = ["label", "amount"]
+expect = { rows = [["t:x", "d:1.50"], ["null", "null"]] }
+
+[[case]]
+id = "chd-03-child-absent-field"
+rule = "SEM-CHD-03"
+title = "a child row that leaves out declared fields is refused"
+op = "write"
+write = ['insert a code="t:a"', 'a.lines @strict label="t:x"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "chd-04-empty-child-table"
+rule = "SEM-CHD-04"
+title = "a document with no child rows has an empty table"
+setup = ['a code="t:a"']
+op = "children"
+doc = "a"
+fields = ["label"]
+expect = { rows = [] }
+
+[[case]]
+id = "chd-04-delete-removes-children"
+rule = "SEM-CHD-04"
+title = "deleting a document deletes its child rows"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'delete a']
+op = "query"
+query = { from = "item_line", select = ["(count)"] }
+expect = { rows = [["i:0"]] }
+
+[[case]]
+id = "chd-04-child-text-rules"
+rule = "SEM-CHD-04"
+title = "child text keeps empty text, null and exactness"
+setup = ['a code="t:a"', 'a.lines label="t:"', 'a.lines label=null', 'a.lines label="t:Ali"', 'a.lines label="t:ali"']
+op = "query"
+query = { from = "item_line", select = ["label"], filter = '(= label "t:ali")' }
+expect = { rows = [["t:ali"]] }

@@ -1,0 +1,56 @@
+# pg_bridge codes: the refusals of the shared blocking PostgreSQL bridge (WP-CON-01.T5, ADR-082 addendum 1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "pg_bridge.wrong_thread"
+class = "Internal"
+summary = "The bridge was called from a thread that is inside an async runtime."
+explanation_key = "error.pg_bridge.wrong_thread"
+params = []
+remedy = "Call the bridge only from a plain thread; code on a request path loads its data through the async layer instead."
+since = "0.1.0"
+
+[[entry]]
+code = "pg_bridge.busy"
+class = "Unavailable"
+summary = "The bridge queue is full, so the call was refused and nothing was queued."
+explanation_key = "error.pg_bridge.busy"
+params = []
+remedy = "Retry later or shed the work; if it recurs, raise max_in_flight within the pool size or reduce the callers."
+since = "0.1.0"
+
+[[entry]]
+code = "pg_bridge.timeout"
+class = "Unavailable"
+summary = "The call did not finish before its deadline and the statement was cancelled."
+explanation_key = "error.pg_bridge.timeout"
+params = []
+remedy = "Treat the work as not done, check the database for slow statements, and retry with a larger deadline only if the statement is expected to be slow."
+since = "0.1.0"
+
+[[entry]]
+code = "pg_bridge.closed"
+class = "Unavailable"
+summary = "The bridge is shut down or a call on it failed without an answer."
+explanation_key = "error.pg_bridge.closed"
+params = []
+remedy = "Construct a new bridge, or stop issuing calls once the process is shutting down."
+since = "0.1.0"
+
+[[entry]]
+code = "pg_bridge.connect"
+class = "Unavailable"
+summary = "The bridge could not get a database connection from the pool."
+explanation_key = "error.pg_bridge.connect"
+params = []
+remedy = "Check that the database is reachable and the pool is not exhausted by other users, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "pg_bridge.config"
+class = "Validation"
+summary = "The bridge configuration is not usable: {setting}."
+explanation_key = "error.pg_bridge.config"
+params = ["setting"]
+remedy = "Correct the named setting; max_in_flight must leave the bridge's reserve free in the pool."
+since = "0.1.0"

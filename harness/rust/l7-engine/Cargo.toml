@@ -1,0 +1,48 @@
+[package]
+name = "spot-l7-engine"
+version = "0.1.0"
+description = "L7 invariant suite, framework cut, part 2 (WP-TST-07.T2): the storage-level driver of spot-l7-invariants run through the document engine and the job engine — naming series gaplessness, lifecycle and outbox/audit completeness, permission-checked workers, app invariant registration and the CI profiles"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# T1's machinery: the invariant registry, the read-only check context and the report.
+spot-l7-invariants = { path = "../l7-invariants" }
+# The lifecycle host under test: DocumentService, the engine, its authorizer and the outbox.
+spot-document = { path = "../../../crates/framework/spot-document" }
+# The app API contract: Document, Invocation, Outcome, DocumentService.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The DocType definitions and their compiled catalog.
+spot-meta = { path = "../../../crates/framework/spot-meta" }
+# The permission decision core and the principal model.
+spot-permissions = { path = "../../../crates/framework/spot-permissions" }
+# The step and seam registry the engine runs against.
+spot-seams = { path = "../../../crates/framework/spot-seams" }
+# Naming series and gapless allocation (WP-DOC-05).
+spot-naming = { path = "../../../crates/framework/spot-naming" }
+# The naming plan compiler.
+spot-plan = { path = "../../../crates/framework/spot-plan" }
+# The job engine: the queue, retries, idempotency keys and the in-memory store (WP-PLT-06).
+spot-jobs = { path = "../../../crates/framework/spot-jobs" }
+# The sample app: its DocTypes, permissions and seed data (WP-DX-05.T1).
+spot-sample-app = { path = "../../../crates/apps/spot-sample-app" }
+# The storage contract: the catalog, the transaction, the outbox and the values.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The lifecycle event topics the engine writes to the outbox.
+spot-events-contract = { path = "../../../contracts/events" }
+# `Clock` and the manual test clock.
+spot-core = { path = "../../../crates/framework/spot-core" }
+# The in-memory backend.
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+# The PostgreSQL backend and its per-test scratch-database harness.
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3.55", default-features = false, features = ["std", "parsing", "formatting", "macros"] }
+toml = "0.8"
+
+[lints]
+workspace = true

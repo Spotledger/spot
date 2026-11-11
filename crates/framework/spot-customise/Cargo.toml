@@ -1,0 +1,56 @@
+[package]
+name = "spot-customise"
+description = "Runtime customisation (WP-PLT-16.T1): DocTypes, custom fields and property overrides created while the site runs, through one validated, additive, crash-recoverable change pipeline over the metadata registry, the schema planner and the hot swap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The PostgreSQL `SchemaBackend`: plans and applies with `spot-pg-migrate`'s online engine.
+postgres = ["dep:spot-pg-migrate", "dep:spot-postgres"]
+
+[dependencies]
+# `SiteId`: the tenant a snapshot belongs to.
+spot-core = { path = "../spot-core" }
+# The effective metadata, definitions, custom fields, property overrides and their validation.
+spot-meta = { path = "../spot-meta" }
+# The versioned snapshot (`LiveMeta`), the `InvalidationBus` and the content hash two nodes compare.
+spot-meta-live = { path = "../spot-meta-live" }
+# The storage catalogue a schema plan is computed for, and the document ops of the record store.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `Right`, the DocType rights a default grant is made of.
+spot-permissions = { path = "../spot-permissions" }
+# Stable text form of a field spec and of the three record shapes.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+# The sha-256 that turns a record key into a stable record id.
+sha2 = "0.10"
+# Typed errors with stable `customise.*` codes.
+thiserror = "2"
+# The one in-process lock that serialises the pipeline on a node (never held across a database lock).
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# `postgres`-gated: the online migration engine and its backend.
+spot-pg-migrate = { path = "../../backends/spot-pg-migrate", optional = true }
+spot-postgres = { path = "../../backends/spot-postgres", optional = true }
+
+[dev-dependencies]
+spot-document = { path = "../spot-document" }
+spot-seams = { path = "../spot-seams" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-api-services = { path = "../spot-api-services" }
+spot-http = { path = "../spot-http" }
+spot-dts = { path = "../spot-dts" }
+spot-views = { path = "../spot-views" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1"
+time = { version = "0.3", features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["sync", "macros", "rt", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

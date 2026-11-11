@@ -1,0 +1,228 @@
+# The host agent execution core's decision and construction codes (WP-ADM-03.T1).
+# Library-internal vocabulary: the agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_core.envelope_malformed"
+class = "none"
+summary = "The command envelope is malformed: it is not the expected JSON shape, or its command or signatures do not decode."
+explanation_key = "error.agent_core.envelope_malformed"
+params = []
+remedy = "Resend the command from the console or CLI; if it persists, the signing or transport layer is corrupting the envelope."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.wrong_audience"
+class = "none"
+summary = "The command is addressed to a different agent."
+explanation_key = "error.agent_core.wrong_audience"
+params = []
+remedy = "Submit the command to the agent it names, or re-issue it for this agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.not_yet_valid"
+class = "none"
+summary = "The command's issue instant is in the future beyond the allowed clock skew."
+explanation_key = "error.agent_core.not_yet_valid"
+params = []
+remedy = "Check the issuer's clock, or re-issue the command when its window has begun."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.expired"
+class = "none"
+summary = "The command's validity window has passed."
+explanation_key = "error.agent_core.expired"
+params = []
+remedy = "Re-issue the command; commands are short-lived by design."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.lifetime_exceeded"
+class = "none"
+summary = "The command's validity window is longer than the policy allows."
+explanation_key = "error.agent_core.lifetime_exceeded"
+params = []
+remedy = "Re-issue the command with a window within the policy's maximum lifetime."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.unknown_signer"
+class = "none"
+summary = "A signature names an administrator key that is not in the trust store."
+explanation_key = "error.agent_core.unknown_signer"
+params = []
+remedy = "Enrol the administrator's hardware key with the agent before signing, or remove the unknown signer."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.revoked_signer"
+class = "none"
+summary = "A signature names an administrator key that was revoked before the command was issued."
+explanation_key = "error.agent_core.revoked_signer"
+params = []
+remedy = "Re-sign the command with a key that is still trusted."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.invalid_signature"
+class = "none"
+summary = "A signature does not verify under the key it names."
+explanation_key = "error.agent_core.invalid_signature"
+params = []
+remedy = "Re-sign the command; a signature that does not verify is treated as no signature."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.insufficient_signatures"
+class = "none"
+summary = "The command carries too few distinct valid administrator signatures for the operation's risk level."
+explanation_key = "error.agent_core.insufficient_signatures"
+params = []
+remedy = "Collect the required number of distinct administrator approvals and resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.replay"
+class = "none"
+summary = "The command's nonce was already accepted, so it is a replay."
+explanation_key = "error.agent_core.replay"
+params = []
+remedy = "Re-issue the command; an accepted command can never verify twice."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.nonce_store"
+class = "none"
+summary = "The nonce store refused the command because it is full or its backend failed."
+explanation_key = "error.agent_core.nonce_store"
+params = []
+remedy = "Restore the nonce store's backend or prune the replay window, then resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.unknown_operation"
+class = "none"
+summary = "The operation named by the command is not registered in the catalogue."
+explanation_key = "error.agent_core.unknown_operation"
+params = []
+remedy = "Register the operation in the agent's catalogue, or use a registered operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.invalid_arguments"
+class = "none"
+summary = "The command's parameters do not satisfy the operation's catalogue schema."
+explanation_key = "error.agent_core.invalid_arguments"
+params = []
+remedy = "Correct the operation's parameters in the console or CLI and re-issue the command."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.software_key_refused"
+class = "none"
+summary = "A signature for a dangerous operation comes from a key that is not hardware-backed."
+explanation_key = "error.agent_core.software_key_refused"
+params = []
+remedy = "Sign the command with the administrator's hardware key."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.requester_cannot_approve"
+class = "none"
+summary = "The requester approved a command the policy forbids the requester from approving."
+explanation_key = "error.agent_core.requester_cannot_approve"
+params = []
+remedy = "Have two other administrators approve the request; the requester's own signature does not count."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.critical_not_cleared"
+class = "none"
+summary = "A critical operation lacks the configured delay or break-glass clearance it requires."
+explanation_key = "error.agent_core.critical_not_cleared"
+params = []
+remedy = "Wait for the configured delay to elapse, or open a recorded break-glass session, then resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.log_unavailable"
+class = "none"
+summary = "The tamper-evident result log could not record the decision, so the command was not run."
+explanation_key = "error.agent_core.log_unavailable"
+params = []
+remedy = "Restore the result log's storage and resubmit; the agent refuses to run without evidence."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.unknown_handler"
+class = "none"
+summary = "No handler is registered for the operation in the executor."
+explanation_key = "error.agent_core.unknown_handler"
+params = []
+remedy = "Register a handler for the operation in this agent, or use an operation it can run."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.plan_unverified"
+class = "none"
+summary = "The plan is not the deterministic plan of a validly signed command."
+explanation_key = "error.agent_core.plan_unverified"
+params = []
+remedy = "Treat the broker as compromised: it presented a plan that does not match the command it claimed to verify."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.plan_hash_mismatch"
+class = "none"
+summary = "The plan's hash does not match the plan's own fields."
+explanation_key = "error.agent_core.plan_hash_mismatch"
+params = []
+remedy = "Treat the plan as tampered with and refuse it; re-verify the command from scratch."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.untrusted_broker"
+class = "none"
+summary = "The plan names a broker key the executor does not trust."
+explanation_key = "error.agent_core.untrusted_broker"
+params = []
+remedy = "Configure the executor with the broker's key, or restart the agent's broker with the enrolled key."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.broker_signature_invalid"
+class = "none"
+summary = "The broker's signature over the plan does not verify."
+explanation_key = "error.agent_core.broker_signature_invalid"
+params = []
+remedy = "Treat the local channel as compromised and refuse the plan."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.invalid_key"
+class = "none"
+summary = "A public key offered for trust is not a valid Ed25519 public key."
+explanation_key = "error.agent_core.invalid_key"
+params = []
+remedy = "Re-export the administrator's or broker's public key and enrol it again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.malformed"
+class = "none"
+summary = "The host supplied a malformed value while building the agent's trusted inputs."
+explanation_key = "error.agent_core.malformed"
+params = []
+remedy = "Check the host's configuration wiring for the agent's catalogue, trust store and broker key."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_core.attestation"
+class = "none"
+summary = "A hardware-key attestation did not verify against the platform's vendor roots."
+explanation_key = "error.agent_core.attestation"
+params = []
+remedy = "Obtain a current attestation for the administrator's hardware key from a trusted vendor root."
+since = "0.1.0"

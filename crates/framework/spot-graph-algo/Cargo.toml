@@ -1,0 +1,22 @@
+[package]
+name = "spot-graph-algo"
+description = "Deterministic, iterative graph algorithms over a minimal GraphView trait: topological order, cycle detection, reachability, shortest path and strongly connected components (WP-GRA-05), shared by the app API and the WIT world so native, WASM and TypeScript callers see identical results"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Typed errors with stable `graph.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Reference implementations the property tests must agree with. Dev-only:
+# no runtime crate may depend on petgraph.
+petgraph = "0.6"
+# Randomised graph generation for the property tests.
+proptest = "1"
+
+[lints]
+workspace = true

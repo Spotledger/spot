@@ -1,0 +1,30 @@
+# Help for the generated error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "generated.document.invalid_name"
+what_happened = "A generated name was refused by the storage layer."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this; the view build should never emit such a name.", "If it keeps happening, tell your administrator and quote the code generated.document.invalid_name."]
+audience = "operator"
+
+[[help]]
+code = "generated.document.missing_row"
+what_happened = "A row added to a child table was not found afterwards."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this; the engine's row push is broken.", "If it keeps happening, tell your administrator and quote the code generated.document.missing_row."]
+audience = "operator"
+
+[[help]]
+code = "generated.document.wrong_select_value"
+what_happened = "A stored choice is no longer one of the field's options."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Re-narrow the options keeping stored values, or fix the stored value.", "If it keeps happening, tell your administrator and quote the code generated.document.wrong_select_value."]
+audience = "operator"
+
+[[help]]
+code = "generated.document.wrong_type"
+what_happened = "A generated view found a different type of value in a field than expected."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Rebuild the views against the current document type; this is a programming error.", "If it keeps happening, tell your administrator and quote the code generated.document.wrong_type."]
+audience = "operator"

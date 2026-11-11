@@ -1,0 +1,100 @@
+# Help for the lease_grants error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "lease_grants.allocator_failed"
+what_happened = "The allocator could not grant a range."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the hub's allocator and its log.", "If it keeps happening, tell your administrator and quote the code lease_grants.allocator_failed."]
+audience = "operator"
+
+[[help]]
+code = "lease_grants.audit_failed"
+what_happened = "The grant could not be audited, so no range was issued."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry once the audit store is available; the range taken is lost and never reissued.", "If it keeps happening, tell your administrator and quote the code lease_grants.audit_failed."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.log_failed"
+what_happened = "The grant could not be recorded, so no range was issued."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry; the range that was taken is lost and never reissued.", "If it keeps happening, tell your administrator and quote the code lease_grants.log_failed."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.node_mismatch"
+what_happened = "The request names another node than the one the connection authenticated."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Send the request from the node it names; a node asks only for its own ranges.", "If it keeps happening, tell your administrator and quote the code lease_grants.node_mismatch."]
+audience = "user"
+
+[[help]]
+code = "lease_grants.node_not_active"
+what_happened = "The node may not be granted a number range."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask the hub administrator about the node's standing.", "If it keeps happening, tell your administrator and quote the code lease_grants.node_not_active."]
+audience = "user"
+
+[[help]]
+code = "lease_grants.series_cap_reached"
+what_happened = "The hub cannot track another naming series."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Ask the hub administrator to remove a series from the grant service or raise its limit.", "If it keeps happening, tell your administrator and quote the code lease_grants.series_cap_reached."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.series_exhausted"
+what_happened = "The series has no numbers left for a range of this size."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Ask for a smaller range, or open a new series.", "If it keeps happening, tell your administrator and quote the code lease_grants.series_exhausted."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.series_not_entitled"
+what_happened = "The node is not entitled to the naming series it asked for."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask the hub administrator which series this node may lease.", "If it keeps happening, tell your administrator and quote the code lease_grants.series_not_entitled."]
+audience = "user"
+
+[[help]]
+code = "lease_grants.size_refused"
+what_happened = "The requested range size is zero or above the series maximum."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Ask for a range between one number and the series maximum.", "If it keeps happening, tell your administrator and quote the code lease_grants.size_refused."]
+audience = "user"
+
+[[help]]
+code = "lease_grants.time_invalid"
+what_happened = "The times involved cannot be compared, so no range was issued."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Retry once, because a clock correction may fix it.", "If it keeps happening, tell your administrator and quote the code lease_grants.time_invalid."]
+audience = "operator"
+
+[[help]]
+code = "lease_grants.too_soon"
+what_happened = "A range of this series was granted to this node too recently."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait for the minimum interval between grants, then ask again.", "If it keeps happening, tell your administrator and quote the code lease_grants.too_soon."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.node_regressed"
+what_happened = "The node reported an older state than the hub issued, or is already flagged, and must re-enrol."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Re-enrol the node with the hub administrator; no range is extended until then.", "If it keeps happening, tell your administrator and quote the code lease_grants.node_regressed."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.report_ahead"
+what_happened = "The node reported a state the hub never issued to it."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask the hub administrator to check the node's identity and enrolment.", "If it keeps happening, tell your administrator and quote the code lease_grants.report_ahead."]
+audience = "admin"
+
+[[help]]
+code = "lease_grants.reply_refused"
+what_happened = "The reply cannot be issued for this request."
+why = "The system is in a state that does not allow this action right now."
+what_to_do = ["Send a fresh request from the node's current state; if it repeats, ask the hub administrator.", "If it keeps happening, tell your administrator and quote the code lease_grants.reply_refused."]
+audience = "admin"

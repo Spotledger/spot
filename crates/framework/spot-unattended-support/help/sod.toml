@@ -1,0 +1,51 @@
+# Help for the sod error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sod.parse_failed"
+what_happened = "The rule set or role catalogue document could not be read."
+why = "The document is not valid TOML, or uses a key, severity or scope mode the model does not accept."
+what_to_do = ["Fix the syntax, key or value that the error names.", "Load the document again."]
+audience = "admin"
+
+[[help]]
+code = "sod.duplicate_id"
+what_happened = "A rule id or role is listed twice."
+why = "Every rule id and every catalogue role must be named only once."
+what_to_do = ["Give one of the duplicates a different id, or remove it.", "Load the rule set again."]
+audience = "admin"
+
+[[help]]
+code = "sod.side_count"
+what_happened = "A separation of duties rule has fewer than two sides."
+why = "A rule needs at least two sides to describe duties that must not be held together."
+what_to_do = ["Add a second side to the rule.", "Load the rule set again."]
+audience = "admin"
+
+[[help]]
+code = "sod.side_empty"
+what_happened = "A side of a separation of duties rule names no duty."
+why = "Roles ride on top of duties and do not replace them."
+what_to_do = ["Give the side at least one duty.", "Load the rule set again."]
+audience = "admin"
+
+[[help]]
+code = "sod.side_overlap"
+what_happened = "One duty sits on two sides of the same rule."
+why = "No user could ever satisfy one side without also satisfying the other."
+what_to_do = ["Remove the duty from one of the two sides.", "Load the rule set again."]
+audience = "admin"
+
+[[help]]
+code = "sod.severity_unknown"
+what_happened = "A rule names a severity that is not known."
+why = "Only low, medium, high and critical are accepted."
+what_to_do = ["Use low, medium, high or critical.", "Load the rule set again."]
+audience = "admin"
+
+[[help]]
+code = "sod.name_empty"
+what_happened = "A name in the rule set is empty."
+why = "A rule id, title, description, duty, role or user is blank after trimming."
+what_to_do = ["Give the named field a value that is not blank.", "Load the rule set again."]
+audience = "admin"

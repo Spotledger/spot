@@ -1,0 +1,15 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.out",
+      "origin": "app:sample",
+      "label": "Out",
+      "slot": "shell.sidebar",
+      "navigate_url": "https://evil.example/x"
+    }
+  ],
+  "$comment": "expect: uiext.external_url. navigate_url never leaves the app's own routes."
+}

@@ -1,0 +1,52 @@
+[package]
+name = "spot-sessions"
+description = "Sessions and login throttling: the Session model and SessionStore contract, the SessionManager with stable session.* errors, and the LoginThrottle state machine with audited lockout (WP-PLT-02.T2, ADR-070)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# OpaqueToken and TokenDigest: only the digest of a token is ever stored or compared;
+# the token text lives only as long as issuance and validation take.
+spot-auth = { path = "../spot-auth" }
+# The salted one-way digest of client source addresses. sha2 is already the workspace
+# digest (spot-auth stores SHA-256 token digests); the SaltKey construction is SHA-256
+# over salt || separator || source.
+sha2 = "0.10"
+# OS CSPRNG for SaltKey::generate; already the workspace randomness crate (spot-auth's
+# token generation uses it).
+rand = { version = "0.9", features = ["os_rng"] }
+# Typed errors with stable machine-readable codes (the workspace's error pattern).
+thiserror = "2"
+# Task spawning for the contract suite's 64-touch property, under the `testing` feature
+# only (an optional dep: no production build pulls a runtime in).
+tokio = { version = "1", default-features = false, features = ["rt"], optional = true }
+
+[dev-dependencies]
+# Runs the crate's own tests on the current thread: no multi-thread runtime, so tests
+# spawn no OS threads; `#[tokio::test]` and the suite's `tokio::spawn` come from here.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+# Seeded properties for the throttle state machine (no real sleeps; times are arguments).
+proptest = "1"
+
+[features]
+# The contract suite (`contract::run_all`) for any SessionStore backend. This crate's own
+# tests compile it through `cfg(test)`; WP-PLT-02.T3's storage-backed store (and any later
+# backend) enables the feature in its dev-dependencies and runs the same suite.
+testing = ["dep:tokio"]
+
+[[test]]
+name = "manager"
+# The integration tests run the contract suite (`contract`) and use the fixed-key
+# helpers (`tests_support`), both compiled under the `testing` feature.
+required-features = ["testing"]
+
+[[test]]
+name = "throttle"
+# The throttle tests read `tests_support`'s fixed salt digests.
+required-features = ["testing"]
+
+[lints]
+workspace = true

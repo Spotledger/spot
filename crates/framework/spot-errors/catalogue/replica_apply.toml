@@ -1,0 +1,168 @@
+# replica_apply codes: the `replica_apply.*` rejection vocabulary of spot-replica-apply
+# (WP-EDG-06.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The replication apply path raises its own typed reasons (`spot_replica_apply::Reason`), so
+# these are library-internal vocabulary: `class = "none"` describes what each code means, and a
+# remedy states what an operator or the quarantine queue does about it.
+
+[[entry]]
+code = "replica_apply.not_owner"
+class = "none"
+summary = "The sender does not own the record; {owner} does."
+explanation_key = "error.replica_apply.not_owner"
+params = ["owner"]
+remedy = "Check the ownership map and the sender's partition; an ownership violation means a bug or a misconfiguration, so quarantine the record."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_scope"
+class = "none"
+summary = "The partition scope {key_type} cannot be read from field {field}: {why}."
+explanation_key = "error.replica_apply.invalid_scope"
+params = ["field", "key_type", "why"]
+remedy = "Fix the configured owner_key field so it names a text field holding the record's scope value; ownership cannot be decided otherwise, so the record is quarantined."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.metadata_skew"
+class = "none"
+summary = "The record's metadata version {record} is outside the accepted skew (this node is at {local}, maximum {skew})."
+explanation_key = "error.replica_apply.metadata_skew"
+params = ["local", "record", "skew"]
+remedy = "Upgrade this node's metadata, or widen the accepted skew once ADR-066 fixes the policy."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.unknown_entity"
+class = "none"
+summary = "The record names entity {entity}, which this node's catalog does not have."
+explanation_key = "error.replica_apply.unknown_entity"
+params = ["entity"]
+remedy = "Install the metadata that declares the entity, then retry the quarantined record."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.child_entity"
+class = "none"
+summary = "The record names child entity {entity}, whose rows travel inside their parent."
+explanation_key = "error.replica_apply.child_entity"
+params = ["entity"]
+remedy = "Send the parent document; child rows are never replicated on their own (ADR-063 L5)."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_id"
+class = "none"
+summary = "The record's id {id} is not a valid UUIDv7 record id."
+explanation_key = "error.replica_apply.invalid_id"
+params = ["id"]
+remedy = "Fix the sender so every record id is a UUIDv7 (ADR-33); the quarantined record cannot be applied."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.missing_field"
+class = "none"
+summary = "The record omits declared field {field} of {entity}."
+explanation_key = "error.replica_apply.missing_field"
+params = ["entity", "field"]
+remedy = "Send the full document: a replicated record stores every declared field (ADR-053)."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.unknown_field"
+class = "none"
+summary = "The record holds field {field}, which {entity} does not declare."
+explanation_key = "error.replica_apply.unknown_field"
+params = ["entity", "field"]
+remedy = "Align the sender's metadata with this node's, or install the metadata that declares the field."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_value"
+class = "none"
+summary = "Field {field} of {entity} does not fit its declared type: {why}."
+explanation_key = "error.replica_apply.invalid_value"
+params = ["entity", "field", "why"]
+remedy = "Fix the value at the sender; shape is checked, business rules are not."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.unknown_child_table"
+class = "none"
+summary = "{entity} has no child table {table}."
+explanation_key = "error.replica_apply.unknown_child_table"
+params = ["entity", "table"]
+remedy = "Align the sender's metadata with this node's, or send the child rows under a declared table."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_payload"
+class = "none"
+summary = "The record payload is not a valid record image: {why}."
+explanation_key = "error.replica_apply.invalid_payload"
+params = ["why"]
+remedy = "Fix the sender's encoder; a payload the apply path cannot decode is quarantined."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_identifier"
+class = "none"
+summary = "The record has an invalid {what}."
+explanation_key = "error.replica_apply.invalid_identifier"
+params = ["what"]
+remedy = "Fix the sender so every record has a non-empty name and a version and sequence of at least 1 (ADR-053)."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.invalid_origin_field"
+class = "none"
+summary = "The configured origin field {field} is not a storage name."
+explanation_key = "error.replica_apply.invalid_origin_field"
+params = ["field"]
+remedy = "Configure origin field names that are valid storage names; a mirror cannot be marked otherwise."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.duplicate_id"
+class = "none"
+summary = "The bundle uses record id {id} for more than one record."
+explanation_key = "error.replica_apply.duplicate_id"
+params = ["id"]
+remedy = "Fix the sender's bundle: every document and child row has its own id (ADR-33)."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.write_failed"
+class = "none"
+summary = "Storing the record failed: {why}."
+explanation_key = "error.replica_apply.write_failed"
+params = ["why"]
+remedy = "Check the storage backend's health; the transaction rolled back, so a retry is safe."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.audit_failed"
+class = "none"
+summary = "Recording the replicated audit marker failed: {why}."
+explanation_key = "error.replica_apply.audit_failed"
+params = ["why"]
+remedy = "Check the audit chain store's availability; the transaction rolled back, so the record was not stored."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.notice_failed"
+class = "none"
+summary = "Appending the delivery notice failed: {why}."
+explanation_key = "error.replica_apply.notice_failed"
+params = ["why"]
+remedy = "Check the notice feed's availability; the transaction rolled back, so the record was not stored."
+since = "0.1.0"
+
+[[entry]]
+code = "replica_apply.quarantine_failed"
+class = "none"
+summary = "Handing the refused record to the quarantine queue failed: {why}."
+explanation_key = "error.replica_apply.quarantine_failed"
+params = ["why"]
+remedy = "Check the quarantine store's health; the record was not stored, and the refusal must not be lost, so the delivery is retried."
+since = "0.1.0"

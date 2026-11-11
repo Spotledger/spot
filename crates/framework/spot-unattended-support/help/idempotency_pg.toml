@@ -1,0 +1,9 @@
+# Help for the idempotency_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "idempotency_pg.migration_failed"
+what_happened = "The table that remembers repeated requests could not be created in the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database user may create tables and indexes and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code idempotency_pg.migration_failed."]
+audience = "operator"

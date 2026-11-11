@@ -1,0 +1,22 @@
+# The Label: the tag master `project.labels` multi-picks from (WP-DX-05.T1).
+name = "label"
+label = "Label"
+app = "sample"
+module = "projects"
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+max_chars = 50
+required = true
+unique = true
+in_list_view = true
+
+[[fields]]
+name = "colour"
+label = "Colour"
+type = "text"
+max_chars = 9
+format = "color"
+in_list_view = true

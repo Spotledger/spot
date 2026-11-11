@@ -1,0 +1,110 @@
+# bpm_triggers codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The trigger layer of the Business Process engine (spot-bpm-triggers, blueprint WS8, ADR-49).
+
+[[entry]]
+code = "bpm_triggers.trigger_incomplete"
+class = "none"
+summary = "A trigger node is incomplete: process {process}, node {node}, {detail}."
+explanation_key = "error.bpm_triggers.trigger_incomplete"
+params = ["detail", "node", "process"]
+remedy = "Complete the trigger node's config for its kind in the process definition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.unknown_operation"
+class = "none"
+summary = "A document-event trigger names an unknown operation: node {node}, operation {operation}."
+explanation_key = "error.bpm_triggers.unknown_operation"
+params = ["node", "operation"]
+remedy = "Name one of the lifecycle operations (create, update, post, cancel, delete, rename, update_posted)."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.invalid_cron"
+class = "none"
+summary = "A schedule trigger has an invalid cron expression: node {node}, {detail}."
+explanation_key = "error.bpm_triggers.invalid_cron"
+params = ["detail", "node"]
+remedy = "Fix the six-field cron expression on the schedule trigger."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.schedule_invalid"
+class = "none"
+summary = "A schedule trigger could not be built: node {node}, {detail}."
+explanation_key = "error.bpm_triggers.schedule_invalid"
+params = ["detail", "node"]
+remedy = "Fix the schedule trigger's step or time zone so the schedule builds."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.unknown_kind"
+class = "none"
+summary = "No trigger kind is registered: {kind}."
+explanation_key = "error.bpm_triggers.unknown_kind"
+params = ["kind"]
+remedy = "Register the trigger kind's matcher and starter before publishing the process."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.signature_verification_failed"
+class = "none"
+summary = "An incoming webhook's signature did not verify: {reason}."
+explanation_key = "error.bpm_triggers.signature_verification_failed"
+params = ["reason"]
+remedy = "Check the signing secret and the exact request bytes the sender signed."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.body_invalid"
+class = "none"
+summary = "An incoming webhook's body is not a valid JSON object: {reason}."
+explanation_key = "error.bpm_triggers.body_invalid"
+params = ["reason"]
+remedy = "Send a JSON object as the webhook body."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.permission_denied"
+class = "none"
+summary = "The principal may not start the process through this trigger: process {process}, node {node}."
+explanation_key = "error.bpm_triggers.permission_denied"
+params = ["node", "process"]
+remedy = "Give the principal the role the trigger names, or start through a trigger it may use."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.start_failed"
+class = "none"
+summary = "Starting the Case failed: process {process}, node {node}, {reason}."
+explanation_key = "error.bpm_triggers.start_failed"
+params = ["node", "process", "reason"]
+remedy = "Retry the event once the CaseStarter's store is available; the start key keeps it safe."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.input_invalid"
+class = "none"
+summary = "The start input does not match the trigger's input schema: process {process}, node {node}, {problems}."
+explanation_key = "error.bpm_triggers.input_invalid"
+params = ["node", "problems", "process"]
+remedy = "Send an input that satisfies the input schema the trigger declares; nothing was started."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.condition_evaluation_failed"
+class = "none"
+summary = "A trigger condition failed to evaluate: condition {condition}, {reason}."
+explanation_key = "error.bpm_triggers.condition_evaluation_failed"
+params = ["condition", "reason"]
+remedy = "Fix the condition against the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_triggers.facts_incomplete"
+class = "none"
+summary = "The facts of a {doctype} document event are incomplete: {reason}."
+explanation_key = "error.bpm_triggers.facts_incomplete"
+params = ["doctype", "reason"]
+remedy = "Publish the event with a full after-image (its state and scalar field values), or give the trigger intake a document loader; nothing was started."
+since = "0.1.0"

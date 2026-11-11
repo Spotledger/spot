@@ -1,0 +1,42 @@
+#!/bin/sh
+set -e
+
+# The package never starts and never enables the service: an administrator
+# provisions a site first and then starts it. The one thing it does do is
+# restart a service that is already running when the package is upgraded (after
+# reloading systemd so a changed unit file takes effect), the same promise the
+# RPM keeps through its post-uninstall scriptlet helper.
+#
+# tools/packaging/build.py assembles this .deb without debhelper, so no
+# #DEBHELPER# snippet runs: the account, the directories and the upgrade restart
+# are done here. No value from the environment reaches a command: the unit name
+# is a literal and the two arguments are quoted.
+if [ "$1" = "configure" ]; then
+	if command -v systemd-sysusers >/dev/null 2>&1; then
+		systemd-sysusers spot.conf
+	fi
+	if command -v systemd-tmpfiles >/dev/null 2>&1; then
+		systemd-tmpfiles --create spot.conf
+	fi
+	if getent group spot >/dev/null 2>&1; then
+		chgrp spot /etc/spot/spot.toml /etc/spot/environment
+	fi
+
+	# $2 is the version dpkg is configuring over: empty on a first install, set
+	# on an upgrade or a downgrade. The unit file of the new version is on disk
+	# by now, but systemd still holds the old one until it is told to reload, so
+	# the reload comes first: a changed ExecStart, hardening option or
+	# environment takes effect with the restart that follows. Asking systemd to
+	# try-restart restarts the unit only when it is running and does nothing
+	# when it is stopped, so a service the administrator never started is never
+	# started here. Neither a failed reload nor a failed restart may fail the
+	# dpkg run (a failed reload does not skip the restart): the journal says why.
+	if [ -n "${2:-}" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+		systemctl daemon-reload || true
+		systemctl try-restart spot.service || true
+	fi
+fi
+
+#DEBHELPER#
+
+exit 0

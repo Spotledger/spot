@@ -1,0 +1,52 @@
+[package]
+name = "spot-agent-windows"
+description = "Windows operation modules for the Spotledger host agent (WP-ADM-05.T1, blueprint WS22, ADR-44): services, Windows Update, the Windows Firewall and local users/groups, each an OperationHandler over a typed WinApi seam with plan, apply and verify, a complete in-memory FakeWin for Linux tests, and a thin #[cfg(windows)] implementation on the `windows` crate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: the operation ids, their parameters and risk levels.
+# The Windows module registers its own specs here and reads the ids from them.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The execution core: the OperationHandler trait every module implements, and the
+# ExecutionPlan it is handed.
+spot-agent-core = { path = "../spot-agent-core" }
+# The agent identity crate, used only for its OS-CSPRNG helper: the new password of a
+# reset account is generated from the OS entropy source, exactly as that crate fills its
+# key seeds and tokens. No networking, no key handling is used here.
+spot-agent-enroll = { path = "../spot-agent-enroll" }
+# Typed errors with stable `agent_windows.*` codes.
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+# The real Win32/COM bindings. Target-specific so Linux (the main CI host) never builds
+# them; only the thin `src/real.rs` implementation uses them.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Services",
+    "Win32_System_Com",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_NetworkManagement_NetManagement",
+] }
+
+[dev-dependencies]
+# The command envelope's key id, to build ExecutionPlans in the handler tests.
+spot-signed-command = { path = "../spot-signed-command" }
+# JSON is how the console ships a catalogue's specs; a spec must round-trip.
+serde_json = "1"
+
+# The `windows` crate's Win32 and COM calls are `unsafe`. Every such call is confined to
+# `src/real.rs`, a `#[cfg(windows)]` module that opens with `#![allow(unsafe_code)]`; the
+# Linux-compiled core stays `deny` and carries no `unsafe`, matching the project coding rules
+# and the sanctioned precedent in `spot-pg-supervisor` (see the PR's Open questions).
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

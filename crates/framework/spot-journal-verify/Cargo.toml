@@ -1,0 +1,29 @@
+[package]
+name = "spot-journal-verify"
+description = "Continuous verification of a tenant's journal in the object store (WP-JRN-03.T5, ADR-061 s8): the signed manifest against the expected tenant and source, every listed segment present with the hash the manifest lists, and in deep mode every segment opened, its block checksums and chain link checked, with findings that name the tenant, generation and position range and an incremental cursor with a byte budget"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The signed manifest, its verifier and the manifest-versus-storage findings.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The segment reader (header, block checksums) and the segment hash.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The store seam and the key layout.
+spot-journal-store = { path = "../spot-journal-store" }
+# So a scheduler can persist the incremental cursor between runs.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `journal_verify.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Test keys: the manifest crate re-exports no test key helper.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Segments are built with the segment writer, which takes the feed position of its entries.
+spot-events-contract = { path = "../../../contracts/events" }
+
+[lints]
+workspace = true

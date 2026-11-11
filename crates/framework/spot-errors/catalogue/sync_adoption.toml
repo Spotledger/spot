@@ -1,0 +1,74 @@
+# sync_adoption codes: the handover adoption exchange (spot-sync-adoption, WP-SYN-01.T3,
+# ADR-063 section 5). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_adoption.not_owner"
+class = "none"
+summary = "The record is owned by Head Office and can no longer be edited at this node."
+explanation_key = "error.sync_adoption.not_owner"
+params = []
+remedy = "Make the change at the hub; it flows down to this node."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.stale_ack"
+class = "none"
+summary = "An adoption acknowledgement carries a final version below one the hub has already seen."
+explanation_key = "error.sync_adoption.stale_ack"
+params = []
+remedy = "Ignore the acknowledgement; the hub waits for the node's current one."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.missing_versions"
+class = "none"
+summary = "An adoption acknowledgement names versions the hub has not received."
+explanation_key = "error.sync_adoption.missing_versions"
+params = []
+remedy = "Do not take ownership; re-sync the node's stream until the hub holds every version, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.no_request"
+class = "none"
+summary = "An adoption acknowledgement arrived for a record no adoption request is pending on."
+explanation_key = "error.sync_adoption.no_request"
+params = []
+remedy = "Ignore the acknowledgement; the hub issues a request first."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.ack_mismatch"
+class = "none"
+summary = "An adoption acknowledgement disagrees with the one that already completed the adoption."
+explanation_key = "error.sync_adoption.ack_mismatch"
+params = []
+remedy = "Investigate the node's stream: an adopted record must not receive a different final version."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.record_not_arrived"
+class = "none"
+summary = "An adoption was triggered before the record reached the hub."
+explanation_key = "error.sync_adoption.record_not_arrived"
+params = []
+remedy = "Trigger the adoption again after the record has arrived at the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.request_ahead"
+class = "none"
+summary = "An adoption request names a version the node never wrote."
+explanation_key = "error.sync_adoption.request_ahead"
+params = []
+remedy = "Investigate the hub's stream: the request must name a version the node has written."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_adoption.version_exhausted"
+class = "none"
+summary = "A record's version counter cannot advance."
+explanation_key = "error.sync_adoption.version_exhausted"
+params = []
+remedy = "This cannot occur in normal operation; report it with the record's id."
+since = "0.1.0"

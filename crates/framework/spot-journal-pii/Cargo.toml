@@ -1,0 +1,27 @@
+[package]
+name = "spot-journal-pii"
+description = "Personal-field encryption inside a journal state image (WP-JRN-08.T1, ADR-061 s3 and s6): a pure library that replaces each personal field of a record image with an envelope sealed under a per-subject key, reveals the image again, yields the documented placeholder once a subject's key is destroyed, and erases a subject by destroying its key while legal-retention fields stay under the tenant journal key"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Base64url without padding for the envelope's ciphertext, nonce and associated-data hash: the
+# same encoding spot-secrets uses for a sealed value's text form.
+base64 = "0.22"
+# XChaCha20-Poly1305, the AEAD `spot-secrets`' SecretBox uses in `spot-secrets/src/crypto.rs`:
+# one primitive, the same 24-byte nonce and the same `nonce || ciphertext` convention.
+chacha20poly1305 = "0.10"
+# SHA-256 for the envelope's `aad_hash`. The workspace's one hash primitive (spot-secrets and
+# spot-journal-segment use the same crate); the brief's allowed list does not name it, and the
+# reason is recorded under Open questions.
+sha2 = "0.10"
+# The image is JSON: `serde_json::Value` in and out.
+serde_json = "1"
+# Typed errors with stable `journal_pii.*` codes.
+thiserror = "2"
+
+[lints]
+workspace = true

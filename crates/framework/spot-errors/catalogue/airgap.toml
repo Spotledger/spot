@@ -1,0 +1,399 @@
+# airgap codes: air-gapped operation — signed offline bundles, verified import from media, the
+# local repository, OS package mirrors, and the signed command and result bundles (WP-ADM-12.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "airgap.manifest"
+class = "none"
+summary = "The offline manifest is malformed: {detail}."
+explanation_key = "error.airgap.manifest"
+params = ["detail"]
+remedy = "Replace the manifest with one the air-gap layer understands; check the format marker, the kind, the version and every file entry."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.signature"
+class = "none"
+summary = "A signature document is malformed: {detail}."
+explanation_key = "error.airgap.signature"
+params = ["detail"]
+remedy = "Replace the signature file with a valid detached bundle signature."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.certificate"
+class = "none"
+summary = "The publisher certificate is malformed: {detail}."
+explanation_key = "error.airgap.certificate"
+params = ["detail"]
+remedy = "Replace the certificate file with one the signing layer issued."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.unsigned"
+class = "none"
+summary = "The offline bundle carries no signature."
+explanation_key = "error.airgap.unsigned"
+params = []
+remedy = "Obtain a signed bundle from the vendor; never import an unsigned one."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.unknown_root"
+class = "none"
+summary = "The issuing root is not trusted by this store."
+explanation_key = "error.airgap.unknown_root"
+params = []
+remedy = "Ask the operator to add the issuing root to the trust anchor, or obtain a bundle signed under a trusted root."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.root_outside_window"
+class = "none"
+summary = "The issuing root is outside its validity window at this time."
+explanation_key = "error.airgap.root_outside_window"
+params = []
+remedy = "Use a root that is valid now, or ask the operator to renew the root."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.certificate_not_yet_valid"
+class = "none"
+summary = "The publisher certificate is not yet valid."
+explanation_key = "error.airgap.certificate_not_yet_valid"
+params = []
+remedy = "Wait for the certificate's validity to start, or re-issue it with a window that covers now."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.certificate_expired"
+class = "none"
+summary = "The publisher certificate has expired."
+explanation_key = "error.airgap.certificate_expired"
+params = []
+remedy = "Ask the publisher to renew the certificate and re-sign the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.certificate_signature"
+class = "none"
+summary = "The publisher certificate's signature does not verify under its issuer."
+explanation_key = "error.airgap.certificate_signature"
+params = []
+remedy = "Re-issue the certificate under the root it names; it may have been altered."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.publisher_revoked"
+class = "none"
+summary = "The publisher was revoked before this bundle was signed."
+explanation_key = "error.airgap.publisher_revoked"
+params = []
+remedy = "The publisher must be re-admitted, or the bundle must be withdrawn."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.key_revoked"
+class = "none"
+summary = "The signing key was revoked before this bundle was signed."
+explanation_key = "error.airgap.key_revoked"
+params = []
+remedy = "Sign with a current key; the publisher issues a new key and certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.key_compromised"
+class = "none"
+summary = "The signing key is revoked as compromised, so every signature it made is refused."
+explanation_key = "error.airgap.key_compromised"
+params = []
+remedy = "The publisher must issue a new key and re-sign every bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.bundle_revoked"
+class = "none"
+summary = "This exact bundle digest is on the revocation list."
+explanation_key = "error.airgap.bundle_revoked"
+params = []
+remedy = "Do not import this bundle; obtain a later signed version."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.signature_invalid"
+class = "none"
+summary = "The bundle signature does not verify over its digest and identity."
+explanation_key = "error.airgap.signature_invalid"
+params = []
+remedy = "The bundle or its signature was altered; re-copy the bundle and its signature from the vendor."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.revocation_signature"
+class = "none"
+summary = "The revocation list's signature does not verify under its issuer."
+explanation_key = "error.airgap.revocation_signature"
+params = []
+remedy = "Re-fetch the revocation list; it may have been altered."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.revocation_stale"
+class = "none"
+summary = "The revocation list is older than the one already held."
+explanation_key = "error.airgap.revocation_stale"
+params = []
+remedy = "Copy the current revocation list from the vendor."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.key_unknown"
+class = "none"
+summary = "The signing key is not trusted: {key_id}."
+explanation_key = "error.airgap.key_unknown"
+params = ["key_id"]
+remedy = "Add the key to the trust anchor, or obtain a result signed by a trusted key."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.key_not_yet_valid"
+class = "none"
+summary = "The signing key is not yet valid: {key_id}."
+explanation_key = "error.airgap.key_not_yet_valid"
+params = ["key_id"]
+remedy = "Trust the key from its valid_from, or wait until its window opens."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.key_expired"
+class = "none"
+summary = "The signing key has expired: {key_id}."
+explanation_key = "error.airgap.key_expired"
+params = ["key_id"]
+remedy = "Renew the key and have the agent re-sign its results."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.updater"
+class = "none"
+summary = "A detached signature was refused: {code}."
+explanation_key = "error.airgap.updater"
+params = ["code"]
+remedy = "Match the update layer's code to its own catalogue for the administrator's remedy."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.downgrade"
+class = "none"
+summary = "The bundle is a downgrade: {offered} is older than {installed}."
+explanation_key = "error.airgap.downgrade"
+params = ["installed", "offered"]
+remedy = "Import a version at or above the one the repository already holds."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.digest_changed"
+class = "none"
+summary = "The bundle {name} {version} is already present with a different digest."
+explanation_key = "error.airgap.digest_changed"
+params = ["name", "version"]
+remedy = "Withdraw the changed bundle and publish it under a new version."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.file_missing"
+class = "none"
+summary = "A file the manifest names is missing: {path}."
+explanation_key = "error.airgap.file_missing"
+params = ["path"]
+remedy = "Re-copy the bundle from the vendor; a file was not written to the medium."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.file_size"
+class = "none"
+summary = "The file {path} is {actual} bytes, not {expected}."
+explanation_key = "error.airgap.file_size"
+params = ["actual", "expected", "path"]
+remedy = "Re-copy the bundle from the vendor; a file was truncated or padded."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.file_digest"
+class = "none"
+summary = "The file {path} has digest {actual}, not {expected}."
+explanation_key = "error.airgap.file_digest"
+params = ["actual", "expected", "path"]
+remedy = "Re-copy the bundle from the vendor; a file was altered."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.extra_file"
+class = "none"
+summary = "A file on the media is not listed in the manifest: {path}."
+explanation_key = "error.airgap.extra_file"
+params = ["path"]
+remedy = "Remove the unlisted file, or obtain a bundle whose manifest lists it."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.repo_index"
+class = "none"
+summary = "The repository index is malformed: {detail}."
+explanation_key = "error.airgap.repo_index"
+params = ["detail"]
+remedy = "Restore the index from a backup, or rebuild it from the imported bundles."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.repo_conflict"
+class = "none"
+summary = "The repository already holds {name} {version} with a different digest."
+explanation_key = "error.airgap.repo_conflict"
+params = ["name", "version"]
+remedy = "Remove the conflicting bundle, or import it under a new version."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.media_unreadable"
+class = "none"
+summary = "The media path is unreadable: {path}."
+explanation_key = "error.airgap.media_unreadable"
+params = ["path"]
+remedy = "Re-insert the medium and check it is mounted and readable."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.staging"
+class = "none"
+summary = "The staging marker is malformed: {detail}."
+explanation_key = "error.airgap.staging"
+params = ["detail"]
+remedy = "Remove the partial staging directory and import the bundle again."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.io"
+class = "none"
+summary = "A storage operation failed: {detail}."
+explanation_key = "error.airgap.io"
+params = ["detail"]
+remedy = "Check the medium and the repository directory are present and writable, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.mirror_manifest"
+class = "none"
+summary = "The package mirror manifest is malformed: {detail}."
+explanation_key = "error.airgap.mirror_manifest"
+params = ["detail"]
+remedy = "Regenerate the mirror manifest and copy it with the packages."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.mirror_missing"
+class = "none"
+summary = "A package the mirror manifest names is missing: {path}."
+explanation_key = "error.airgap.mirror_missing"
+params = ["path"]
+remedy = "Copy the missing package onto the medium."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.mirror_digest"
+class = "none"
+summary = "The package {path} has digest {actual}, not {expected}."
+explanation_key = "error.airgap.mirror_digest"
+params = ["actual", "expected", "path"]
+remedy = "Re-copy the package; it was altered or truncated."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.mirror_extra"
+class = "none"
+summary = "A package is not listed in the mirror manifest: {path}."
+explanation_key = "error.airgap.mirror_extra"
+params = ["path"]
+remedy = "Remove the unlisted package, or regenerate the manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.mirror_builder"
+class = "none"
+summary = "The mirror metadata builder failed: {detail}."
+explanation_key = "error.airgap.mirror_builder"
+params = ["detail"]
+remedy = "Check that the distribution's repository tool is installed and the repository directory is writable."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.command_bundle"
+class = "none"
+summary = "The command bundle is malformed: {detail}."
+explanation_key = "error.airgap.command_bundle"
+params = ["detail"]
+remedy = "Re-copy the command bundle from the console."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.command_rejected"
+class = "none"
+summary = "A signed command was refused: {code}."
+explanation_key = "error.airgap.command_rejected"
+params = ["code"]
+remedy = "Match the command layer's code to its own catalogue; a replay or an untrusted key is the usual cause."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.result_bundle"
+class = "none"
+summary = "The result bundle is malformed: {detail}."
+explanation_key = "error.airgap.result_bundle"
+params = ["detail"]
+remedy = "Re-copy the result bundle from the agent's medium."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.result_unsigned"
+class = "none"
+summary = "The result bundle is not signed."
+explanation_key = "error.airgap.result_unsigned"
+params = []
+remedy = "Obtain the agent's signed result bundle; never record an unsigned one."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.result_signature"
+class = "none"
+summary = "The result bundle's agent signature does not verify."
+explanation_key = "error.airgap.result_signature"
+params = []
+remedy = "Re-copy the result bundle; it or its signature was altered."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.result_conflict"
+class = "none"
+summary = "A result bundle with id {id} is already recorded with different content."
+explanation_key = "error.airgap.result_conflict"
+params = ["id"]
+remedy = "Reconcile the two bundles; an agent must not reuse a result id for different content."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.audit_segment"
+class = "none"
+summary = "The audit-chain segment is malformed: {detail}."
+explanation_key = "error.airgap.audit_segment"
+params = ["detail"]
+remedy = "Re-copy the result bundle; the segment does not match its own head."
+since = "0.1.0"
+
+[[entry]]
+code = "airgap.signer"
+class = "none"
+summary = "The signing callback refused: {detail}."
+explanation_key = "error.airgap.signer"
+params = ["detail"]
+remedy = "Check the signing key and certificate the callback holds."
+since = "0.1.0"

@@ -1,0 +1,28 @@
+[package]
+name = "spot-app-compose"
+description = "Spotledger app-to-app composition (WP-STR-06.T1, ADR-21; blueprint WS11): one app extends another through WIT imports, with semver resolution, cycle and capability checks, runtime linking with caller-attributed fuel, seam contributions, and uninstall/upgrade safety"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The extension contract: `Controller`, `StepName`, `StepOverride` and the seam provider
+# trait the composition contributes through (gate G4).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The step and seam registry an extension's overrides go through, so composition gets the
+# same conflict detection and `explain` output as any other install (ADR-08).
+spot-seams = { path = "../spot-seams" }
+# The declared capability vocabulary (`network`, `email`, `files`, `doctypes`) the manifest
+# already uses, so an approval, a grant and a declared set read alike.
+spot-manifest = { path = "../spot-manifest" }
+# Acyclic compose-graph checks and the provider-before-consumer order (WP-GRA-05).
+spot-graph-algo = { path = "../spot-graph-algo" }
+# The runtime per-call limits a composed call runs under.
+spot-wasm = { path = "../spot-wasm" }
+# Interface versions are semver; imports match exports by range.
+semver = "1"
+
+[lints]
+workspace = true

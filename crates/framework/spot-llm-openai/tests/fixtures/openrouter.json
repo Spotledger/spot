@@ -1,0 +1,346 @@
+[
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://openrouter.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-text"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3.\"}]}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ]
+      ],
+      "body": "{\"id\":\"or-1\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"5\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-stream.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-text"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+    },
+    "response": {
+      "kind": "stream",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "text/event-stream"
+        ]
+      ],
+      "chunks": [
+        "data: {\"id\":\"or-s1\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"or-s1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"5\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"or-s1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-tool.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-tool"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3 with the add tool.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"add\",\"description\":\"Adds two integers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}}]}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ]
+      ],
+      "body": "{\"id\":\"or-2\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"add\",\"arguments\":\"{\\\"a\\\": 2, \\\"b\\\": 3}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":40,\"completion_tokens\":18}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-tool-result.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-tool-result"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3 with the add tool.\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"add\",\"arguments\":\"{\\\"a\\\":2,\\\"b\\\":3}\"}}]},{\"role\":\"tool\",\"content\":\"5\",\"tool_call_id\":\"call_1\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"add\",\"description\":\"Adds two integers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}}]}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ]
+      ],
+      "body": "{\"id\":\"or-3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"The sum is 5.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":40,\"completion_tokens\":18}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-stream-tool.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-tool"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3 with the add tool.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"add\",\"description\":\"Adds two integers.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+    },
+    "response": {
+      "kind": "stream",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "text/event-stream"
+        ]
+      ],
+      "chunks": [
+        "data: {\"id\":\"or-s2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"or-s2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"add\",\"arguments\":\"\"}}]}}]}\n\n",
+        "data: {\"id\":\"or-s2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\": 2,\"}}]}}]}\n\n",
+        "data: {\"id\":\"or-s2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" \\\"b\\\": 3}\"}}]}}]}\n\n",
+        "data: {\"id\":\"or-s2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+        "data: {\"id\":\"or-s2\",\"choices\":[],\"usage\":{\"prompt_tokens\":40,\"completion_tokens\":18}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-error.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-error"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"The on-call token is SECRET-CANNOT-APPEAR; add 1 and 1.\"}]}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 429,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "retry-after",
+          "2"
+        ]
+      ],
+      "body": "{\"error\":{\"message\":\"Rate limit exceeded. Please try again in 2 seconds.\",\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\"}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://or-error-stream.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-error"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"The on-call token is SECRET-CANNOT-APPEAR; add 1 and 1.\"}],\"stream\":true}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 429,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "retry-after",
+          "2"
+        ]
+      ],
+      "body": "{\"error\":{\"message\":\"Rate limit exceeded. Please try again in 2 seconds.\",\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\"}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://stream-error.test/v1/chat/completions",
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ],
+        [
+          "authorization",
+          "Bearer test-key-not-real"
+        ],
+        [
+          "http-referer",
+          "https://spotledger.example"
+        ],
+        [
+          "x-title",
+          "Spotledger"
+        ],
+        [
+          "request-id",
+          "cf-text"
+        ]
+      ],
+      "body": "{\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Spotledger's conformance probe.\"},{\"role\":\"user\",\"content\":\"Add 2 and 3.\"}],\"stream\":true}"
+    },
+    "response": {
+      "kind": "stream",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "text/event-stream"
+        ]
+      ],
+      "chunks": [
+        "data: {\"error\":{\"message\":\"The server is overloaded\",\"type\":\"server_error\",\"code\":\"overloaded_error\"}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  }
+]

@@ -1,0 +1,43 @@
+[package]
+name = "spot-retrieval"
+description = "Permission-aware retrieval (WP-AI-10.T1): the change-feed indexer with chunking and an embedding seam, a deterministic in-memory vector store, and a query path that re-checks read and field rights per hit so a restricted principal never sees an unreadable document"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId`: one indexer serves one site, exactly as the realtime feed pump does.
+spot-core = { path = "../spot-core" }
+# The decision core: `Principal`, `Decision`, `Snapshot` (the policy check reads field
+# protection from it) and `DocFacts`.
+spot-permissions = { path = "../spot-permissions" }
+# `restrict_columns`: the field-level view a principal may read, used by the in-memory
+# `ReadCheck` fake so the crate never re-implements field rules.
+spot-perm-query = { path = "../spot-perm-query" }
+# The change feed (`ChangeFeed`, `Change`, `ChangeOp`, `FeedPosition`) and `NodeRef`.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `DEFAULT_FIELD_NAMES`: the field names the platform treats as secret-bearing; a policy that
+# indexes one of them is refused unless it is listed under `restricted_ok`.
+spot-redact = { path = "../spot-redact" }
+# `IndexPolicy` is TOML-loadable with unknown keys an error.
+serde = { version = "1", features = ["derive"] }
+# `serde_json` renders a `Hits` value for the byte-for-byte "empty equals hidden" proof.
+serde_json = "1"
+toml = "0.8"
+# The one error type, with stable machine-readable `retrieval.*` codes.
+thiserror = "2"
+# Grapheme-safe sentence boundaries for the chunker (already in `Cargo.lock`).
+unicode-segmentation = "1"
+
+[dev-dependencies]
+# `EffectiveMeta`: the acceptance test builds a real `PermissionEngine`, so the permission
+# fixture is the same one `spot-permissions` and `spot-perm-query` use in their own tests.
+spot-meta = { path = "../spot-meta" }
+# Chunker property tests (no chunk over its limit; overlap-stripped concatenation rebuilds
+# the text; deterministic).
+proptest = "1"
+
+[lints]
+workspace = true

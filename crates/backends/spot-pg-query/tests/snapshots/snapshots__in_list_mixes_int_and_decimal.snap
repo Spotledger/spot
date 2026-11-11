@@ -1,0 +1,6 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: "{\n    let mut s = c.sql.clone();\n    s.push_str(&format!(\"\\n{} params\", c.params.len())); s\n}"
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE ((CAST("p"."visits" AS numeric) IN (CAST($1 AS numeric), $2)) OR ("p"."credit_limit" IN (CAST($3 AS numeric), $4)) OR ("p"."parent_party" IN ($5))) ORDER BY "p"."id" ASC OFFSET $6
+6 params

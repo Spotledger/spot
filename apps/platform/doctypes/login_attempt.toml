@@ -1,0 +1,50 @@
+name = "login_attempt"
+label = "Login Attempt"
+app = "platform"
+module = "identity"
+
+# Append-only: every field is read-only and no shipped grant gives write or delete; only the
+# sign-in service (the system principal) inserts.
+[[protection_groups]]
+name = "login_source"
+label = "Login Source"
+
+[[fields]]
+name = "account"
+label = "Account"
+type = "text"
+max_chars = 254
+read_only = true
+index = true
+in_list_view = true
+description = "The sign-in name that was presented; it need not belong to a user."
+
+[[fields]]
+name = "source_digest"
+label = "Source Digest"
+type = "text"
+max_chars = 128
+read_only = true
+index = true
+protection_group = "login_source"
+classification = ["pii"]
+description = "A keyed digest of the source address, never the address."
+
+[[fields]]
+name = "result_code"
+label = "Result Code"
+type = "text"
+required = true
+max_chars = 64
+read_only = true
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "at"
+label = "At"
+type = "datetime"
+required = true
+read_only = true
+index = true
+in_list_view = true

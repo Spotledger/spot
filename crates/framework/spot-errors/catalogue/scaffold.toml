@@ -1,0 +1,112 @@
+# scaffold codes (WP-DX-01.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The scaffolding library's own vocabulary: these codes never ride an `AppError` (the command
+# line maps every refusal to exit code 3), so their class is `none`.
+
+[[entry]]
+code = "scaffold.io"
+class = "none"
+summary = "A file, directory or stream could not be read or written."
+explanation_key = "error.scaffold.io"
+params = []
+remedy = "Check the permissions and free space of the output directory."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.path_escape"
+class = "none"
+summary = "A path is absolute, holds `..`, or resolves outside the output root."
+explanation_key = "error.scaffold.path_escape"
+params = []
+remedy = "Use a plain relative path such as `doctypes/note.toml`."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.symlink"
+class = "none"
+summary = "A symlink sits on a path the scaffold would write through."
+explanation_key = "error.scaffold.symlink"
+params = []
+remedy = "Remove the symlink, or point --out at the real directory."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.exists"
+class = "none"
+summary = "A file would be overwritten without --force."
+explanation_key = "error.scaffold.exists"
+params = []
+remedy = "Pass --force to replace it, or choose another --out."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.invalid_name"
+class = "none"
+summary = "A name is not a valid storage name."
+explanation_key = "error.scaffold.invalid_name"
+params = []
+remedy = "Use lowercase letters, digits and `_`, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.reserved_name"
+class = "none"
+summary = "A name is a reserved word or a reserved platform prefix."
+explanation_key = "error.scaffold.reserved_name"
+params = []
+remedy = "Pick a name outside the reserved words and the doc_, sys_, identity_ and spot_ prefixes."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.duplicate"
+class = "none"
+summary = "The name already exists in the app."
+explanation_key = "error.scaffold.duplicate"
+params = []
+remedy = "Choose another name, or edit the file the message names."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.template"
+class = "none"
+summary = "A template could not be rendered."
+explanation_key = "error.scaffold.template"
+params = []
+remedy = "Fix the template, or report the scaffold bug."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.manifest"
+class = "none"
+summary = "An existing manifest or controllers file could not be parsed or edited."
+explanation_key = "error.scaffold.manifest"
+params = []
+remedy = "Fix the manifest so the platform's parser accepts it, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.not_an_app"
+class = "none"
+summary = "The output directory is not a scaffolded app."
+explanation_key = "error.scaffold.not_an_app"
+params = []
+remedy = "Point --out at a project `spot-scaffold app new` created."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.unknown_doctype"
+class = "none"
+summary = "The app has no DocType by that name."
+explanation_key = "error.scaffold.unknown_doctype"
+params = []
+remedy = "Add the DocType first with `spot-scaffold doctype add`."
+since = "0.1.0"
+
+[[entry]]
+code = "scaffold.usage"
+class = "none"
+summary = "The command line was used incorrectly."
+explanation_key = "error.scaffold.usage"
+params = []
+remedy = "Run `spot-scaffold --help`."
+since = "0.1.0"

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "check_hours_accepts_low_bound",
+    "event": "{\"op\":\"step\",\"name\":\"sample:check_hours\",\"hours\":\"0.25\"}",
+    "expect": "ok",
+    "contains": "\"ok\":true"
+  },
+  {
+    "name": "check_hours_accepts_high_bound",
+    "event": "{\"op\":\"step\",\"name\":\"sample:check_hours\",\"hours\":\"24.00\"}",
+    "expect": "ok",
+    "contains": "\"ok\":true"
+  },
+  {
+    "name": "check_hours_rejects_above_high_bound",
+    "event": "{\"op\":\"step\",\"name\":\"sample:check_hours\",\"hours\":\"24.01\"}",
+    "expect": "err",
+    "code": "sample.hours_out_of_range",
+    "message_contains": "0.25"
+  },
+  {
+    "name": "check_hours_rejects_below_low_bound",
+    "event": "{\"op\":\"step\",\"name\":\"sample:check_hours\",\"hours\":\"0.24\"}",
+    "expect": "err",
+    "code": "sample.hours_out_of_range",
+    "message_contains": "0.25"
+  },
+  {
+    "name": "double_hours_doubles",
+    "event": "{\"op\":\"call\",\"name\":\"sample:double_hours\",\"hours\":\"2.50\"}",
+    "expect": "ok",
+    "contains": "\"value\":\"5.00\""
+  },
+  {
+    "name": "double_hours_keeps_two_places",
+    "event": "{\"op\":\"call\",\"name\":\"sample:double_hours\",\"hours\":\"0.25\"}",
+    "expect": "ok",
+    "contains": "\"value\":\"0.50\""
+  },
+  {
+    "name": "unknown_call_is_refused",
+    "event": "{\"op\":\"call\",\"name\":\"sample:nope\",\"hours\":\"1.00\"}",
+    "expect": "err",
+    "code": "sample.unknown_op",
+    "message_contains": ""
+  }
+]

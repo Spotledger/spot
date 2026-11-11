@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-ADM-09.T3: the Admin Center's tenant and fleet tools (tenants and companies, apps,
+       migrations, desired state and drift, waves, fleet health) as view-models over typed
+       management-API responses. Every change is gated by the signatures its operation needs.
+       Plain MVVM on the shell's ObservableObject. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.AdminCenter.Tenants.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.AdminCenter/Spotledger.AdminCenter.csproj" />
+  </ItemGroup>
+</Project>

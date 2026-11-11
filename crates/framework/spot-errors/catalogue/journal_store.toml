@@ -1,0 +1,73 @@
+# journal_store codes: the journal's object-store seam of spot-journal-store (WP-JRN-03.T3, ADR-061 s5): the key layout's refusals, the immutability and replace guards, and the backend's own failures. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_store.key_invalid"
+class = "none"
+summary = "An object key is not one of the journal's canonical key shapes, or a tenant id, generation, sequence number or hash in it is not in the layout's canonical form."
+explanation_key = "error.journal_store.key_invalid"
+params = []
+remedy = "Build the key with the journal layout instead of by hand: a tenant id is one path component with no slash and no two dots, and every number is zero-padded to twenty digits."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.already_exists"
+class = "none"
+summary = "A write offered a key that already holds an object; segments, tail chunks, blobs and manifests are written once per generation."
+explanation_key = "error.journal_store.already_exists"
+params = []
+remedy = "Do not rewrite an immutable object: seal the next segment, use the next batch id, or replace the manifest through the etag-guarded replace."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.not_found"
+class = "none"
+summary = "The key holds no object, so there was nothing to read for a guarded replace or to delete."
+explanation_key = "error.journal_store.not_found"
+params = []
+remedy = "Check the key against the tenant's manifest before reading or deleting; a missing segment is a recovery problem, not a retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.etag_mismatch"
+class = "none"
+summary = "A guarded manifest replace carried an etag that is not the stored object's etag, so another writer changed the manifest first."
+explanation_key = "error.journal_store.etag_mismatch"
+params = []
+remedy = "Read the manifest again, rebuild the new manifest on the etag just read, and retry the replace."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.replace_refused"
+class = "none"
+summary = "A replace was offered a key that is not a manifest; only the manifest of a generation is replaced, and only through the etag guard."
+explanation_key = "error.journal_store.replace_refused"
+params = []
+remedy = "Write immutable objects with put_new and keep a new name for new content; replace only the manifest key."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.delete_refused"
+class = "none"
+summary = "A delete was offered a key under the segments or snapshots prefix; the sealed record is kept forever, and deletion exists only for compacted tail chunks."
+explanation_key = "error.journal_store.delete_refused"
+params = []
+remedy = "Do not delete segments or snapshots; delete the tail chunk once it has been compacted into a sealed segment."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.io"
+class = "none"
+summary = "A filesystem or provider operation on an object failed: the write, the read, the listing, the replace or the delete."
+explanation_key = "error.journal_store.io"
+params = []
+remedy = "Check the journal target: free space and permissions for a folder target, reachability and credentials for a remote one."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_store.backend"
+class = "none"
+summary = "The backend cannot serve the call at all, for example because the in-memory store's lock is poisoned by a panicking writer."
+explanation_key = "error.journal_store.backend"
+params = []
+remedy = "Restart the process that owns the store; an in-memory store holds nothing worth recovering."
+since = "0.1.0"

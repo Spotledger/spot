@@ -1,0 +1,28 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "tiles": [
+    {
+      "id": "sample.health_tile",
+      "origin": "app:sample",
+      "label": "Project health",
+      "icon": "chart",
+      "slot": "home.tiles",
+      "order": 5,
+      "component": "sample.project_health",
+      "props": {
+        "open": {
+          "query": "sample.open_tasks"
+        },
+        "total": {
+          "query": "sample.task_count"
+        }
+      },
+      "open": {
+        "destination": "sample.projects"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.unknown_component. The tile names a component the app does not contribute."
+}

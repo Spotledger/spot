@@ -1,0 +1,9 @@
+# Help for the session error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "session.store_failed"
+what_happened = "The session store could not complete the operation."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Retry; if the backend keeps failing, check its connection and health checks.", "If it keeps happening, tell your administrator and quote the code session.store_failed."]
+audience = "operator"

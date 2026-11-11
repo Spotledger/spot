@@ -1,0 +1,37 @@
+# journal_audit_run codes: the refusals of the scheduled journal audit runner (WP-JRN-07.T2, ADR-061 s8). A refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. A rebuild that fails is a result row, not one of these. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_audit_run.options_invalid"
+class = "none"
+summary = "The journal audit options are not usable: the journal source is empty."
+explanation_key = "error.journal_audit_run.options_invalid"
+params = []
+remedy = "Pass the source id of the journal being audited."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_run.tenant_mismatch"
+class = "none"
+summary = "The {side} side of the journal audit belongs to another tenant than the run, so nothing was read or rebuilt."
+explanation_key = "error.journal_audit_run.tenant_mismatch"
+params = ["side"]
+remedy = "Build the live and scratch sides for the tenant the audit runs for; one audit audits one tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_run.signer_missing"
+class = "none"
+summary = "The audit was asked to start from an untrusted snapshot but has no snapshot signer to mark it verified after a clean run."
+explanation_key = "error.journal_audit_run.signer_missing"
+params = []
+remedy = "Pass the tenant journal key's snapshot signer, or run on trusted snapshots only."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_run.compare_failed"
+class = "none"
+summary = "The journal audit could not compare the live side with the rebuild: a side's summaries are not sorted or a fingerprint is unusable."
+explanation_key = "error.journal_audit_run.compare_failed"
+params = []
+remedy = "Order each side's summaries by entity then id and give every fingerprint one name and unique keys, as the journal audit crate requires."
+since = "0.1.0"

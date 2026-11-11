@@ -1,0 +1,38 @@
+[package]
+name = "spot-lease-grants"
+description = "Hub-side lease grants for leased naming sequences: a range is granted only to the node the transport authenticated, only while it is active, atomically and disjointly, persisted before use and audited either way (WP-EDG-03.T4, R-065, ADR-062 section 7)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `RangeAllocator`, `RangeLease`, `LeaseId`, `PartitionError`: the allocator this service wraps.
+spot-partition = { path = "../spot-partition" }
+# `NodeRegistry` and `NodeState` (standing), `AuditSink` and the audit actor naming.
+spot-offline-identity = { path = "../spot-offline-identity" }
+# `AuditRecord` and `PayloadValue`: what a grant or refusal writes.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# `SeriesKey`: the naming series a range is leased from.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `NodeId`: the node a `RangeLease` is leased to (the partition crate's own node type).
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# `PublicKey`: the node key a signed request is verified under (the same primitives the node
+# crate signs with).
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# Instants are arguments (`OffsetDateTime`); this crate reads no clock.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# Typed errors with stable `lease_grants.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The test signers (the production keys sit behind `Signer`; this crate reads no randomness).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The node side that must accept a granted lease (and refuse it for another node).
+spot-leased-sequences = { path = "../spot-leased-sequences" }
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

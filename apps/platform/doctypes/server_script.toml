@@ -1,0 +1,108 @@
+name = "server_script"
+label = "Server Script"
+app = "platform"
+module = "automation"
+title_field = "name"
+
+# A Server Script is TypeScript that runs on a document event. The source is transpiled and
+# compiled when the record is saved; the compiled hash is stored, and the source field carries
+# every diagnostic, with its line and column, as a field error.
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+required = true
+unique = true
+max_chars = 140
+in_list_view = true
+description = "The script's name; also the step it runs as within the DocType."
+
+[[fields]]
+name = "enabled"
+label = "Enabled"
+type = "bool"
+default = "true"
+in_list_view = true
+in_standard_filter = true
+description = "Whether the script runs. A script that keeps failing is disabled automatically."
+
+[[fields]]
+name = "doctype"
+label = "DocType"
+type = "text"
+required = true
+max_chars = 63
+index = true
+in_list_view = true
+in_standard_filter = true
+description = "The DocType whose lifecycle events trigger this script (its storage name)."
+
+[[fields]]
+name = "event"
+label = "Event"
+type = "select"
+options = "before_validate\nvalidate\nbefore_save\nafter_save\nbefore_submit\non_submit\nbefore_cancel\non_cancel\nafter_commit"
+required = true
+in_list_view = true
+in_standard_filter = true
+description = "The document event the script runs on."
+
+[[fields]]
+name = "script"
+label = "Script"
+type = "long_text"
+format = "code"
+syntax = "typescript"
+required = true
+description = "The TypeScript source. It must export on_<event>({ doc, ctx }); every diagnostic is reported here on save."
+
+[[fields]]
+name = "compiled_hash"
+label = "Compiled Hash"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 64
+description = "The hash of the compiled source, written when the script saves."
+
+[[fields]]
+name = "last_error"
+label = "Last Error"
+type = "long_text"
+read_only = true
+no_copy = true
+description = "The last failure, if any, for the admin listing."
+
+[[fields]]
+name = "timeout_ms"
+label = "Timeout (ms)"
+type = "int"
+default = "200"
+in_list_view = true
+description = "The per-script wall-clock deadline in milliseconds; clamped to the site maximum (2 s)."
+
+[[fields]]
+name = "priority"
+label = "Priority"
+type = "int"
+default = "0"
+in_list_view = true
+description = "Ordering within the event: lower runs first, then by name."
+
+[[fields]]
+name = "last_run_count"
+label = "Last Run Count"
+type = "int"
+read_only = true
+no_copy = true
+description = "How many times the script has run since it was last saved."
+
+[[fields]]
+name = "disabled_reason"
+label = "Disabled Reason"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 500
+description = "Why the script was disabled automatically, when it was."

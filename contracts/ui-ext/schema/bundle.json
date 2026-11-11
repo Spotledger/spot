@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/bundle.json",
+  "title": "UI extension document",
+  "description": "How an app contributes to the client: one `ui` document per app.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "requires_shell",
+    "app"
+  ],
+  "properties": {
+    "$comment": {
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "requires_shell": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "app": {
+      "$ref": "common.json#/$defs/app"
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "action.json"
+      }
+    },
+    "panels": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "panel.json"
+      }
+    },
+    "components": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "component.json"
+      }
+    },
+    "tiles": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "origin",
+          "label",
+          "slot",
+          "component"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.json#/$defs/id"
+          },
+          "origin": {
+            "$ref": "common.json#/$defs/origin"
+          },
+          "label": {
+            "$ref": "common.json#/$defs/label"
+          },
+          "icon": {
+            "$ref": "common.json#/$defs/icon"
+          },
+          "slot": {
+            "$ref": "slot.json#/$defs/slot"
+          },
+          "doctype": {
+            "$ref": "common.json#/$defs/name"
+          },
+          "order": {
+            "$ref": "common.json#/$defs/order"
+          },
+          "visible_if": {
+            "$ref": "common.json#/$defs/expression"
+          },
+          "permission": {
+            "$ref": "common.json#/$defs/permission"
+          },
+          "component": {
+            "$ref": "common.json#/$defs/id"
+          },
+          "props": {
+            "type": "object",
+            "maxProperties": 16,
+            "propertyNames": {
+              "$ref": "common.json#/$defs/name"
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "$ref": "common.json#/$defs/value"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "query"
+                  ],
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "open": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "destination"
+            ],
+            "properties": {
+              "destination": {
+                "$ref": "common.json#/$defs/id"
+              },
+              "filters": {
+                "type": "object",
+                "maxProperties": 8,
+                "propertyNames": {
+                  "$ref": "common.json#/$defs/name"
+                },
+                "additionalProperties": {
+                  "$ref": "common.json#/$defs/expression"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tabs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "origin",
+          "label",
+          "slot",
+          "doctype",
+          "panel"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.json#/$defs/id"
+          },
+          "origin": {
+            "$ref": "common.json#/$defs/origin"
+          },
+          "label": {
+            "$ref": "common.json#/$defs/label"
+          },
+          "icon": {
+            "$ref": "common.json#/$defs/icon"
+          },
+          "slot": {
+            "$ref": "slot.json#/$defs/slot"
+          },
+          "doctype": {
+            "$ref": "common.json#/$defs/name"
+          },
+          "order": {
+            "$ref": "common.json#/$defs/order"
+          },
+          "visible_if": {
+            "$ref": "common.json#/$defs/expression"
+          },
+          "permission": {
+            "$ref": "common.json#/$defs/permission"
+          },
+          "panel": {
+            "$ref": "common.json#/$defs/id"
+          }
+        }
+      }
+    }
+  }
+}

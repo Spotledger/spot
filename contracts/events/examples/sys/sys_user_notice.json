@@ -1,0 +1,4 @@
+{
+  "payload": {"doctype": "sales_invoice", "id": "0192f1c0-0000-7000-8000-000000000042", "event": "approved", "lines": 3, "tags": ["urgent", "q4"]},
+  "user": "0192f1c0-0000-7000-8000-000000000043"
+}

@@ -1,0 +1,6 @@
+<Project>
+  <!-- WP-UI-18: the demo centralises its own versions but inherits every parent pin.
+       New packages get a line HERE (never in the parent file) and an entry in
+       docs/DecisionLog.md. Part 1 adds no new packages beyond the parent pins. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

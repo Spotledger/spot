@@ -1,0 +1,20 @@
+# sync_repair_pull codes: the closure repair loop in spot-sync-repair-pull (WP-SYN-04.T2, ADR-064 section 7). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto conditions and lead escalations (ADR-067), so `class = "none"`.
+
+[[entry]]
+code = "sync_repair_pull.out_of_scope"
+class = "none"
+summary = "A missing {entity} record is outside this node's subscription scope, so it was not asked for."
+explanation_key = "error.sync_repair_pull.out_of_scope"
+params = ["entity"]
+remedy = "Escalate to the lead: the hub would refuse the request and the node would retry forever. Check the node's subscription scope and the bundle that references the record."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_repair_pull.invalid_config"
+class = "none"
+summary = "The repair settings are not usable: {reason}."
+explanation_key = "error.sync_repair_pull.invalid_config"
+params = ["reason"]
+remedy = "Set every repair bound and interval above zero, and the maximum interval at or above the ask interval."
+since = "0.1.0"

@@ -1,0 +1,228 @@
+# nocode_builders codes: the no-code report, dashboard and approval builder
+# (spot-nocode-builders, WP-DX-07.T1).
+# Library-internal vocabulary: raised by the crate, explained to a business user by the host.
+# The summary is the plain-language message a designer reads; the remedy is the fix. No entry
+# names a value, a query or an SQL statement. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+# --- report and dashboard structure (raised while a draft is edited or compiled) ---
+
+[[entry]]
+code = "nocode_builders.bad_name"
+class = "none"
+summary = "This name is not a valid name."
+explanation_key = "error.nocode_builders.bad_name"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.empty"
+class = "none"
+summary = "The report, dashboard or tile has nothing to show yet."
+explanation_key = "error.nocode_builders.empty"
+params = []
+remedy = "Add at least one column, tile or value."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.duplicate"
+class = "none"
+summary = "Two columns, tiles, values or links share a name."
+explanation_key = "error.nocode_builders.duplicate"
+params = []
+remedy = "Give each column, tile, value and link its own name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unknown_field"
+class = "none"
+summary = "The design uses a field that the record type does not have."
+explanation_key = "error.nocode_builders.unknown_field"
+params = []
+remedy = "Choose a field the record type still has."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unknown_join"
+class = "none"
+summary = "The design follows a link that is not declared, or that no longer leads to a record type."
+explanation_key = "error.nocode_builders.unknown_join"
+params = []
+remedy = "Add the link again, or remove the fields and conditions that use it."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unknown_column"
+class = "none"
+summary = "A total, chart or tile names a column the report does not have."
+explanation_key = "error.nocode_builders.unknown_column"
+params = []
+remedy = "Choose one of the report's own columns."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_type"
+class = "none"
+summary = "A value, total, summary or step does not fit the kind of field it uses."
+explanation_key = "error.nocode_builders.bad_type"
+params = []
+remedy = "Choose a field of the right kind, or change the value."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_value"
+class = "none"
+summary = "A setting has a value the builder does not accept."
+explanation_key = "error.nocode_builders.bad_value"
+params = []
+remedy = "Correct the setting: a title, a row limit, a default or a step value."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unknown_parameter"
+class = "none"
+summary = "A condition or tile uses a value the report or dashboard does not offer."
+explanation_key = "error.nocode_builders.unknown_parameter"
+params = []
+remedy = "Add the value, or choose one that is already offered."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_chart"
+class = "none"
+summary = "The chart asks for a shape its columns cannot draw."
+explanation_key = "error.nocode_builders.bad_chart"
+params = []
+remedy = "Choose the axis and value columns the chart kind needs, or choose another chart."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.field_not_offered"
+class = "none"
+summary = "The author may not read and report on this field, so the builder may not use it."
+explanation_key = "error.nocode_builders.field_not_offered"
+params = []
+remedy = "Choose another field, or ask an administrator for access to this one."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_layout"
+class = "none"
+summary = "A tile does not fit the dashboard's grid, or sits on top of another tile."
+explanation_key = "error.nocode_builders.bad_layout"
+params = []
+remedy = "Move the tile to a free place inside the grid, or change the grid's size."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unknown_report"
+class = "none"
+summary = "A tile shows a report the site does not have."
+explanation_key = "error.nocode_builders.unknown_report"
+params = []
+remedy = "Choose a published report for the tile."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_refresh"
+class = "none"
+summary = "The dashboard's refresh policy is not one the platform accepts."
+explanation_key = "error.nocode_builders.bad_refresh"
+params = []
+remedy = "Choose a refresh interval above zero, or refresh only when the viewer asks."
+since = "0.1.0"
+
+# --- the approval starter ---
+
+[[entry]]
+code = "nocode_builders.unknown_doctype"
+class = "none"
+summary = "The report or approval names a kind of record the site does not have."
+explanation_key = "error.nocode_builders.unknown_doctype"
+params = []
+remedy = "Choose a kind of record this site has."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.bad_approver"
+class = "none"
+summary = "An approver is empty or is not a name the site can resolve."
+explanation_key = "error.nocode_builders.bad_approver"
+params = []
+remedy = "Choose a role, a person, or a field that holds the approver."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.invalid_process"
+class = "none"
+summary = "The approval process does not pass the workflow checks."
+explanation_key = "error.nocode_builders.invalid_process"
+params = []
+remedy = "Check the approver, the record type and the record steps."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.too_large"
+class = "none"
+summary = "The report is larger than the platform runs safely."
+explanation_key = "error.nocode_builders.too_large"
+params = []
+remedy = "Remove some columns, links or conditions."
+since = "0.1.0"
+
+# --- preview and publish ---
+
+[[entry]]
+code = "nocode_builders.preview_budget"
+class = "none"
+summary = "A preview has no row or time limit, so it would run unrestricted."
+explanation_key = "error.nocode_builders.preview_budget"
+params = []
+remedy = "Give the preview a small row limit and a few seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.preview_too_slow"
+class = "none"
+summary = "The preview took longer than its time limit allows, so it was stopped."
+explanation_key = "error.nocode_builders.preview_too_slow"
+params = []
+remedy = "Narrow the report with a condition, or ask for a larger preview."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.not_ready"
+class = "none"
+summary = "The design is not ready to publish, or no one may open it yet."
+explanation_key = "error.nocode_builders.not_ready"
+params = []
+remedy = "Fix the blocking problems and choose the roles that may see it."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.publish_forbidden"
+class = "none"
+summary = "The caller does not hold the permission to publish a design."
+explanation_key = "error.nocode_builders.publish_forbidden"
+params = []
+remedy = "Ask an administrator for the permission to publish designs."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.publish_failed"
+class = "none"
+summary = "The store that receives the published design refused it."
+explanation_key = "error.nocode_builders.publish_failed"
+params = []
+remedy = "Try again, or ask an administrator to check the store."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_builders.unsupported_op"
+class = "none"
+summary = "The edit is not supported for this draft."
+explanation_key = "error.nocode_builders.unsupported_op"
+params = []
+remedy = "Make a different edit, or refresh the builder."
+since = "0.1.0"

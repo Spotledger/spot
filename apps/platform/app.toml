@@ -1,0 +1,8 @@
+# The platform's own app (WP-IAM-02.T2): the records the platform keeps about who can sign in,
+# what they may do, and which keys and sessions exist. Loaded before every other app. It holds
+# data only (DocTypes, grants, bootstrap records); behaviour lives in spot-iam-directory,
+# spot-auth and the sign-in service. No hooks yet.
+[app]
+name = "platform"
+version = "0.1.0"
+title = "Platform"

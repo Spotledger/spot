@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-CON-03.T2: compiles the Kiota-generated C# client for the native API
+       contract (contracts/native-api/openapi.yaml, ADR-055). check.sh generates
+       the client into Generated/ inside a copy of this project. The generated
+       code is produced from the contract on every run and is never committed. -->
+  <PropertyGroup>
+    <!-- Same .NET SDK and house style as clients/avalonia (global.json pins the SDK). -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned runtime dependency of Kiota-generated C# clients; bumped
+         together with the pinned generator (see README.md). -->
+    <PackageReference Include="Microsoft.Kiota.Bundle" Version="2.1.2" />
+  </ItemGroup>
+
+</Project>

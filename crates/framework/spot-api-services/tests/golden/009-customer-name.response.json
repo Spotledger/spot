@@ -1,0 +1,15 @@
+{
+  "data": {
+    "patch": {
+      "customer_name": "Acme Ltd"
+    }
+  },
+  "messages": [
+    {
+      "code": "document.created",
+      "field": "customer_name",
+      "level": "info",
+      "message": "Customer selected."
+    }
+  ]
+}

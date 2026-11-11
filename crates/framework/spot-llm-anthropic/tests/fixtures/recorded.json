@@ -1,0 +1,168 @@
+[
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://plain-reply.test/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-text"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 2 and 3.\"}]}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        ["content-type", "application/json"],
+        ["request-id", "req_plain_1"]
+      ],
+      "body": "{\"id\":\"msg_plain_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[{\"type\":\"text\",\"text\":\"5\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":12,\"output_tokens\":4,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://stream-reply.test/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-text"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 2 and 3.\"}]}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "stream",
+      "status": 200,
+      "headers": [
+        ["content-type", "text/event-stream"]
+      ],
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[],\"stop_reason\":null,\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0}}}\n\n",
+        "event: ping\ndata: {\"type\":\"ping\"}\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"5\"}}\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":4}}\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://tool-call.test/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-tool"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 2 and 3 with the add tool.\"}]}],\"tools\":[{\"name\":\"add\",\"description\":\"Adds two integers.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        ["content-type", "application/json"]
+      ],
+      "body": "{\"id\":\"msg_tool_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"add\",\"input\":{\"a\":2,\"b\":3}}],\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":40,\"output_tokens\":18}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://tool-result.test/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-tool-result"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 2 and 3 with the add tool.\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"add\",\"input\":{\"a\":2,\"b\":3}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"5\"}]}],\"tools\":[{\"name\":\"add\",\"description\":\"Adds two integers.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 200,
+      "headers": [
+        ["content-type", "application/json"]
+      ],
+      "body": "{\"id\":\"msg_tool_2\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[{\"type\":\"text\",\"text\":\"The sum is 5.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":40,\"output_tokens\":18}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://stream-tool.test/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-tool"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 2 and 3 with the add tool.\"}]}],\"tools\":[{\"name\":\"add\",\"description\":\"Adds two integers.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "stream",
+      "status": 200,
+      "headers": [
+        ["content-type", "text/event-stream"]
+      ],
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_tool_s\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[],\"stop_reason\":null,\"usage\":{\"input_tokens\":40,\"output_tokens\":0}}}\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"add\"}}\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"a\\\": 2,\"}}\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" \\\"b\\\": 3}\"}}\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":18}}\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://api.anthropic.com/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-error"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"The on-call token is SECRET-CANNOT-APPEAR; add 1 and 1.\"}]}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 429,
+      "headers": [
+        ["content-type", "application/json"],
+        ["retry-after", "2"]
+      ],
+      "body": "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of requests too high\"}}"
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "url": "https://api.anthropic.com/v1/messages",
+      "headers": [
+        ["content-type", "application/json"],
+        ["x-api-key", "test-key-not-real"],
+        ["anthropic-version", "2023-06-01"],
+        ["request-id", "cf-error"]
+      ],
+      "body": "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"You are Spotledger's conformance probe.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"The on-call token is SECRET-CANNOT-APPEAR; add 1 and 1.\"}]}],\"temperature\":0.7}"
+    },
+    "response": {
+      "kind": "complete",
+      "status": 429,
+      "headers": [
+        ["content-type", "application/json"],
+        ["retry-after", "2"]
+      ],
+      "body": "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of requests too high\"}}"
+    }
+  }
+]

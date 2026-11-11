@@ -1,0 +1,25 @@
+[package]
+name = "spot-wasm"
+description = "The WebAssembly component host: pooled instances, fuel and epoch limits, memory caps, capability-gated imports (WP-EXT-05.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The runtime. Pinned with `=`: the component API changes between major releases. Default
+# features are off; the ones below are the component model, the pooling allocator, async calls,
+# the Cranelift compiler and the runtime itself.
+wasmtime = { version = "=49.0.5", default-features = false, features = ["component-model", "pooling-allocator", "async", "cranelift", "runtime", "std"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "time"] }
+
+[dev-dependencies]
+# Test components are written as WebAssembly text and compiled here.
+wat = "1"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

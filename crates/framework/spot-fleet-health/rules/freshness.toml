@@ -1,0 +1,13 @@
+# The freshness register (WP-CTL-03.T1, ADR-067, ADR-076).
+#
+# A silent subject is not healthy. When no telemetry has arrived for `after_seconds`, the
+# subject turns amber even if every reading that did arrive was green. A subject that has
+# never reported gets the `no_data_sentence` immediately. With the default evaluation cadence
+# (15 seconds) and 45 seconds of allowed silence, a node that stops reporting is amber well
+# inside one minute.
+
+[freshness]
+after_seconds = 45
+sentence = "No telemetry has arrived from {subject} for {duration}; a silent node is not healthy."
+no_data_sentence = "No telemetry has arrived from {subject} yet, so its health is unknown."
+action = "Check that the node is running and that its telemetry exporter can reach the control plane."

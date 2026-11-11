@@ -1,0 +1,51 @@
+[package]
+name = "spot-self-model"
+description = "The system self-model (WP-AI-01.T1, WS13, ADR-26): an in-memory graph of DocTypes, fields, scripts, seams, apps, migrations, permissions, settings and runtime health, built from the platform's authoritative sources, with introspective traversal that answers 'why did this change?' from evidence records"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Agent tiers decide what an introspection caller may see. The self-model is read-only and
+# every query is audited; the ladder is the same one the authoriser uses (ADR-26).
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# Reuse the platform's graph ids and algorithms: node and edge ids are the graph model's
+# stable SHA-256 ids, and `why` traverses with `spot-graph-algo`.
+spot-graph-algo = { path = "../spot-graph-algo" }
+spot-graph-model = { path = "../spot-graph-model" }
+# Authoritative source: effective metadata and the site's customisations.
+spot-meta = { path = "../spot-meta" }
+# Authoritative source: the installed-app state the installer maintains.
+spot-installer = { path = "../spot-installer" }
+# Authoritative source: app manifests (overrides, seams, schedules, patches).
+spot-manifest = { path = "../spot-manifest" }
+# Authoritative source: migration audit runs.
+spot-migration-audit = { path = "../spot-migration-audit" }
+# Authoritative source: release metadata patch declarations.
+spot-release-meta = { path = "../spot-release-meta" }
+# Authoritative source: the permission snapshot summary.
+spot-permissions = { path = "../spot-permissions" }
+# Authoritative source: the step and seam registry and its override report.
+spot-seams = { path = "../spot-seams" }
+# Authoritative source: script ids (the `.d.ts` check supplies the referenced fields).
+spot-ts = { path = "../spot-ts" }
+# Authoritative source: fleet health findings and observations.
+spot-fleet-health = { path = "../spot-fleet-health" }
+# Serde on every public type; callers choose the wire format.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `self_model.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Scenario fixtures are TOML files under `tests/scenarios/`.
+toml = "0.8"
+# Constructing real `InstalledApp` values in the app adapter's tests.
+semver = "1"
+spot-bundle = { path = "../spot-bundle" }
+# The installer's in-memory fakes, for tests only (WP-SEC-03.T6).
+spot-installer = { path = "../spot-installer", features = ["testing"] }
+
+[lints]
+workspace = true

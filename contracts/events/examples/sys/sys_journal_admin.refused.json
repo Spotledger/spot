@@ -1,0 +1,8 @@
+{
+  "action": "rebuild_planned",
+  "actor": "system",
+  "code": "journal.rebuild_conflict",
+  "dry_run": true,
+  "outcome": "refused",
+  "target": "2:104200"
+}

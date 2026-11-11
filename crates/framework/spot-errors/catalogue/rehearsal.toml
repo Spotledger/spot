@@ -1,0 +1,52 @@
+# rehearsal codes: the `rehearsal.*` vocabulary of spot-rehearsal (WP-MIG-06.T1). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+#
+# The rehearsal engine raises its own typed errors (`spot_rehearsal::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy states
+# what an operator does about it. A fingerprint difference the plan does not explain, and a failed
+# invariant, are part of the rehearsal report, not errors.
+
+[[entry]]
+code = "rehearsal.ticket_mismatch"
+class = "none"
+summary = "The ticket's plan digest {ticket} does not match the plan's {plan}."
+explanation_key = "error.rehearsal.ticket_mismatch"
+params = ["plan", "ticket"]
+remedy = "Re-approve the plan and rehearse the ticket that carries the approved plan digest."
+since = "0.1.0"
+
+[[entry]]
+code = "rehearsal.invalid_input"
+class = "none"
+summary = "Invalid {what}: {reason}."
+explanation_key = "error.rehearsal.invalid_input"
+params = ["reason", "what"]
+remedy = "Correct the named argument and run the rehearsal again."
+since = "0.1.0"
+
+[[entry]]
+code = "rehearsal.snapshot_failed"
+class = "none"
+summary = "Taking or restoring the clone failed: {reason}."
+explanation_key = "error.rehearsal.snapshot_failed"
+params = ["reason"]
+remedy = "Check the snapshot provider and the scratch database, then rehearse again."
+since = "0.1.0"
+
+[[entry]]
+code = "rehearsal.apply_failed"
+class = "none"
+summary = "Applying the plan to the clone failed: {reason}."
+explanation_key = "error.rehearsal.apply_failed"
+params = ["reason"]
+remedy = "Read the reason, fix the plan or the clone, and rehearse again; the live site is untouched."
+since = "0.1.0"
+
+[[entry]]
+code = "rehearsal.fingerprint_failed"
+class = "none"
+summary = "Computing fingerprint section {section} failed: {reason}."
+explanation_key = "error.rehearsal.fingerprint_failed"
+params = ["reason", "section"]
+remedy = "Fix the declared fingerprint query or its source; a measure must be an integer."
+since = "0.1.0"

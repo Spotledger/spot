@@ -1,0 +1,73 @@
+# api codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "api.invalid_request"
+class = "none"
+summary = "The request body or query parameters do not match the endpoint's schema: {field}."
+explanation_key = "error.api.invalid_request"
+params = ["field"]
+remedy = "Correct the named parameter against the endpoint's schema."
+since = "0.1.0"
+
+[[entry]]
+code = "api.invalid_json"
+class = "none"
+summary = "The request body is not valid JSON for this endpoint."
+explanation_key = "error.api.invalid_json"
+params = []
+remedy = "Send well-formed JSON matching the endpoint's schema."
+since = "0.1.0"
+
+[[entry]]
+code = "api.unknown_route"
+class = "none"
+summary = "No endpoint is registered for this path."
+explanation_key = "error.api.unknown_route"
+params = []
+remedy = "Check the path and the API version prefix."
+since = "0.1.0"
+
+[[entry]]
+code = "api.method_not_allowed"
+class = "none"
+summary = "The endpoint exists but does not answer this HTTP method: {allow}."
+explanation_key = "error.api.method_not_allowed"
+params = ["allow"]
+remedy = "Use one of the methods in the Allow set."
+since = "0.1.0"
+
+[[entry]]
+code = "api.unsupported_media_type"
+class = "none"
+summary = "The request body is not in a media type the endpoint accepts: {received}."
+explanation_key = "error.api.unsupported_media_type"
+params = ["received"]
+remedy = "Send the body as the endpoint's declared media type."
+since = "0.1.0"
+
+[[entry]]
+code = "api.precondition_required"
+class = "none"
+summary = "This endpoint requires an Idempotency-Key header and none was sent."
+explanation_key = "error.api.precondition_required"
+params = []
+remedy = "Send the same request again with an Idempotency-Key header."
+since = "0.1.0"
+
+[[entry]]
+code = "api.idempotency_conflict"
+class = "none"
+summary = "This idempotency key was already used with a different request."
+explanation_key = "error.api.idempotency_conflict"
+params = []
+remedy = "Use a fresh idempotency key for the new request."
+since = "0.1.0"
+
+[[entry]]
+code = "api.rate_limited"
+class = "none"
+summary = "The caller has spent this endpoint's rate limit."
+explanation_key = "error.api.rate_limited"
+params = []
+remedy = "Wait the retry_after time before retrying."
+since = "0.1.0"

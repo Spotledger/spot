@@ -1,0 +1,16 @@
+# Help for the tenancy_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "tenancy_pg.invalid_baseline"
+what_happened = "The tenant baseline catalogue cannot be merged with the built-in seed entity."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Remove the tenant_seed entity from the application catalogue and retry the provisioner setup.", "If it keeps happening, tell your administrator and quote the code tenancy_pg.invalid_baseline."]
+audience = "operator"
+
+[[help]]
+code = "tenancy_pg.migration_failed"
+what_happened = "The tenancy control schema could not be created in the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database user may create schemas and tables and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code tenancy_pg.migration_failed."]
+audience = "operator"

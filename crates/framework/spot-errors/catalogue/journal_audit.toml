@@ -1,0 +1,28 @@
+# journal_audit codes: the journal audit comparison of spot-journal-audit (WP-JRN-07.T1, ADR-061 s8 and s9). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_audit.stream_not_sorted"
+class = "none"
+summary = "A side of the journal audit is not sorted strictly ascending by entity then id, so the streaming compare would report one record as missing and extra at once."
+explanation_key = "error.journal_audit.stream_not_sorted"
+params = []
+remedy = "Order each side by entity and then id before comparing, as the scratch rebuild and the live snapshot both promise."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit.fingerprint_invalid"
+class = "none"
+summary = "A financial fingerprint is unusable: it has no name, a value has no key, a key repeats, or two fingerprints of one side share a name."
+explanation_key = "error.journal_audit.fingerprint_invalid"
+params = []
+remedy = "Give every fingerprint one name and every value one key, and declare each name once per side."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit.amount_invalid"
+class = "none"
+summary = "A fingerprint amount is not an exact decimal: it has no digits, more than one point, a character that is not a digit, or no fractional digits after a point."
+explanation_key = "error.journal_audit.amount_invalid"
+params = []
+remedy = "Supply the amount as integer minor units or as a plain decimal string such as -1234.50, never as a floating-point number or an exponent."
+since = "0.1.0"

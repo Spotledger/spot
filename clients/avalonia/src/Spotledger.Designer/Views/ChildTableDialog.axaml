@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.ChildTableDialog">
+  <!-- Adding a child table: the table field's label, the child DocType the rows are stored in and
+       that child's title. The names are the server's, so they are checked as the user types. -->
+  <Border Background="#88000000" IsVisible="{Binding ChildTableDialog.IsOpen}">
+    <Border MaxWidth="480" Margin="24" Padding="16" CornerRadius="6"
+            Background="{DynamicResource Color.Surface.Raised}"
+            BorderBrush="{DynamicResource Color.Border.Strong}"
+            BorderThickness="1">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Add a child table"
+                   FontSize="{DynamicResource Font.Size.Heading}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBlock Text="The grid's rows are kept as their own DocType, and the canvas opens its own design."
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBlock Text="Table label" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding ChildTableDialog.Title, Mode=TwoWay}" />
+        <TextBlock Text="Row DocType name" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding ChildTableDialog.ChildDoctype, Mode=TwoWay}" />
+        <TextBlock Text="{Binding ChildTableDialog.NameHint}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBlock Text="Row DocType title" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding ChildTableDialog.ChildLabel, Mode=TwoWay}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+          <Button Content="Cancel" Command="{Binding ChildTableDialog.CancelCommand}" />
+          <Button Content="Add child table" Command="{Binding ChildTableDialog.CreateCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Border>
+</UserControl>

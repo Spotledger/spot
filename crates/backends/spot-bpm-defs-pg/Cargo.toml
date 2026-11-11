@@ -1,0 +1,32 @@
+[package]
+name = "spot-bpm-defs-pg"
+description = "PostgreSQL DefinitionStore for the BPM engine (WP-BPM-09.T2): immutable published process versions in spot_bpm_definition with an atomic version counter in spot_bpm_definition_head, a trigger that refuses any change to a stored text, hash, publisher or note, and a database-side size cap and name grammar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `DefinitionStore` trait, the stored types and the checks every store applies.
+spot-bpm-definitions = { path = "../../framework/spot-bpm-definitions" }
+# `OffsetDateTime`: time is an argument.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its two tables.
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-time-0_3"] }
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases and a raw client for the immutability and corruption checks.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The Case table `running_pins` reads (its DDL is created in the test database).
+spot-bpm-pg = { path = "../spot-bpm-pg" }
+# The registry `load_into` fills and the process model.
+spot-bpm-engine = { path = "../../framework/spot-bpm-engine" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

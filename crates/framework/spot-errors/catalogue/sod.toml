@@ -1,0 +1,65 @@
+# sod codes: the segregation-of-duties decision core of spot-sod (WP-SEC-02). One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sod.parse_failed"
+class = "Validation"
+summary = "An SoD rule-set or role-catalogue document is not valid TOML, or uses a key, severity or scope mode the model does not accept."
+explanation_key = "error.sod.parse_failed"
+params = []
+remedy = "Fix the syntax, key or value named in the error; a key the model does not know is an error."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.duplicate_id"
+class = "Validation"
+summary = "An SoD rule id is named twice in one rule set, or a catalogue role is named twice."
+explanation_key = "error.sod.duplicate_id"
+params = []
+remedy = "Give one of the duplicates a different id, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.side_count"
+class = "Validation"
+summary = "An SoD rule has fewer than two sides."
+explanation_key = "error.sod.side_count"
+params = []
+remedy = "Give the rule at least two sides."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.side_empty"
+class = "Validation"
+summary = "A side of an SoD rule names no duty."
+explanation_key = "error.sod.side_empty"
+params = []
+remedy = "Give the side at least one duty; roles ride on top, they do not replace duties."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.side_overlap"
+class = "Validation"
+summary = "One duty sits on two sides of one SoD rule, so no user could ever satisfy one side without the other."
+explanation_key = "error.sod.side_overlap"
+params = []
+remedy = "Remove the duty from one of the two sides."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.severity_unknown"
+class = "Validation"
+summary = "An SoD rule names a severity the model does not know."
+explanation_key = "error.sod.severity_unknown"
+params = []
+remedy = "Use low, medium, high or critical."
+since = "0.1.0"
+
+[[entry]]
+code = "sod.name_empty"
+class = "Validation"
+summary = "An SoD name (rule id, title, description, duty, role, or user) is empty or blank after trimming."
+explanation_key = "error.sod.name_empty"
+params = []
+remedy = "Give the named field a non-blank value."
+since = "0.1.0"

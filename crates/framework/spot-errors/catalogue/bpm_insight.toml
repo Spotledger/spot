@@ -1,0 +1,20 @@
+# bpm_insight codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Process insight from Case events (spot-bpm-insight, blueprint WS8, WP-BPM-11.T1, ADR-49).
+
+[[entry]]
+code = "bpm_insight.report_definition"
+class = "none"
+summary = "A report definition spot-bpm-insight ships is invalid: {name}: {detail}."
+explanation_key = "error.bpm_insight.report_definition"
+params = ["detail", "name"]
+remedy = "Fix the shipped report definition; the message names the offending key."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_insight.label_invalid"
+class = "none"
+summary = "A run-label override is empty: {which}."
+explanation_key = "error.bpm_insight.label_invalid"
+params = ["which"]
+remedy = "Give the label override a non-empty value, or leave it unset for the default."
+since = "0.1.0"

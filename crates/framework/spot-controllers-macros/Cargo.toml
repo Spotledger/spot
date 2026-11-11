@@ -1,0 +1,36 @@
+[package]
+name = "spot-controllers-macros"
+description = "#[controller] and #[whitelist] (WP-DOC-11.T1): native controller methods exposed to the API with typed arguments and results through serde, a method table, argument and result schemas, and a dispatcher that maps bad arguments and panics to catalogued errors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Parsing the impl block and the types the schemas are derived from.
+syn = { version = "2.0", default-features = false, features = ["derive", "full", "parsing", "printing", "proc-macro", "clone-impls"] }
+quote = "1"
+proc-macro2 = "1"
+
+[dev-dependencies]
+# What the expansion refers to (an app crate depends on `spot-app-api` and `serde_json`).
+spot-app-api = { path = "../../../contracts/app-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Compile-fail tests with their stderr snapshots.
+trybuild = "1"
+# The real engine on the in-memory backend, with controllers registered through the registry.
+spot-document = { path = "../spot-document" }
+spot-controllers = { path = "../spot-controllers" }
+spot-seams = { path = "../spot-seams" }
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

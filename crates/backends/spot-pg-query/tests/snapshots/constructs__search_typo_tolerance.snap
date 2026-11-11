@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(& ok(& q, & wide_catalog()))"
+---
+SELECT "x"."title" AS "title" FROM "listing" AS "x" WHERE EXISTS (SELECT 1 FROM "spot_search_doc" AS "sd$" WHERE "sd$"."doc_id" = "x"."id" AND "sd$"."doctype" = $1 AND ("sd$"."terms" @@ websearch_to_tsquery('simple'::regconfig, $2) OR strip("sd$"."terms")::text % $3)) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Text("listing")
+$2 = Text("harbur")
+$3 = Text("harbur")
+$4 = Int8(0)
+columns = ["title"]
+decode = [Text]

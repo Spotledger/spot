@@ -1,0 +1,25 @@
+# Seed setting for os.kernel.version. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "os.kernel.version"
+title = "Kernel Version"
+summary = "The running kernel version (read-only)."
+description = "The version of the operating system kernel. This is observed from the system and cannot be changed."
+scopes = ["server"]
+risk = "read"
+secret = false
+read_only = true
+since = "0.1.0"
+tags = [
+    "os",
+    "readonly",
+]
+
+[value.Text]
+max_len = 128
+
+[default]
+Text = "unknown"
+
+[restart]
+type = "none"

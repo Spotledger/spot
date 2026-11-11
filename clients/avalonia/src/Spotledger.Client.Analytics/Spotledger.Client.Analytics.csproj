@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-06.T1: opt-in, privacy-safe usage analytics and the screen markers the
+       coverage tracker (tools/ui-coverage) scans for. It collects counters of screen,
+       action, error-code and shortcut ids and nothing else: no document data, no user
+       text, no field values, no user id. No dependencies, no Avalonia, no reflection
+       serialisation, no clock (the caller passes the day), AOT and trim safe.
+
+       WP-UI-06.T2 hardening: the screen id set is generated from the screens manifest at
+       BUILD time (KnownScreens.g.cs), so the shipped client reads no file at runtime and
+       can never fall back to a permissive set. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <!-- tools/ui-coverage/screens, relative to this project: clients/avalonia/src/<project>. -->
+    <ScreensManifestDirectory>$(MSBuildThisFileDirectory)../../../../tools/ui-coverage/screens</ScreensManifestDirectory>
+  </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)KnownScreens.targets" />
+
+  <ItemGroup>
+    <AnalyticsScreensManifest Include="$(ScreensManifestDirectory)/*.toml" />
+  </ItemGroup>
+
+
+  <!-- IntermediateOutputPath is only defined after the SDK targets are imported, so the
+       generated file's path is resolved in a target that runs first. -->
+  <Target Name="PrepareKnownScreens">
+    <PropertyGroup>
+      <KnownScreensFile>$(IntermediateOutputPath)KnownScreens.g.cs</KnownScreensFile>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="GenerateKnownScreens"
+          DependsOnTargets="PrepareKnownScreens"
+          BeforeTargets="CoreCompile"
+          Inputs="@(AnalyticsScreensManifest);$(MSBuildProjectFullPath)"
+          Outputs="$(KnownScreensFile)">
+    <GenerateKnownScreens ManifestDirectory="$(ScreensManifestDirectory)" OutputFile="$(KnownScreensFile)" />
+    <ItemGroup>
+      <Compile Include="$(KnownScreensFile)" />
+      <FileWrites Include="$(KnownScreensFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

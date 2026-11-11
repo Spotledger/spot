@@ -1,0 +1,29 @@
+[package]
+name = "spot-idle-connections"
+description = "Idle-connection harness (WP-PLT-01.T2): opens thousands of idle HTTP/1.1, HTTP/2 and WebSocket connections to the real spot-http router and measures memory, descriptors, accept time, busy-client latency and shutdown. Test code only."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The real server under test: router, site resolution, accept loop, graceful shutdown.
+spot-http = { path = "../../../crates/framework/spot-http" }
+# The WebSocket transport (`ws::router`) and its token verifier seam.
+spot-realtime = { path = "../../../crates/framework/spot-realtime" }
+# `SiteId` and the system clock the realtime bus takes.
+spot-core = { path = "../../../crates/framework/spot-core" }
+# The fake service route mounted beside the realtime route.
+axum = { version = "0.8.9", features = ["ws"] }
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "process"] }
+# The report and the budgets file.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+# Counts the server's "accept failed" events (the server only logs them).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+
+[lints]
+workspace = true

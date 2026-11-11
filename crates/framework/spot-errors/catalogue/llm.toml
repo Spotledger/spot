@@ -1,0 +1,91 @@
+# llm codes: provider-neutral model failures of spot-llm (ADR-26). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "llm.auth"
+class = "none"
+summary = "The model provider refused the key, or the key lacks access."
+explanation_key = "error.llm.auth"
+params = []
+remedy = "Check the provider key in the secrets service and that it may use the requested model."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.rate_limited"
+class = "none"
+summary = "The model provider rate limited the request; it can be retried."
+explanation_key = "error.llm.rate_limited"
+params = []
+remedy = "Retry after the provider's retry-after delay, or lower the request rate."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.overloaded"
+class = "none"
+summary = "The model provider is momentarily overloaded; it can be retried."
+explanation_key = "error.llm.overloaded"
+params = []
+remedy = "Retry with backoff, or route to another provider."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.context_too_long"
+class = "none"
+summary = "The conversation does not fit the model's context window."
+explanation_key = "error.llm.context_too_long"
+params = []
+remedy = "Shorten or summarise the conversation, or choose a model with a larger window."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.bad_request"
+class = "none"
+summary = "The provider rejected the request as malformed."
+explanation_key = "error.llm.bad_request"
+params = []
+remedy = "Fix the request shape named in the detail; retrying the same request will fail again."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.timeout"
+class = "none"
+summary = "The model exchange did not finish inside the per-request timeout; it can be retried."
+explanation_key = "error.llm.timeout"
+params = []
+remedy = "Retry, or raise the request timeout for long generations."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.unavailable"
+class = "none"
+summary = "The model endpoint could not be reached; it can be retried."
+explanation_key = "error.llm.unavailable"
+params = []
+remedy = "Check the endpoint address and network, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.content_filtered"
+class = "none"
+summary = "The provider refused the content under its safety filter."
+explanation_key = "error.llm.content_filtered"
+params = []
+remedy = "Change the input; retrying the same content will be refused again."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.budget_exceeded"
+class = "none"
+summary = "The model budget is exhausted; raised by the router, never by a provider."
+explanation_key = "error.llm.budget_exceeded"
+params = []
+remedy = "Raise the budget or wait for the budget window to reset."
+since = "0.1.0"
+
+[[entry]]
+code = "llm.protocol"
+class = "none"
+summary = "The provider answered in a way that breaks its own protocol."
+explanation_key = "error.llm.protocol"
+params = []
+remedy = "Report the provider and model; the detail names what was wrong."
+since = "0.1.0"

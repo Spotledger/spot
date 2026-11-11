@@ -1,0 +1,30 @@
+[package]
+name = "spot-permissions"
+description = "The permission decision core (WP-PLT-03.T1): DocType rights, field and protection-group grants, per-assignment scope, shares and owner rules over the lifecycle operations, as a pure, deterministic evaluator with a reason for everything it decides"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The app API view (`DocTypeDef`, `FieldDef`, `FieldKind`, `Phase`, the `Actor`).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The operations an action wraps and the re-exports (`Name`, `RecordId`, `Value`).
+spot-events-contract = { path = "../../../contracts/events" }
+# Effective metadata: the DocType facts (`is_posted`, field names, link fields).
+spot-meta = { path = "../spot-meta" }
+# Stable, derive-based serde on every public type, so sites can load grants and user
+# permissions from persisted, hand-editable records.
+serde = { version = "1", features = ["derive"] }
+# TOML-loadable model: grants, user permissions and the test matrix are TOML.
+toml = "0.8"
+# The one error type, with stable machine-readable `perm.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: role union is a lattice; adding a role never removes a right.
+proptest = "1"
+
+[lints]
+workspace = true

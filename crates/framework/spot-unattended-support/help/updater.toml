@@ -1,0 +1,254 @@
+# Help for the updater error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "updater.archive"
+what_happened = "The update content archive is not usable."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Obtain a fresh, intact update package from the vendor; the archive failed to read or holds a malformed entry.", "If it keeps happening, tell your administrator and quote the code updater.archive."]
+audience = "user"
+
+[[help]]
+code = "updater.archive_bomb"
+what_happened = "A file inside the update package is refused because it unpacks far larger than it says."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Do not install this package; report it to the vendor, because an entry inflates far beyond the size it declares.", "If it keeps happening, tell your administrator and quote the code updater.archive_bomb."]
+audience = "user"
+
+[[help]]
+code = "updater.archive_escape"
+what_happened = "A file inside the update package would be unpacked outside its own folder."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Do not install this package; report it to the vendor, because its paths try to leave the install directory.", "If it keeps happening, tell your administrator and quote the code updater.archive_escape."]
+audience = "user"
+
+[[help]]
+code = "updater.archive_missing"
+what_happened = "The update package lacks a file that its signed list says it contains."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Obtain a complete package; the archive is missing a file the signed manifest names.", "If it keeps happening, tell your administrator and quote the code updater.archive_missing."]
+audience = "user"
+
+[[help]]
+code = "updater.archive_unlisted"
+what_happened = "The update package holds a file that its signed list does not mention."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Obtain a package whose archive matches its signed manifest; an unlisted file is not trusted.", "If it keeps happening, tell your administrator and quote the code updater.archive_unlisted."]
+audience = "user"
+
+[[help]]
+code = "updater.channel"
+what_happened = "The update channel is not allowed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Point the updater at an allowed channel, or allow this channel in the update policy.", "If it keeps happening, tell your administrator and quote the code updater.channel."]
+audience = "user"
+
+[[help]]
+code = "updater.digest_changed"
+what_happened = "A version that was already seen now arrives with different content."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Investigate the re-issued package; the same version must not change.", "If it keeps happening, tell your administrator and quote the code updater.digest_changed."]
+audience = "user"
+
+[[help]]
+code = "updater.disk_full"
+what_happened = "The disk filled up."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Free space on the install volume, then resume recovery. Check the journal before restarting; a full disk can also prevent rollback and require administrator attention.", "If it keeps happening, tell your administrator and quote the code updater.disk_full."]
+audience = "admin"
+
+[[help]]
+code = "updater.disk_space"
+what_happened = "Not enough free space to unpack the update."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Free space on the install volume, or point the install at a volume with room, then retry the update.", "If it keeps happening, tell your administrator and quote the code updater.disk_space."]
+audience = "admin"
+
+[[help]]
+code = "updater.downgrade"
+what_happened = "An older version than installed is refused."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Install a newer version, or roll back deliberately; an update never downgrades.", "If it keeps happening, tell your administrator and quote the code updater.downgrade."]
+audience = "user"
+
+[[help]]
+code = "updater.file_digest"
+what_happened = "A file of the update does not match its signed fingerprint."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Reinstall the update package; a file changed on disk.", "If it keeps happening, tell your administrator and quote the code updater.file_digest."]
+audience = "user"
+
+[[help]]
+code = "updater.file_size"
+what_happened = "A file of the update is not the size its signed list gives."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Reinstall the update package; a file was truncated or replaced.", "If it keeps happening, tell your administrator and quote the code updater.file_size."]
+audience = "user"
+
+[[help]]
+code = "updater.health"
+what_happened = "The new version is not serving."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Read the new version's log; the update rolled back to the previous version, which still serves.", "If it keeps happening, tell your administrator and quote the code updater.health."]
+audience = "admin"
+
+[[help]]
+code = "updater.hook"
+what_happened = "The data hook failed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Read the backup or migration log; the update rolled back and the data was restored from the backup.", "If it keeps happening, tell your administrator and quote the code updater.hook."]
+audience = "admin"
+
+[[help]]
+code = "updater.io"
+what_happened = "A filesystem operation failed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check that the install volume is writable and not failing, then retry the update.", "If it keeps happening, tell your administrator and quote the code updater.io."]
+audience = "admin"
+
+[[help]]
+code = "updater.journal"
+what_happened = "The update journal is not usable."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Run the updater's repair or resume step; if the journal cannot be read, restore the last good version and retry the update.", "If it keeps happening, tell your administrator and quote the code updater.journal."]
+audience = "operator"
+
+[[help]]
+code = "updater.key_expired"
+what_happened = "The signing key has expired."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Rotate the update trust anchor to a current release key and re-issue the update.", "If it keeps happening, tell your administrator and quote the code updater.key_expired."]
+audience = "user"
+
+[[help]]
+code = "updater.key_malformed"
+what_happened = "A signing key is malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Replace the trust anchor entry with a valid Ed25519 public key and its 32-character key id.", "If it keeps happening, tell your administrator and quote the code updater.key_malformed."]
+audience = "user"
+
+[[help]]
+code = "updater.key_not_yet_valid"
+what_happened = "The signing key is not yet valid."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Trust the key from its valid_from, or wait until the key's window opens.", "If it keeps happening, tell your administrator and quote the code updater.key_not_yet_valid."]
+audience = "user"
+
+[[help]]
+code = "updater.key_revoked"
+what_happened = "The signing key is revoked."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Do not install this update; obtain one signed by a key that is not revoked.", "If it keeps happening, tell your administrator and quote the code updater.key_revoked."]
+audience = "user"
+
+[[help]]
+code = "updater.key_unknown"
+what_happened = "The signing key is not trusted."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Add the release key to the update trust anchor, or obtain an update signed by a trusted key.", "If it keeps happening, tell your administrator and quote the code updater.key_unknown."]
+audience = "user"
+
+[[help]]
+code = "updater.layout"
+what_happened = "The update layout is wrong."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Repair the install directory so the versions, current, previous and staging paths exist as the updater expects.", "If it keeps happening, tell your administrator and quote the code updater.layout."]
+audience = "operator"
+
+[[help]]
+code = "updater.manifest"
+what_happened = "The update manifest is malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Replace the manifest with one the updater understands; check the format marker and every field.", "If it keeps happening, tell your administrator and quote the code updater.manifest."]
+audience = "user"
+
+[[help]]
+code = "updater.min_from"
+what_happened = "This update cannot be installed directly from the version you have."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Apply the intermediate version the manifest lists, then retry the update.", "If it keeps happening, tell your administrator and quote the code updater.min_from."]
+audience = "user"
+
+[[help]]
+code = "updater.not_released"
+what_happened = "The manifest is dated in the future."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Check the machine clock and the update source; retry once the release time has passed.", "If it keeps happening, tell your administrator and quote the code updater.not_released."]
+audience = "user"
+
+[[help]]
+code = "updater.payload_digest"
+what_happened = "The content digest is wrong."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Re-download the update package; a byte changed in transit or on disk.", "If it keeps happening, tell your administrator and quote the code updater.payload_digest."]
+audience = "user"
+
+[[help]]
+code = "updater.payload_size"
+what_happened = "The content size is wrong."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Re-download the update package; the transfer was incomplete or corrupted.", "If it keeps happening, tell your administrator and quote the code updater.payload_size."]
+audience = "user"
+
+[[help]]
+code = "updater.pointer"
+what_happened = "A version pointer is not trustworthy."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Repair the current or previous pointer so it names an existing, complete version directory, then retry.", "If it keeps happening, tell your administrator and quote the code updater.pointer."]
+audience = "operator"
+
+[[help]]
+code = "updater.product"
+what_happened = "The update is for another product."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use the update published for this product.", "If it keeps happening, tell your administrator and quote the code updater.product."]
+audience = "user"
+
+[[help]]
+code = "updater.revocation_signature"
+what_happened = "The revocation list's signature does not verify under its issuer."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Replace the revocation list with one signed by a trusted anchor key.", "If it keeps happening, tell your administrator and quote the code updater.revocation_signature."]
+audience = "user"
+
+[[help]]
+code = "updater.revocation_stale"
+what_happened = "The revocation list is older than the one already held."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fetch a revocation list with a generation at least as high as the one already held.", "If it keeps happening, tell your administrator and quote the code updater.revocation_stale."]
+audience = "user"
+
+[[help]]
+code = "updater.schema_epoch"
+what_happened = "The update needs a database schema the installed version does not support."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Apply the intermediate updates that migrate the database to the needed schema epoch.", "If it keeps happening, tell your administrator and quote the code updater.schema_epoch."]
+audience = "user"
+
+[[help]]
+code = "updater.service"
+what_happened = "The service control operation failed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check that the Spotledger service is installed and the account running the update may control it, then retry.", "If it keeps happening, tell your administrator and quote the code updater.service."]
+audience = "admin"
+
+[[help]]
+code = "updater.signature"
+what_happened = "The update signature does not verify over this manifest."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Obtain a fresh update; the package may be corrupted or tampered with.", "If it keeps happening, tell your administrator and quote the code updater.signature."]
+audience = "user"
+
+[[help]]
+code = "updater.signature_malformed"
+what_happened = "The update signature is malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Replace update.sig with a valid detached signature document.", "If it keeps happening, tell your administrator and quote the code updater.signature_malformed."]
+audience = "user"
+
+[[help]]
+code = "updater.unsigned"
+what_happened = "The update is not signed."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Obtain a signed update from the vendor; never apply an unsigned package.", "If it keeps happening, tell your administrator and quote the code updater.unsigned."]
+audience = "user"

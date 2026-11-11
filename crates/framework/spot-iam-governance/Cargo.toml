@@ -1,0 +1,40 @@
+[package]
+name = "spot-iam-governance"
+description = "Access governance as a pure core (WP-IAM-08.T1, ADR-070 section 8): the grant-time segregation-of-duties check, overrides with a reason and a mitigating control, delegated-administration limits, grant approval routed to the BPM engine, and the permission-change audit with its between-two-dates diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The segregation-of-duties decision core the grant gate consults: rules over duties, the
+# grant-time check, the overrides and the `override_sod` right.
+spot-sod = { path = "../spot-sod" }
+# `Assignment`, `Scope`, `RoleName`, `Source`: the role assignment a grant becomes, and the
+# scope that belongs to it.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# `authorise_change` and `ManagedRoles`: who may add an assignment, and the IdP-managed
+# refusal that stops a manual grant.
+spot-iam-assign = { path = "../spot-iam-assign" }
+# `UserPermission` and `AppliesTo`: the value restrictions a scope carries.
+spot-permissions = { path = "../spot-permissions" }
+# The Process model and its built-in approval-with-escalation template: an approval is a
+# Process on the BPM engine, never a private workflow.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# Stable, derive-based serde on every public type.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON snapshots and the identity-topic payloads.
+serde_json = "1"
+# The one error type, with stable machine-readable `iam_governance.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Build a review item carrying the override note, proving the override record is the input
+# an access review consumes.
+spot-access-review = { path = "../spot-access-review" }
+# Validate the emitted audit payloads against the real identity topic schemas.
+spot-events-contract = { path = "../../../contracts/events" }
+
+[lints]
+workspace = true

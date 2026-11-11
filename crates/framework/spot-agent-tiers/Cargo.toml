@@ -1,0 +1,27 @@
+[package]
+name = "spot-agent-tiers"
+description = "The authoriser for AI agents (WP-AI-06.T1): agent identity, the T0 to T3 tiers, registered deep agents, support versus operations separation, and a pure decision core that refuses and records every out-of-tier action"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public data type, so sites can keep identities,
+# policies and the action catalogue in persisted, hand-editable records.
+serde = { version = "1", features = ["derive"] }
+# The action catalogue is TOML, loadable and hand-editable.
+toml = "0.8"
+# The one error type for catalogue loads and registry changes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: a refusal always carries the first failing check's reason in the
+# documented order, and an allow implies every check passed.
+proptest = "1"
+# The wire-form test of `Tier`: written upper case, read in either case.
+serde_json = "1"
+
+[lints]
+workspace = true

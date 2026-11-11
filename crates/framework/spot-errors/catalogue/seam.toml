@@ -1,0 +1,46 @@
+# seam codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "seam.duplicate_provider"
+class = "none"
+summary = "Two apps provide the same seam at the same version."
+explanation_key = "error.seam.duplicate_provider"
+params = []
+remedy = "Uninstall one provider or version the seam differently."
+since = "0.1.0"
+
+[[entry]]
+code = "seam.replace_unknown"
+class = "none"
+summary = "A seam replacement targets a seam and version nobody provides."
+explanation_key = "error.seam.replace_unknown"
+params = []
+remedy = "Target a declared seam version."
+since = "0.1.0"
+
+[[entry]]
+code = "seam.duplicate_replacement"
+class = "none"
+summary = "Two apps replace the same seam version."
+explanation_key = "error.seam.duplicate_replacement"
+params = []
+remedy = "Keep one replacement."
+since = "0.1.0"
+
+[[entry]]
+code = "seam.version_mismatch"
+class = "none"
+summary = "A replacement was built against another seam version than the one installed."
+explanation_key = "error.seam.version_mismatch"
+params = []
+remedy = "Rebuild the replacement for the installed seam version."
+since = "0.1.0"
+
+[[entry]]
+code = "seam.required_missing"
+class = "none"
+summary = "A seam the install requires is not provided by any installed app."
+explanation_key = "error.seam.required_missing"
+params = []
+remedy = "Install the app that provides the seam."
+since = "0.1.0"

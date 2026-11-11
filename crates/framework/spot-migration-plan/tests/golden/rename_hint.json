@@ -1,0 +1,71 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "metadata/party/field_renamed/new_name",
+      "area": "metadata",
+      "kind": "field_renamed",
+      "rule": "metadata/field_renamed",
+      "target": "party.new_name",
+      "description": "Field `party.old_name` is renamed to `new_name`.",
+      "before": "old_name",
+      "after": "new_name",
+      "risk": "destructive",
+      "reason": "a rename moves stored values; the backend cannot do it online",
+      "alternative": "add the new field, backfill it, keep the old one, then drop it in a later release",
+      "blocking": "maintenance_window"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 1,
+    "expected": 2,
+    "high": 4,
+    "per_change": [
+      {
+        "change_id": "metadata/party/field_renamed/new_name",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "maintenance_window",
+        "unknown": false
+      }
+    ],
+    "blocking": "maintenance_window",
+    "unknown": false
+  },
+  "plan_digest": "6ad4003223d609470a2f4a326164d7a208752c8d77e75c5029fdeffb257d3252",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "new_name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [
+      {
+        "doctype": "party",
+        "from": "old_name",
+        "to": "new_name"
+      }
+    ],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "node": "acme.spotledger.app#branch7",
+  "remaining": 50,
+  "series": "pos:branch7:till2",
+  "total": 1000
+}

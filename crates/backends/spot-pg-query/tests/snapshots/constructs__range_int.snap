@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(& ok(& slot_with(\"qty\", i(1, 9)), & cat))"
+---
+SELECT $1 AS "one" FROM "slot" AS "x" WHERE ("x"."qty" && int8range($2, $3, '[)')) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Int8(1)
+$2 = Int8(1)
+$3 = Int8(9)
+$4 = Int8(0)
+columns = ["one"]
+decode = [Int]

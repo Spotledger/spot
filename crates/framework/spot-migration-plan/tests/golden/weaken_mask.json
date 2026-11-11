@@ -1,0 +1,68 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "metadata/party/protection/secret",
+      "area": "metadata",
+      "kind": "protection_changed",
+      "rule": "metadata/protection_changed",
+      "target": "party.secret",
+      "description": "The protection of `party.secret` changes.",
+      "before": "group=none mask=last_chars(4) tags=[] declassified=none",
+      "after": "group=none mask=last_chars(8) tags=[] declassified=none",
+      "risk": "needs_review",
+      "reason": "protection is weakened: a field becomes less protected or its mask reveals more",
+      "alternative": "keep the protection or mask as it was until a review approves the change",
+      "blocking": "online"
+    }
+  ],
+  "risk": "needs_review",
+  "estimate": {
+    "low": 1,
+    "expected": 2,
+    "high": 4,
+    "per_change": [
+      {
+        "change_id": "metadata/party/protection/secret",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "online",
+    "unknown": false
+  },
+  "plan_digest": "0e2feefca3df26e79f379ad331a0b95322199dbf2e5caa67ac66dba4b024821a",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "secret",
+              "type": "text",
+              "masking": {
+                "last_chars": 8
+              }
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

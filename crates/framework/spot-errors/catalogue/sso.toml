@@ -1,0 +1,1023 @@
+# sso codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The single sign-on core (spot-sso) raises these; the API layer maps them.
+#
+# Two texts per code: `summary` is the public message (safe to show an end user, it never
+# says which check failed), and `remedy` is the administrator's (what to fix). They mirror
+# `SsoError::public_message` and `SsoError::admin_message`.
+
+[[entry]]
+code = "sso.required"
+class = "none"
+summary = "Local sign-in is not available for this tenant."
+explanation_key = "error.sso.required"
+params = []
+remedy = "Sign in with single sign-on, or use a break-glass administrator account."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.break_glass_too_few"
+class = "none"
+summary = "The tenant's sign-in policy is not safe."
+explanation_key = "error.sso.break_glass_too_few"
+params = []
+remedy = "Appoint at least two break-glass administrators before requiring single sign-on."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.break_glass_not_admin"
+class = "none"
+summary = "The tenant's sign-in policy is not safe."
+explanation_key = "error.sso.break_glass_not_admin"
+params = []
+remedy = "Make every break-glass entry an enabled tenant administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.break_glass_no_password"
+class = "none"
+summary = "The tenant's sign-in policy is not safe."
+explanation_key = "error.sso.break_glass_no_password"
+params = []
+remedy = "Give every break-glass administrator a local password."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.break_glass_no_second_factor"
+class = "none"
+summary = "The tenant's sign-in policy is not safe."
+explanation_key = "error.sso.break_glass_no_second_factor"
+params = []
+remedy = "Register a TOTP or hardware second factor for every break-glass administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.no_provider"
+class = "none"
+summary = "The tenant's sign-in policy is not safe."
+explanation_key = "error.sso.no_provider"
+params = []
+remedy = "Configure and test at least one identity provider before requiring single sign-on."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.policy_lockout"
+class = "none"
+summary = "This change would lock everyone out of the tenant."
+explanation_key = "error.sso.policy_lockout"
+params = []
+remedy = "Keep local sign-in until two break-glass administrators can sign in with a second factor."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.sso_not_allowed"
+class = "none"
+summary = "Single sign-on is not available for this account."
+explanation_key = "error.sso.sso_not_allowed"
+params = []
+remedy = "Enable single sign-on for this tenant or user, or let them sign in locally."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.provider_not_configured"
+class = "none"
+summary = "That sign-in method is not available."
+explanation_key = "error.sso.provider_not_configured"
+params = []
+remedy = "Trust the provider in the tenant's sign-in policy first."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.unknown_user"
+class = "none"
+summary = "That account is not known."
+explanation_key = "error.sso.unknown_user"
+params = []
+remedy = "Check the user exists and is enabled."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.issuer_invalid"
+class = "none"
+summary = "The identity provider's issuer is not a secure URL."
+explanation_key = "error.sso.issuer_invalid"
+params = []
+remedy = "Set the issuer to the exact https value the provider reports."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.client_id_missing"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.client_id_missing"
+params = []
+remedy = "Set the client id issued by the identity provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.secret_ref_invalid"
+class = "none"
+summary = "The identity provider's client credential is not configured as a reference."
+explanation_key = "error.sso.secret_ref_invalid"
+params = []
+remedy = "Store the secret in spot-secrets and name it here; never paste the secret itself."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.scopes_missing_openid"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.scopes_missing_openid"
+params = []
+remedy = "Add the openid scope to the provider's scopes."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.redirect_uri_invalid"
+class = "none"
+summary = "The identity provider's redirect URI is not acceptable."
+explanation_key = "error.sso.redirect_uri_invalid"
+params = []
+remedy = "Use one exact https URI (http on loopback for development), with no wildcard and no fragment."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.discovery_url_invalid"
+class = "none"
+summary = "The identity provider's discovery URL is not a secure URL."
+explanation_key = "error.sso.discovery_url_invalid"
+params = []
+remedy = "Set the provider's discovery URL to an https address."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.alg_unsupported"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.alg_unsupported"
+params = []
+remedy = "Use only the RS256 and ES256 signing algorithms."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.clock_skew_excessive"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.clock_skew_excessive"
+params = []
+remedy = "Set the tolerated clock skew to between 0 and 120 seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.claim_map_invalid"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.claim_map_invalid"
+params = []
+remedy = "Name a claim for every mapped field."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.bad_return_to"
+class = "none"
+summary = "The page to return to is not allowed."
+explanation_key = "error.sso.bad_return_to"
+params = []
+remedy = "Return to a path inside this application, not another site."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.rng_insufficient"
+class = "none"
+summary = "The sign-in could not be prepared."
+explanation_key = "error.sso.rng_insufficient"
+params = []
+remedy = "Supply at least 32 random bytes to begin a sign-in."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.state_mismatch"
+class = "none"
+summary = "The sign-in response did not match this attempt."
+explanation_key = "error.sso.state_mismatch"
+params = []
+remedy = "Start the sign-in again from the beginning."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.state_expired"
+class = "none"
+summary = "This sign-in attempt has taken too long."
+explanation_key = "error.sso.state_expired"
+params = []
+remedy = "Start the sign-in again; the attempt expires after ten minutes."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.state_replayed"
+class = "none"
+summary = "This sign-in attempt has already been completed."
+explanation_key = "error.sso.state_replayed"
+params = []
+remedy = "Start the sign-in again from the beginning."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.idp_error"
+class = "none"
+summary = "The identity provider refused the sign-in."
+explanation_key = "error.sso.idp_error"
+params = []
+remedy = "Check the provider's configuration and the user's account there."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.missing_param"
+class = "none"
+summary = "The sign-in response was incomplete."
+explanation_key = "error.sso.missing_param"
+params = []
+remedy = "Check the provider returns the required parameters."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.discovery_mismatch"
+class = "none"
+summary = "The identity provider could not be used."
+explanation_key = "error.sso.discovery_mismatch"
+params = []
+remedy = "Check the discovery URL, the issuer and that the provider supports the code flow with S256."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.jwks_invalid"
+class = "none"
+summary = "The identity provider's keys could not be read."
+explanation_key = "error.sso.jwks_invalid"
+params = []
+remedy = "Check the provider publishes RSA (2048 bit or larger) or P-256 keys."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.key_too_small"
+class = "none"
+summary = "The identity provider publishes a signing key that is too small."
+explanation_key = "error.sso.key_too_small"
+params = []
+remedy = "Publish an RSA key of at least 2048 bits or a P-256 key."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.jwks_stale"
+class = "none"
+summary = "The sign-in response names a key the platform does not hold."
+explanation_key = "error.sso.jwks_stale"
+params = []
+remedy = "Refresh the provider's key set and try once more."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.token_malformed"
+class = "none"
+summary = "The sign-in response could not be read."
+explanation_key = "error.sso.token_malformed"
+params = []
+remedy = "Check the identity provider returns a standard compact ID token."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.header_untrusted"
+class = "none"
+summary = "The sign-in response could not be trusted."
+explanation_key = "error.sso.header_untrusted"
+params = []
+remedy = "Configure a fixed jwks_uri; a token must not carry its own key."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.alg_mismatch"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.alg_mismatch"
+params = []
+remedy = "Check the provider signs with the algorithm its keys declare."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.signature_invalid"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.signature_invalid"
+params = []
+remedy = "Check the provider's keys are current and the signing algorithm matches."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.issuer_mismatch"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.issuer_mismatch"
+params = []
+remedy = "Check the configured issuer matches the provider's iss exactly."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.audience_mismatch"
+class = "none"
+summary = "The sign-in response was not for this application."
+explanation_key = "error.sso.audience_mismatch"
+params = []
+remedy = "Check the client id registered with the provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.azp_mismatch"
+class = "none"
+summary = "The sign-in response was not for this application."
+explanation_key = "error.sso.azp_mismatch"
+params = []
+remedy = "Check the azp claim names this client id."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.token_expired"
+class = "none"
+summary = "The sign-in has taken too long."
+explanation_key = "error.sso.token_expired"
+params = []
+remedy = "Check the server clock and the provider's token lifetime."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.token_not_yet_valid"
+class = "none"
+summary = "The sign-in response is not valid yet."
+explanation_key = "error.sso.token_not_yet_valid"
+params = []
+remedy = "Check the server clock and the tolerated skew."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.issued_at_invalid"
+class = "none"
+summary = "The sign-in response is not valid yet."
+explanation_key = "error.sso.issued_at_invalid"
+params = []
+remedy = "Check the server clock and the tolerated skew."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.nonce_mismatch"
+class = "none"
+summary = "The sign-in response did not match this attempt."
+explanation_key = "error.sso.nonce_mismatch"
+params = []
+remedy = "Start the sign-in again from the beginning."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.at_hash_mismatch"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.at_hash_mismatch"
+params = []
+remedy = "Check the provider computes at_hash over the access token."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.acr_insufficient"
+class = "none"
+summary = "The sign-in did not meet this tenant's requirements."
+explanation_key = "error.sso.acr_insufficient"
+params = []
+remedy = "Ask the provider to authenticate the user with the required context."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.email_not_verified"
+class = "none"
+summary = "The account's e-mail has not been verified by the provider."
+explanation_key = "error.sso.email_not_verified"
+params = []
+remedy = "Have the user verify their e-mail at the identity provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.pkce_mismatch"
+class = "none"
+summary = "The sign-in attempt was altered."
+explanation_key = "error.sso.pkce_mismatch"
+params = []
+remedy = "Start the sign-in again from the beginning."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.claim_missing"
+class = "none"
+summary = "The sign-in response was incomplete."
+explanation_key = "error.sso.claim_missing"
+params = []
+remedy = "Check the provider includes the configured subject claim."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.unknown_identity"
+class = "none"
+summary = "This account is not set up for single sign-on here."
+explanation_key = "error.sso.unknown_identity"
+params = []
+remedy = "Invite the user, link their identity, or enable a just-in-time rule."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.user_disabled"
+class = "none"
+summary = "This account is not available."
+explanation_key = "error.sso.user_disabled"
+params = []
+remedy = "Re-enable the user, or remove the linked identity."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.identity_other_user"
+class = "none"
+summary = "This sign-in account is already connected to another user."
+explanation_key = "error.sso.identity_other_user"
+params = []
+remedy = "Unlink it from the other user, or sign in as that user."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.link_requires_proof"
+class = "none"
+summary = "This sign-in account matches an existing account and must be confirmed first."
+explanation_key = "error.sso.link_requires_proof"
+params = []
+remedy = "Have the user prove control of the local account before linking."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.jit_not_allowed"
+class = "none"
+summary = "Just-in-time account creation is turned off for this tenant."
+explanation_key = "error.sso.jit_not_allowed"
+params = []
+remedy = "Enable a just-in-time rule, or invite the user."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.no_end_session"
+class = "none"
+summary = "This sign-in method cannot sign you out at the provider."
+explanation_key = "error.sso.no_end_session"
+params = []
+remedy = "The provider does not publish an end-session endpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_redirect"
+class = "none"
+summary = "The page to return to after signing out is not allowed."
+explanation_key = "error.sso.logout_redirect"
+params = []
+remedy = "Use the exact redirect URI registered with the provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_missing_jti"
+class = "none"
+summary = "The sign-out request was incomplete."
+explanation_key = "error.sso.logout_token_missing_jti"
+params = []
+remedy = "The provider must give every logout token a jti."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_replayed"
+class = "none"
+summary = "This sign-out request has already been used."
+explanation_key = "error.sso.logout_token_replayed"
+params = []
+remedy = "Refuse a replayed logout token; the jti is single use."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.replay_store_unavailable"
+class = "none"
+summary = "The request could not be checked and was refused."
+explanation_key = "error.sso.replay_store_unavailable"
+params = []
+remedy = "The replay store is unavailable; restore it and the sender may retry."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_events_missing"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.logout_token_events_missing"
+params = []
+remedy = "A logout token must carry the back-channel-logout events member."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_nonce_present"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.logout_token_nonce_present"
+params = []
+remedy = "A logout token never carries nonce; an ID token is not a logout."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_no_target"
+class = "none"
+summary = "The sign-out request named no session."
+explanation_key = "error.sso.logout_token_no_target"
+params = []
+remedy = "A logout token must carry sub, sid, or both."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_no_exp"
+class = "none"
+summary = "The sign-out request was incomplete."
+explanation_key = "error.sso.logout_token_no_exp"
+params = []
+remedy = "The provider must give every logout token an integer exp."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_expired"
+class = "none"
+summary = "The sign-out request has taken too long."
+explanation_key = "error.sso.logout_token_expired"
+params = []
+remedy = "Check the server clock and that the provider delivers logout tokens at once."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_lifetime_excessive"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.logout_token_lifetime_excessive"
+params = []
+remedy = "The logout token lives longer than this tenant allows; shorten the provider's logout token lifetime."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_token_malformed_times"
+class = "none"
+summary = "The sign-out request could not be read."
+explanation_key = "error.sso.logout_token_malformed_times"
+params = []
+remedy = "The logout token's exp is not after its iat; check the provider's clock and token lifetime."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_lifetime_invalid"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso.logout_lifetime_invalid"
+params = []
+remedy = "Set the longest logout token or LogoutRequest lifetime to between 1 and 600 seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.metadata_invalid"
+class = "none"
+summary = "The identity provider's metadata could not be read."
+explanation_key = "error.sso.saml.metadata_invalid"
+params = []
+remedy = "Check the identity provider publishes SAML 2.0 metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.metadata_unsigned"
+class = "none"
+summary = "The identity provider's metadata is not trusted."
+explanation_key = "error.sso.saml.metadata_unsigned"
+params = []
+remedy = "Pin the metadata signing certificate, or mark the document trusted out of band."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.metadata_signature_invalid"
+class = "none"
+summary = "The identity provider's metadata is not trusted."
+explanation_key = "error.sso.saml.metadata_signature_invalid"
+params = []
+remedy = "Check the pinned metadata certificate and the provider's signature."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.metadata_expired"
+class = "none"
+summary = "The identity provider's metadata is out of date."
+explanation_key = "error.sso.saml.metadata_expired"
+params = []
+remedy = "Fetch the identity provider's metadata again."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.no_signing_certificate"
+class = "none"
+summary = "The identity provider could not be used."
+explanation_key = "error.sso.saml.no_signing_certificate"
+params = []
+remedy = "Publish a signing certificate in the IdP metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.no_sso_endpoint"
+class = "none"
+summary = "The identity provider could not be used."
+explanation_key = "error.sso.saml.no_sso_endpoint"
+params = []
+remedy = "The metadata publishes no single-sign-on endpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.too_large"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.too_large"
+params = []
+remedy = "Raise the response size cap only if a legitimate provider exceeds it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.not_base64"
+class = "none"
+summary = "The sign-in response could not be read."
+explanation_key = "error.sso.saml.not_base64"
+params = []
+remedy = "Check the identity provider Base64-encodes the SAML response."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.not_utf8"
+class = "none"
+summary = "The sign-in response could not be read."
+explanation_key = "error.sso.saml.not_utf8"
+params = []
+remedy = "Check the identity provider sends UTF-8 SAML XML."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.dtd_forbidden"
+class = "none"
+summary = "The sign-in response could not be read."
+explanation_key = "error.sso.saml.dtd_forbidden"
+params = []
+remedy = "The identity provider sent a document with a DTD or entity declaration; SAML never uses one."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.xml_invalid"
+class = "none"
+summary = "The sign-in response could not be read."
+explanation_key = "error.sso.saml.xml_invalid"
+params = []
+remedy = "Check the identity provider sends well-formed SAML XML."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.not_a_response"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.not_a_response"
+params = []
+remedy = "The response root must be a samlp:Response."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.multiple_assertions"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.multiple_assertions"
+params = []
+remedy = "The response carries more than one assertion; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.assertion_missing"
+class = "none"
+summary = "The sign-in response was incomplete."
+explanation_key = "error.sso.saml.assertion_missing"
+params = []
+remedy = "The response must carry exactly one assertion."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.encrypted_unsupported"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.encrypted_unsupported"
+params = []
+remedy = "Encrypted assertions need a decryption key; none is configured."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.wrapper_forbidden"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.wrapper_forbidden"
+params = []
+remedy = "The message carries an Extensions or Object element; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.destination_mismatch"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.destination_mismatch"
+params = []
+remedy = "The response Destination must be this ACS URL."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.in_response_to_mismatch"
+class = "none"
+summary = "The sign-in response did not match this attempt."
+explanation_key = "error.sso.saml.in_response_to_mismatch"
+params = []
+remedy = "The InResponseTo does not name the pending AuthnRequest."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.unsolicited"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.unsolicited"
+params = []
+remedy = "An unsolicited response arrived and IdP-initiated sign-in is off."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.status_not_success"
+class = "none"
+summary = "The identity provider refused the sign-in."
+explanation_key = "error.sso.saml.status_not_success"
+params = []
+remedy = "The IdP returned a non-success status; check the user's account there."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.signature_missing"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.saml.signature_missing"
+params = []
+remedy = "The identity provider must sign the assertion with a pinned certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.signature_multiple"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.signature_multiple"
+params = []
+remedy = "The SAML message carries more than one signature; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.signature_not_enveloped"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.signature_not_enveloped"
+params = []
+remedy = "The SAML signature is not an enveloped signature over the assertion or response."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.signature_invalid"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.saml.signature_invalid"
+params = []
+remedy = "Check the identity provider's pinned certificates and signing algorithm."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.reference_invalid"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.reference_invalid"
+params = []
+remedy = "The signature reference must name the element it is attached to."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.duplicate_id"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.duplicate_id"
+params = []
+remedy = "The SAML message reuses an XML ID; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.alg_unsupported"
+class = "none"
+summary = "The sign-in response used a method this tenant does not allow."
+explanation_key = "error.sso.saml.alg_unsupported"
+params = []
+remedy = "Accept only SHA-256 digests and RSA-SHA256 or ECDSA-SHA256 signatures."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.transform_unsupported"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.transform_unsupported"
+params = []
+remedy = "Accept only the enveloped-signature and exclusive-canonicalisation transforms."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.digest_mismatch"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.saml.digest_mismatch"
+params = []
+remedy = "The signed element was altered after signing; refuse the message."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.unsigned_assertion"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.unsigned_assertion"
+params = []
+remedy = "The asserted identity is not covered by the verified signature; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.comment_in_value"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.saml.comment_in_value"
+params = []
+remedy = "An assertion value was split by a comment or processing instruction; refuse the message."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.issuer_mismatch"
+class = "none"
+summary = "The sign-in response was not trusted."
+explanation_key = "error.sso.saml.issuer_mismatch"
+params = []
+remedy = "The response Issuer does not match the configured IdP entity id."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.conditions_invalid"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.conditions_invalid"
+params = []
+remedy = "The assertion's Conditions are outside the accepted time window."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.audience_mismatch"
+class = "none"
+summary = "The sign-in response was not for this application."
+explanation_key = "error.sso.saml.audience_mismatch"
+params = []
+remedy = "The AudienceRestriction must contain this SP entity id."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.subject_confirmation"
+class = "none"
+summary = "The sign-in response was refused."
+explanation_key = "error.sso.saml.subject_confirmation"
+params = []
+remedy = "The Subject must carry a bearer SubjectConfirmation."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.no_authn_statement"
+class = "none"
+summary = "The sign-in response was incomplete."
+explanation_key = "error.sso.saml.no_authn_statement"
+params = []
+remedy = "The assertion must carry an AuthnStatement."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.authn_context"
+class = "none"
+summary = "The sign-in did not meet this tenant's requirements."
+explanation_key = "error.sso.saml.authn_context"
+params = []
+remedy = "Ask the IdP to authenticate with the required AuthnContextClassRef."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.nameid_invalid"
+class = "none"
+summary = "This sign-in account cannot be linked."
+explanation_key = "error.sso.saml.nameid_invalid"
+params = []
+remedy = "A transient NameID cannot be used to link an identity."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.attribute_missing"
+class = "none"
+summary = "The sign-in response was incomplete."
+explanation_key = "error.sso.saml.attribute_missing"
+params = []
+remedy = "The configured subject attribute is missing from the assertion."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.replay"
+class = "none"
+summary = "This sign-in response has already been used."
+explanation_key = "error.sso.saml.replay"
+params = []
+remedy = "Refuse a replayed assertion; the assertion id is single use."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.provider_not_configured"
+class = "none"
+summary = "That sign-in method is not available."
+explanation_key = "error.sso.saml.provider_not_configured"
+params = []
+remedy = "The assertion's Issuer is not a configured identity provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.signing_key_missing"
+class = "none"
+summary = "The sign-in could not be prepared."
+explanation_key = "error.sso.saml.signing_key_missing"
+params = []
+remedy = "Name the SP signing key in spot-secrets, or turn off request signing."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_not_a_request"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.saml.slo_not_a_request"
+params = []
+remedy = "The request root must be a samlp:LogoutRequest."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_destination_mismatch"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.saml.slo_destination_mismatch"
+params = []
+remedy = "The LogoutRequest Destination must be this service provider's SLO URL."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_expired"
+class = "none"
+summary = "The sign-out request has taken too long."
+explanation_key = "error.sso.saml.slo_expired"
+params = []
+remedy = "The LogoutRequest NotOnOrAfter has passed; refuse it and let the provider retry."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_lifetime_excessive"
+class = "none"
+summary = "The sign-out request was refused."
+explanation_key = "error.sso.saml.slo_lifetime_excessive"
+params = []
+remedy = "The LogoutRequest NotOnOrAfter lies further ahead than this tenant allows; refuse it."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_replay"
+class = "none"
+summary = "This sign-out request has already been used."
+explanation_key = "error.sso.saml.slo_replay"
+params = []
+remedy = "Refuse a replayed LogoutRequest; the request ID is single use."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_name_id_missing"
+class = "none"
+summary = "The sign-out request was incomplete."
+explanation_key = "error.sso.saml.slo_name_id_missing"
+params = []
+remedy = "A LogoutRequest must carry a non-empty saml:NameID."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.saml.slo_endpoint_missing"
+class = "none"
+summary = "This sign-in method cannot sign you out here."
+explanation_key = "error.sso.saml.slo_endpoint_missing"
+params = []
+remedy = "Set the service provider's single-logout URL before accepting IdP-initiated logout."
+since = "0.1.0"

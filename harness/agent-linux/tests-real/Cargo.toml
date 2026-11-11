@@ -1,0 +1,40 @@
+# The real-system conformance crate for the Linux modules (WP-ADM-04.T3).
+#
+# This crate is deliberately its own workspace: it depends on the two module crates by
+# path but is not a member of the platform workspace (the root workspace only globs
+# `harness/rust/*`), so a host `cargo test` on the platform never builds or runs it. The
+# harness (`harness/agent-linux/run.sh`) builds it, mounts the test binary into a
+# distribution container, and runs the `#[ignore]`d tests with `--ignored`.
+#
+# Every test in `tests/real.rs` is `#[ignore]`d: `cargo test` on a bare host compiles the
+# crate and runs nothing, so the crate is safe to build anywhere.
+[workspace]
+resolver = "3"
+
+[package]
+name = "spot-agent-linux-real"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.98.1"
+description = "Real-system conformance tests for spot-agent-linux and spot-agent-linux-sys (WP-ADM-04.T3): the module suite run inside Fedora, RHEL-compatible and Ubuntu containers or VMs"
+
+[dependencies]
+# Part 1 of the Linux modules under test: packages, services, users, firewall.
+spot-agent-linux = { path = "../../../crates/framework/spot-agent-linux" }
+# Part 2: storage and snapshots, network, certificates, time, sysctl, SELinux/AppArmor.
+spot-agent-linux-sys = { path = "../../../crates/framework/spot-agent-linux-sys" }
+# The typed operation catalogue the part-1 modules are validated through.
+spot-mgmt-ops = { path = "../../../crates/framework/spot-mgmt-ops" }
+# The injected clock the network module's constructor wants (a real system clock).
+spot-core = { path = "../../../crates/framework/spot-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

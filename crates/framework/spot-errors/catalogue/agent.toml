@@ -1,0 +1,109 @@
+# agent codes: raised by the spot-agent-tiers crate. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "agent.allow"
+class = "none"
+summary = "The authoriser allowed the action; this is the decision code recorded for an allow, not an error."
+explanation_key = "error.agent.allow"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.unknown_action"
+class = "none"
+summary = "The requested action is not in the action catalogue."
+explanation_key = "error.agent.unknown_action"
+params = []
+remedy = "Add the action to the catalogue with its tier, domain and effect, or request a catalogued action."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.agent_not_active"
+class = "none"
+summary = "The agent is not active, so no action is allowed."
+explanation_key = "error.agent.agent_not_active"
+params = []
+remedy = "Re-activate the agent, or use an active agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.domain_mismatch"
+class = "none"
+summary = "The action belongs to a domain the agent is not registered for."
+explanation_key = "error.agent.domain_mismatch"
+params = []
+remedy = "Use an agent registered for the action's domain."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.above_agent_max_tier"
+class = "none"
+summary = "The action needs a higher tier than the agent's own ceiling, however well it is approved."
+explanation_key = "error.agent.above_agent_max_tier"
+params = []
+remedy = "Raise the agent's maximum tier, or hand the action to a human or a higher-tier agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.tier_needs_approval"
+class = "none"
+summary = "A T3 action run unattended needs a deep-registered agent or a human approval."
+explanation_key = "error.agent.tier_needs_approval"
+params = []
+remedy = "Attach a valid human approval to the request, or register the agent deep."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.approval_invalid"
+class = "none"
+summary = "The approval carried by the request does not validate (an agent approver, or the owner approving their own agent)."
+explanation_key = "error.agent.approval_invalid"
+params = []
+remedy = "Have a different human approver approve the request."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_not_journaled"
+class = "none"
+summary = "A change runs only while the change journal is on, and it is off."
+explanation_key = "error.agent.hard_floor_not_journaled"
+params = []
+remedy = "Turn the change journal on, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_no_snapshot"
+class = "none"
+summary = "A change runs only with a snapshot already taken, and there is none."
+explanation_key = "error.agent.hard_floor_no_snapshot"
+params = []
+remedy = "Take a snapshot, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_financial_route"
+class = "none"
+summary = "A submitted financial record changes only through cancel, amend or a journal entry; a direct edit is always refused."
+explanation_key = "error.agent.hard_floor_financial_route"
+params = []
+remedy = "Use cancel, amend or a journal entry instead of editing the record."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.deep_registered"
+class = "none"
+summary = "Registry event: an agent was registered deep; recorded for the audit trail, not an error."
+explanation_key = "error.agent.deep_registered"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.deep_revoked"
+class = "none"
+summary = "Registry event: an agent's deep registration was revoked; recorded for the audit trail, not an error."
+explanation_key = "error.agent.deep_revoked"
+params = []
+remedy = "None needed."
+since = "0.1.0"

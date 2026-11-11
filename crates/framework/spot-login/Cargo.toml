@@ -1,0 +1,60 @@
+[package]
+name = "spot-login"
+description = "The real AuthService for the native API: password sign-in with two-factor and recovery codes, session start, session check on every request, logout, change password, my sessions, API-key authentication, throttle and lockout, identity events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Credential primitives: hash/verify, TOTP, recovery codes, opaque tokens, API keys.
+spot-auth = { path = "../spot-auth" }
+# Session management: SessionManager, LoginThrottle and their store contracts.
+spot-sessions = { path = "../spot-sessions" }
+# Identity events: topics, Actor and payload validation (WP-IAM-01).
+spot-events-contract = { path = "../../../contracts/events" }
+# RecordId, Name, Value, the query IR and the transaction the stores run in.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The native API service traits and types (AuthService, RequestCtx, ApiError, Code, ...).
+spot-http = { path = "../spot-http" }
+# Clock and SiteId.
+spot-core = { path = "../spot-core" }
+# The document engine: the one secret path (`SecretAccess`, `set_secret`, `open_secret`,
+# `find_by_secret`) a credential may travel, and the lifecycle every sealed write runs in.
+spot-document = { path = "../spot-document" }
+# `SecretString`: the zeroing plaintext form the capability takes and returns.
+spot-secrets = { path = "../spot-secrets" }
+# `Invocation`, `Actor` and `Document` for a sealed create.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The platform app's DocType names and record shapes the stores read and write.
+spot-platform-app = { path = "../spot-platform-app" }
+# The warn-level event a store failure writes, with the request id.
+tracing = "0.1"
+# JSON payloads for identity events and login attempts.
+serde_json = "1"
+# Instants for event payloads, login attempts and every stored date.
+time = { version = "0.3", features = ["formatting"] }
+
+[dev-dependencies]
+# Async test runtime, with the multi-thread scheduler the PostgreSQL rig uses.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+# The platform app's metadata, compiled into the catalog the stores run against.
+spot-meta = { path = "../spot-meta" }
+# The step/seam registry an engine needs (empty: sign-in runs no hooks).
+spot-seams = { path = "../spot-seams" }
+# The in-memory backend: the contract suite runs on it as well as on PostgreSQL.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The PostgreSQL backend and its per-test scratch database (env-gated: `SPOT_TEST_PG_URL`).
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+# `contract::run_all`: the store contract suite, compiled behind its `testing` feature.
+spot-sessions = { path = "../spot-sessions", features = ["testing"] }
+# `SecretCaller::Test`: a test may seed a credential through the engine's own capability, the
+# way the engine's secret-path suite does.
+spot-document = { path = "../spot-document", features = ["testing"] }
+
+# A capturing subscriber for the log tests.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+
+[lints]
+workspace = true

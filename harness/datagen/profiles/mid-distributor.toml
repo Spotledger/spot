@@ -1,0 +1,42 @@
+# mid-distributor: the throughput benchmark, about 250k invoices plus 137.5k
+# payments (550 per mille paid) over one year. Streams day by day; peak RSS
+# stays at master-data size. Measured in harness/datagen/README.md.
+
+[period]
+start = "2026-01-01"
+end = "2026-12-31"
+
+[counts]
+companies = 5
+warehouses_per_company = 3
+items = 2000
+customers = 1500
+suppliers = 800
+sales_invoices = 170000
+purchase_invoices = 80000
+payments = 137500
+journal_entries = 20000
+stock_transfers = 30000
+stock_adjustments = 25000
+
+[distributions]
+item_popularity_skew = 4
+customer_activity_skew = 3
+paid_share_per_mille = 550
+sales_return_per_mille = 70
+purchase_return_per_mille = 90
+opening_stock_coverage_per_mille = 500
+opening_stock_min_milli = 100
+opening_stock_max_milli = 100000
+opening_receivable_per_mille = 90
+opening_payable_per_mille = 120
+monthly_seasonality = [6, 5, 8, 8, 9, 11, 13, 12, 9, 10, 12, 15]
+
+[distributions.lines_per_invoice]
+min = 1
+peak = 2
+max = 5
+
+[distributions.payment_delay]
+min_days = 7
+max_days = 60

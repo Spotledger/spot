@@ -1,0 +1,281 @@
+# app_review codes: the app store review rules (WP-STR-05). One [[entry]] per rule id; see
+# crates/framework/spot-errors/README.md. A finding's `rule` carries the code verbatim; the
+# summary is what the rule means, and the remedy is what the publisher should change.
+
+# --- static checks ---------------------------------------------------------------------------
+
+[[entry]]
+code = "app_review.static.unused_capability"
+class = "none"
+summary = "A capability the manifest declares that nothing in the component exercises."
+explanation_key = "error.app_review.static.unused_capability"
+params = []
+remedy = "Remove the capability from the manifest, or add the code that needs it."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.static.title_missing"
+class = "none"
+summary = "The manifest has no human title, so an administrator sees only the storage name."
+explanation_key = "error.app_review.static.title_missing"
+params = []
+remedy = "Add `title` to the `[app]` table."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.static.patch_undeclared"
+class = "none"
+summary = "A patch omits its `reversible` or `idempotent` declaration."
+explanation_key = "error.app_review.static.patch_undeclared"
+params = []
+remedy = "State both `reversible` and `idempotent` on the patch, even when they are false."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.static.patch_irreversible"
+class = "none"
+summary = "A data or schema patch is neither reversible nor idempotent."
+explanation_key = "error.app_review.static.patch_irreversible"
+params = []
+remedy = "Make the patch reversible or idempotent, or split it so a failed run can be undone."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.static.requires_host_open"
+class = "none"
+summary = "The `requires_host` requirement sets no upper bound."
+explanation_key = "error.app_review.static.requires_host_open"
+params = []
+remedy = "Bound the host range with an upper limit the app is actually tested against."
+since = "0.1.0"
+
+# --- security scan ---------------------------------------------------------------------------
+
+[[entry]]
+code = "app_review.scan.endpoint.private"
+class = "none"
+summary = "A declared network endpoint whose host is a private address."
+explanation_key = "error.app_review.scan.endpoint.private"
+params = []
+remedy = "Remove the endpoint; the egress policy denies private addresses by default."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.endpoint.loopback"
+class = "none"
+summary = "A declared network endpoint whose host is the loopback address."
+explanation_key = "error.app_review.scan.endpoint.loopback"
+params = []
+remedy = "Remove the endpoint; the egress policy denies loopback by default."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.endpoint.link_local"
+class = "none"
+summary = "A declared network endpoint whose host is a link-local address."
+explanation_key = "error.app_review.scan.endpoint.link_local"
+params = []
+remedy = "Remove the endpoint; the egress policy denies link-local addresses by default."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.endpoint.metadata"
+class = "none"
+summary = "A declared network endpoint whose host is a cloud metadata address."
+explanation_key = "error.app_review.scan.endpoint.metadata"
+params = []
+remedy = "Remove the endpoint; the egress policy denies cloud metadata addresses by default."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.endpoint.raw_ip"
+class = "none"
+summary = "A declared network endpoint whose host is a raw IP address."
+explanation_key = "error.app_review.scan.endpoint.raw_ip"
+params = []
+remedy = "Declare a named host instead of an IP address, so the destination is legible."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.doctype.platform_write"
+class = "none"
+summary = "Write access to a platform DocType such as User or Role Assignment."
+explanation_key = "error.app_review.scan.doctype.platform_write"
+params = []
+remedy = "Remove the platform DocType from the write list, or explain the need in the store listing."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.doctype.broad"
+class = "none"
+summary = "Read or write access to more DocTypes than the configuration allows."
+explanation_key = "error.app_review.scan.doctype.broad"
+params = []
+remedy = "Narrow the DocType list to the ones the app actually uses."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.files.read_write_unused"
+class = "none"
+summary = "`files = read_write` with nothing in the component importing a file function."
+explanation_key = "error.app_review.scan.files.read_write_unused"
+params = []
+remedy = "Drop to `read`, or remove the file access, until the app uses it."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.email.undeclared_purpose"
+class = "none"
+summary = "The e-mail capability with no declared sender purpose."
+explanation_key = "error.app_review.scan.email.undeclared_purpose"
+params = []
+remedy = "Remove the e-mail capability, or declare the purpose it is needed for."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.asset.executable"
+class = "none"
+summary = "An asset with an executable or script extension."
+explanation_key = "error.app_review.scan.asset.executable"
+params = []
+remedy = "Ship data assets only; a bundle must not carry scripts or executables."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.asset.active_content"
+class = "none"
+summary = "An HTML asset carrying active content: a remote script, inline eval, cookies or an absolute-URL fetch."
+explanation_key = "error.app_review.scan.asset.active_content"
+params = []
+remedy = "Remove the active content, or serve it from the app's own script rather than an asset."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.scan.secret.embedded"
+class = "none"
+summary = "The component or an asset carries bytes that look like an embedded key or token."
+explanation_key = "error.app_review.scan.secret.embedded"
+params = []
+remedy = "Remove the key or token and rotate it; secrets are configured at the site, never shipped."
+since = "0.1.0"
+
+# --- resource profile ------------------------------------------------------------------------
+
+[[entry]]
+code = "app_review.resource.fuel"
+class = "none"
+summary = "A profiled call ran out of fuel."
+explanation_key = "error.app_review.resource.fuel"
+params = []
+remedy = "Make the entry point finish within the host's fuel budget, or move the work off the call path."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.memory"
+class = "none"
+summary = "A profiled call grew past its memory limit."
+explanation_key = "error.app_review.resource.memory"
+params = []
+remedy = "Reduce the memory the entry point allocates, or stream the data instead of buffering it."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.host_calls"
+class = "none"
+summary = "A profiled call made more host calls than its limit."
+explanation_key = "error.app_review.resource.host_calls"
+params = []
+remedy = "Batch or reduce the host calls the entry point makes."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.timeout"
+class = "none"
+summary = "A profiled call ran past its wall-clock limit."
+explanation_key = "error.app_review.resource.timeout"
+params = []
+remedy = "Make the entry point return within the wall-clock budget."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.trap"
+class = "none"
+summary = "A profiled call trapped."
+explanation_key = "error.app_review.resource.trap"
+params = []
+remedy = "Fix the trap the message names before publishing."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.output_limit"
+class = "none"
+summary = "A profiled call produced a result larger than its output limit."
+explanation_key = "error.app_review.resource.output_limit"
+params = []
+remedy = "Return less data from the entry point, or page the result."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.output_share"
+class = "none"
+summary = "A profiled call produced a result above the configured share of its output limit."
+explanation_key = "error.app_review.resource.output_share"
+params = []
+remedy = "Return less data, or raise the output limit in the review configuration if the size is intended."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.entry_missing"
+class = "none"
+summary = "The component does not export the entry the profile tried to call."
+explanation_key = "error.app_review.resource.entry_missing"
+params = []
+remedy = "Export the entry the profile names, or fix the profile."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.bad_arguments"
+class = "none"
+summary = "The entry rejected the arguments the profile passed."
+explanation_key = "error.app_review.resource.bad_arguments"
+params = []
+remedy = "Pass arguments that fit the entry's parameter types in the profile."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.instantiate_failed"
+class = "none"
+summary = "The component could not be compiled, linked or instantiated under the host."
+explanation_key = "error.app_review.resource.instantiate_failed"
+params = []
+remedy = "Fix the component or its declared capabilities so it links under the host."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.capability_denied"
+class = "none"
+summary = "A call asked for a capability the manifest did not declare."
+explanation_key = "error.app_review.resource.capability_denied"
+params = []
+remedy = "Declare the capability the call needs, or stop calling it."
+since = "0.1.0"
+
+[[entry]]
+code = "app_review.resource.profile_invalid"
+class = "none"
+summary = "The author's `profile.toml` does not parse, so the review used the default entry."
+explanation_key = "error.app_review.resource.profile_invalid"
+params = []
+remedy = "Fix the profile's TOML, or remove it to use the default entry."
+since = "0.1.0"
+
+# --- contract probe --------------------------------------------------------------------------
+
+[[entry]]
+code = "app_review.probe.contract"
+class = "none"
+summary = "A contract probe (DocType metadata, permissions or fixtures) failed."
+explanation_key = "error.app_review.probe.contract"
+params = []
+remedy = "Fix the problem the probe's message names and republish."
+since = "0.1.0"

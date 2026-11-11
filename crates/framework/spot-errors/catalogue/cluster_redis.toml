@@ -1,0 +1,22 @@
+# cluster_redis codes: the optional Redis/Valkey plugin of spot-cluster-redis (WP-PLT-19). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md. The coordinator maps a Redis
+# failure to the existing `coordinator.unavailable` code and the bus to `metalive.store`, so only
+# the plugin's own connection wrapper and health probe raise these.
+
+[[entry]]
+code = "cluster_redis.unavailable"
+class = "none"
+summary = "The Redis/Valkey server could not be reached or answered a command with an error."
+explanation_key = "error.cluster_redis.unavailable"
+params = []
+remedy = "Check the server and the connection URL; the plugin reconnects with backoff and the call may be retried."
+since = "0.1.0"
+
+[[entry]]
+code = "cluster_redis.protocol"
+class = "none"
+summary = "The server answered something the plugin could not parse, such as a malformed bus message or presence key."
+explanation_key = "error.cluster_redis.protocol"
+params = []
+remedy = "Check that the key prefix is used by one plugin version only, and inspect the server contents."
+since = "0.1.0"

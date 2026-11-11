@@ -1,0 +1,23 @@
+[package]
+name = "spot-sync-freshness"
+description = "Freshness policy, sync stamps, stale-document findings and the clock offset estimate (WP-SYN-06.T1, ADR-065 sections 4, 5 and 7): a monotonic-only freshness tracker, the stale-policy posting decision, the stamp on every submitted record, and the hub-side check that finds documents posted without a rule already in force"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The stable JSON form of the sync stamp (pinned by a golden test) and the settings types.
+serde = { version = "1", features = ["derive"] }
+# The stamp's JSON text form; the golden test and the size bound read it.
+serde_json = "1"
+# Typed errors with stable `sync_freshness.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Properties of the offset estimate and of the staleness threshold.
+proptest = "1"
+
+[lints]
+workspace = true

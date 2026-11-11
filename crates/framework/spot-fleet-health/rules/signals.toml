@@ -1,0 +1,175 @@
+# The shipped fleet health rules (WP-CTL-03.T1, ADR-067, ADR-076).
+#
+# Each entry is one failure mode as data: the signal, whom it applies to, the threshold, how
+# long the breach must last before it counts, the colour, the sentence and the action.
+# Amber means the system is handling it or the service is degraded; red means a person is
+# needed. Green is never a rule: it is the absence of findings.
+#
+# Units: error_rate and disk_usage are basis points (10000 = 100%); queue_lag,
+# replication_lag and certificate_expiry are seconds; job_failures is a count; health_probe is
+# 1 passing / 0 failing; licence_state is 0 active, 1 grace, 2 expired.
+
+[[rule]]
+id = "health_probe_down"
+signal = "health_probe"
+subject = "either"
+comparison = "below"
+threshold = 1
+for_seconds = 30
+severity = "red"
+sentence = "The health probe for {subject} has been failing for {duration}."
+action = "Check that the node is running and that its database and telemetry exporter are reachable."
+
+[[rule]]
+id = "error_rate_high"
+signal = "error_rate"
+subject = "either"
+comparison = "above"
+threshold = 500
+for_seconds = 120
+severity = "amber"
+sentence = "The error rate for {subject} is {value}, above the normal level for {duration}."
+action = "The platform is retrying automatically; if it stays high, check the database and recent deployments."
+
+[[rule]]
+id = "error_rate_critical"
+signal = "error_rate"
+subject = "either"
+comparison = "above"
+threshold = 2000
+for_seconds = 60
+severity = "red"
+sentence = "The error rate for {subject} is {value}, so requests are failing for real users."
+action = "Open the node's recent errors, check the database and roll back the last deployment if it started then."
+
+[[rule]]
+id = "queue_lag_high"
+signal = "queue_lag"
+subject = "tenant"
+comparison = "above"
+threshold = 60
+for_seconds = 120
+severity = "amber"
+sentence = "Work for {subject} has waited in the queue for {value}, so it is running behind."
+action = "The queue is catching up on its own; if the lag grows, add a worker or check the slowest job."
+
+[[rule]]
+id = "queue_lag_critical"
+signal = "queue_lag"
+subject = "tenant"
+comparison = "above"
+threshold = 300
+for_seconds = 60
+severity = "red"
+sentence = "Work for {subject} has waited in the queue for {value}; users are waiting for it."
+action = "Check whether the job workers are running and whether one job is blocking the queue."
+
+[[rule]]
+id = "job_failures_high"
+signal = "job_failures"
+subject = "tenant"
+comparison = "above"
+threshold = 5
+for_seconds = 300
+severity = "amber"
+sentence = "{value} jobs for {subject} failed in the last window; the platform is retrying them."
+action = "No action yet; if failures continue, inspect the failing job's error and its input."
+
+[[rule]]
+id = "job_failures_critical"
+signal = "job_failures"
+subject = "tenant"
+comparison = "above"
+threshold = 25
+for_seconds = 120
+severity = "red"
+sentence = "{value} jobs for {subject} failed; the retries are not clearing the backlog."
+action = "Stop the failing job, read its error, and fix or disable it before the queue grows further."
+
+[[rule]]
+id = "replication_lag_high"
+signal = "replication_lag"
+subject = "node"
+comparison = "above"
+threshold = 30
+for_seconds = 60
+severity = "amber"
+sentence = "{subject} is {value} behind its primary; reads may be stale."
+action = "Watch the lag; if it grows, check the network and the primary's write load."
+
+[[rule]]
+id = "replication_lag_critical"
+signal = "replication_lag"
+subject = "node"
+comparison = "above"
+threshold = 120
+for_seconds = 60
+severity = "red"
+sentence = "{subject} is {value} behind its primary; it cannot serve consistent reads."
+action = "Check the replica's network and disk, and take it out of rotation until it catches up."
+
+[[rule]]
+id = "disk_usage_high"
+signal = "disk_usage"
+subject = "either"
+comparison = "above"
+threshold = 8500
+for_seconds = 300
+severity = "amber"
+sentence = "Storage for {subject} is {value} full; the platform is cleaning up on its own."
+action = "No action yet; if usage keeps rising, enlarge the volume or remove large attachments."
+
+[[rule]]
+id = "disk_usage_critical"
+signal = "disk_usage"
+subject = "either"
+comparison = "above"
+threshold = 9500
+for_seconds = 60
+severity = "red"
+sentence = "Storage for {subject} is {value} full, so writes will fail soon."
+action = "Free space now, or enlarge the volume; check the backup and journal directories first."
+
+[[rule]]
+id = "certificate_expiring_soon"
+signal = "certificate_expiry"
+subject = "either"
+comparison = "below"
+threshold = 2592000
+for_seconds = 0
+severity = "amber"
+sentence = "The certificate for {subject} expires in {value}; renewal is automatic while it can connect."
+action = "Check that the node can reach the control plane; if renewal fails, replace the certificate."
+
+[[rule]]
+id = "certificate_expiring_critical"
+signal = "certificate_expiry"
+subject = "either"
+comparison = "below"
+threshold = 259200
+for_seconds = 0
+severity = "red"
+sentence = "The certificate for {subject} expires in {value}; connections will fail."
+action = "Renew the certificate now, before the node loses contact with the control plane."
+
+[[rule]]
+id = "licence_grace"
+signal = "licence_state"
+subject = "tenant"
+comparison = "above"
+threshold = 0
+for_seconds = 0
+severity = "amber"
+sentence = "{subject} is running on a licence in its grace period."
+action = "Renew the licence; the tenant keeps working until the grace period ends."
+
+[[rule]]
+id = "licence_expired"
+signal = "licence_state"
+subject = "tenant"
+comparison = "above"
+threshold = 1
+for_seconds = 0
+severity = "red"
+sentence = "{subject} has an expired licence and its grace period is over."
+action = "Renew the licence, or suspend the tenant deliberately if it must not continue."

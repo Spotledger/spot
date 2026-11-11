@@ -1,0 +1,37 @@
+# file codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "file.too_large"
+class = "Validation"
+summary = "The upload exceeds the size limit set for this site and nothing was stored."
+explanation_key = "error.file.too_large"
+params = []
+remedy = "Upload a smaller file, or ask an administrator to raise the upload limit."
+since = "0.1.0"
+
+[[entry]]
+code = "file.store_failed"
+class = "Unavailable"
+summary = "The file could not be stored at this time; the same upload may succeed on a retry."
+explanation_key = "error.file.store_failed"
+params = []
+remedy = "Retry the upload; if it keeps failing, tell an administrator with the request id."
+since = "0.1.0"
+
+[[entry]]
+code = "file.scan_failed"
+class = "Unavailable"
+summary = "The file.scan check for this site failed, so the upload was not stored."
+explanation_key = "error.file.scan_failed"
+params = []
+remedy = "Retry later, or ask an administrator to check the file.scan seam."
+since = "0.1.0"
+
+[[entry]]
+code = "file.virus_detected"
+class = "Validation"
+summary = "The file.scan check rejected the upload and nothing was stored."
+explanation_key = "error.file.virus_detected"
+params = []
+remedy = "Do not upload this file; scan it on your device."
+since = "0.1.0"

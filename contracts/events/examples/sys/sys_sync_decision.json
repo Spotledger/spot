@@ -1,0 +1,8 @@
+{
+  "action": "resend_requested",
+  "actor": "0192f1c0-0000-7000-8000-000000000007",
+  "count": 12,
+  "entity": "sales_invoice",
+  "node": "branch07.spotledger.app",
+  "outcome": "ok"
+}

@@ -1,0 +1,91 @@
+# The Project master: the container every Task and Time Entry hangs off (WP-DX-05.T1).
+#
+# `status` is a select; `owner` links the platform `User` (the platform app ships that
+# DocType; with it absent from this set the link still validates against its own
+# DocType name once both apps are installed). `budget` is exact decimal with the
+# shared hours scale, never a float (ADR-12). `labels` is a table-multiselect over
+# `label`: its child `label_pick` holds the one link field. `attachments` references
+# file records (WP-PLT-10); the platform's `file` DocType must be in the installed set.
+name = "project"
+label = "Project"
+app = "sample"
+module = "projects"
+title_field = "code"
+
+[[fields]]
+name = "code"
+label = "Project Code"
+type = "text"
+max_chars = 140
+required = true
+unique = true
+description = "Named by the series PRJ-.YYYY.-.#### (the naming engine WP-MET-03 renders it on create; until then the user types it)."
+
+[[fields]]
+name = "title"
+label = "Title"
+type = "text"
+max_chars = 140
+required = true
+
+[[fields]]
+name = "status"
+label = "Status"
+type = "select"
+options = "Planning\nActive\nOn Hold\nDone"
+default = "Planning"
+required = true
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "owner"
+label = "Project Owner"
+type = "link"
+options = "user"
+required = true
+[fields.lookup]
+params = { enabled_only = "true" }
+
+[[fields]]
+name = "start_date"
+label = "Start Date"
+type = "date"
+
+[[fields]]
+name = "end_date"
+label = "End Date"
+type = "date"
+
+[[fields]]
+name = "budget"
+label = "Budget"
+type = "decimal"
+scale = 2
+precision = 18
+description = "In the currency of the `currency` field; the currency display format binds a link field (WP-MET-01), so the amount stays a plain decimal here."
+
+[[fields]]
+name = "currency"
+label = "Currency"
+type = "select"
+options = "USD\nEUR\nGBP\nPKR"
+
+[[fields]]
+name = "description"
+label = "Description"
+type = "long_text"
+
+[[fields]]
+name = "labels"
+label = "Labels"
+type = "table_multiselect"
+options = "label_pick"
+
+[[fields]]
+name = "attachments"
+label = "Attachments"
+type = "attach"
+
+[[indexes]]
+fields = ["status", "start_date"]

@@ -1,0 +1,75 @@
+# lineage codes: traceability and lineage queries (WP-DAG-05.T1).
+# A graph query's own failures pass through with their `graphq.*` or `storage.*` codes and are
+# not listed here; the `lineage.*` codes are the chain configuration and the quantity arithmetic.
+
+[[entry]]
+code = "lineage.config"
+class = "none"
+summary = "A lineage chain configuration is invalid at {path}."
+explanation_key = "error.lineage.config"
+params = ["path"]
+remedy = "Correct the chain or bill-of-materials entry named by the path and reload the configuration."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.unknown_chain"
+class = "none"
+summary = "No document chain is configured for DocType {doctype}."
+explanation_key = "error.lineage.unknown_chain"
+params = ["doctype"]
+remedy = "Add a chain entry for the DocType to the lineage configuration, or query a DocType that has one."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.unknown_bom"
+class = "none"
+summary = "No bill of materials is configured for item DocType {doctype}."
+explanation_key = "error.lineage.unknown_bom"
+params = ["doctype"]
+remedy = "Add a bill-of-materials entry for the item DocType to the lineage configuration."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.depth_out_of_range"
+class = "none"
+summary = "A lineage query asked for depth {depth}, outside 1 to {max}."
+explanation_key = "error.lineage.depth_out_of_range"
+params = ["depth", "max"]
+remedy = "Choose a max_depth from 1 to the graph query API's maximum."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.max_nodes_out_of_range"
+class = "none"
+summary = "A lineage query asked for a node budget of {max_nodes}, outside 1 to {max}."
+explanation_key = "error.lineage.max_nodes_out_of_range"
+params = ["max", "max_nodes"]
+remedy = "Choose a max_nodes from 1 to the graph query API's ceiling."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.bad_quantity"
+class = "none"
+summary = "A quantity is not a plain decimal number: {text}."
+explanation_key = "error.lineage.bad_quantity"
+params = ["text"]
+remedy = "Store quantities as exact decimals, never as binary floating-point numbers."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.missing_quantity"
+class = "none"
+summary = "The field {field} carries no decimal quantity on a bill-of-materials node."
+explanation_key = "error.lineage.missing_quantity"
+params = ["field"]
+remedy = "Give every bill-of-materials node a decimal quantity in the field the configuration names."
+since = "0.1.0"
+
+[[entry]]
+code = "lineage.quantity_overflow"
+class = "none"
+summary = "An exact quantity multiplication or addition did not fit."
+explanation_key = "error.lineage.quantity_overflow"
+params = []
+remedy = "Reduce the quantity scale or magnitude, or split the bill of materials into smaller parts."
+since = "0.1.0"

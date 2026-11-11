@@ -1,0 +1,94 @@
+# sync_protocol codes — the sync wire model and state machines (WP-EDG-02.T1, ADR-062).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. These are the protocol's
+# own vocabulary: the transport binding (WP-EDG-02.T2) maps them onto the app-facing surface,
+# so `class = "none"`.
+
+[[entry]]
+code = "sync_protocol.invalid_argument"
+class = "none"
+summary = "An argument to a sync constructor, configuration or call is missing, out of range or self-contradictory."
+explanation_key = "error.sync_protocol.invalid_argument"
+params = []
+remedy = "Pass a value inside the stated range: a positive batch size and window, a non-empty record name, a valid node id."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.invalid_sequence"
+class = "none"
+summary = "A batch's sequence range is malformed: from_seq is above to_seq, the records are not the contiguous run the header claims, or the count does not match."
+explanation_key = "error.sync_protocol.invalid_sequence"
+params = []
+remedy = "Rebuild the batch from a contiguous, ascending run of the source's stream."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.corrupt_batch"
+class = "none"
+summary = "A batch failed its SHA-256 checksum, so the receiver refused it before reading a record."
+explanation_key = "error.sync_protocol.corrupt_batch"
+params = []
+remedy = "Re-request the batch from the receiver's checkpoint; a mismatch means the bytes were altered in transit or storage."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.gap"
+class = "none"
+summary = "A batch arrived that does not start at the receiver's next expected sequence, so a sequence is missing."
+explanation_key = "error.sync_protocol.gap"
+params = []
+remedy = "Re-send from the checkpoint the receiver names; sync never skips forward."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.version_mismatch"
+class = "none"
+summary = "The two peers' protocol version ranges do not overlap, so no version is common to them."
+explanation_key = "error.sync_protocol.version_mismatch"
+params = []
+remedy = "Upgrade one side so its protocol range overlaps the other's."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.metadata_epoch"
+class = "none"
+summary = "The two peers' metadata epochs differ, so their catalogs are not the same version."
+explanation_key = "error.sync_protocol.metadata_epoch"
+params = []
+remedy = "Complete the pending migration so both nodes reach the same metadata epoch before syncing."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.batch_too_large"
+class = "none"
+summary = "A batch is larger than the receiver's flow-control limit."
+explanation_key = "error.sync_protocol.batch_too_large"
+params = []
+remedy = "Send smaller batches; the sender halves its batch size and retries from the last acknowledged sequence."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.deadline_exceeded"
+class = "none"
+summary = "A session's deadline passed before its step completed."
+explanation_key = "error.sync_protocol.deadline_exceeded"
+params = []
+remedy = "Retry within a fresh deadline, or allow more time for the session."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.store_failed"
+class = "none"
+summary = "Writing a per-source checkpoint to its store failed."
+explanation_key = "error.sync_protocol.store_failed"
+params = []
+remedy = "Fix the checkpoint store; the redelivery re-applies idempotently and checkpoints again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_protocol.apply_failed"
+class = "none"
+summary = "Applying a record to its durable apply sink failed."
+explanation_key = "error.sync_protocol.apply_failed"
+params = []
+remedy = "Fix the apply path; nothing is checkpointed past the failure, so the batch is re-delivered."
+since = "0.1.0"

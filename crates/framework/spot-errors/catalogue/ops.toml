@@ -1,0 +1,208 @@
+# ops codes: raised by this crate. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "ops.default_invalid"
+class = "none"
+summary = "A default does not satisfy its parameter's own type."
+explanation_key = "error.ops.default_invalid"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.duplicate_id"
+class = "none"
+summary = "Two modules register the same operation id."
+explanation_key = "error.ops.duplicate_id"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.duplicate_param"
+class = "none"
+summary = "One operation declares a parameter name twice."
+explanation_key = "error.ops.duplicate_param"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.enum_empty"
+class = "none"
+summary = "An `Enum` parameter has no choices."
+explanation_key = "error.ops.enum_empty"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.flag_collision"
+class = "none"
+summary = "A parameter's flag collides with another parameter's `--no-form`."
+explanation_key = "error.ops.flag_collision"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.int_range_empty"
+class = "none"
+summary = "An `Int` parameter has `min > max`."
+explanation_key = "error.ops.int_range_empty"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.missing_param"
+class = "none"
+summary = "A required parameter was not supplied."
+explanation_key = "error.ops.missing_param"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.not_in_enum"
+class = "none"
+summary = "An enum value is not one of the parameter's choices."
+explanation_key = "error.ops.not_in_enum"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.out_of_range"
+class = "none"
+summary = "An integer or duration value sits outside the parameter's bounds."
+explanation_key = "error.ops.out_of_range"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.param_name"
+class = "none"
+summary = "A parameter name is not a lower-case identifier."
+explanation_key = "error.ops.param_name"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.parse_bad_flag"
+class = "none"
+summary = "A flag or its value is malformed."
+explanation_key = "error.ops.parse_bad_flag"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.parse_bad_path"
+class = "none"
+summary = "The operation path is missing or malformed."
+explanation_key = "error.ops.parse_bad_path"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.parse_bad_value"
+class = "none"
+summary = "A value does not fit its parameter's type."
+explanation_key = "error.ops.parse_bad_value"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.parse_duplicate"
+class = "none"
+summary = "A non-list parameter was supplied twice."
+explanation_key = "error.ops.parse_duplicate"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.parse_not_ops"
+class = "none"
+summary = "The argv does not start with `spot ops`."
+explanation_key = "error.ops.parse_not_ops"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.pattern_invalid"
+class = "none"
+summary = "A `Text` pattern does not compile as a regex."
+explanation_key = "error.ops.pattern_invalid"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.pattern_mismatch"
+class = "none"
+summary = "A text value does not match the whole-value pattern."
+explanation_key = "error.ops.pattern_mismatch"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.secret_with_default"
+class = "none"
+summary = "A secret parameter declares a default."
+explanation_key = "error.ops.secret_with_default"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.text_shape"
+class = "none"
+summary = "A `Text` parameter's bounds or pattern are unusable."
+explanation_key = "error.ops.text_shape"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.too_long"
+class = "none"
+summary = "A text value exceeds the parameter's maximum length."
+explanation_key = "error.ops.too_long"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.unknown_op"
+class = "none"
+summary = "The operation id is not in the catalogue."
+explanation_key = "error.ops.unknown_op"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.unknown_param"
+class = "none"
+summary = "The caller supplied a parameter the operation does not declare."
+explanation_key = "error.ops.unknown_param"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "ops.wrong_type"
+class = "none"
+summary = "The value's shape does not fit the parameter's type."
+explanation_key = "error.ops.wrong_type"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"

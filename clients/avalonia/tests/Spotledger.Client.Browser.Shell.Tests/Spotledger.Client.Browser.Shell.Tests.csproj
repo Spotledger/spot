@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-09.T2: headless tests of the shell library (fake storage, fake network) and, under node when it is
+       installed, of the service worker's pure policy file against the same golden vectors. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Spotledger.Client.Browser.Shell.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The node test imports the policy by the output-relative path ../sw/shell-policy.js and the vectors from Golden/. -->
+    <None Include="Js/*.mjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Spotledger.Client.Browser/wwwroot/sw/spot-sw.js" Link="sw/spot-sw.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Golden/vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Spotledger.Client.Browser/wwwroot/sw/shell-policy.js" Link="sw/shell-policy.js" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Client.Browser.Shell/Spotledger.Client.Browser.Shell.csproj" />
+  </ItemGroup>
+</Project>

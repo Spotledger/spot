@@ -1,0 +1,78 @@
+{
+  "status": "action",
+  "headline_key": "sync.health.headline.action",
+  "now": 360000000,
+  "needs_you": [
+    {
+      "conditions": [
+        "NODE_TOO_OLD"
+      ],
+      "severity": "red",
+      "remedy_key": "sync.remedy.offer_upgrade",
+      "params": {
+        "minimum_version": "1.3.0",
+        "node": "branch-12",
+        "node_version": "1.1.0"
+      },
+      "since": 180000000,
+      "count": 1,
+      "subjects_sample": [
+        "node:branch-12"
+      ],
+      "more": 0,
+      "link": "admin.sync.node"
+    },
+    {
+      "conditions": [
+        "MISSING_DEP"
+      ],
+      "severity": "amber",
+      "remedy_key": "sync.operator.resend",
+      "params": {
+        "node": "branch-3",
+        "record": "inv-1"
+      },
+      "since": 36000000,
+      "count": 2,
+      "subjects_sample": [
+        "record:inv-1",
+        "record:inv-2"
+      ],
+      "more": 0,
+      "link": "admin.sync.record"
+    }
+  ],
+  "nodes": [
+    {
+      "node": "branch-12",
+      "last_contact": 216000000,
+      "silent_for": 144000000,
+      "lag_positions": 200,
+      "lag_estimate": 600000,
+      "version": "1.1.0",
+      "status": "too_old",
+      "colour": "red",
+      "as_of": 216000000
+    },
+    {
+      "node": "branch-3",
+      "last_contact": 356400000,
+      "silent_for": 3600000,
+      "lag_positions": 0,
+      "lag_estimate": null,
+      "version": "1.4.2",
+      "status": "connected",
+      "colour": "amber",
+      "as_of": 356400000
+    }
+  ],
+  "counts": {
+    "info": 20,
+    "amber": 3,
+    "red": 1,
+    "needs_you_items": 3,
+    "needs_you_rows": 2,
+    "nodes": 2
+  },
+  "truncated": false
+}

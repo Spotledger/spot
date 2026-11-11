@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Desktop/Spotledger.Client.Desktop.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Grid/Spotledger.Client.Grid.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="perf-budgets.toml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Spotledger.Client.Grid.Tests/perf-budgets.toml" Link="grid-perf-budgets.toml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

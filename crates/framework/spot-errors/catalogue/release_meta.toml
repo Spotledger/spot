@@ -1,0 +1,33 @@
+# release_meta codes: the release metadata contract (spot-release-meta, WP-MIG-02). One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+#
+# The crate raises its own typed errors (`spot_release_meta::Error`) for input that cannot be
+# parsed at all; a bad *release* (an undeclared patch, a missing down-step) is a returned
+# `Problem`, not an error, so that the checker reports every problem at once.
+
+[[entry]]
+code = "release_meta.bad_patch"
+class = "none"
+summary = "The patch declaration `{path}` is not valid: {message}."
+explanation_key = "error.release_meta.bad_patch"
+params = ["message", "path"]
+remedy = "Correct the TOML so it names the patch id, a non-empty intent, a risk class and its reversibility."
+since = "0.1.0"
+
+[[entry]]
+code = "release_meta.bad_changelog"
+class = "none"
+summary = "The behaviour changelog is not valid: {message}."
+explanation_key = "error.release_meta.bad_changelog"
+params = ["message"]
+remedy = "Correct the TOML so every `[[entry]]` names a key, a summary, a since_version, a kind and a sensitivity."
+since = "0.1.0"
+
+[[entry]]
+code = "release_meta.bad_key"
+class = "none"
+summary = "The behaviour key `{key}` is not valid: {reason}."
+explanation_key = "error.release_meta.bad_key"
+params = ["key", "reason"]
+remedy = "Write the key as `doctype:<name>` or `seam:<name>`."
+since = "0.1.0"

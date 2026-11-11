@@ -1,0 +1,42 @@
+# large: the L9 scale ceiling, about 2M invoices plus 1M payments (500 per
+# mille paid) over one year. Expect a few gigabytes of JSONL; generate only
+# where disk and time allow. Same determinism guarantees as every profile.
+
+[period]
+start = "2025-01-01"
+end = "2026-12-31"
+
+[counts]
+companies = 8
+warehouses_per_company = 3
+items = 8000
+customers = 5000
+suppliers = 2500
+sales_invoices = 1400000
+purchase_invoices = 600000
+payments = 1000000
+journal_entries = 80000
+stock_transfers = 120000
+stock_adjustments = 100000
+
+[distributions]
+item_popularity_skew = 4
+customer_activity_skew = 3
+paid_share_per_mille = 500
+sales_return_per_mille = 60
+purchase_return_per_mille = 70
+opening_stock_coverage_per_mille = 400
+opening_stock_min_milli = 100
+opening_stock_max_milli = 200000
+opening_receivable_per_mille = 70
+opening_payable_per_mille = 90
+monthly_seasonality = [6, 5, 8, 8, 9, 11, 13, 12, 9, 10, 12, 15]
+
+[distributions.lines_per_invoice]
+min = 1
+peak = 2
+max = 5
+
+[distributions.payment_delay]
+min_days = 7
+max_days = 90

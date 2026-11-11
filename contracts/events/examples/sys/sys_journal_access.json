@@ -1,0 +1,10 @@
+{
+  "bytes": 2097152,
+  "first_seq": 1000,
+  "generation": 3,
+  "grant": "0192f1c0-0000-7000-8000-000000000002",
+  "last_seq": 1999,
+  "object": "segment",
+  "outcome": "served",
+  "principal": "0192f1c0-0000-7000-8000-000000000001"
+}

@@ -1,0 +1,11 @@
+# sync_conditions codes: the journal and sync conditions catalogue's own refusals (WP-SYN-09.T3,
+# ADR-067 s2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_conditions.invalid_entry"
+class = "none"
+summary = "The catalogue entry {id} breaks the rule {rule}."
+explanation_key = "error.sync_conditions.invalid_entry"
+params = ["id", "rule"]
+remedy = "Fix the entry in the catalogue table so it meets the rule: a reason for every severity above info, strictly increasing escalation, a response for every red condition, well-formed message keys."
+since = "0.1.0"

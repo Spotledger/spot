@@ -1,0 +1,23 @@
+[package]
+name = "spot-journal-store"
+description = "The journal's object-store seam (WP-JRN-03.T3, ADR-061 s5): the per-tenant key layout, a JournalStore trait whose methods are boxed futures (no runtime dependency), an in-memory and a local-folder backend, and the backend-independent contract suite every provider must pass"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# SHA-256 for the object etag, which is the content hash a provider reports.
+sha2 = "0.10"
+# Typed errors with stable `journal_store.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Drives the boxed store futures in tests without an async runtime.
+futures = "0.3"
+# Gives each folder-store test its own directory.
+tempfile = "3"
+
+[lints]
+workspace = true

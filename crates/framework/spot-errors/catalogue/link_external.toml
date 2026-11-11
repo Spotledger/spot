@@ -1,0 +1,174 @@
+# link_external codes — the external carrier of the tenant link (WP-CTL-11.T1, ADR-058 rule 12).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. Refusals are answered to the
+# peer as `{ "error": { "code" } }`; none rides an `AppError`.
+
+[[entry]]
+code = "link_external.invalid_peer"
+class = "none"
+summary = "The external peer definition is not valid."
+explanation_key = "error.link_external.invalid_peer"
+params = []
+remedy = "Fix the named field of the peer (name, inbound path, timestamp tolerance, webhook URL or connector operation) and save it again."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.record_topic"
+class = "none"
+summary = "A record topic is granted on an external link; only message topics may cross it."
+explanation_key = "error.link_external.record_topic"
+params = []
+remedy = "Remove the record topic from the link's grants, or carry the data as a message topic."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.wrong_carrier"
+class = "none"
+summary = "The link is not an external-carrier link."
+explanation_key = "error.link_external.wrong_carrier"
+params = []
+remedy = "Use this carrier only for links whose peer is an external party and whose carrier is external."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.peer_mismatch"
+class = "none"
+summary = "The peer definition, the link and the signing identity do not name the same external peer."
+explanation_key = "error.link_external.peer_mismatch"
+params = []
+remedy = "Check that the peer id, the link's other party and the bridge identity are the same peer."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.missing_signature"
+class = "none"
+summary = "The inbound request carries no readable signature."
+explanation_key = "error.link_external.missing_signature"
+params = []
+remedy = "Sign the request with the scheme configured for this peer and send the signature header."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.bad_signature"
+class = "none"
+summary = "The inbound signature does not verify."
+explanation_key = "error.link_external.bad_signature"
+params = []
+remedy = "Check that the peer signs the exact body bytes with the shared secret this link refers to."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.stale_timestamp"
+class = "none"
+summary = "The inbound request timestamp is outside the accepted window."
+explanation_key = "error.link_external.stale_timestamp"
+params = []
+remedy = "Send a fresh timestamp and check that the peer's clock is correct."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.tolerance_too_wide"
+class = "none"
+summary = "The peer's inbound timestamp tolerance is wider than the maximum of 900 seconds."
+explanation_key = "error.link_external.tolerance_too_wide"
+params = []
+remedy = "Set the peer's inbound tolerance to at most 900 seconds and save it again."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.unknown_path"
+class = "none"
+summary = "No inbound endpoint is served at this path."
+explanation_key = "error.link_external.unknown_path"
+params = []
+remedy = "Post to the inbound path configured for this peer."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.body_too_large"
+class = "none"
+summary = "The inbound request body is larger than this peer's cap, so it was refused before its signature was checked."
+explanation_key = "error.link_external.body_too_large"
+params = []
+remedy = "Send a body no larger than the peer's configured maximum, or raise that maximum deliberately."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.invalid_body"
+class = "none"
+summary = "The inbound body is not a message this link can carry."
+explanation_key = "error.link_external.invalid_body"
+params = []
+remedy = "Send a JSON message with an id, conversation, topic, schema version and a payload of text, whole numbers and booleans."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.mapping_failed"
+class = "none"
+summary = "The peer format mapping failed on this message."
+explanation_key = "error.link_external.mapping_failed"
+params = []
+remedy = "Check the mapping rules against a sample of the peer's messages; the message is held, not lost."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.credential_unavailable"
+class = "none"
+summary = "The credential the peer refers to could not be resolved."
+explanation_key = "error.link_external.credential_unavailable"
+params = []
+remedy = "Check that the credential reference exists in the vault and that this tenant may use it."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.link_inactive"
+class = "none"
+summary = "The link is revoked, expired or not active, so nothing is accepted on it."
+explanation_key = "error.link_external.link_inactive"
+params = []
+remedy = "Propose a new link if the relationship continues; revocation cannot be undone."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.peer_unreachable"
+class = "none"
+summary = "The peer could not be reached or answered with a server error; the message waits and is sent again."
+explanation_key = "error.link_external.peer_unreachable"
+params = []
+remedy = "Check the peer's endpoint; the message stays deliverable until its retention ends."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.peer_timeout"
+class = "none"
+summary = "The peer did not answer within the deadline; the message waits and is sent again."
+explanation_key = "error.link_external.peer_timeout"
+params = []
+remedy = "Check the peer's endpoint; the message stays deliverable until its retention ends."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.egress_denied"
+class = "none"
+summary = "The egress policy does not allow this destination; the message waits."
+explanation_key = "error.link_external.egress_denied"
+params = []
+remedy = "Allow the peer's host in the tenant's egress policy, or correct the peer's URL."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.misconfigured"
+class = "none"
+summary = "The peer's connector or endpoint is not usable as configured; the message waits."
+explanation_key = "error.link_external.misconfigured"
+params = []
+remedy = "Check the connector, the operation and the endpoint configured for this peer."
+since = "0.1.0"
+
+[[entry]]
+code = "link_external.unexpected_status"
+class = "none"
+summary = "The peer answered with a status this carrier does not treat as an answer; the message waits."
+explanation_key = "error.link_external.unexpected_status"
+params = []
+remedy = "Check what the peer returns; only 2xx, 4xx and retryable statuses are understood."
+since = "0.1.0"

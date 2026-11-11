@@ -1,0 +1,30 @@
+# Seed setting for runtime.session.idle_timeout. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "runtime.session.idle_timeout"
+title = "Session Idle Timeout"
+summary = "Maximum idle time before a session expires."
+description = "Maximum idle time in seconds before a user session is automatically terminated. Set to 0 to disable."
+value = "Duration"
+scopes = [
+    "fleet",
+    "group",
+    "server",
+    "tenant",
+    "company",
+]
+risk = "low"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "session",
+    "security",
+]
+help_url = "https://docs.example.com/settings/runtime.session.idle_timeout"
+
+[default]
+Duration = 1800
+
+[restart]
+type = "none"

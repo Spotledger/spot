@@ -1,0 +1,129 @@
+name = "field_demo"
+label = "Field Demo"
+title_field = "code"
+
+[[fields]]
+name = "code"
+type = "text"
+max_chars = 20
+unique = true
+
+[[fields]]
+name = "contact_email"
+type = "text"
+format = "email"
+default = "info@example.com"
+
+[[fields]]
+name = "contact_phone"
+type = "text"
+format = "phone"
+default = "+1 (555) 010-1234"
+
+[[fields]]
+name = "website"
+type = "text"
+format = "url"
+default = "https://example.com"
+
+[[fields]]
+name = "accent"
+type = "text"
+format = "color"
+default = "#1A2B3C"
+
+[[fields]]
+name = "ean"
+type = "text"
+format = "barcode"
+symbology = "ean13"
+index = true
+
+[[fields]]
+name = "notes"
+type = "long_text"
+
+[[fields]]
+name = "body_markdown"
+type = "long_text"
+format = "markdown"
+
+[[fields]]
+name = "body_html"
+type = "long_text"
+format = "html"
+
+[[fields]]
+name = "script"
+type = "long_text"
+format = "code"
+syntax = "sql"
+
+[[fields]]
+name = "lead_time"
+type = "int"
+format = "duration"
+default = "3600"
+
+[[fields]]
+name = "score"
+type = "int"
+format = "rating"
+max = 10
+default = "7"
+
+[[fields]]
+name = "stars"
+type = "int"
+format = "rating"
+
+[[fields]]
+name = "currency"
+type = "link"
+options = "currency"
+
+[[fields]]
+name = "price"
+type = "decimal"
+scale = 2
+format = "currency"
+currency_field = "currency"
+
+[[fields]]
+name = "discount"
+type = "decimal"
+scale = 2
+format = "percent"
+default = "12.50"
+
+[[fields]]
+name = "place"
+type = "json"
+format = "geolocation"
+
+[[fields]]
+name = "extra"
+type = "json"
+
+[[fields]]
+name = "document"
+type = "attach"
+
+[[fields]]
+name = "photo"
+type = "attach"
+format = "image"
+
+[[fields]]
+name = "sign_off"
+type = "attach"
+format = "signature"
+
+[[fields]]
+name = "api_key"
+type = "secret"
+
+[[fields]]
+name = "tags"
+type = "table_multiselect"
+options = "demo_tag"

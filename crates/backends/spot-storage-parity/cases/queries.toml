@@ -1,0 +1,371 @@
+# Query validation, paging, joins, grouping, and limits.
+
+[[case]]
+id = "qry-01-unknown-entity"
+rule = "SEM-QRY-01"
+title = "an unknown entity is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { from = "nope", select = ["code"] }
+expect = { error = "unknown_entity" }
+
+[[case]]
+id = "qry-01-unknown-field"
+rule = "SEM-QRY-01"
+title = "an unknown field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["nope"] }
+expect = { error = "unknown_field" }
+
+[[case]]
+id = "qry-01-unknown-field-in-filter"
+rule = "SEM-QRY-01"
+title = "an unknown field in a filter is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = "(= nope 1)" }
+expect = { error = "unknown_field" }
+
+[[case]]
+id = "qry-01-unknown-alias"
+rule = "SEM-QRY-01"
+title = "an unknown alias is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["z.code"] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-ungrouped-field"
+rule = "SEM-QRY-01"
+title = "a plain field beside an aggregate is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code", "(count)"] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-ungrouped-field-in-order"
+rule = "SEM-QRY-01"
+title = "ordering an aggregate query by an ungrouped field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["(count)"], order = ["code"] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-type-mismatch-text-int"
+rule = "SEM-QRY-01"
+title = "a text literal against an integer field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = '(= qty "t:5")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-type-mismatch-int-text"
+rule = "SEM-QRY-01"
+title = "an integer literal against a text field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = "(= code 5)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-type-mismatch-bool"
+rule = "SEM-QRY-01"
+title = "a boolean literal against a text field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = "(= code true)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-text-match-on-integer"
+rule = "SEM-QRY-01"
+title = "a text match on an integer field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = '(prefix qty "1")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-aggregate-in-filter"
+rule = "SEM-QRY-01"
+title = "an aggregate in a filter is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], filter = "(> (count) 1)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-nested-aggregate"
+rule = "SEM-QRY-01"
+title = "an aggregate inside an aggregate is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["(sum (count))"] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-aggregate-needs-argument"
+rule = "SEM-QRY-01"
+title = "Sum without an argument is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["(sum)"] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-system-column-not-on-entity"
+rule = "SEM-QRY-01"
+title = "the idx column does not exist on a document entity"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["idx"] }
+expect = { error = "unknown_field" }
+
+[[case]]
+id = "qry-01-having-ungrouped"
+rule = "SEM-QRY-01"
+title = "having on an ungrouped field is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["(count)"], having = "(> qty 1)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-01-duplicate-join-alias"
+rule = "SEM-QRY-01"
+title = "a join alias equal to the from alias is refused"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2']
+op = "query"
+query = { select = ["code"], joins = [{ kind = "inner", entity = "item", alias = "i", on = "(= ref i.id)" }] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-02-limit-offset"
+rule = "SEM-QRY-02"
+title = "limit 3 offset 2 gives the third to fifth row"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code"], limit = 3, offset = 2 }
+expect = { rows = [["t:c03"], ["t:c04"], ["t:c05"]] }
+
+[[case]]
+id = "qry-02-last-page"
+rule = "SEM-QRY-02"
+title = "a page that runs past the end is short"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code"], limit = 5, offset = 8 }
+expect = { rows = [["t:c09"], ["t:c10"]] }
+
+[[case]]
+id = "qry-02-offset-past-the-end"
+rule = "SEM-QRY-02"
+title = "an offset past the end gives no rows"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code"], limit = 5, offset = 20 }
+expect = { rows = [] }
+
+[[case]]
+id = "qry-02-limit-zero"
+rule = "SEM-QRY-02"
+title = "limit 0 gives no rows"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code"], limit = 0 }
+expect = { rows = [] }
+
+[[case]]
+id = "qry-02-offset-without-limit"
+rule = "SEM-QRY-02"
+title = "an offset without a limit skips and returns the rest"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code"], offset = 7 }
+expect = { rows = [["t:c08"], ["t:c09"], ["t:c10"]] }
+
+[[case]]
+id = "qry-02-descending-page"
+rule = "SEM-QRY-02"
+title = "paging applies after a descending sort"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["code desc"], limit = 2, offset = 1 }
+expect = { rows = [["t:c09"], ["t:c08"]] }
+
+[[case]]
+id = "qry-02-pages-with-ties"
+rule = "SEM-QRY-02"
+title = "pages over tied sort keys are stable and use id order"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], order = ["qty"], limit = 4, offset = 3 }
+expect = { rows = [["t:c01"], ["t:c04"], ["t:c07"], ["t:c10"]] }
+
+[[case]]
+id = "qry-02-filter-then-page"
+rule = "SEM-QRY-02"
+title = "the filter applies before the page"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["code"], filter = "(= qty 0)", order = ["code"], limit = 2, offset = 1 }
+expect = { rows = [["t:c06"], ["t:c09"]] }
+
+[[case]]
+id = "qry-02-aggregate-paging"
+rule = "SEM-QRY-02"
+title = "grouped results page after ordering"
+setup = ['a01 code="t:c01" qty=i:1', 'a02 code="t:c02" qty=i:2', 'a03 code="t:c03" qty=i:0', 'a04 code="t:c04" qty=i:1', 'a05 code="t:c05" qty=i:2', 'a06 code="t:c06" qty=i:0', 'a07 code="t:c07" qty=i:1', 'a08 code="t:c08" qty=i:2', 'a09 code="t:c09" qty=i:0', 'a10 code="t:c10" qty=i:1']
+op = "query"
+query = { select = ["qty", "(count)"], group = ["qty"], order = ["qty"], limit = 2, offset = 1 }
+expect = { rows = [["i:1", "i:4"], ["i:2", "i:3"]] }
+
+[[case]]
+id = "qry-03-query-and-read-agree"
+rule = "SEM-QRY-03"
+title = "a transaction's query and a read return the same rows for a join and an aggregate"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:1 ref="id:a"']
+op = "query"
+query = { select = ["j.code", "(count)", "(sum i.qty)"], joins = [{ kind = "left", entity = "item", alias = "j", on = "(= i.ref j.id)" }], group = ["j.code"], order = ["j.code nulls-first"] }
+expect = { rows = [["null", "i:1", "i:1"], ["t:a", "i:1", "i:1"]] }
+
+[[case]]
+id = "qry-03-same-rows-on-a-plain-select"
+rule = "SEM-QRY-03"
+title = "a plain select returns the same rows both ways"
+setup = ['a code="t:a" note="t:x"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "note"] }
+expect = { rows = [["t:a", "t:x"], ["t:b", "null"]] }
+
+[[case]]
+id = "qry-04-inner-join"
+rule = "SEM-QRY-04"
+title = "an inner join drops the row without a match"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"', 'c code="t:c"']
+op = "query"
+query = { select = ["code", "j.code"], joins = [{ kind = "inner", entity = "item", alias = "j", on = "(= ref j.id)" }] }
+expect = { rows = [["t:b", "t:a"]] }
+
+[[case]]
+id = "qry-04-join-child-rows"
+rule = "SEM-QRY-04"
+title = "an inner join to the child table lists each line with its document"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "j.label"], joins = [{ kind = "inner", entity = "item_line", alias = "j", on = "(= j.parent id)" }], order = ["j.idx"] }
+expect = { rows = [["t:a", "t:x"], ["t:a", "t:y"]] }
+
+[[case]]
+id = "qry-04-left-join-child-rows"
+rule = "SEM-QRY-04"
+title = "a left join to the child table keeps the document without lines"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "j.label"], joins = [{ kind = "left", entity = "item_line", alias = "j", on = "(= j.parent id)" }], order = ["code"] }
+expect = { rows = [["t:a", "t:x"], ["t:b", "null"]] }
+
+[[case]]
+id = "qry-04-join-count"
+rule = "SEM-QRY-04"
+title = "counting joined child rows per document"
+setup = ['a code="t:a"', 'a.lines label="t:x"', 'a.lines label="t:y"', 'b code="t:b"', 'b.lines label="t:z"']
+op = "query"
+query = { select = ["code", "(count j.label)"], joins = [{ kind = "left", entity = "item_line", alias = "j", on = "(= j.parent id)" }], group = ["code"], order = ["code"] }
+expect = { rows = [["t:a", "i:2"], ["t:b", "i:1"]] }
+
+[[case]]
+id = "qry-06-group-by-comparison"
+rule = "SEM-QRY-06"
+title = "group by a comparison expression and select the same expression"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["(= money \"d:1.5\")", "(count)"], group = ["(= money \"d:1.5\")"] }
+expect = { rows = [["b:true", "i:2"], ["b:false", "i:1"]], unordered = true }
+
+[[case]]
+id = "qry-06-group-by-arithmetic"
+rule = "SEM-QRY-06"
+title = "group by an arithmetic expression"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["(+ qty 1)", "(count)"], group = ["(+ qty 1)"], order = ["(+ qty 1)"] }
+expect = { rows = [["i:2", "i:2"], ["i:3", "i:1"]] }
+
+[[case]]
+id = "qry-06-group-by-coalesce"
+rule = "SEM-QRY-06"
+title = "group by a Coalesce with a literal"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["(coalesce note \"t:none\")", "(count)"], group = ["(coalesce note \"t:none\")"] }
+expect = { rows = [["t:x", "i:2"], ["t:none", "i:1"]], unordered = true }
+
+[[case]]
+id = "qry-06-group-by-field-having"
+rule = "SEM-QRY-06"
+title = "having filters groups by an aggregate"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["qty", "(count)"], group = ["qty"], having = "(> (count) 1)" }
+expect = { rows = [["i:1", "i:2"]] }
+
+[[case]]
+id = "qry-06-order-by-aggregate"
+rule = "SEM-QRY-06"
+title = "groups ordered by an aggregate, ties by the group key"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["qty", "(sum money)"], group = ["qty"], order = ["(count) desc", "qty"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "qry-06-group-by-two-keys"
+rule = "SEM-QRY-06"
+title = "group by two keys"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["qty", "note", "(count)"], group = ["qty", "note"] }
+expect = { rows = [["i:1", "t:x", "i:1"], ["i:1", "null", "i:1"], ["i:2", "t:x", "i:1"]], unordered = true }
+
+[[case]]
+id = "qry-06-select-key-expression-in-order"
+rule = "SEM-QRY-06"
+title = "order a grouped query by the grouping expression"
+setup = ['a code="t:a" qty=i:1 money="d:1.50" note="t:x"', 'b code="t:b" qty=i:1 money="d:1.5"', 'c code="t:c" qty=i:2 money="d:3.00" note="t:x"']
+op = "query"
+query = { select = ["(* qty 10)", "(count)"], group = ["(* qty 10)"], order = ["(* qty 10) desc"] }
+expect = { rows = [["i:20", "i:1"], ["i:10", "i:2"]] }
+
+[[case]]
+id = "qry-05-arithmetic-on-text"
+rule = "SEM-QRY-05"
+title = "arithmetic on a text field (open: refused or left to the database)"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["(+ code 1)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "qry-05-bool-in-arithmetic"
+rule = "SEM-QRY-05"
+title = "arithmetic on a boolean field (open)"
+setup = ['a code="t:a" flag=b:true']
+op = "query"
+query = { select = ["(+ flag 1)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "qry-05-compare-int-field-with-text-field"
+rule = "SEM-QRY-05"
+title = "an integer field compared with a text field (open)"
+setup = ['a code="t:a" qty=i:1']
+op = "query"
+query = { select = ["code"], filter = "(= qty code)" }
+expect = { same_as_reference = true }
+

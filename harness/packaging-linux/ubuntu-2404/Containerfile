@@ -1,0 +1,31 @@
+# Ubuntu 24.04 LTS, booted, for the packaging scenarios (WP-PRD-09.T2).
+#
+# The Debian-family host: dpkg/apt behaviour is proved on a real Ubuntu, not on a
+# translation of it. It is a *test* image: systemd is PID 1 so `--systemd=always` gives a
+# real service manager, and the dpkg tooling the scenarios drive is present. The product
+# runtime image lives in packaging/linux/container/Containerfile.
+#
+#   podman build -t localhost/spot-pkgverify-ubuntu-2404:24.04 -f Containerfile .
+#
+# tools/packaging/verify/run.py builds this image itself; the command above is only for
+# poking at it by hand.
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# The apt lists are deliberately kept: `apt-get install ./spot_x.y.z_amd64.deb` resolves
+# the package's dependencies (libc6, systemd) against the image's index, so the image must
+# have one. curl is the health probe, util-linux and procps give stat, install and kill.
+# `systemd-sysv` ships `/sbin/init`; without it the container has systemd's binaries but no
+# init for `--systemd=always` to exec.
+RUN apt-get update \
+    && apt-get -y --no-install-recommends install \
+        systemd \
+        systemd-sysv \
+        util-linux \
+        procps \
+        curl \
+        ca-certificates \
+    && apt-get clean
+
+CMD ["/sbin/init"]

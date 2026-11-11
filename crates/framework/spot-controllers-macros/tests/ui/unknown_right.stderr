@@ -1,0 +1,5 @@
+error: unknown right `delete_everything`: expected one of read, write, submit, cancel, create (name an app-registered permission with `permission = "..."` instead)
+  --> tests/ui/unknown_right.rs:20:25
+   |
+20 |     #[whitelist(right = "delete_everything")]
+   |                         ^^^^^^^^^^^^^^^^^^^

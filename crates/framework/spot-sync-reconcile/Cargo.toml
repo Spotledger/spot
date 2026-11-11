@@ -1,0 +1,43 @@
+[package]
+name = "spot-sync-reconcile"
+description = "Drift reconciliation and the sync lag measure (WP-EDG-07.T1, ADR-062, ADR-053): scope digests of counts, declared totals, GL balances and stock quantities plus a Merkle-style range digest over (name, version) pairs, drift findings narrowed by bisection, repair suggestions that never repair an owner from a mirror, and per-node and per-scope lag metrics through spot-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `FeedPosition` (the safe bookmark a read is consistent at), `Name` and `Version`: the keys a
+# digest is built from, so the reconciler and the stream agree by construction (ADR-053).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `AppError`/`ErrorClass` for the catalogue codes and `StepName` for the cycle's scheduled step.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `Schedule`, `ScheduleBuilder` and `TimeZone`: the daily reconciliation cycle runs as an
+# ordinary manifest schedule, so it inherits DST-correct firing and missed-run policies.
+spot-scheduler = { path = "../spot-scheduler" }
+# `Cron` and `Queue`: the raw parts a `spot-scheduler` `Schedule` is built from.
+spot-manifest = { path = "../spot-manifest" }
+# The Prometheus recorder these metric names are served by (`render_prometheus`).
+spot-telemetry = { path = "../spot-telemetry" }
+# The metric facade `spot-telemetry` installs; the names are constants in `crate::metrics`.
+metrics = "0.24"
+# SHA-256 for the Merkle-style range digest and the leaf hashes.
+sha2 = "0.10"
+# The instant a lag age is measured against; time is always an argument, never read.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# `jiff::Timestamp`, the instant type `spot-scheduler::Schedule` fires on.
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+# Typed errors with stable `sync_reconcile.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory storage backend the reference `DigestSource` reads a node's storage from.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# A runtime for the async `DigestSource` reads and the concurrent-writes test.
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,42 @@
+[package]
+name = "spot-server-scripts"
+description = "Document-event Server Scripts (WP-EXT-06.T1): the Server Script record, TypeScript transpiled on save, scripts attached to lifecycle steps as controller steps on the TypeScript engine, the closed host surface, per-script limits and a script log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The extension contract: `Controller`, `HookContext`, `Document`, `AppError` and the phase rules.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The typed query IR, the document store and the storage backend a script's host calls use.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The embedded engine a script runs on (ADR-054).
+spot-ts = { path = "../spot-ts" }
+# Save-time type stripping and the tier rules (ADR-054 step 2).
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# Exact money and quantities: `format_money` and `round` never touch a float (ADR-12).
+spot-money = { path = "../spot-money" }
+# The JSON the bridge carries; the contract does not re-export serde_json.
+serde_json = "1"
+# The dates a document view carries.
+time = { version = "0.3.55", default-features = false, features = ["std", "parsing", "formatting"] }
+# The engine runs a script on a thread of its own; the caller services its host calls on its
+# task, so the crate needs the tokio runtime primitives.
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "macros"] }
+
+[dev-dependencies]
+# The document engine and the in-memory backend, for the end-to-end lifecycle tests.
+spot-document = { path = "../spot-document" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-controllers = { path = "../spot-controllers" }
+# Effective metadata and a clock, to build the engine in tests.
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+spot-seams = { path = "../spot-seams" }
+spot-permissions = { path = "../spot-permissions" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

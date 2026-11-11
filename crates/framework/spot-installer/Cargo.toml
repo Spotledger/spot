@@ -1,0 +1,52 @@
+[package]
+name = "spot-installer"
+description = "Spotledger installer (WP-STR-04.T1/T2, ADR-21): the pure per-site install, upgrade and uninstall plan over a catalogue of verified bundles, and the executor that runs it step by step over traits, with a recorded undo for every step, automatic rollback on failure, crash-resume, and per-site isolation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The in-memory fakes and the backend-independent `AppRegistryStore` contract suite
+# (`testing::contract::run_all`), public so a database implementation can reuse it.
+testing = []
+
+[dependencies]
+# The manifest model the plan reads: name, version, requires_host, depends, capabilities,
+# patches and fixtures (already parsed and validated by spot-manifest).
+spot-manifest = { path = "../spot-manifest" }
+# The canonical digest of a candidate bundle, from Bundle::digest.
+spot-bundle = { path = "../spot-bundle" }
+# `SiteId` keys every executor trait call to one site; `Clock` is the only way the executor
+# reads the time, so tests drive it.
+spot-core = { path = "../spot-core" }
+# The per-site lease and its fence, so two installers cannot run on one site.
+spot-coordinator = { path = "../spot-coordinator" }
+# Version and VersionReq for requests, dependency ranges and the host version.
+semver = "1"
+# SHA-256 for the plan hash.
+sha2 = "0.10"
+# serde and serde_json build the canonical, sorted encoding the plan hash covers.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed plan refusals with stable `installer.*` codes.
+thiserror = "2"
+# `stream::iter(...).buffer_unordered` bounds how many sites `run_many` runs at once.
+futures = "0.3"
+# `Notify` (through the coordinator) and the executor's bounded waits.
+tokio = { version = "1", features = ["sync", "time"] }
+
+[dev-dependencies]
+# `#[tokio::test]` and the multi-thread runtime for the isolation and cancellation cases.
+tokio = { version = "1", features = ["sync", "time", "macros", "rt", "rt-multi-thread", "test-util"] }
+# The harness seeds `spot_core::ManualClock` at the Unix epoch; the executor never reads the
+# system clock in a test.
+time = { version = "0.3", features = ["std"] }
+# The fakes and the contract suite are behind this crate's own `testing` feature.
+spot-installer = { path = ".", features = ["testing"] }
+# Property tests over random acyclic catalogues (order and requirement invariants).
+proptest = "1"
+
+[lints]
+workspace = true

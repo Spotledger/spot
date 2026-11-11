@@ -1,0 +1,48 @@
+[package]
+name = "spot-ts-controllers"
+description = "TypeScript DocType controllers (WP-EXT-10.T1): an app ships a TypeScript module that is a full controller for a DocType — lifecycle steps and whitelisted methods with typed arguments — run on the embedded engine as the triggering user, with the shared controller conformance suite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The extension contract: `Controller`, `ControllerFactory`, `HookContext`, `MethodContext`,
+# `MethodDecl`, `StepDecl`, `AppError` and the lifecycle phase rules.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The controller registry a TypeScript controller registers into (`ControllerSource::TypeScript`).
+spot-controllers = { path = "../spot-controllers" }
+# The typed query IR, values and record ids the host bridge carries.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The embedded engine a controller runs on (ADR-054).
+spot-ts = { path = "../spot-ts" }
+# Save-time type stripping and the tier rules (ADR-054 step 2).
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The Server Script host surface, bridge, document view and limits this crate reuses rather than
+# forks (WP-EXT-06.T1): the same closed surface, the same `FieldView`, the same `ScriptBridge`.
+spot-server-scripts = { path = "../spot-server-scripts" }
+# Exact money and quantities: a decimal argument is validated as a decimal, never a float (ADR-12).
+spot-money = { path = "../spot-money" }
+# The JSON the bridge carries; the contract does not re-export serde_json.
+serde_json = "1"
+# RFC 3339 timestamps in the context a handler sees.
+time = { version = "0.3.55", default-features = false, features = ["std", "parsing", "formatting"] }
+# The engine runs a handler on a thread of its own; the caller services its host calls on its task.
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "macros"] }
+# The shared conformance suite exercises a controller through the real document engine on the fake
+# backend, so the suite's module needs the engine, the fake backend and effective metadata.
+spot-document = { path = "../spot-document" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+spot-seams = { path = "../spot-seams" }
+spot-permissions = { path = "../spot-permissions" }
+
+[dev-dependencies]
+# Manifests written as TOML, so the tests exercise the real registration path.
+spot-manifest = { path = "../spot-manifest" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

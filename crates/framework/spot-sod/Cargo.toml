@@ -1,0 +1,33 @@
+[package]
+name = "spot-sod"
+description = "The segregation-of-duties decision core (WP-SEC-02, ADR-070 section 8): rules over duties and over roles for convenience, conflict analysis over assignments, the grant-time check and override records that demand a reason and a mitigating control, as a pure, deterministic evaluator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public type, so rules and overrides ride in
+# persisted, hand-editable records.
+serde = { version = "1", features = ["derive"] }
+# TOML-loadable rules: the rule set a tenant authors is TOML, like the permission model.
+toml = "0.8"
+# The one error type, with stable machine-readable `sod.*` codes.
+thiserror = "2"
+# `TenantId`: every store method is scoped by the caller's tenant.
+spot-tenancy = { path = "../spot-tenancy" }
+
+[features]
+# The `SodStore` contract suite (`contract::run_all`) that every backend must pass.
+testing = []
+
+[dev-dependencies]
+# Enables the contract suite for this crate's own tests (the memory fake must pass it).
+spot-sod = { path = ".", features = ["testing"] }
+# Property tests: the grant-time check is the set difference of the analyses, whatever the
+# order of the assignments.
+proptest = "1"
+
+[lints]
+workspace = true

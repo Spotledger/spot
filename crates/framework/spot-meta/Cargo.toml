@@ -1,0 +1,27 @@
+[package]
+name = "spot-meta"
+description = "DocType metadata (WP-MET-01.T1): TOML definitions, custom fields and property overrides, effective metadata, compiled to the storage catalog and the app API view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The app API view (`DocTypeDef`) and the prelude types (`Name`, `Decimal`).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The storage view (`Catalog`, `EntityDef`, ...). The app API does not re-export it.
+spot-storage-contract = { path = "../../../contracts/storage" }
+serde = { version = "1", features = ["derive"] }
+# Reads the one GeoJSON value of the deprecated `geolocation` alias.
+serde_json = "1"
+toml = "0.8"
+
+[dev-dependencies]
+# Proves storage accepts what the metadata compiles to.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+proptest = "1"
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

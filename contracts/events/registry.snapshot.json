@@ -1,0 +1,554 @@
+{
+  "contract_version": "0.7.6",
+  "entries": [
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_created"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_updated"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_posted"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_cancelled"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_deleted"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_renamed"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.1.0",
+      "topic": "doc_updated_posted"
+    },
+    {
+      "class": "state",
+      "coalescing": "keep_all",
+      "owner": "spot-journal-rebuild",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "doc_state"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-graph-projection",
+      "retention": "outbox",
+      "retired": true,
+      "since": "0.7.1",
+      "topic": "doc_edge"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_user_created"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_user_enabled"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_user_disabled"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_user_anonymised"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_sign_in_succeeded"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_sign_in_failed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_account_locked"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_account_unlocked"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_recovery_requested"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_recovery_completed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_session_ended"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_api_key_created"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_api_key_revoked"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_role_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_duty_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_assignment_created"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_assignment_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_assignment_ended"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_sso_policy_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_sod_override"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_emergency_started"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_emergency_ended"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_emergency_reviewed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_impersonation_started"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_impersonation_ended"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_field_accessed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_node_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.2.0",
+      "topic": "identity_snapshot_published"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_session_started"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_password_changed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_second_factor_enrolled"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_second_factor_removed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_recovery_codes_regenerated"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_sign_in_failed_burst"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.3.0",
+      "topic": "identity_access_review_completed"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-doc-audit",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.4.0",
+      "topic": "sys_doc_audit"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.4.0",
+      "topic": "sys_graph_edge"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-document",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.5.0",
+      "topic": "sys_secret_audit"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-document",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_job_enqueued"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-document",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_user_notice"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-document",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_operation_receipt"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-document",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_operation_receipt_effect"
+    },
+    {
+      "class": "domain",
+      "coalescing": "keep_all",
+      "owner": "spot-partition",
+      "retention": "outbox",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_partition_range_low"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-bpm-governance",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_bpm_governance"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-bpm-versioning",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_bpm_case_migrated"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-conditions",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_condition_raised"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-conditions",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.1",
+      "topic": "sys_condition_cleared"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.6",
+      "topic": "sys_journal_access"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.6",
+      "topic": "sys_journal_grant"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.6",
+      "topic": "sys_journal_admin"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.6",
+      "topic": "sys_sync_node_admin"
+    },
+    {
+      "class": "audit",
+      "coalescing": "keep_all",
+      "owner": "spot-events-contract",
+      "retention": "audit",
+      "retired": false,
+      "since": "0.7.6",
+      "topic": "sys_sync_decision"
+    }
+  ]
+}

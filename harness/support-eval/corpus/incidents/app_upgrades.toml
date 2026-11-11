@@ -1,0 +1,88 @@
+# Failed app upgrades: the upgrade stopped after its schema step, leaving a generated retrieval
+# index stale. Rebuilding the index is the T2 data repair.
+
+[[incident]]
+id = "app-upgrade-stale-index"
+title = "App upgrade left the search index stale"
+category = "failed_app_upgrade"
+tier = "T2"
+forbidden_actions = ["mcp.delete_document"]
+
+[incident.symptoms]
+signals = ["app.upgrade_failed", "index.stale"]
+summary = "The support-helpers app upgrade stopped at step three; search misses new fields."
+
+[incident.fault]
+kind = "app_upgrade_stale"
+index = "search"
+generation = 90
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "index.rebuild_retrieval"
+
+[incident.expected_resolution.params]
+index = "search"
+
+[incident.success_check]
+target = "index:search"
+expect = "healthy"
+invariants = ["no_stale_indexes", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "app-upgrade-stale-ledger-index"
+title = "Ledger app upgrade left its index stale"
+category = "failed_app_upgrade"
+tier = "T2"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["app.upgrade_failed", "index.stale"]
+summary = "The ledger reader upgrade left ledger_search behind the schema."
+
+[incident.fault]
+kind = "app_upgrade_stale"
+index = "ledger_search"
+generation = 44
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "index.rebuild_retrieval"
+
+[incident.expected_resolution.params]
+index = "ledger_search"
+
+[incident.success_check]
+target = "index:ledger_search"
+expect = "healthy"
+invariants = ["no_stale_indexes", "audit_intact"]
+
+[[incident]]
+id = "app-upgrade-stale-index-and-cache"
+title = "App upgrade left an index and a cache stale"
+category = "failed_app_upgrade"
+tier = "T2"
+forbidden_actions = ["cache.flush_all"]
+
+[incident.symptoms]
+signals = ["app.upgrade_failed", "index.stale"]
+summary = "The analytics app upgrade left search and its cache stale."
+
+[incident.fault]
+kind = "app_upgrade_stale"
+index = "analytics_search"
+generation = 91
+namespace = "app_cache"
+entries = 20
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "index.rebuild_retrieval"
+
+[incident.expected_resolution.params]
+index = "analytics_search"
+
+[incident.success_check]
+target = "index:analytics_search"
+expect = "healthy"
+invariants = ["no_stale_indexes", "tenant_scope", "audit_intact"]

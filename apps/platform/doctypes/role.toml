@@ -1,0 +1,49 @@
+name = "role"
+label = "Role"
+app = "platform"
+module = "identity"
+title_field = "role_name"
+
+[[fields]]
+name = "role_name"
+label = "Role Name"
+type = "text"
+required = true
+unique = true
+max_chars = 100
+in_list_view = true
+
+[[fields]]
+name = "description"
+label = "Description"
+type = "long_text"
+
+[[fields]]
+name = "is_system"
+label = "Is System"
+type = "bool"
+default = "false"
+read_only = true
+in_list_view = true
+description = "A system role ships with the platform and cannot be deleted."
+
+[[fields]]
+name = "origin"
+label = "Origin"
+type = "select"
+options = "reference\ncustom"
+required = true
+default = "custom"
+in_standard_filter = true
+
+[[fields]]
+name = "copied_from"
+label = "Copied From"
+type = "link"
+options = "role"
+
+[[fields]]
+name = "duties"
+label = "Duties"
+type = "table"
+options = "role_duty"

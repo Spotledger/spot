@@ -1,0 +1,58 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.deep",
+      "origin": "app:sample",
+      "props": [],
+      "body": {
+        "node": "column",
+        "children": [
+          {
+            "node": "column",
+            "children": [
+              {
+                "node": "column",
+                "children": [
+                  {
+                    "node": "column",
+                    "children": [
+                      {
+                        "node": "column",
+                        "children": [
+                          {
+                            "node": "column",
+                            "children": [
+                              {
+                                "node": "column",
+                                "children": [
+                                  {
+                                    "node": "column",
+                                    "children": [
+                                      {
+                                        "node": "control",
+                                        "control": "label",
+                                        "text": "x"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "$comment": "expect: uiext.component_too_deep. Nesting depth 9 exceeds the maximum of 8."
+}

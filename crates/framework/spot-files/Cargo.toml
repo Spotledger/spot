@@ -1,0 +1,49 @@
+[package]
+name = "spot-files"
+description = "FileStore interface for attachment and asset bytes, the local-disk provider, the in-memory provider and the provider contract suite (WP-PLT-10.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The S3 / S3-compatible provider (MinIO, Cloudflare R2, Wasabi), on object_store/aws.
+s3 = ["dep:object_store", "object_store/aws", "dep:url"]
+# The Azure Blob Storage provider, on object_store/azure.
+azure = ["dep:object_store", "object_store/azure", "dep:url"]
+
+[dependencies]
+# SiteId scopes every file operation to one tenant (ADR-34).
+spot-core = { path = "../spot-core" }
+# Async filesystem IO, the AsyncRead body type and the in-memory store's lock.
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync"] }
+# Content hash computed while streaming a put.
+sha2 = "0.10"
+# FileMeta modified times.
+time = { version = "0.3", default-features = false, features = ["std"] }
+# FileError with stable codes.
+thiserror = "2"
+# Lifecycle traces for puts and deletes.
+tracing = "0.1"
+# Config URLs for the object-store providers (features `s3` and `azure`): bucket and
+# container endpoints. The optional deps below keep the crate, and the workspace-wide
+# build, compiling without either provider.
+url = { version = "2", optional = true }
+# One client behind both cloud providers (WP-PLT-10.T2), enabled per feature.
+object_store = { version = "0.14.2", default-features = false, optional = true }
+
+[dev-dependencies]
+# Scratch roots for LocalFileStore tests.
+tempfile = "3"
+# #[tokio::test] on the multi-thread runtime for the concurrency cases.
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "macros", "rt-multi-thread"] }
+# Test-only (lead review of #446): a wrapper object_store client must name the trait's
+# stream types and the trait's own async form. Never compiled into the library, only
+# into its test binaries.
+futures-util = { version = "0.3", default-features = false }
+async-trait = "0.1"
+
+[lints]
+workspace = true

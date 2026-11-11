@@ -1,0 +1,8 @@
+# Field grants of the shipped system roles. Nothing here touches the `credential` group.
+
+# The source digest of a sign-in attempt: system managers audit it, user managers do not.
+[[entries]]
+role = "System Manager"
+doctype = "login_attempt"
+target = { group = "login_source" }
+access = ["read", "report"]

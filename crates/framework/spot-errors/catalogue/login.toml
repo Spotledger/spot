@@ -1,0 +1,225 @@
+# login codes: raised by spot-login. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "login.invalid_credentials"
+class = "none"
+summary = "The provided credentials are invalid."
+explanation_key = "error.login.invalid_credentials"
+params = []
+remedy = "Check your email and password and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "login.totp_required"
+class = "none"
+summary = "Two-factor authentication is required but no code was provided."
+explanation_key = "error.login.totp_required"
+params = []
+remedy = "Provide a TOTP code from your authenticator app or a recovery code."
+since = "0.1.0"
+
+[[entry]]
+code = "login.totp_invalid"
+class = "none"
+summary = "The provided two-factor code is invalid."
+explanation_key = "error.login.totp_invalid"
+params = []
+remedy = "Check your authenticator app and try again. Ensure your device clock is synchronized."
+since = "0.1.0"
+
+[[entry]]
+code = "login.totp_replayed"
+class = "none"
+summary = "The provided two-factor code has already been used."
+explanation_key = "error.login.totp_replayed"
+params = []
+remedy = "Wait for the next code from your authenticator app and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "login.recovery_code_invalid"
+class = "none"
+summary = "The provided recovery code is invalid."
+explanation_key = "error.login.recovery_code_invalid"
+params = []
+remedy = "Check your recovery codes and try again. Each code can only be used once."
+since = "0.1.0"
+
+[[entry]]
+code = "login.recovery_code_used"
+class = "none"
+summary = "The provided recovery code has already been used."
+explanation_key = "error.login.recovery_code_used"
+params = []
+remedy = "Use a different recovery code or your authenticator app."
+since = "0.1.0"
+
+[[entry]]
+code = "login.account_disabled"
+class = "none"
+summary = "The account is disabled."
+explanation_key = "error.login.account_disabled"
+params = []
+remedy = "Contact your administrator to enable the account."
+since = "0.1.0"
+
+[[entry]]
+code = "login.account_locked"
+class = "none"
+summary = "The account is locked due to too many failed sign-in attempts."
+explanation_key = "error.login.account_locked"
+params = []
+remedy = "Wait for the lockout to expire or contact your administrator to unlock the account."
+since = "0.1.0"
+
+[[entry]]
+code = "login.account_invited"
+class = "none"
+summary = "The account has been invited but not yet accepted."
+explanation_key = "error.login.account_invited"
+params = []
+remedy = "Check your email for the invitation link and complete the sign-up process."
+since = "0.1.0"
+
+[[entry]]
+code = "login.account_anonymised"
+class = "none"
+summary = "The account has been anonymised."
+explanation_key = "error.login.account_anonymised"
+params = []
+remedy = "This account cannot be used. Contact your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "login.throttled"
+class = "none"
+summary = "Too many failed sign-in attempts; try again in {retry_after} seconds."
+explanation_key = "error.login.throttled"
+params = ["retry_after"]
+remedy = "Wait before trying again. The response includes a Retry-After header with the wait time in seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "login.throttle_burst"
+class = "none"
+summary = "Too many failed sign-in attempts; the account is locked until {locked_until}."
+explanation_key = "error.login.throttle_burst"
+params = ["locked_until"]
+remedy = "The account is locked until the time in locked_until. Contact your administrator to unlock it sooner."
+since = "0.1.0"
+
+[[entry]]
+code = "login.current_password_wrong"
+class = "none"
+summary = "The current password is incorrect."
+explanation_key = "error.login.current_password_wrong"
+params = []
+remedy = "Enter your current password correctly."
+since = "0.1.0"
+
+[[entry]]
+code = "login.password_policy_violation"
+class = "none"
+summary = "The new password does not meet the password policy requirements: {violations}."
+explanation_key = "error.login.password_policy_violation"
+params = ["violations"]
+remedy = "Choose a password that meets the requirements shown in the violations field."
+since = "0.1.0"
+
+[[entry]]
+code = "login.session_not_found"
+class = "none"
+summary = "The session was not found or has expired."
+explanation_key = "error.login.session_not_found"
+params = []
+remedy = "Sign in again to get a new session."
+since = "0.1.0"
+
+[[entry]]
+code = "login.session_forbidden"
+class = "none"
+summary = "The session belongs to another user."
+explanation_key = "error.login.session_forbidden"
+params = []
+remedy = "You can only end your own sessions."
+since = "0.1.0"
+
+[[entry]]
+code = "login.api_key_not_found"
+class = "none"
+summary = "The API key was not found."
+explanation_key = "error.login.api_key_not_found"
+params = []
+remedy = "Check the key ID and try again, or create a new API key."
+since = "0.1.0"
+
+[[entry]]
+code = "login.api_key_revoked"
+class = "none"
+summary = "The API key has been revoked."
+explanation_key = "error.login.api_key_revoked"
+params = []
+remedy = "Create a new API key."
+since = "0.1.0"
+
+[[entry]]
+code = "login.api_key_expired"
+class = "none"
+summary = "The API key has expired."
+explanation_key = "error.login.api_key_expired"
+params = []
+remedy = "Create a new API key."
+since = "0.1.0"
+
+[[entry]]
+code = "login.api_key_owner_disabled"
+class = "none"
+summary = "The API key's owner account is disabled."
+explanation_key = "error.login.api_key_owner_disabled"
+params = []
+remedy = "Contact your administrator to enable the owner account, or create a new API key for an enabled user."
+since = "0.1.0"
+
+[[entry]]
+code = "login.admin_action_denied"
+class = "none"
+summary = "The administrative action is not permitted."
+explanation_key = "error.login.admin_action_denied"
+params = []
+remedy = "You do not have permission to perform this action."
+since = "0.1.0"
+
+[[entry]]
+code = "login.initial_secret_invalid"
+class = "none"
+summary = "The one-time initial password secret is invalid or expired."
+explanation_key = "error.login.initial_secret_invalid"
+params = []
+remedy = "Request a new initial password secret from your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "login.initial_secret_used"
+class = "none"
+summary = "The one-time initial password secret has already been used."
+explanation_key = "error.login.initial_secret_used"
+params = []
+remedy = "Request a new initial password secret from your administrator."
+since = "0.1.0"
+[[entry]]
+code = "login.invalid_identifier"
+class = "none"
+summary = "The sign-in name is empty or unusable after normalisation."
+explanation_key = "error.login.invalid_identifier"
+params = []
+remedy = "Enter your e-mail address or username and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "login.store_failed"
+class = "Internal"
+summary = "A store, event sink or clock the sign-in service depends on failed."
+explanation_key = "error.login.store_failed"
+params = []
+remedy = "Retry; if the backend keeps failing, check its connection and health checks."
+since = "0.1.0"

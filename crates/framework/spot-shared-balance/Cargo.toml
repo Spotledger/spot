@@ -1,0 +1,23 @@
+[package]
+name = "spot-shared-balance"
+description = "Shared-balance policies for balances several offline nodes can spend (WP-EDG-09.T1, ADR-062): an append-only ledger of integer minor-unit entries, one BalancePolicy trait with three interchangeable strategies (online-only, allocated quotas, accept-and-reconcile), each with a stated safety limit, and quarantine of entries refused on arrival"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The refusal-store contract suite (`testing`), for a durable hub's own tests. Off by default.
+testing = []
+
+[dependencies]
+# Typed errors with stable `shared_balance.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The same crate with `testing` on, so the contract suite runs in `cargo test -p spot-shared-balance`.
+spot-shared-balance = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

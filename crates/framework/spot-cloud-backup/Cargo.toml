@@ -1,0 +1,45 @@
+[package]
+name = "spot-cloud-backup"
+description = "Client-side encrypted, chunked and verified cloud backups for desktop tenants, and restore on a new PC from the recovery key (WP-CTL-08)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId` is the tenant identity (ADR-34: one tenant = one site).
+spot-core = { path = "../spot-core" }
+# The envelope that wraps each backup's data key under the tenant recovery key.
+spot-secrets = { path = "../spot-secrets" }
+# The licence entitlement and state machine the service authenticates against.
+spot-license = { path = "../spot-license" }
+# Storage quotas are metering limits (`MeterLimit`); storage is `Meter::StorageBytes`.
+spot-metering = { path = "../spot-metering" }
+# Chunk ciphertext is XChaCha20-Poly1305, as in spot-secrets.
+chacha20poly1305 = "0.10"
+# Chunk digests and the manifest authenticator (ADR-068 rule 22).
+sha2 = "0.10"
+# Data keys, backup ids and verification samples come from the OS RNG.
+rand = "0.9"
+# Data keys and plaintext buffers are zeroed on drop.
+zeroize = "1"
+# Manifests and the wire shapes of the service are JSON (deterministic field order).
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = "1"
+# Wrapped keys travel as base64url text in the manifest.
+base64 = "0.22"
+# Retention buckets need calendar dates; time is always an argument, never read here.
+time = { version = "0.3.55", default-features = false, features = ["std", "macros", "formatting"] }
+# Object-safe ports return boxed futures; the filesystem store uses tokio's fs.
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "rt"] }
+# Typed errors with stable `cloud_backup.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Throwaway directories for the filesystem store.
+tempfile = "3"
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "rt", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

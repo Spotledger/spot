@@ -1,0 +1,44 @@
+name = "pipeline step order changed by a new override"
+description = "The acme 2.0.0 bundle promoted by a migration installed an override that moved selling:validate to effective order 2; why(PipelineStep) must walk step <- override <- migration."
+epoch = 12
+
+[caller]
+id = "agent:t0"
+tier = "T0"
+
+[[migrations]]
+id = "upgrade-2"
+actor = "user:alice"
+started = 200
+ended = 210
+outcome = "verified"
+risk = "additive"
+
+[[migrations.installs]]
+app = "acme"
+version = "2.0.0"
+
+[[overrides]]
+doctype = "sales_invoice"
+hook_point = "before_save"
+target_step = "selling:validate"
+app = "acme"
+kind = "reorder"
+reason = "recheck totals after tax"
+order = 2
+at = 200
+actor = "user:alice"
+record = "promotion:42"
+cause_run = "upgrade-2"
+
+[[expect]]
+subject = { kind = "PipelineStep", name = "sales_invoice.before_save.selling:validate" }
+paths = [[
+  "PipelineStep:sales_invoice.before_save.selling:validate",
+  "Customisation:override:pipeline:sales_invoice.before_save.acme.selling:validate",
+  "Migration:upgrade-2",
+]]
+
+[[expect]]
+subject = { kind = "App", name = "acme" }
+paths = [["App:acme", "Migration:upgrade-2"]]

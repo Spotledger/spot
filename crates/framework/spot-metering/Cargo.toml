@@ -1,0 +1,33 @@
+[package]
+name = "spot-metering"
+description = "Usage meters (users, transactions, storage, AI tokens) as an idempotent, period-bucketed ledger with quota decisions against licence entitlements and a reconciliation check (WP-CTL-05.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The entitlements quota policies are built from (`Entitlements`, `Limit`, `ExtraEntitlement`)
+# and the licence state machine (`Status`, `evaluate`) that shapes what a quota means.
+spot-license = { path = "../spot-license" }
+# The AI-token usage source the `AiTokensFromLedger` adapter reads.
+spot-llm-router = { path = "../spot-llm-router" }
+# IANA time zones for the period buckets: jiff 0.2 is already in the lock via
+# spot-scheduler, its tzdb is compiled in (no system tzdata), and its DST gap/fold
+# handling is explicit — which the period boundary tests lean on.
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+# Lock-free snapshot swaps for the quota guard's hot path (`Arc<QuotaSnapshot>`
+# read with no lock; spot-plan uses the same crate).
+arc-swap = "1"
+# Typed errors with stable `metering.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# `#[tokio::test]` for the async store contract suite.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# Property tests: any permutation and duplication of a batch gives the same totals.
+proptest = "1"
+
+[lints]
+workspace = true

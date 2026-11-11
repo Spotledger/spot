@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Spotledger</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preload" id="webassembly" />
+    <script type="importmap"></script>
+    <script type="module" src="main#[.{fingerprint}].js"></script>
+    <!-- WP-UI-09.T2: the shell cache. spot-contract is the native API contract version this build speaks
+         (contracts/native-api/VERSION); the worker clears its cache when it changes. Both scripts are deferred, so
+         the first-paint path above is untouched. The worker is sw/spot-sw.js; its policy is sw/shell-policy.js. -->
+    <meta name="spot-contract" content="0.9.0">
+    <script defer src="sw/shell-policy.js"></script>
+    <script defer src="sw/shell-bridge.js"></script>
+    <style>
+        html, body { margin: 0; height: 100%; overflow: hidden; }
+        #out { width: 100vw; height: 100vh; }
+        .splash { font: 16px system-ui, sans-serif; padding: 24px; }
+    </style>
+</head>
+<body>
+    <div id="out"><div class="splash">Loading Spotledger...</div></div>
+</body>
+</html>

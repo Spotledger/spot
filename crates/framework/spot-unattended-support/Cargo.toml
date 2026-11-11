@@ -1,0 +1,32 @@
+[package]
+name = "spot-unattended-support"
+description = "Unattended-support basics (WP-PRD-13.T1): offline plain-language help for every user-visible error code, opt-in crash reporting and telemetry with local redaction, and the crash intake that files grouped reports into the fix pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# A GitHub issue `Sink` that talks to the REST API through a host-supplied `HttpPost`; it adds
+# no dependency (the host owns the HTTP client, the credential and the egress policy).
+github = []
+
+[[bin]]
+name = "help-coverage"
+path = "src/help_coverage_main.rs"
+
+[dependencies]
+# The error catalogue the help is checked against.
+spot-errors = { path = "../spot-errors" }
+# Redaction of everything written to the spool or sent anywhere.
+spot-redact = { path = "../spot-redact" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+# Report signatures and spool ids.
+sha2 = "0.10"
+
+[lints]
+workspace = true

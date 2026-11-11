@@ -1,0 +1,25 @@
+[package]
+name = "spot-sync-repair-pull"
+description = "Closure repair loop of the sync receiver (WP-SYN-04.T2, ADR-064 sections 7 and 8, ADR-067 section 3): ask the hub for exactly the records a parked bundle lacks, bounded, deduplicated and backed off, escalate to a scoped re-send, and raise CLOSURE_UNRESOLVED"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `RepairItem`: what the node's parking store pushes out for repair.
+spot-sync-node = { path = "../spot-sync-node" }
+# `RecordKey` and `Position`: the units a pull request names (spot-sync-node does not re-export them).
+spot-sync-closure = { path = "../spot-sync-closure" }
+# Requests and escalations are wire-shaped plain data.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `sync_repair_pull.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Arrival and miss order is arbitrary: the loop's bounds must hold for any sequence.
+proptest = "1"
+
+[lints]
+workspace = true

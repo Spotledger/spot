@@ -1,0 +1,29 @@
+# Help for the journal capture codes of the document engine (WP-JRN-02.T2).
+
+[[help]]
+code = "capture.exclusion_unowned"
+what_happened = "A DocType is left out of the journal without an owner or a reason."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Give the exclusion the owner that declares the DocType derived or local-only, and a reason code.", "If it keeps happening, tell your administrator and quote the code capture.exclusion_unowned."]
+audience = "operator"
+
+[[help]]
+code = "capture.exclusion_unknown"
+what_happened = "A journal exclusion names a DocType that does not exist."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Name a top-level DocType of the installed metadata in the exclusion list.", "If it keeps happening, tell your administrator and quote the code capture.exclusion_unknown."]
+audience = "operator"
+
+[[help]]
+code = "capture.exclusion_duplicate"
+what_happened = "A DocType is left out of the journal twice."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["List each excluded DocType once.", "If it keeps happening, tell your administrator and quote the code capture.exclusion_duplicate."]
+audience = "operator"
+
+[[help]]
+code = "capture.event_failed"
+what_happened = "A change could not be recorded in the journal, so it was not saved."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Try the action again.", "If it keeps happening, tell your administrator and quote the code capture.event_failed."]
+audience = "operator"

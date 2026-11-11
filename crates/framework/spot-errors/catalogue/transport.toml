@@ -1,0 +1,37 @@
+# transport codes: failures of the spot-llm HTTP transport beneath the model providers. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "transport.timeout"
+class = "none"
+summary = "The HTTP exchange did not finish inside its timeout; it can be retried."
+explanation_key = "error.transport.timeout"
+params = []
+remedy = "Retry, or raise the transport timeout."
+since = "0.1.0"
+
+[[entry]]
+code = "transport.connection"
+class = "none"
+summary = "The connection failed at DNS, TCP or TLS level."
+explanation_key = "error.transport.connection"
+params = []
+remedy = "Check the host name, network path and certificates, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "transport.too_large"
+class = "none"
+summary = "A buffered response body exceeded its size cap of {cap} bytes."
+explanation_key = "error.transport.too_large"
+params = ["cap"]
+remedy = "Request less data, or raise the response cap where the body is expected to be large."
+since = "0.1.0"
+
+[[entry]]
+code = "transport.protocol"
+class = "none"
+summary = "The exchange broke its protocol: a refused redirect, a bad header or an unexpected body."
+explanation_key = "error.transport.protocol"
+params = []
+remedy = "Check the endpoint speaks the expected protocol and does not redirect to another host."
+since = "0.1.0"

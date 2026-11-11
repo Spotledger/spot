@@ -1,0 +1,191 @@
+# A minimal X12 856 ship notice (our own definition, WP-INT-06.T1).
+id = "x12_856"
+syntax = "x12"
+version = "004010"
+title = "Ship notice / manifest"
+functional_group = "SH"
+
+[[segment]]
+tag = "ST"
+min = 1
+max = 1
+[[segment.element]]
+name = "set_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "BSN"
+min = 1
+max = 1
+[[segment.element]]
+name = "purpose"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "shipment"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "date"
+kind = "date"
+min = 1
+max = 1
+[[segment.element]]
+name = "time"
+kind = "time"
+min = 0
+max = 1
+
+[[segment]]
+tag = "HL"
+min = 1
+max = 0
+[[segment.element]]
+name = "id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "parent"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "level"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "code"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "TD1"
+min = 0
+max = 0
+[[segment.element]]
+name = "packing"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "lading"
+kind = "numeric"
+min = 0
+max = 1
+
+[[segment]]
+tag = "TD5"
+min = 0
+max = 0
+[[segment.element]]
+name = "routing"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "REF"
+min = 0
+max = 0
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "value"
+kind = "text"
+min = 0
+max = 1
+
+[[segment]]
+tag = "N1"
+min = 0
+max = 200
+[[segment.element]]
+name = "entity"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "name"
+kind = "text"
+min = 0
+max = 1
+
+[[segment]]
+tag = "LIN"
+min = 0
+max = 0
+[[segment.element]]
+name = "line"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "item"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "SN1"
+min = 0
+max = 0
+[[segment.element]]
+name = "line"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "quantity"
+kind = "decimal"
+min = 0
+max = 1
+[[segment.element]]
+name = "unit"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "PRF"
+min = 0
+max = 0
+[[segment.element]]
+name = "po_number"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "SE"
+min = 1
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1

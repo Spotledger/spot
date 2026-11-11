@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.CanvasView"
+             Focusable="True"
+             KeyDown="OnKeyDown">
+  <!-- The canvas: the form's sections, their column spans, the fields in them (drag to reorder,
+       drop a palette type on a section or a field) and the tray of fields that are not on the
+       form yet. Every action here has a key gesture; see the hint at the bottom. -->
+  <Border Background="{DynamicResource Color.Surface.Canvas}" Padding="12">
+    <Grid RowDefinitions="Auto,*,Auto">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Canvas.ActiveScopeTitle}"
+                     FontSize="{DynamicResource Font.Size.Heading}"
+                     Foreground="{DynamicResource Color.Text.Primary}" />
+          <ItemsControl ItemsSource="{Binding Canvas.ChildTables}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="4" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Content="{Binding Label}"
+                        Tag="{Binding Doctype}"
+                        FontSize="{DynamicResource Font.Size.Caption}"
+                        Click="OnOpenChildGrid"
+                        ToolTip.Tip="Design this child table's grid" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="Form"
+                  FontSize="{DynamicResource Font.Size.Caption}"
+                  IsVisible="{Binding Canvas.IsChildGrid}"
+                  Click="OnCloseChildGrid"
+                  ToolTip.Tip="Back to the form" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+          <TextBox Text="{Binding NewSectionTitle, Mode=TwoWay}" Width="130" PlaceholderText="Section title" />
+          <Button Content="Add section" Click="OnAddSection" />
+          <Button Content="Add tab" Click="OnAddTab" />
+        </StackPanel>
+      </Grid>
+
+      <ScrollViewer Grid.Row="1">
+        <StackPanel Spacing="8">
+          <ItemsControl ItemsSource="{Binding Canvas.CurrentSections}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Margin="0,6"
+                        Padding="10"
+                        CornerRadius="6"
+                        Background="{DynamicResource Color.Surface.Raised}"
+                        BorderBrush="{DynamicResource Color.Border.Default}"
+                        BorderThickness="1"
+                        DragDrop.AllowDrop="True">
+                  <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Color.Text.Primary}" />
+                        <TextBlock Text="{Binding SpanText}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Color.Text.Secondary}" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button Content="−"
+                                Tag="{Binding}"
+                                Click="OnNarrower"
+                                ToolTip.Tip="One column narrower (Alt+Left)" />
+                        <Button Content="+"
+                                Tag="{Binding}"
+                                Click="OnWider"
+                                ToolTip.Tip="One column wider (Alt+Right)" />
+                      </StackPanel>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Fields}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Margin="0,2"
+                                  Padding="8,6"
+                                  CornerRadius="4"
+                                  Background="{DynamicResource Color.Surface.Sunken}"
+                                  PointerPressed="OnFieldPressed"
+                                  DragDrop.AllowDrop="True">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Color.Text.Primary}" />
+                              <TextBlock Text="{Binding TypeTitle}"
+                                         FontSize="{DynamicResource Font.Size.Caption}"
+                                         Foreground="{DynamicResource Color.Text.Secondary}" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Border Name="Tray"
+                  Margin="0,8,0,0"
+                  Padding="10"
+                  CornerRadius="6"
+                  Background="{DynamicResource Color.Surface.Sunken}"
+                  BorderBrush="{DynamicResource Color.Border.Default}"
+                  BorderThickness="1"
+                  DragDrop.AllowDrop="True">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Not on the form"
+                         FontWeight="SemiBold"
+                         Foreground="{DynamicResource Color.Text.Primary}" />
+              <TextBlock Text="Fields here exist on the DocType but nobody can fill them in yet. Drag one onto a section."
+                         FontSize="{DynamicResource Font.Size.Caption}"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource Color.Text.Secondary}" />
+              <ItemsControl ItemsSource="{Binding Canvas.CurrentUnplaced}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Margin="0,2"
+                            Padding="8,6"
+                            CornerRadius="4"
+                            Background="{DynamicResource Color.Surface.Raised}"
+                            PointerPressed="OnFieldPressed">
+                      <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Color.Text.Primary}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <TextBlock Grid.Row="2"
+                 Margin="0,8,0,0"
+                 FontSize="{DynamicResource Font.Size.Caption}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource Color.Text.Secondary}"
+                 Text="Keys: Ctrl+I inserts the picked palette type · Alt+Up/Down moves the field · Alt+Left/Right resizes the section · Alt+Shift+Up/Down moves the field between sections · Delete removes it" />
+    </Grid>
+  </Border>
+</UserControl>

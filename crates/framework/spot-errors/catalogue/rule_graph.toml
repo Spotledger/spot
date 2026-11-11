@@ -1,0 +1,121 @@
+# rule graph codes: business rules as Datalog over the graph (spot-rule-graph, WP-GRA-04.T1).
+# Library-internal vocabulary (ADR-26): raised by the crate, explained by the host. A compile
+# fault carries a line and a column and rides a `RuleGraphError::Invalid`, never an AppError, so
+# every class is `none`. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "rule_graph.parse"
+class = "none"
+summary = "The rule text does not match the grammar, or a guard is not a valid expression."
+explanation_key = "error.rule_graph.parse"
+params = []
+remedy = "Fix the rule at the reported line and column; a guard reads bound variables as doc.<name>."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unknown_predicate"
+class = "none"
+summary = "A predicate names neither an edge type, a metadata field, nor a derived predicate."
+explanation_key = "error.rule_graph.unknown_predicate"
+params = []
+remedy = "Name an edge type or a field the effective metadata defines, or define the predicate in a rule head."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.not_a_field"
+class = "none"
+summary = "A name shaped like doctype.field names a link or table field, which is an edge, not a readable field predicate."
+explanation_key = "error.rule_graph.not_a_field"
+params = []
+remedy = "Read a link field as its edge predicate, or name a scalar field instead."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.arity"
+class = "none"
+summary = "A predicate is used with a different number of arguments than it is defined with."
+explanation_key = "error.rule_graph.arity"
+params = []
+remedy = "Give the predicate the same number of arguments everywhere it appears."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.predicate_conflict"
+class = "none"
+summary = "A derived predicate shares its name with an edge type or a metadata field."
+explanation_key = "error.rule_graph.predicate_conflict"
+params = []
+remedy = "Rename the derived predicate so it does not shadow an edge type or a field."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unsafe"
+class = "none"
+summary = "A rule is not range-restricted: a variable in the head, a negated atom or a guard is not bound by a positive body atom."
+explanation_key = "error.rule_graph.unsafe"
+params = []
+remedy = "Add a positive body atom that binds the variable, or remove it from the head, the negation or the guard."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unknown_variable"
+class = "none"
+summary = "A guard reads a name that is not a bound variable of the rule."
+explanation_key = "error.rule_graph.unknown_variable"
+params = []
+remedy = "Bind the variable in a positive body atom, and read only bound variables as doc.<name>."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.not_stratified"
+class = "none"
+summary = "The program cannot be stratified: a cycle runs through negation or through an aggregate."
+explanation_key = "error.rule_graph.not_stratified"
+params = []
+remedy = "Break the cycle so a negated or aggregated predicate depends only on lower strata."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.aggregate"
+class = "none"
+summary = "An aggregate is malformed or applied to a value it cannot aggregate."
+explanation_key = "error.rule_graph.aggregate"
+params = []
+remedy = "Aggregate an integer or decimal variable with sum, or a bound variable with count, min or max."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unknown_query"
+class = "none"
+summary = "The query names a predicate the program does not define."
+explanation_key = "error.rule_graph.unknown_query"
+params = []
+remedy = "Query a predicate the program defines, spelled exactly as it is."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.fuel_exhausted"
+class = "none"
+summary = "Rule evaluation exhausted its fuel of {limit} derived tuples."
+explanation_key = "error.rule_graph.fuel_exhausted"
+params = ["limit"]
+remedy = "Narrow the program or the fact source, or raise the engine's fuel if the derivation is intended."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.eval"
+class = "none"
+summary = "Rule evaluation failed, for example a guard raised or a head value was unbound."
+explanation_key = "error.rule_graph.eval"
+params = []
+remedy = "Fix the guard or the rule the message names."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.registry"
+class = "none"
+summary = "A registry operation failed."
+explanation_key = "error.rule_graph.registry"
+params = []
+remedy = "Check the rule set's name and its source, then retry the registry operation."
+since = "0.1.0"

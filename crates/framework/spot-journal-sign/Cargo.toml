@@ -1,0 +1,25 @@
+[package]
+name = "spot-journal-sign"
+description = "Ed25519 adapters for the journal snapshot (WP-JRN-05.T4, ADR-061 s5 and s8): a SnapshotSigner over a caller-supplied tenant journal signing key and SnapshotKeys over the manifest's key windows, so a snapshot index and verified marker are signed and checked with the same rotation rule as the manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The two traits this crate implements.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# VerifyingKeys::verify_message, the one key-window check.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# Ed25519 signing (same version and features as spot-journal-manifest). Keys are supplied by the
+# caller; this crate reads no randomness.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# The end-to-end test runs the snapshot writer on the in-memory object store.
+spot-journal-store = { path = "../spot-journal-store" }
+serde_json = "1"
+
+[lints]
+workspace = true

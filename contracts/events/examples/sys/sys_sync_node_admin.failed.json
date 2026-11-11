@@ -1,0 +1,7 @@
+{
+  "action": "certificate_rotated",
+  "actor": "system",
+  "code": "sync.certificate_rotation_failed",
+  "node": "branch07.spotledger.app#edge_01",
+  "outcome": "failed"
+}

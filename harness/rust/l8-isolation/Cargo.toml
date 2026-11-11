@@ -1,0 +1,25 @@
+[package]
+name = "spot-l8-isolation"
+version = "0.1.0"
+description = "L8 isolation checker (WP-TST-08.T1): an Elle-style history checker over list-append and rw-register workloads, the claimed-versus-observed isolation report, and the weakened-backend proofs that it finds real anomalies"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# `bin/` directories are git-ignored in this repository, so the binary lives under `src/cli/`.
+[[bin]]
+name = "spot-l8"
+path = "src/cli/main.rs"
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+spot-l7-invariants = { path = "../l7-invariants" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

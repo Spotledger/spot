@@ -1,0 +1,271 @@
+# manifest codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "manifest.invalid_toml"
+class = "none"
+summary = "The manifest is not valid TOML: {error}."
+explanation_key = "error.manifest.invalid_toml"
+params = ["error"]
+remedy = "Fix the TOML syntax at the stated position."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.unknown_key"
+class = "none"
+summary = "The manifest holds a key no manifest version declares: {path}."
+explanation_key = "error.manifest.unknown_key"
+params = ["path"]
+remedy = "Remove the key or correct its spelling."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.missing_key"
+class = "none"
+summary = "The manifest is missing a required key: {path}."
+explanation_key = "error.manifest.missing_key"
+params = ["path"]
+remedy = "Add the required key."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_type"
+class = "none"
+summary = "A manifest value has the wrong type for its key: {path}."
+explanation_key = "error.manifest.invalid_type"
+params = ["path"]
+remedy = "Give the key the declared type."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_name"
+class = "none"
+summary = "A manifest name is not a valid identifier: {path}."
+explanation_key = "error.manifest.invalid_name"
+params = ["path"]
+remedy = "Use a name matching the identifier rules."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_version"
+class = "none"
+summary = "The manifest's version is not MAJOR.MINOR.PATCH: {path}."
+explanation_key = "error.manifest.invalid_version"
+params = ["path"]
+remedy = "Version the manifest as MAJOR.MINOR.PATCH."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_event"
+class = "none"
+summary = "The manifest subscribes to an event no contract declares: {path}."
+explanation_key = "error.manifest.invalid_event"
+params = ["path"]
+remedy = "Subscribe to a declared event name."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.phase_rule"
+class = "none"
+summary = "The manifest's declared phase rules contradict the platform's lifecycle rules: {path}."
+explanation_key = "error.manifest.phase_rule"
+params = ["path"]
+remedy = "Align the declared phases with ADR-51."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_session_event"
+class = "none"
+summary = "The manifest declares a session event that is not in the contract: {path}."
+explanation_key = "error.manifest.invalid_session_event"
+params = ["path"]
+remedy = "Use one of the declared session events."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_step"
+class = "none"
+summary = "A manifest step name is malformed: {path}."
+explanation_key = "error.manifest.invalid_step"
+params = ["path"]
+remedy = "Name steps as <app>:<step>."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.foreign_step"
+class = "none"
+summary = "The manifest overrides a step belonging to another app: {path}."
+explanation_key = "error.manifest.foreign_step"
+params = ["path"]
+remedy = "Override only steps of the same app, or ask the owning app."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.duplicate_step"
+class = "none"
+summary = "The manifest declares the same step twice: {path}."
+explanation_key = "error.manifest.duplicate_step"
+params = ["path"]
+remedy = "Keep one declaration of the step."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.budget_out_of_range"
+class = "none"
+summary = "A manifest budget (fuel, seconds, rows) is outside its allowed range: {path}."
+explanation_key = "error.manifest.budget_out_of_range"
+params = ["path"]
+remedy = "Set the budget inside the documented limits."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.duplicate_schedule"
+class = "none"
+summary = "The manifest declares two schedules at the same cron position: {path}."
+explanation_key = "error.manifest.duplicate_schedule"
+params = ["path"]
+remedy = "Merge the schedules into one."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_cron"
+class = "none"
+summary = "A manifest schedule's cron expression does not parse: {path}."
+explanation_key = "error.manifest.invalid_cron"
+params = ["path"]
+remedy = "Fix the cron expression."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_queue"
+class = "none"
+summary = "The manifest names a job queue outside the declared set: {path}."
+explanation_key = "error.manifest.invalid_queue"
+params = ["path"]
+remedy = "Use one of the declared queues."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_intent"
+class = "none"
+summary = "A manifest patch has an intent key that does not parse: {path}."
+explanation_key = "error.manifest.invalid_intent"
+params = ["path"]
+remedy = "Use one of the declared patch intents."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.duplicate_patch"
+class = "none"
+summary = "The manifest patches the same target twice in one wave: {path}."
+explanation_key = "error.manifest.duplicate_patch"
+params = ["path"]
+remedy = "Merge the patches."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.patch_order"
+class = "none"
+summary = "The manifest's patch order contradicts its dependency order: {path}."
+explanation_key = "error.manifest.patch_order"
+params = ["path"]
+remedy = "Order patches so dependencies apply first."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.override_missing_by"
+class = "none"
+summary = "An override entry is missing the by (overriding app) field: {path}."
+explanation_key = "error.manifest.override_missing_by"
+params = ["path"]
+remedy = "Name the overriding app in the override."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.override_with_by"
+class = "none"
+summary = "An override entry carries a by field that its kind forbids: {path}."
+explanation_key = "error.manifest.override_with_by"
+params = ["path"]
+remedy = "Remove the by field for this override kind."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_override"
+class = "none"
+summary = "An override entry does not match any declared override kind: {path}."
+explanation_key = "error.manifest.invalid_override"
+params = ["path"]
+remedy = "Use one of the declared override shapes."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_seam"
+class = "none"
+summary = "The manifest declares a seam with a malformed name or version: {path}."
+explanation_key = "error.manifest.invalid_seam"
+params = ["path"]
+remedy = "Declare seams as <name>@<version> with a valid name."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_path"
+class = "none"
+summary = "A manifest path escapes its root or is not normalized: {path}."
+explanation_key = "error.manifest.invalid_path"
+params = ["path"]
+remedy = "Use a clean relative path inside the app bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_route"
+class = "none"
+summary = "A manifest route does not start with the app's route prefix: {path}."
+explanation_key = "error.manifest.invalid_route"
+params = ["path"]
+remedy = "Route under /app/<app>/ as the contract requires."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_method"
+class = "none"
+summary = "A manifest route lists an HTTP method that does not exist: {path}."
+explanation_key = "error.manifest.invalid_method"
+params = ["path"]
+remedy = "Use standard HTTP method names."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.invalid_capability"
+class = "none"
+summary = "The manifest requests a capability no contract version grants: {path}."
+explanation_key = "error.manifest.invalid_capability"
+params = ["path"]
+remedy = "Request only declared capabilities."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.permission_name"
+class = "none"
+summary = "A declared app permission name is not a valid permission name: {path}."
+explanation_key = "error.manifest.permission_name"
+params = ["path"]
+remedy = "Name the permission with lowercase letters, digits and `_`, starting with a letter, at most 64 bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.permission_title"
+class = "none"
+summary = "A declared app permission has an empty title or one over 120 characters: {path}."
+explanation_key = "error.manifest.permission_title"
+params = ["path"]
+remedy = "Give the permission a one-line title between 1 and 120 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "manifest.permission_duplicate"
+class = "none"
+summary = "The manifest declares the same app permission name twice: {path}."
+explanation_key = "error.manifest.permission_duplicate"
+params = ["path"]
+remedy = "Keep one declaration per permission name."
+since = "0.1.0"

@@ -1,0 +1,41 @@
+[package]
+name = "spot-field-guard"
+description = "Field-level protection on every channel except the document read path (WP-SEC-04.T1, ADR-070 section 12): the outbound redactor for version history and audit diffs, exports, print and report columns, link titles, search and notification payloads; the audited reveal service; the field access trace; and the cross-channel leak harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The adapter over `spot_meta::EffectiveMeta` (`MetaProtection`). Without it the crate is
+# driven by `StaticProtection`, a plain TOML fixture.
+default = ["meta"]
+meta = ["dep:spot-meta"]
+
+[dependencies]
+# `Document`, `Value`, `AppError` and the `Clock` the records are stamped with.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The decisions: `PermissionEngine`, `FieldFacts`, `FieldLevel`, `mask`. This crate decides
+# no right itself.
+spot-permissions = { path = "../spot-permissions" }
+# The version-history diff (`FieldChange`, `REDACTED`) the outbound redactor rewrites.
+spot-activity = { path = "../spot-activity" }
+# Effective metadata, for the optional `MetaProtection` adapter.
+spot-meta = { path = "../spot-meta", optional = true }
+# Stable serde on the records and the TOML fixture.
+serde = { version = "1", features = ["derive"] }
+# Row snapshots in a diff are JSON text; the redactor rewrites them.
+serde_json = "1"
+# The TOML fixture a `StaticProtection` loads.
+toml = "0.8"
+
+[dev-dependencies]
+# The matrix fixtures build real effective metadata and a real permission snapshot.
+spot-meta = { path = "../spot-meta" }
+spot-events-contract = { path = "../../../contracts/events" }
+# A manual clock for deterministic record stamps.
+spot-core = { path = "../spot-core" }
+
+[lints]
+workspace = true

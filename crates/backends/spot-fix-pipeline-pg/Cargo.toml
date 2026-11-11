@@ -1,0 +1,35 @@
+[package]
+name = "spot-fix-pipeline-pg"
+description = "The PostgreSQL FixJournal (WP-AI-08.T2, ADR-082 class C): the write-ahead journal of agent actions in the control schema, reached through the shared blocking spot-pg-bridge, with a gapless atomic append and an append-only table enforced by the database"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `FixJournal` trait this crate implements, with the entry, record, id and error types.
+spot-fix-pipeline = { path = "../../framework/spot-fix-pipeline" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool the bridge borrows; the constructor checks the bridge configuration against its size.
+deadpool-postgres = "0.14"
+# The driver: statements run on the connection the bridge hands to the closure.
+tokio-postgres = "0.7"
+# The constructor refuses a current-thread runtime; no runtime is created here.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# A record is stored as its serde form in a `jsonb` column.
+serde_json = "1"
+
+[dev-dependencies]
+# The pipeline's in-memory doubles, to drive the engine over this journal in the crash tests.
+spot-fix-pipeline = { path = "../../framework/spot-fix-pipeline", features = ["testing"] }
+# The tier ladder and remedy id the test plans are built from.
+spot-agent-tiers = { path = "../../framework/spot-agent-tiers" }
+spot-remedies = { path = "../../framework/spot-remedies" }
+# Per-test scratch databases and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

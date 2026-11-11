@@ -1,0 +1,35 @@
+# Spotledger sample app: Projects and Tasks (WP-DX-05.T1)
+#
+# The app manifest (ADR-17). The app declares no hooks beyond the controller:
+# the controller steps below are the Time Entry hour checks and roll-up plus the
+# Task owner derivation, all implemented in crates/apps/spot-sample-app.
+# `controller` is the WP-DOC-10 controller reference the manifest loader resolves
+# against the crate's NATIVE_CONTROLLERS table (`native:sample`, the Time Entry
+# controller). An app has one controller per DocType: the Task controller is its
+# companion `native:sample.task`, installed with the app. Each event below attaches
+# only to the DocType its controller serves, and `doctype` is the storage name.
+[app]
+name = "sample"
+version = "1.0.0"
+title = "Sample: Projects and Tasks"
+controller = "native:sample"
+
+[[events]]
+doctype = "task"
+event = "before_save"
+step = "sample:derive_project_owner"
+
+[[events]]
+doctype = "time_entry"
+event = "validate_save"
+step = "sample:check_hours"
+
+[[events]]
+doctype = "time_entry"
+event = "after_post"
+step = "sample:roll_up_hours_add"
+
+[[events]]
+doctype = "time_entry"
+event = "after_cancel"
+step = "sample:roll_up_hours_subtract"

@@ -1,0 +1,32 @@
+{
+  "actor": {
+    "actor": "user:0192f1c0-0000-7000-8000-000000000002",
+    "component": null,
+    "on_behalf_of": null
+  },
+  "at": 1760000400000000,
+  "changed_fields": [
+    "owner"
+  ],
+  "command_id": "cmd-4d2a18",
+  "diff": [
+    {
+      "after": {
+        "text": "0192f1c0-0000-7000-8000-000000000007"
+      },
+      "before": null,
+      "path": "owner"
+    }
+  ],
+  "diff_digest": null,
+  "doctype": "sales_invoice",
+  "hidden_changes": false,
+  "id": "0192f1c0-0000-7000-8000-000000000006",
+  "node": "branch_khi_01",
+  "operation": "update",
+  "site": "acme.spotledger.app",
+  "source": "sync",
+  "truncated": false,
+  "version": 7,
+  "via": "step"
+}

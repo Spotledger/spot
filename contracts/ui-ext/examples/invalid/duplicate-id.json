@@ -1,0 +1,45 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.start_work",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 10,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.start_work",
+      "origin": "app:sample",
+      "label": "Time entries",
+      "icon": "time",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 20,
+      "permission": "time_entry:read",
+      "open": {
+        "destination": "sample.time_entries",
+        "filters": {
+          "task": "doc.name"
+        }
+      }
+    }
+  ],
+  "$comment": "expect: uiext.duplicate_id. Two items share an id."
+}

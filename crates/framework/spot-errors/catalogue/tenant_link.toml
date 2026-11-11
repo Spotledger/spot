@@ -1,0 +1,442 @@
+# tenant_link codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tenant_link.invalid_id"
+class = "none"
+summary = "An identifier is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_id"
+params = ["reason"]
+remedy = "Use a UUIDv7 link id and a 32-hex-character nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_party"
+class = "none"
+summary = "The party is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_party"
+params = ["reason"]
+remedy = "Name a tenant by its UUIDv7 or an external peer by its 1-to-128-character id."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_topic"
+class = "none"
+summary = "The topic is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_topic"
+params = ["reason"]
+remedy = "Use at least two dotted lower-case segments, each starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_grant"
+class = "none"
+summary = "The grant is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_grant"
+params = ["reason"]
+remedy = "Correct the grant and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_schema_range"
+class = "none"
+summary = "The schema range is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_schema_range"
+params = ["reason"]
+remedy = "Use a lowest version of at least 1 that is not above the highest version."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_field"
+class = "none"
+summary = "The field name is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_field"
+params = ["reason"]
+remedy = "Use dotted lower-case field segments of at most 128 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.field_classification"
+class = "none"
+summary = "The field {field} is {class} and must be listed explicitly."
+explanation_key = "error.tenant_link.field_classification"
+params = ["class", "field"]
+remedy = "Add the field to the grant by name instead of relying on a namespace rule."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_offer"
+class = "none"
+summary = "The offer is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_offer"
+params = ["reason"]
+remedy = "List each topic once and make the offer from the side that sends it."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_expiry"
+class = "none"
+summary = "The expiry is not valid: {reason}."
+explanation_key = "error.tenant_link.invalid_expiry"
+params = ["reason"]
+remedy = "Use an instant after the link was created and after the current time for a new grant."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.external_record_topic"
+class = "none"
+summary = "An external link cannot carry the record topic {topic}."
+explanation_key = "error.tenant_link.external_record_topic"
+params = ["topic"]
+remedy = "Use a message topic for an external peer, or link two platform tenants for record mirrors."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.not_found"
+class = "none"
+summary = "Link {link} was not found."
+explanation_key = "error.tenant_link.not_found"
+params = ["link"]
+remedy = "Check the link id."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.version_conflict"
+class = "none"
+summary = "Link {link} changed since it was read (expected version {expected}, found {found})."
+explanation_key = "error.tenant_link.version_conflict"
+params = ["expected", "found", "link"]
+remedy = "Read the link again and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.duplicate_link"
+class = "none"
+summary = "A link with this id or party pair already exists: {link}."
+explanation_key = "error.tenant_link.duplicate_link"
+params = ["link"]
+remedy = "Read the existing link instead of creating a second one for the same pair."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.invalid_transition"
+class = "none"
+summary = "Link {link} cannot move from {from} to {to}."
+explanation_key = "error.tenant_link.invalid_transition"
+params = ["from", "link", "to"]
+remedy = "Check the link's current state and the allowed transitions."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.not_active"
+class = "none"
+summary = "Link {link} is {state} and cannot be used."
+explanation_key = "error.tenant_link.not_active"
+params = ["link", "state"]
+remedy = "Finish the handshake before exchanging anything over the link."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.revoked"
+class = "none"
+summary = "Link {link} was revoked."
+explanation_key = "error.tenant_link.revoked"
+params = ["link"]
+remedy = "Propose a new link if the parties still want to exchange."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.link_expired"
+class = "none"
+summary = "Link {link} expired."
+explanation_key = "error.tenant_link.link_expired"
+params = ["link"]
+remedy = "Agree a new link with fresh grants."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.grant_expired"
+class = "none"
+summary = "The grant for topic {topic} on link {link} expired."
+explanation_key = "error.tenant_link.grant_expired"
+params = ["link", "topic"]
+remedy = "Agree a new grant with a later expiry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.topic_not_granted"
+class = "none"
+summary = "Link {link} has no grant for topic {topic}."
+explanation_key = "error.tenant_link.topic_not_granted"
+params = ["link", "topic"]
+remedy = "Add the topic to both offers and agree a grant."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.wrong_direction"
+class = "none"
+summary = "The grant for topic {topic} on link {link} does not allow that direction."
+explanation_key = "error.tenant_link.wrong_direction"
+params = ["link", "topic"]
+remedy = "Use a direction the grant covers, or agree a wider one on both sides."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.offer_conflict"
+class = "none"
+summary = "The offers disagree on topic {topic}: {reason}."
+explanation_key = "error.tenant_link.offer_conflict"
+params = ["reason", "topic"]
+remedy = "Align the kind, direction and schema range of the shared topic on both sides."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.grant_wider"
+class = "none"
+summary = "The grant for topic {topic} is wider than the offers: {dimension}."
+explanation_key = "error.tenant_link.grant_wider"
+params = ["dimension", "topic"]
+remedy = "Narrow the grant to what both offers list."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.region_refused"
+class = "none"
+summary = "The peer region {region} is refused by {clause}."
+explanation_key = "error.tenant_link.region_refused"
+params = ["clause", "region"]
+remedy = "Choose a peer in an allowed region or change the residency policy through its owner."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.peer_region_mismatch"
+class = "none"
+summary = "The peer is in region {found} but the grant requires {required}."
+explanation_key = "error.tenant_link.peer_region_mismatch"
+params = ["found", "required"]
+remedy = "Agree a grant whose region requirement matches the peer's region."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.bad_signature"
+class = "none"
+summary = "A handshake message signature did not verify."
+explanation_key = "error.tenant_link.bad_signature"
+params = []
+remedy = "Discard the message and ask the peer to resend the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.wrong_signer"
+class = "none"
+summary = "The handshake message was signed by {found}, not by {expected}."
+explanation_key = "error.tenant_link.wrong_signer"
+params = ["expected", "found"]
+remedy = "Check that the peer uses the identity key it exchanged for this link."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.key_mismatch"
+class = "none"
+summary = "The identity key of {party} is not the trusted one: expected {expected}, found {found}."
+explanation_key = "error.tenant_link.key_mismatch"
+params = ["expected", "found", "party"]
+remedy = "Confirm the peer administrator's key fingerprint out of band, pin that key and ask the peer to sign with it."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.key_unpinned"
+class = "none"
+summary = "Party {party} has no pinned identity key and this key was not confirmed on first use."
+explanation_key = "error.tenant_link.key_unpinned"
+params = ["party"]
+remedy = "Pin the peer's key in the peer key directory, or pass its confirmed fingerprint as a first-use confirmation."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.replayed"
+class = "none"
+summary = "Handshake message {revision} was already received."
+explanation_key = "error.tenant_link.replayed"
+params = ["revision"]
+remedy = "Ignore the duplicate and continue from the current revision."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.out_of_order"
+class = "none"
+summary = "Handshake message {found} arrived where {expected} was expected."
+explanation_key = "error.tenant_link.out_of_order"
+params = ["expected", "found"]
+remedy = "Resend the missing step before this one."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.transcript_mismatch"
+class = "none"
+summary = "The handshake message does not continue the transcript."
+explanation_key = "error.tenant_link.transcript_mismatch"
+params = []
+remedy = "Restart the handshake; a message that does not chain to the previous one is not trusted."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.wrong_step"
+class = "none"
+summary = "Handshake step {found} arrived where {expected} was expected."
+explanation_key = "error.tenant_link.wrong_step"
+params = ["expected", "found"]
+remedy = "Send the step the exchange is waiting for."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.wrong_link"
+class = "none"
+summary = "The message names link {found}, not {expected}."
+explanation_key = "error.tenant_link.wrong_link"
+params = ["expected", "found"]
+remedy = "Send the message for this link; a message for another link is never applied."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.consent_required"
+class = "none"
+summary = "Link {link} needs two distinct consents before it can be activated."
+explanation_key = "error.tenant_link.consent_required"
+params = ["link"]
+remedy = "Obtain the second party administrator's consent and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.consent_duplicate"
+class = "none"
+summary = "The consent of {actor} cannot stand for both parties."
+explanation_key = "error.tenant_link.consent_duplicate"
+params = ["actor"]
+remedy = "Have a second administrator consent for the other party."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.consent_invalid"
+class = "none"
+summary = "The consent is not valid: {reason}."
+explanation_key = "error.tenant_link.consent_invalid"
+params = ["reason"]
+remedy = "Record the consent for the consenting party with a current step-up proof."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.step_up_required"
+class = "none"
+summary = "The consent of {actor} has no recent strong sign-in."
+explanation_key = "error.tenant_link.step_up_required"
+params = ["actor"]
+remedy = "Sign in again with a strong method and record the consent."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.consent_stale"
+class = "none"
+summary = "The consent of {actor} is older than the allowed {max_age_ms} milliseconds."
+explanation_key = "error.tenant_link.consent_stale"
+params = ["actor", "max_age_ms"]
+remedy = "Record a fresh consent with a recent strong sign-in and retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.audit_failed"
+class = "none"
+summary = "The audit trail could not record {action}."
+explanation_key = "error.tenant_link.audit_failed"
+params = ["action"]
+remedy = "Check the audit store and retry; the change was not made."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.store_failed"
+class = "none"
+summary = "The link store failed: {reason}."
+explanation_key = "error.tenant_link.store_failed"
+params = ["reason"]
+remedy = "Check the link store and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.proposed"
+class = "none"
+summary = "A link was proposed."
+explanation_key = "error.tenant_link.proposed"
+params = []
+remedy = "No action; the peer answers with accept, reject or a later handshake step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.accepted"
+class = "none"
+summary = "A peer accepted a link."
+explanation_key = "error.tenant_link.accepted"
+params = []
+remedy = "No action; the identity keys and activation follow."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.key_exchanged"
+class = "none"
+summary = "A side published its link identity key."
+explanation_key = "error.tenant_link.key_exchanged"
+params = []
+remedy = "No action."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.activated"
+class = "none"
+summary = "A link was activated."
+explanation_key = "error.tenant_link.activated"
+params = []
+remedy = "No action; the grants are in force."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.rejected"
+class = "none"
+summary = "A peer rejected a link."
+explanation_key = "error.tenant_link.rejected"
+params = []
+remedy = "Read the peer's fixed rejection reason and propose new terms if wanted."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.expired"
+class = "none"
+summary = "A link reached its expiry."
+explanation_key = "error.tenant_link.expired"
+params = []
+remedy = "Agree a new link with fresh grants if the exchange should continue."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.allowed"
+class = "none"
+summary = "A use of a link was allowed."
+explanation_key = "error.tenant_link.allowed"
+params = []
+remedy = "No action."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.refused"
+class = "none"
+summary = "A use of a link was refused."
+explanation_key = "error.tenant_link.refused"
+params = []
+remedy = "Read the refusal detail, which names the stable error code."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.change_failed"
+class = "none"
+summary = "An audited link change did not reach the store."
+explanation_key = "error.tenant_link.change_failed"
+params = []
+remedy = "Check the link store and retry the operation."
+since = "0.1.0"

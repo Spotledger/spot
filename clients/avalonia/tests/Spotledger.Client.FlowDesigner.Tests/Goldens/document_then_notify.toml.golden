@@ -1,0 +1,45 @@
+# Spotledger process definition (spot-bpm-model). Canonical: keys sorted, one scalar per line.
+name = "document_then_notify"
+app = "billing"
+title = "Document then notify"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+cron = "0 8 * * *"
+trigger = "schedule"
+
+[[nodes]]
+id = "create_invoice"
+kind = "document"
+action = "create"
+doctype = "Sales Invoice"
+
+[[nodes]]
+id = "post_invoice"
+kind = "document"
+action = "post"
+doctype = "Sales Invoice"
+operation = "post"
+
+[[nodes]]
+id = "notify"
+kind = "integration"
+terminal = true
+action = "send"
+connector = "email"
+endpoint = "accounts@example.com"
+
+[[edges]]
+from = "start"
+to = "create_invoice"
+
+[[edges]]
+from = "create_invoice"
+to = "post_invoice"
+
+[[edges]]
+from = "post_invoice"
+to = "notify"

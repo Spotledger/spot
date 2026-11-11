@@ -1,0 +1,9 @@
+name = "invoice"
+label = "Invoice"
+is_posted = true
+title_field = "number"
+fields = [
+  { name = "number", type = "text", required = true },
+  { name = "customer", type = "link", options = "customer" },
+  { name = "lines", type = "table", options = "invoice_line" },
+]

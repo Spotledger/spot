@@ -1,0 +1,20 @@
+# node_role_pg codes: the PostgreSQL store of a site's recorded node role (WP-RTB-03.T5).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "node_role_pg.unavailable"
+class = "none"
+summary = "The recorded node role could not be read or written: the database or its pool failed."
+explanation_key = "error.node_role_pg.unavailable"
+params = []
+remedy = "Check that the database is reachable and the pool has a free connection, then retry; the host refuses to start rather than guess the role."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role_pg.table_missing"
+class = "none"
+summary = "The node role table (spot_node_role_state) does not exist in the database."
+explanation_key = "error.node_role_pg.table_missing"
+params = []
+remedy = "Run spot migrate to create the table, then start the host again."
+since = "0.1.0"

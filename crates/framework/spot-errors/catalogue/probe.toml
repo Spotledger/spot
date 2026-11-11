@@ -1,0 +1,82 @@
+# probe codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "probe.failed"
+class = "none"
+summary = "Contract-suite probe: a step failed on purpose to test error flow."
+explanation_key = "error.probe.failed"
+params = []
+remedy = "Contract test only; never raised in production."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.lookup"
+class = "Internal"
+summary = "Contract-suite probe: a lookup case failed."
+explanation_key = "error.probe.lookup"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.out_of_ids"
+class = "Internal"
+summary = "Contract-suite probe: the test id queue ran dry."
+explanation_key = "error.probe.out_of_ids"
+params = []
+remedy = "Contract test only; enlarge the queue."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.load_mutable"
+class = "Internal"
+summary = "Contract-suite probe: a load hook tried to mutate the document."
+explanation_key = "error.probe.load_mutable"
+params = []
+remedy = "Contract test only; proves the phase guard."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.seam"
+class = "Internal"
+summary = "Contract-suite probe: a seam case failed."
+explanation_key = "error.probe.seam"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.smtp_down"
+class = "Unavailable"
+summary = "Contract-suite probe: the fake mail seam reports itself down."
+explanation_key = "error.probe.smtp_down"
+params = []
+remedy = "Contract test only; exercises retryable failures."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.first"
+class = "none"
+summary = "Contract-suite probe message: the first message in a sequence test."
+explanation_key = "error.probe.first"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.second"
+class = "none"
+summary = "Contract-suite probe message: the second message in a sequence test."
+explanation_key = "error.probe.second"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"
+
+[[entry]]
+code = "probe.loaded"
+class = "none"
+summary = "Contract-suite probe message: emitted by the load-mutability test."
+explanation_key = "error.probe.loaded"
+params = []
+remedy = "Contract test only."
+since = "0.1.0"

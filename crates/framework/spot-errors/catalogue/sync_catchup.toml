@@ -1,0 +1,65 @@
+# sync_catchup codes: the catch-up planner of spot-sync-catchup (WP-SYN-07.T1, ADR-066 sections 1 to 3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto its own conditions and none rides an AppError, so `class = "none"`.
+
+[[entry]]
+code = "sync_catchup.invalid_settings"
+class = "none"
+summary = "The catch-up settings cannot plan: {reason}."
+explanation_key = "error.sync_catchup.invalid_settings"
+params = ["reason"]
+remedy = "Set a limit above zero and keep the snapshot fraction at or below 100%."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.inconsistent_summary"
+class = "none"
+summary = "The gap summary describes no possible gap: {reason}."
+explanation_key = "error.sync_catchup.inconsistent_summary"
+params = ["reason"]
+remedy = "Rebuild the summary from the node's acknowledged prefix and the stream's current end."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.unknown_topic"
+class = "none"
+summary = "The topic {topic} has no registered event class, so its events cannot be planned."
+explanation_key = "error.sync_catchup.unknown_topic"
+params = ["topic"]
+remedy = "Register the topic's class in the event registry (ADR-061 section 2), or exclude it from the node's scope."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.subject_missing"
+class = "none"
+summary = "The state event at position {position} on topic {topic} names no record."
+explanation_key = "error.sync_catchup.subject_missing"
+params = ["position", "topic"]
+remedy = "Fix the producer or the relay so every state event carries its record's subject."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.duplicate_image"
+class = "none"
+summary = "The image set holds the {entity} record {id} twice, so its dependencies cannot be ordered."
+explanation_key = "error.sync_catchup.duplicate_image"
+params = ["entity", "id"]
+remedy = "Coalesce the events before ordering their images, so each record has exactly one latest image."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.reference_unreadable"
+class = "none"
+summary = "The references of the {entity} record {id} cannot be read from the catalog."
+explanation_key = "error.sync_catchup.reference_unreadable"
+params = ["entity", "id"]
+remedy = "Declare the entity's links in the catalog, or exclude the record from the node's scope."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup.unscoped_audit"
+class = "none"
+summary = "The gap holds an audit event at position {position} that is not addressed to this node."
+explanation_key = "error.sync_catchup.unscoped_audit"
+params = ["position"]
+remedy = "Build the planner's input with scope_for_node, which drops audit events addressed to other nodes; never hand the planner a gap read straight from the stream."
+since = "0.1.0"

@@ -1,0 +1,11 @@
+{
+  "active": false,
+  "layout": {
+    "columns": 5,
+    "fields": [
+      { "field": "heading", "kind": "label", "required": false },
+      { "field": "units", "kind": "decimal", "required": true }
+    ]
+  },
+  "name": "independent panel"
+}

@@ -1,0 +1,19 @@
+[package]
+name = "spot-storage-contract"
+version = "0.3.0"
+description = "Storage contract v0.3 for the Spotledger Platform: traits, typed query IR, errors and the contract test suite"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Binary, time-ordered record keys (ADR-33).
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+# Decimal money and quantities (ADR-12); maps to PostgreSQL NUMERIC.
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+# Dates and timestamps; maps to PostgreSQL date/time/timestamptz.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

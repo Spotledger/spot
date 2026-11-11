@@ -1,0 +1,145 @@
+# graph codes: graph model derivation problems and graph algorithm errors. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "graph.dangling_target"
+class = "none"
+summary = "A link field's options name a DocType that does not exist: {doctype}.{field} -> {target}."
+explanation_key = "error.graph.dangling_target"
+params = ["doctype", "field", "target"]
+remedy = "Fix the field's options to name an existing DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.relation_doctype_unknown"
+class = "none"
+summary = "A relation spec names a DocType that is not in the metadata: {doctype}."
+explanation_key = "error.graph.relation_doctype_unknown"
+params = ["doctype"]
+remedy = "Correct the DocType name in the relation spec."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.relation_doctype_is_child"
+class = "none"
+summary = "A relation spec names a child DocType, which cannot carry the two ends of a relation: {doctype}."
+explanation_key = "error.graph.relation_doctype_is_child"
+params = ["doctype"]
+remedy = "Name a top-level DocType in the relation spec."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.relation_field_not_link"
+class = "none"
+summary = "A relation's from or to field is missing or not a link field: {doctype}.{field}."
+explanation_key = "error.graph.relation_field_not_link"
+params = ["doctype", "field"]
+remedy = "Make the named field an existing link field."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.relation_property_unsupported"
+class = "none"
+summary = "A relation DocType field has a type an edge cannot carry as a property: {doctype}.{field} ({field_type})."
+explanation_key = "error.graph.relation_property_unsupported"
+params = ["doctype", "field", "field_type"]
+remedy = "Remove the field from the relation DocType, or move it to a child table or a separate record."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.relation_end_unknown_target"
+class = "none"
+summary = "A relation end links to a DocType that does not exist: {doctype}.{field} -> {target}."
+explanation_key = "error.graph.relation_end_unknown_target"
+params = ["doctype", "field", "target"]
+remedy = "Point the end field at an existing DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.duplicate_edge_name"
+class = "none"
+summary = "Two edges share one canonical name, so lookups could not tell them apart: {name}."
+explanation_key = "error.graph.duplicate_edge_name"
+params = ["name"]
+remedy = "Give one of the edges a different name."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.limit_exceeded"
+class = "none"
+summary = "A graph algorithm input exceeds a configured limit: {kind} limit {limit}, got {actual}."
+explanation_key = "error.graph.limit_exceeded"
+params = ["actual", "kind", "limit"]
+remedy = "Reduce the input or raise the limit deliberately."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.node_out_of_range"
+class = "none"
+summary = "A node index is not valid for the graph: {index} of {node_count} nodes."
+explanation_key = "error.graph.node_out_of_range"
+params = ["index", "node_count"]
+remedy = "Pass only indexes the graph was built with."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.node_index_overflow"
+class = "none"
+summary = "A graph has more nodes than a 32-bit node index can address: {count}."
+explanation_key = "error.graph.node_index_overflow"
+params = ["count"]
+remedy = "Split the graph or reduce its node count."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.cost_overflow"
+class = "none"
+summary = "A path cost overflowed 64 bits at an edge: {from} -> {to}."
+explanation_key = "error.graph.cost_overflow"
+params = ["from", "to"]
+remedy = "Reduce the edge weights; costs never wrap."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.zero_weight_edge"
+class = "none"
+summary = "An edge has weight 0 where shortest_path needs at least 1: {from} -> {to}."
+explanation_key = "error.graph.zero_weight_edge"
+params = ["from", "to"]
+remedy = "Give the edge a weight of at least 1."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.internal_invariant"
+class = "none"
+summary = "A documented internal invariant of the graph view did not hold: {what}."
+explanation_key = "error.graph.internal_invariant"
+params = ["what"]
+remedy = "Ensure the graph view's successors are stable between calls; report a bug otherwise."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.cycle"
+class = "none"
+summary = "The graph is cyclic and an acyclic graph was required; one witness cycle is carried."
+explanation_key = "error.graph.cycle"
+params = []
+remedy = "Break the cycle named by the witness."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.aggregate_property_unknown"
+class = "none"
+summary = "A relation spec aggregates a property its DocType does not declare: {doctype}.{field}."
+explanation_key = "error.graph.aggregate_property_unknown"
+params = ["doctype", "field"]
+remedy = "Name an existing Int or Decimal field of the relation DocType, or drop the aggregate."
+since = "0.1.0"
+
+[[entry]]
+code = "graph.aggregate_property_not_numeric"
+class = "none"
+summary = "A relation spec aggregates a property that is not an int or a decimal: {doctype}.{field}."
+explanation_key = "error.graph.aggregate_property_not_numeric"
+params = ["doctype", "field"]
+remedy = "Name an Int or Decimal field of the relation DocType, or drop the aggregate."
+since = "0.1.0"

@@ -1,0 +1,84 @@
+# Barrier 3 fixture (WP-IAM-11.T4): one exposed duty, one staff duty, one stored-before-the-mark
+# duty (no `outside_exposed` key), and roles covering each way a portal user could be given
+# something an outside user may not hold.
+
+[[duty]]
+name = "view_own_invoices"
+version = 1
+outside_exposed = true
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "view_own_invoices"
+rights = ["read"]
+
+[[duty]]
+name = "post_invoices"
+version = 1
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "post_invoices"
+rights = ["read", "submit"]
+
+[[duty]]
+name = "old_stored_duty"
+version = 1
+[[duty.grants]]
+doctype = "customer"
+role = "old_stored_duty"
+rights = ["read"]
+
+[[role]]
+name = "Desk Clerk"
+origin = { kind = "custom" }
+duties = [{ name = "post_invoices" }]
+
+[[role]]
+name = "Desk Exposed Only"
+origin = { kind = "custom" }
+duties = [{ name = "view_own_invoices" }]
+
+[[role]]
+name = "Portal Viewer"
+origin = { kind = "custom" }
+kind = "portal"
+duties = [{ name = "view_own_invoices" }]
+
+[[role]]
+name = "Portal Empty"
+origin = { kind = "custom" }
+kind = "portal"
+
+[[role]]
+name = "Portal Leaky"
+origin = { kind = "custom" }
+kind = "portal"
+duties = [{ name = "view_own_invoices" }, { name = "post_invoices" }]
+
+[[role]]
+name = "Portal Inherits Leaky"
+origin = { kind = "custom" }
+kind = "portal"
+duties = [{ name = "view_own_invoices" }]
+parents = ["Portal Leaky"]
+
+[[role]]
+name = "Portal Old Duty"
+origin = { kind = "custom" }
+kind = "portal"
+duties = [{ name = "old_stored_duty" }]
+
+[[role]]
+name = "Portal Over Desk"
+origin = { kind = "custom" }
+kind = "portal"
+duties = [{ name = "view_own_invoices" }]
+parents = ["Desk Exposed Only"]
+
+[[role]]
+name = "Portal Direct"
+origin = { kind = "custom" }
+kind = "portal"
+[[role.direct_grants]]
+doctype = "sales_invoice"
+role = "Portal Direct"
+rights = ["read"]

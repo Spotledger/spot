@@ -1,0 +1,32 @@
+# agent_memory_pg codes: the PostgreSQL + pgvector agent memory store (WP-AI-09.T2, WS13,
+# ADR-26). One [[entry]] per code; see crates/framework/spot-errors/README.md. These are raised
+# on a control-plane path (a schema migration or a provisioning step), so they name the step and
+# never a database name, a role, a password or a SQLSTATE's detail: a provisioning failure is the
+# one place a connection secret is most likely to be about.
+
+[[entry]]
+code = "agent_memory_pg.migration_failed"
+class = "Internal"
+summary = "The agent memory tables, or the vector extension they need, could not be created in the tenant's memory database."
+explanation_key = "error.agent_memory_pg.migration_failed"
+params = []
+remedy = "Check that the memory role owns its database and may create tables there, that the server is reachable, then run prepare again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory_pg.extension_missing"
+class = "Internal"
+summary = "The PostgreSQL server has no vector extension available, so a memory database cannot be prepared on it."
+explanation_key = "error.agent_memory_pg.extension_missing"
+params = []
+remedy = "Install the pgvector extension on the server (the package that provides the vector extension), then provision the memory database again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory_pg.provision_failed"
+class = "Internal"
+summary = "The tenant's memory database could not be provisioned at one of its steps: database, role, grants, extension or registry."
+explanation_key = "error.agent_memory_pg.provision_failed"
+params = []
+remedy = "Check the control-plane role may create databases and roles on the server, then provision the tenant again; provisioning is idempotent and resumes where it stopped."
+since = "0.1.0"

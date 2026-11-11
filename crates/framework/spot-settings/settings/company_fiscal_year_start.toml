@@ -1,0 +1,27 @@
+# Seed setting for company.fiscal_year_start. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "company.fiscal_year_start"
+title = "Fiscal Year Start"
+summary = "The month when the fiscal year starts."
+description = "The calendar month (1-12) when the company's fiscal year begins. Used for financial reporting."
+scopes = ["company"]
+risk = "low"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "finance",
+    "reporting",
+]
+help_url = "https://docs.example.com/settings/company.fiscal_year_start"
+
+[value.Int]
+min = 1
+max = 12
+
+[default]
+Int = 1
+
+[restart]
+type = "none"

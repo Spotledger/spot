@@ -1,0 +1,37 @@
+# Seed setting for runtime.logging.level. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "runtime.logging.level"
+title = "Log Level"
+summary = "Minimum log level for application logs."
+description = "Controls the verbosity of application logs. Higher levels produce more output."
+scopes = [
+    "fleet",
+    "group",
+    "server",
+    "tenant",
+]
+risk = "low"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "logging",
+    "observability",
+]
+help_url = "https://docs.example.com/settings/runtime.logging.level"
+
+[value]
+Enum = [
+    "trace",
+    "debug",
+    "info",
+    "warn",
+    "error",
+]
+
+[default]
+Text = "info"
+
+[restart]
+type = "none"

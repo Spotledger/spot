@@ -1,0 +1,130 @@
+# nocode_publish codes: packaging and publishing a designer-built no-code app
+# (spot-nocode-publish, WP-DX-08.T1). Library-internal vocabulary: the host renders the
+# summary and remedy for the designer or publisher.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "nocode_publish.bad_draft"
+class = "none"
+summary = "The app draft is not publishable."
+explanation_key = "error.nocode_publish.bad_draft"
+params = []
+remedy = "Correct the name, publisher, site, creation time, title or duplicate item the message names."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.missing_item"
+class = "none"
+summary = "An item the app draft names is not on the site it was designed on."
+explanation_key = "error.nocode_publish.missing_item"
+params = []
+remedy = "Add the item to the site, remove the reference from the draft, or republish the draft."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.data_not_declared"
+class = "none"
+summary = "The site carries fixture rows for a DocType the app draft does not declare."
+explanation_key = "error.nocode_publish.data_not_declared"
+params = []
+remedy = "Declare the fixture DocType in the draft, or remove those rows from the site."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.bad_manifest"
+class = "none"
+summary = "The generated app manifest is not valid."
+explanation_key = "error.nocode_publish.bad_manifest"
+params = []
+remedy = "Correct the app name, version, dependency or host range the message names and package again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.bad_bundle"
+class = "none"
+summary = "The packed app bundle is not valid."
+explanation_key = "error.nocode_publish.bad_bundle"
+params = []
+remedy = "Correct the bundle problem the message names and package again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.over_privileged"
+class = "none"
+summary = "The app asks for more than the host policy allows."
+explanation_key = "error.nocode_publish.over_privileged"
+params = []
+remedy = "Remove the capability the message names, or ask the store operator to widen the policy."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.bad_custom_bundle"
+class = "none"
+summary = "The captured site customisations are not valid."
+explanation_key = "error.nocode_publish.bad_custom_bundle"
+params = []
+remedy = "Correct the customisation the message names and package again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.review_rejected"
+class = "none"
+summary = "The app store review found a blocker, so the app cannot be listed."
+explanation_key = "error.nocode_publish.review_rejected"
+params = []
+remedy = "Fix every blocker the review report names, then package and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.version_exists"
+class = "none"
+summary = "The same semantic version is already published."
+explanation_key = "error.nocode_publish.version_exists"
+params = []
+remedy = "Raise the app version and publish the new bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.version_not_increasing"
+class = "none"
+summary = "The new app version does not exceed every published version."
+explanation_key = "error.nocode_publish.version_not_increasing"
+params = []
+remedy = "Raise the app version above the latest published version."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.private_other_organisation"
+class = "none"
+summary = "A private release names an organisation that does not own the app."
+explanation_key = "error.nocode_publish.private_other_organisation"
+params = []
+remedy = "Publish privately for the organisation the signing certificate names."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.signature"
+class = "none"
+summary = "The publisher signature is missing, does not verify, or names another identity."
+explanation_key = "error.nocode_publish.signature"
+params = []
+remedy = "Sign with the certificate's key, inside its validity window, and check the revocation list."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.registry"
+class = "none"
+summary = "The store registry refused the release."
+explanation_key = "error.nocode_publish.registry"
+params = []
+remedy = "Correct the release the registry's message names and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_publish.install"
+class = "none"
+summary = "The install did not complete."
+explanation_key = "error.nocode_publish.install"
+params = []
+remedy = "Read the installer step and code the message names, correct it, and run the install again."
+since = "0.1.0"

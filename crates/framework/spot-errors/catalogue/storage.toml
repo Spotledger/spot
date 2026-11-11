@@ -1,0 +1,226 @@
+# storage codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "storage.not_found"
+class = "none"
+summary = "Storage-internal vocabulary: the record or document does not exist."
+explanation_key = "error.storage.not_found"
+params = []
+remedy = "For logs; hosts report document.not_found."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.already_exists"
+class = "none"
+summary = "Storage-internal vocabulary: a record with this id already exists."
+explanation_key = "error.storage.already_exists"
+params = []
+remedy = "For logs; hosts report document.duplicate."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.stale_version"
+class = "none"
+summary = "Storage-internal vocabulary: the stored version is not the expected one."
+explanation_key = "error.storage.stale_version"
+params = []
+remedy = "For logs; hosts report document.stale_version."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.unique_violation"
+class = "none"
+summary = "Storage-internal vocabulary: a unique index would hold two equal keys."
+explanation_key = "error.storage.unique_violation"
+params = []
+remedy = "For logs; hosts report document.duplicate."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.reference_violation"
+class = "none"
+summary = "Storage-internal vocabulary: a database-checked link points at a missing record."
+explanation_key = "error.storage.reference_violation"
+params = []
+remedy = "For logs; hosts report document.linked or document.invalid_link."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.invalid_value"
+class = "none"
+summary = "Storage-internal vocabulary: a value does not fit its field."
+explanation_key = "error.storage.invalid_value"
+params = []
+remedy = "For logs; hosts report document.invalid_value."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.invalid_name"
+class = "none"
+summary = "Storage-internal vocabulary: a name is not a valid storage identifier."
+explanation_key = "error.storage.invalid_name"
+params = []
+remedy = "For logs; check the entity or field name."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.invalid_schema"
+class = "none"
+summary = "Storage-internal vocabulary: the catalog is inconsistent."
+explanation_key = "error.storage.invalid_schema"
+params = []
+remedy = "For logs; repair the schema definition."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.unknown_entity"
+class = "none"
+summary = "Storage-internal vocabulary: the entity is not in the transaction's catalog."
+explanation_key = "error.storage.unknown_entity"
+params = []
+remedy = "For logs; hosts report meta.unknown_doctype."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.unknown_field"
+class = "none"
+summary = "Storage-internal vocabulary: the field is not defined on the entity."
+explanation_key = "error.storage.unknown_field"
+params = []
+remedy = "For logs; hosts report document.unknown_field."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.invalid_query"
+class = "none"
+summary = "Storage-internal vocabulary: the query is not valid against the catalog."
+explanation_key = "error.storage.invalid_query"
+params = []
+remedy = "For logs; fix the query against the metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.serialization_failure"
+class = "none"
+summary = "Storage-internal vocabulary: the transaction could not be serialized with concurrent ones."
+explanation_key = "error.storage.serialization_failure"
+params = []
+remedy = "For logs; the host retries the whole transaction with backoff."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.deadlock"
+class = "none"
+summary = "Storage-internal vocabulary: the transaction was chosen as a deadlock victim."
+explanation_key = "error.storage.deadlock"
+params = []
+remedy = "For logs; the host retries the whole transaction."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.lock_timeout"
+class = "none"
+summary = "Storage-internal vocabulary: a lock was not granted within the lock timeout."
+explanation_key = "error.storage.lock_timeout"
+params = []
+remedy = "For logs; hosts report server.unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.lock_not_available"
+class = "none"
+summary = "Storage-internal vocabulary: a NoWait lock is held by another transaction."
+explanation_key = "error.storage.lock_not_available"
+params = []
+remedy = "For logs; hosts report server.unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.statement_timeout"
+class = "none"
+summary = "Storage-internal vocabulary: a statement exceeded its timeout."
+explanation_key = "error.storage.statement_timeout"
+params = []
+remedy = "For logs; hosts report server.unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.transaction_too_large"
+class = "none"
+summary = "Storage-internal vocabulary: the transaction exceeded its write limit."
+explanation_key = "error.storage.transaction_too_large"
+params = []
+remedy = "For logs; chunk the work into smaller transactions."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.read_only_transaction"
+class = "none"
+summary = "Storage-internal vocabulary: a write was attempted in a read-only transaction."
+explanation_key = "error.storage.read_only_transaction"
+params = []
+remedy = "For logs; open the transaction as writable."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.traversal_too_large"
+class = "none"
+summary = "Storage-internal vocabulary: a traversal reached more nodes than its limit."
+explanation_key = "error.storage.traversal_too_large"
+params = []
+remedy = "For logs; narrow the traversal."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.resync_required"
+class = "none"
+summary = "Storage-internal vocabulary: a feed position can no longer be continued."
+explanation_key = "error.storage.resync_required"
+params = []
+remedy = "For logs; consumers resynchronise and reconcile effects."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.unsupported"
+class = "none"
+summary = "Storage-internal vocabulary: the backend does not offer this capability."
+explanation_key = "error.storage.unsupported"
+params = []
+remedy = "For logs; use a backend with the capability."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.unavailable"
+class = "none"
+summary = "Storage-internal vocabulary: the backend cannot be reached; retry is safe."
+explanation_key = "error.storage.unavailable"
+params = []
+remedy = "For logs; hosts report server.unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.commit_outcome_unknown"
+class = "none"
+summary = "Storage-internal vocabulary: the connection failed during commit; the outcome is unknown."
+explanation_key = "error.storage.commit_outcome_unknown"
+params = []
+remedy = "For logs; check the outcome before retrying, never blindly."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.internal"
+class = "none"
+summary = "Storage-internal vocabulary: an unexpected backend failure."
+explanation_key = "error.storage.internal"
+params = []
+remedy = "For logs; hosts report http.internal."
+since = "0.1.0"
+
+[[entry]]
+code = "storage.exclusion_violation"
+class = "none"
+summary = "Storage-internal vocabulary: a write conflicts with an exclusion rule."
+explanation_key = "error.storage.exclusion_violation"
+params = []
+remedy = "For logs; the layer above reports the user-facing conflict."
+since = "0.1.0"

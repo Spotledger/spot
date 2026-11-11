@@ -1,0 +1,217 @@
+# installer codes: the pure install planner (WP-STR-04.T1, ADR-21). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "installer.unverified"
+class = "none"
+summary = "A bundle the site needs is not verified: {app}."
+explanation_key = "error.installer.unverified"
+params = ["app"]
+remedy = "Re-download the bundle and its signature, and install only a verified bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.requires_host"
+class = "none"
+summary = "The host version is outside the range {app} {version} accepts."
+explanation_key = "error.installer.requires_host"
+params = ["app", "version"]
+remedy = "Update the platform to a version the app accepts, or install a version that supports this host."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.wit_world_mismatch"
+class = "none"
+summary = "The bundle for {app} targets a different WIT world than this host."
+explanation_key = "error.installer.wit_world_mismatch"
+params = ["app"]
+remedy = "Install a bundle built for this host's WIT world, or update the platform."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.downgrade"
+class = "none"
+summary = "An app would move to a lower version without a downgrade request: {app}."
+explanation_key = "error.installer.downgrade"
+params = ["app"]
+remedy = "Request the downgrade explicitly, or choose a version at or above the installed one."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.downgrade_unsafe"
+class = "none"
+summary = "An explicit downgrade of {app} would run a data or schema patch, which cannot be undone."
+explanation_key = "error.installer.downgrade_unsafe"
+params = ["app"]
+remedy = "Do not downgrade across a data or schema patch; restore a snapshot instead of downgrading."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.digest_changed"
+class = "none"
+summary = "The same version of {app} is offered with a different bundle digest."
+explanation_key = "error.installer.digest_changed"
+params = ["app"]
+remedy = "Withdraw one of the two bundles for the version, or publish it as a new version."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.already_installed"
+class = "none"
+summary = "An install names an app the site already has: {app}."
+explanation_key = "error.installer.already_installed"
+params = ["app"]
+remedy = "Upgrade the installed app instead of installing it again."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.not_installed"
+class = "none"
+summary = "An upgrade, downgrade or uninstall names an app the site does not have: {app}."
+explanation_key = "error.installer.not_installed"
+params = ["app"]
+remedy = "Install the app first, or correct the app name."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.has_dependents"
+class = "none"
+summary = "An uninstall would remove an app another installed app depends on: {app}."
+explanation_key = "error.installer.has_dependents"
+params = ["app"]
+remedy = "Uninstall the dependent apps first, or keep this app."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.patch_removed"
+class = "none"
+summary = "A new manifest drops a patch the site already applied: {patch}."
+explanation_key = "error.installer.patch_removed"
+params = ["patch"]
+remedy = "Publish a manifest that keeps the applied patch, or a new patch that undoes it."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.missing_dependency"
+class = "none"
+summary = "A required app has no bundle in the catalogue: {app}."
+explanation_key = "error.installer.missing_dependency"
+params = ["app"]
+remedy = "Publish the required app to the catalogue, or remove the dependency."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.conflicting_requirement"
+class = "none"
+summary = "No version of {app} satisfies every requirement placed on it."
+explanation_key = "error.installer.conflicting_requirement"
+params = ["app"]
+remedy = "Publish a version that satisfies all requirers, or relax a dependency range."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.breaks_dependent"
+class = "none"
+summary = "A chosen version would break an installed app that depends on {app}."
+explanation_key = "error.installer.breaks_dependent"
+params = ["app"]
+remedy = "Choose a version the dependent accepts, or upgrade the dependent first."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.dependency_cycle"
+class = "none"
+summary = "The resolved dependencies form a cycle at {app}."
+explanation_key = "error.installer.dependency_cycle"
+params = ["app"]
+remedy = "Break the cycle by removing one of the dependency edges between the apps."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.no_candidate"
+class = "none"
+summary = "The catalogue holds no bundle matching the request for {app}."
+explanation_key = "error.installer.no_candidate"
+params = ["app"]
+remedy = "Publish a matching bundle, or widen the requested version range."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.plan_not_approved"
+class = "none"
+summary = "The plan's hash is not the hash an administrator approved, so it never runs."
+explanation_key = "error.installer.plan_not_approved"
+params = []
+remedy = "Re-plan, approve the actions as they stand, then run the newly approved hash."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.needs_approval"
+class = "none"
+summary = "The plan asks for capabilities an administrator has not approved, so it never runs."
+explanation_key = "error.installer.needs_approval"
+params = []
+remedy = "Approve the listed capabilities for the app, then run the re-planned, approved hash."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.lease_held"
+class = "none"
+summary = "Another installer holds this site's lease, so the run did not start."
+explanation_key = "error.installer.lease_held"
+params = []
+remedy = "Wait for the other installer to finish or its lease to lapse, then run again."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.lease_lost"
+class = "none"
+summary = "The per-site lease was lost mid-run, so the run stopped and left its journal."
+explanation_key = "error.installer.lease_lost"
+params = []
+remedy = "Resume the site once the lease is free; the journal rolls the run back or completes it."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.rollback_failed"
+class = "none"
+summary = "A step failed and undoing an earlier step failed too, so the site needs a person."
+explanation_key = "error.installer.rollback_failed"
+params = []
+remedy = "Inspect the site, then resume it once the failing undo can run."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.journal_corrupt"
+class = "none"
+summary = "The resume journal is missing rows or mixes two runs, so it cannot be trusted."
+explanation_key = "error.installer.journal_corrupt"
+params = []
+remedy = "Do not resume blindly; inspect the site and its journal, then restore a snapshot if needed."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.step_failed"
+class = "none"
+summary = "A trait call failed while running a plan step; the message names the step."
+explanation_key = "error.installer.step_failed"
+params = []
+remedy = "Read the named step, fix what it reported, then run or resume the plan again."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.interrupted"
+class = "none"
+summary = "Resume found a run that stopped before its commit and put the site back."
+explanation_key = "error.installer.interrupted"
+params = []
+remedy = "Nothing: the site is back in its previous state; run the plan again when ready."
+since = "0.1.0"
+
+[[entry]]
+code = "installer.no_plan"
+class = "none"
+summary = "A multi-site run was given a site with no approved plan."
+explanation_key = "error.installer.no_plan"
+params = []
+remedy = "Build and approve a plan for the site, then run the fleet again."
+since = "0.1.0"

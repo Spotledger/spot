@@ -1,0 +1,43 @@
+[package]
+name = "spot-webhooks"
+description = "Outbound webhooks with guaranteed delivery from the outbox: Webhook record, HMAC-signed payloads, delivery as jobs with retries and dead-letter state, replay, delivery log, per-endpoint rate and circuit limits, all calls through egress policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-core = { path = "../spot-core" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-jobs = { path = "../spot-jobs" }
+spot-egress = { path = "../spot-egress" }
+spot-secrets = { path = "../spot-secrets" }
+spot-expr = { path = "../spot-expr" }
+spot-redact = { path = "../spot-redact" }
+spot-permissions = { path = "../spot-permissions" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "macros"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+ring = { version = "0.17", features = ["std"] }
+subtle = "2"
+http = "1"
+hex = "0.4"
+url = "2"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "rt-multi-thread", "test-util"] }
+toml = "0.8"
+spot-meta = { path = "../spot-meta" }
+# The jobs crate's fakes, for tests only (WP-SEC-03.T6).
+spot-jobs = { path = "../spot-jobs", features = ["testing"] }
+
+[features]
+testing = []
+
+[lints]
+workspace = true

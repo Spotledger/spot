@@ -1,0 +1,120 @@
+# unattended_support codes: offline error help, opt-in crash reporting and telemetry, and the
+# crash intake that feeds the fix pipeline (WP-PRD-13.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "unattended_support.help_malformed"
+class = "none"
+summary = "A help file is malformed: {detail}."
+explanation_key = "error.unattended_support.help_malformed"
+params = ["detail"]
+remedy = "Fix the help file so it parses and every entry has all its fields."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.help_missing"
+class = "none"
+summary = "The user-visible error code {code} has no help entry."
+explanation_key = "error.unattended_support.help_missing"
+params = ["code"]
+remedy = "Add a help entry for the code, or run help-coverage with --write-skeletons and fill in the text."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.help_orphan"
+class = "none"
+summary = "A help entry names the code {code}, which the error catalogue does not contain."
+explanation_key = "error.unattended_support.help_orphan"
+params = ["code"]
+remedy = "Remove the entry or correct its code."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.help_bad_doc"
+class = "none"
+summary = "The help for {code} points to a document that does not exist."
+explanation_key = "error.unattended_support.help_bad_doc"
+params = ["code"]
+remedy = "Point learn_more at a document that exists under docs, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.help_style"
+class = "none"
+summary = "The help for {code} breaks the style rules: {detail}."
+explanation_key = "error.unattended_support.help_style"
+params = ["code", "detail"]
+remedy = "Rewrite the text in short plain sentences without jargon, code names or stack traces."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.consent_invalid"
+class = "none"
+summary = "The consent value is not one of off, ask or on."
+explanation_key = "error.unattended_support.consent_invalid"
+params = []
+remedy = "Set the setting to off, ask or on."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.spool_failed"
+class = "none"
+summary = "The crash report spool could not be used: {detail}."
+explanation_key = "error.unattended_support.spool_failed"
+params = ["detail"]
+remedy = "Check that the spool folder exists, is writable and has free space."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.report_too_large"
+class = "none"
+summary = "The crash report is larger than the size cap even after trimming."
+explanation_key = "error.unattended_support.report_too_large"
+params = []
+remedy = "Nothing to do; the report is dropped rather than sent oversized."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.name_invalid"
+class = "none"
+summary = "A telemetry counter name is not allowed: {detail}."
+explanation_key = "error.unattended_support.name_invalid"
+params = ["detail"]
+remedy = "Use a short lower-case name made of letters, digits, underscores and dots."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.upload_failed"
+class = "none"
+summary = "The upload did not complete: {detail}."
+explanation_key = "error.unattended_support.upload_failed"
+params = ["detail"]
+remedy = "Nothing is lost; the data stays queued and the next attempt sends it again."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.sink_failed"
+class = "none"
+summary = "The work item sink failed: {detail}."
+explanation_key = "error.unattended_support.sink_failed"
+params = ["detail"]
+remedy = "Check the sink's destination and try the intake flush again."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.redactor_failed"
+class = "none"
+summary = "The redaction rules could not be built: {detail}."
+explanation_key = "error.unattended_support.redactor_failed"
+params = ["detail"]
+remedy = "Nothing is written until redaction works; report the problem to the vendor."
+since = "0.1.0"
+
+[[entry]]
+code = "unattended_support.report_invalid"
+class = "none"
+summary = "A crash report breaks the size or shape rules: {detail}."
+explanation_key = "error.unattended_support.report_invalid"
+params = ["detail"]
+remedy = "Nothing to do for the sender; the intake refuses the report and counts it."
+since = "0.1.0"

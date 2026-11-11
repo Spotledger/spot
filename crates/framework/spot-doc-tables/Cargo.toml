@@ -1,0 +1,21 @@
+[package]
+name = "spot-doc-tables"
+description = "Child-table operations as pure functions: row diff, paths, clone with fresh ids, shape validation (WP-DOC-03.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, `ChildRow`, `AppError`, `FieldPath` and the prelude types (`Name`, `Value`, `RecordId`).
+spot-app-api = { path = "../../../contracts/app-api" }
+# Effective metadata: which table holds which child DocType, and the link field of a multiselect.
+spot-meta = { path = "../spot-meta" }
+
+[dev-dependencies]
+# Random patches: the diff must agree with what the patch meant.
+proptest = "1"
+
+[lints]
+workspace = true

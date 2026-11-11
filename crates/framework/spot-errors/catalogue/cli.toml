@@ -1,0 +1,166 @@
+# cli codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The command-line host's own refusals: codes its HTTP dispatcher answers with before a
+# request reaches the router, so they never ride an `AppError` and carry no class.
+
+[[entry]]
+code = "cli.password_change_required"
+class = "none"
+summary = "The caller signed in with a one-time secret and has not chosen a password yet."
+explanation_key = "error.cli.password_change_required"
+params = []
+remedy = "Choose a password first, then repeat the request."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.partition_registry_missing"
+class = "none"
+summary = "The site has a node id but no partition registry, so ownership cannot be checked and the node refuses to start."
+explanation_key = "error.cli.partition_registry_missing"
+params = []
+remedy = "Give the node a partition registry (the site's [partition] profile and a registry source), or remove the node id from the site configuration."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_app_exists"
+class = "none"
+summary = "The app's place in the app folder is missing or already holds other content, so the bundle is not unpacked over it."
+explanation_key = "error.cli.bundle_app_exists"
+params = []
+remedy = "Create the app directory empty (with an empty doctypes directory), list it in common.toml `apps`, and install again."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_certificate_expired"
+class = "none"
+summary = "The publisher certificate is not valid now, or was not valid when the bundle was signed."
+explanation_key = "error.cli.bundle_certificate_expired"
+params = []
+remedy = "Ask the publisher for a bundle signed with a current certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_certificate_missing"
+class = "none"
+summary = "The bundle is signed but the publisher certificate (app.cert) is not next to it."
+explanation_key = "error.cli.bundle_certificate_missing"
+params = []
+remedy = "Place the publisher's certificate file beside the bundle and install again."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_incompatible"
+class = "none"
+summary = "The bundle needs a different host version than this one."
+explanation_key = "error.cli.bundle_incompatible"
+params = []
+remedy = "Install a bundle built for this host version, or upgrade the host."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_invalid"
+class = "none"
+summary = "The file does not open as a valid bundle, or names an app that cannot be installed."
+explanation_key = "error.cli.bundle_invalid"
+params = []
+remedy = "Rebuild the bundle with spot-pack and install again."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_no_trust"
+class = "none"
+summary = "The site pins no publisher root key, so no signed bundle can be trusted."
+explanation_key = "error.cli.bundle_no_trust"
+params = []
+remedy = "Pin the publisher's root key under [trust] roots in common.toml."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_not_listed"
+class = "none"
+summary = "The app's directory is not listed in common.toml `apps`."
+explanation_key = "error.cli.bundle_not_listed"
+params = []
+remedy = "Create the app directory (empty, with an empty doctypes directory), list it under `apps`, and install again."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_revocations_invalid"
+class = "none"
+summary = "The site has no usable revocation list, or the list is stale or not validly signed."
+explanation_key = "error.cli.bundle_revocations_invalid"
+params = []
+remedy = "Set [trust] revocations in common.toml to a current, root-signed revocation list."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_revoked"
+class = "none"
+summary = "The publisher, the signing key or this bundle was revoked."
+explanation_key = "error.cli.bundle_revoked"
+params = []
+remedy = "Do not install this bundle; ask the publisher for a replacement signed with a valid key."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_signature_invalid"
+class = "none"
+summary = "The signature does not verify over this bundle: it was altered, or the signature file is unreadable."
+explanation_key = "error.cli.bundle_signature_invalid"
+params = []
+remedy = "Obtain the bundle and its signature again from the publisher."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_unpack_failed"
+class = "none"
+summary = "The verified bundle could not be written to the app folder; nothing was installed."
+explanation_key = "error.cli.bundle_unpack_failed"
+params = []
+remedy = "Check the app folder permissions and free space, then install again."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_unreadable"
+class = "none"
+summary = "The bundle file cannot be read."
+explanation_key = "error.cli.bundle_unreadable"
+params = []
+remedy = "Check the path and the file permissions."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_unsafe_path"
+class = "none"
+summary = "The bundle carries an entry that is not a plain relative file, or an entry the format does not allow."
+explanation_key = "error.cli.bundle_unsafe_path"
+params = []
+remedy = "Do not install this bundle; rebuild it with spot-pack."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_unsigned"
+class = "none"
+summary = "The bundle has no signature and the site requires signed apps."
+explanation_key = "error.cli.bundle_unsigned"
+params = []
+remedy = "Install a signed bundle, or on a development site set `require_signed = false` under [trust] in common.toml."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.bundle_untrusted_publisher"
+class = "none"
+summary = "The publisher is not trusted by this site, or the publisher certificate cannot be read."
+explanation_key = "error.cli.bundle_untrusted_publisher"
+params = []
+remedy = "Pin the publisher's root key under [trust] roots in common.toml, or use a bundle from a trusted publisher."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.directory_unsigned"
+class = "none"
+summary = "The site requires signed apps, so an app directory or catalogue name cannot be installed."
+explanation_key = "error.cli.directory_unsigned"
+params = []
+remedy = "Install a signed bundle, or on a development site set `require_signed = false` under [trust] in common.toml."
+since = "0.1.0"

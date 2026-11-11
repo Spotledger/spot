@@ -1,0 +1,61 @@
+name = "approval_escalation"
+app = "workflow"
+title = "Approval with escalation"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+trigger = "manual"
+
+[[nodes]]
+id = "first"
+kind = "decision"
+title = "Approve the request?"
+assignee = "role:manager"
+outcomes = ["approve", "reject"]
+
+[[nodes]]
+id = "escalate"
+kind = "decision"
+title = "Escalated approval"
+assignee = "role:director"
+outcomes = ["approve", "reject"]
+
+[[nodes]]
+id = "approved"
+kind = "logic"
+logic = "branch"
+join = "any"
+terminal = true
+
+[[nodes]]
+id = "rejected"
+kind = "logic"
+logic = "branch"
+terminal = true
+
+[[edges]]
+from = "start"
+to = "first"
+
+[[edges]]
+from = "first"
+to = "approved"
+condition = "doc.approved == true"
+
+[[edges]]
+from = "first"
+to = "escalate"
+default = true
+
+[[edges]]
+from = "escalate"
+to = "approved"
+condition = "doc.escalated_approved == true"
+
+[[edges]]
+from = "escalate"
+to = "rejected"
+default = true

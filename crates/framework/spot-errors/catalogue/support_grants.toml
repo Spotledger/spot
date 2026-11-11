@@ -1,0 +1,209 @@
+# Support-session grants for the control plane (WP-CTL-07.T1): grant validation,
+# approval, enforcement denials, extension, revocation and customer-side record events.
+
+[[entry]]
+code = "support_grants.agent_refused"
+class = "none"
+summary = "The grant's subject is not an active support agent allowed the requested tier."
+explanation_key = "error.support_grants.agent_refused"
+params = []
+remedy = "Enrol the agent in the support domain with at least the grant's tier, or request a grant within the agent's registered maximum."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.already_revoked"
+class = "none"
+summary = "The grant was already revoked; revocation is final."
+explanation_key = "error.support_grants.already_revoked"
+params = []
+remedy = "Request a new grant if the work is still needed; a revoked grant never reactivates."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.allowed"
+class = "none"
+summary = "The action was inside the grant's scope, tier and window."
+explanation_key = "error.support_grants.allowed"
+params = []
+remedy = "No action needed; this is the recorded outcome of a permitted action."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.approved"
+class = "none"
+summary = "A customer administrator approved the grant."
+explanation_key = "error.support_grants.approved"
+params = []
+remedy = "No action needed; this is a session-log event. Revoke the grant if the scope or window is not what the customer agreed."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.audit_unavailable"
+class = "none"
+summary = "The customer-side audit chain could not record the event."
+explanation_key = "error.support_grants.audit_unavailable"
+params = []
+remedy = "Stop the support action, check the tenant's audit store and retry; a permitted action is refused until it can be recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.duplicate_grant"
+class = "none"
+summary = "A grant with that id already exists for the tenant."
+explanation_key = "error.support_grants.duplicate_grant"
+params = []
+remedy = "Use the existing grant, or choose a new grant id."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.duration_over_policy"
+class = "none"
+summary = "The grant or its extension would run longer than the configured maximum."
+explanation_key = "error.support_grants.duration_over_policy"
+params = []
+remedy = "Shorten the requested window to the configured maximum, or ask a customer administrator for a new grant."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.extended"
+class = "none"
+summary = "A customer administrator extended the grant's end."
+explanation_key = "error.support_grants.extended"
+params = []
+remedy = "No action needed; this is a session-log event. Revoke the grant if the longer window is not what the customer agreed."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.extension_refused"
+class = "none"
+summary = "The extension was refused by the session policy."
+explanation_key = "error.support_grants.extension_refused"
+params = []
+remedy = "Check that the grant is running, that the extension limit is not reached and that the total duration stays within the cap; otherwise request a new grant."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.invalid_request"
+class = "none"
+summary = "The grant request is not in the shape a grant can have."
+explanation_key = "error.support_grants.invalid_request"
+params = []
+remedy = "Fill the grant id, tenant, support organisation and every condition, then request again."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.not_admin"
+class = "none"
+summary = "The approver is not a registered customer administrator of the tenant."
+explanation_key = "error.support_grants.not_admin"
+params = []
+remedy = "Ask a registered administrator of the tenant to approve or extend the grant."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.not_running"
+class = "none"
+summary = "The grant is not running at the requested instant."
+explanation_key = "error.support_grants.not_running"
+params = []
+remedy = "Start the session inside the grant's window, or request a new grant."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.requested"
+class = "none"
+summary = "A support-side requester asked for a grant."
+explanation_key = "error.support_grants.requested"
+params = []
+remedy = "Customer administrator: review the scope, tier and window and approve only what is needed. Support: wait for the approval."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.revoked"
+class = "none"
+summary = "The grant was revoked and stops immediately."
+explanation_key = "error.support_grants.revoked"
+params = []
+remedy = "No action needed; a new grant is needed to continue. Customer: confirm the revocation is yours if it was unexpected."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.self_approval"
+class = "none"
+summary = "The approver is the requester or the grant's subject."
+explanation_key = "error.support_grants.self_approval"
+params = []
+remedy = "Ask a different customer administrator to approve; nobody approves their own support access."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.session_refused"
+class = "none"
+summary = "The session model refused the request, approval, extension or revocation."
+explanation_key = "error.support_grants.session_refused"
+params = []
+remedy = "Read the session reason on the error; correct the scope, window, approver or state and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.started"
+class = "none"
+summary = "A session started under the grant."
+explanation_key = "error.support_grants.started"
+params = []
+remedy = "No action needed; this is a session-log event. Revoke the grant if it should not be running."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.stopped"
+class = "none"
+summary = "A session stopped."
+explanation_key = "error.support_grants.stopped"
+params = []
+remedy = "No action needed; this is a session-log event."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.store_failed"
+class = "none"
+summary = "The grant store could not complete the operation."
+explanation_key = "error.support_grants.store_failed"
+params = []
+remedy = "Retry; if the store keeps failing, check its connection and health."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.subject_mismatch"
+class = "none"
+summary = "The session is run by someone other than the subject the grant was made to."
+explanation_key = "error.support_grants.subject_mismatch"
+params = []
+remedy = "Run the session as the agent or person the customer granted, or ask for a grant to the right subject."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.support_org_mismatch"
+class = "none"
+summary = "The session names a support organisation the grant was not made to."
+explanation_key = "error.support_grants.support_org_mismatch"
+params = []
+remedy = "Run the session under the organisation the customer granted, or ask for a grant to the right organisation."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.unknown_grant"
+class = "none"
+summary = "No grant with that id exists for the tenant."
+explanation_key = "error.support_grants.unknown_grant"
+params = []
+remedy = "Check the grant id and tenant, or request a grant first."
+since = "0.1.0"
+
+[[entry]]
+code = "support_grants.wrong_tenant"
+class = "none"
+summary = "The action or grant is about another tenant."
+explanation_key = "error.support_grants.wrong_tenant"
+params = []
+remedy = "Run the session and its actions on the tenant the customer granted."
+since = "0.1.0"

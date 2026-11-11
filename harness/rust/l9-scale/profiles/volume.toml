@@ -1,0 +1,35 @@
+# The `volume` profile (WP-TST-15.T4, README tier M data-volume paths): posting at 10 tx/s for
+# 5 minutes against a `task`/`checklist_item` dataset big enough that storage, indexes, number
+# series (where the platform has one; see the L9 baseline notes) and list queries
+# are exercised, not an empty table. This profile times the posting leg only (create and submit
+# of the `time_entry` DocType, the same posting the `smoke` and tier S/M session profiles use);
+# the list/count/depth/report/lookup operations at volume are measured separately in
+# `tests/volume.rs`, directly against the seeded dataset, because they are not part of the
+# session op mix `profile::Op` defines (`list` at a fixed depth, a raw `count`, a lookup
+# typeahead and a report run are one-shot reads over the whole seeded table, not something an
+# open-loop session schedule repeats).
+#
+# `sessions = 20` gives the open-loop schedule room above `target_tps = 10` so no session queues
+# behind another (the same reasoning as `smoke.toml`'s 5 sessions for 5 tx/s).
+name = "volume"
+tier = "M"
+sessions = 20
+ramp_seconds = 15
+steady_seconds = 300
+seed = 20261107
+target_tps = 10
+request_timeout_ms = 15000
+sample_every_seconds = 10
+report = "task_summary"
+
+[think]
+kind = "uniform"
+min_ms = 200
+max_ms = 600
+
+[mix]
+# Almost every arrival posts (create + submit a `time_entry`); a small share of `list` keeps a
+# second operation visible in the same report without diluting the measured posting rate much
+# below 10 tx/s.
+create_submit = 90
+list = 10

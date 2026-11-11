@@ -1,0 +1,84 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "behaviour/erp_selling/capability",
+      "area": "behaviour",
+      "kind": "capability_widened",
+      "rule": "behaviour/capability_widened",
+      "target": "erp_selling",
+      "description": "App `erp_selling` widens its capabilities.",
+      "before": "network=[] email=false files= read=[] write=[]",
+      "after": "network=[api.example.com:443] email=true files= read=[] write=[]",
+      "risk": "needs_review",
+      "reason": "widened: network api.example.com:443, email",
+      "blocking": "online"
+    }
+  ],
+  "risk": "needs_review",
+  "estimate": {
+    "low": 2,
+    "expected": 5,
+    "high": 10,
+    "per_change": [
+      {
+        "change_id": "behaviour/erp_selling/capability",
+        "low": 2,
+        "expected": 5,
+        "high": 10,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "online",
+    "unknown": false
+  },
+  "plan_digest": "69bc131953ac4c7f71aacf6b6f667f3715cdafafe4b0c1571c19d709057c7529",
+  "to": {
+    "apps": [
+      {
+        "name": "erp_selling",
+        "version": "0.3.0",
+        "manifest": {
+          "events": [],
+          "schedules": [],
+          "patches": [],
+          "overrides": [],
+          "capabilities": {
+            "network": [
+              "api.example.com:443"
+            ],
+            "email": true,
+            "files": "",
+            "doctypes_read": [],
+            "doctypes_write": []
+          }
+        }
+      }
+    ],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

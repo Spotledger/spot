@@ -1,0 +1,127 @@
+# audit codes: the tamper-evident audit chain of spot-audit-chain (WP-AI-11.T1): refusals on append and the verifier's failure codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "audit.payload_too_large"
+class = "none"
+summary = "The audit record payload is larger than the limit once canonically encoded."
+explanation_key = "error.audit.payload_too_large"
+params = []
+remedy = "Record fewer or shorter payload values; keep large data in the document and audit only a reference to it."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.float_refused"
+class = "none"
+summary = "A floating-point number cannot be an audit payload value."
+explanation_key = "error.audit.float_refused"
+params = []
+remedy = "Record the number as an integer (for example minor units or micros) or as text."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.record_invalid"
+class = "none"
+summary = "The audit record is malformed: a code, actor, subject or payload key is empty, too long or not in its documented form."
+explanation_key = "error.audit.record_invalid"
+params = []
+remedy = "Use a dotted lower-case kind, an actor of the form system, user:<id> or agent:<id>, and non-empty names."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.head_conflict"
+class = "none"
+summary = "Another writer kept extending the chain head, so the append gave up after its retries."
+explanation_key = "error.audit.head_conflict"
+params = []
+remedy = "Retry the append; if it persists, reduce the number of concurrent writers for the site."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.store"
+class = "none"
+summary = "The audit store failed or refused an entry that does not extend its head."
+explanation_key = "error.audit.store"
+params = []
+remedy = "Check the audit store backend; the entry was not appended."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.signer"
+class = "none"
+summary = "The checkpoint signer could not sign."
+explanation_key = "error.audit.signer"
+params = []
+remedy = "Check that the signing key is available; the entry itself was appended and the checkpoint can be taken again."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.key_invalid"
+class = "none"
+summary = "A public key given to the key ring is not a valid Ed25519 key."
+explanation_key = "error.audit.key_invalid"
+params = []
+remedy = "Supply the 32 bytes of the checkpoint signer's Ed25519 public key."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.hash_mismatch"
+class = "none"
+summary = "An entry's stored hash is not the hash of its contents: a field of the entry was altered."
+explanation_key = "error.audit.hash_mismatch"
+params = []
+remedy = "Treat the chain as tampered from this entry; restore it from a trusted copy and investigate."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.link_broken"
+class = "none"
+summary = "An entry does not link to the entry before it: one was removed, inserted or reordered."
+explanation_key = "error.audit.link_broken"
+params = []
+remedy = "Treat the chain as tampered at this entry; restore it from a trusted copy and investigate."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.seq_gap"
+class = "none"
+summary = "The entry sequence numbers skip a value: an entry is missing."
+explanation_key = "error.audit.seq_gap"
+params = []
+remedy = "Treat the chain as tampered at this entry; restore the missing entries from a trusted copy."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.duplicate"
+class = "none"
+summary = "The same sequence number appears more than once in the chain."
+explanation_key = "error.audit.duplicate"
+params = []
+remedy = "Treat the chain as tampered at this entry; remove the duplicate from a restored copy."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.bad_checkpoint_signature"
+class = "none"
+summary = "A checkpoint's signature does not verify under the key it names, or it names another site."
+explanation_key = "error.audit.bad_checkpoint_signature"
+params = []
+remedy = "Treat the checkpoint as forged; compare with a trusted copy of the checkpoints."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.checkpoint_ahead_of_chain"
+class = "none"
+summary = "A signed checkpoint names a sequence number or head hash the chain no longer has: the tail was truncated or replaced."
+explanation_key = "error.audit.checkpoint_ahead_of_chain"
+params = []
+remedy = "Treat the chain as truncated; restore the missing tail from a trusted copy."
+since = "0.1.0"
+
+[[entry]]
+code = "audit.unknown_key"
+class = "none"
+summary = "A checkpoint is signed by a key the key ring does not know."
+explanation_key = "error.audit.unknown_key"
+params = []
+remedy = "Add the retired or rotated public key to the key ring so old checkpoints stay verifiable."
+since = "0.1.0"

@@ -1,0 +1,22 @@
+[package]
+name = "spot-sync-catchup"
+description = "The catch-up planner (WP-SYN-07.T1, ADR-066 sections 1 to 3): choose incremental, coalesced or snapshot mode by cost, coalesce only state events, order the coalesced images by dependency, and plan the mandatory lane ahead of all bulk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The plan travels to the node as data (ADR-066 section 1, step 2), so every type here has a
+# stable serialised form.
+serde = { version = "1", features = ["derive"] }
+# Typed planner errors with stable `sync_catchup.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property run on random reference graphs and random gap summaries.
+proptest = "1"
+
+[lints]
+workspace = true

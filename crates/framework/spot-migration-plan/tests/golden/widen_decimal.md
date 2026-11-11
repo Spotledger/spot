@@ -1,0 +1,8 @@
+# Release plan: metadata 0 -> 0
+
+- **Risk:** additive
+- **Estimate:** 1s expected (1s low, 2s high), blocking: online
+- **Changes:** 1 change (schema 1, metadata 0, patches 0, behaviour 0)
+
+## Additive (1)
+- [schema] party.amount — Do `widen_numeric:party.amount`. (live schema -> catalogue)

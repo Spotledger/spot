@@ -1,0 +1,29 @@
+# The dedicated AI connection-pool size (WP-AI-05.T1). Kept apart from the human-traffic pool
+# so twenty parallel agents cannot consume interactive connections.
+
+key = "ai.pool.size"
+title = "AI Pool Size"
+summary = "Connections reserved for AI and agent traffic, separate from human traffic."
+description = "The dedicated `ai` role's connection-pool budget on this node. AI admission never exceeds this many concurrent calls, so a burst of agents cannot take connections from interactive users."
+scopes = [
+    "fleet",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "ai",
+    "performance",
+]
+
+[value.Int]
+min = 1
+max = 1000
+
+[default]
+Int = 4
+
+[restart]
+type = "none"

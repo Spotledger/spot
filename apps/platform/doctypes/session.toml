@@ -1,0 +1,77 @@
+name = "session"
+label = "Session"
+app = "platform"
+module = "identity"
+
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "active\nended\nexpired"
+required = true
+default = "active"
+in_standard_filter = true
+
+[[fields]]
+name = "method"
+label = "Method"
+type = "select"
+options = "password\ntotp\nrecovery\noidc\nsaml\napi_key\nmagic_link"
+description = "How the session was established; it may not move to a weaker method."
+
+[[fields]]
+name = "created_at"
+label = "Created At"
+type = "datetime"
+required = true
+read_only = true
+
+[[fields]]
+name = "last_seen"
+label = "Last Seen"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "idle_expires_at"
+label = "Idle Expires At"
+type = "datetime"
+required = true
+
+[[fields]]
+name = "absolute_expires_at"
+label = "Absolute Expires At"
+type = "datetime"
+required = true
+
+[[fields]]
+name = "client_info"
+label = "Client Info"
+type = "text"
+max_chars = 500
+description = "Device label and user agent."
+
+[[fields]]
+name = "token_digest"
+label = "Token Digest"
+type = "secret"
+lookup = true
+unique = true
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true

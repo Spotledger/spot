@@ -1,0 +1,55 @@
+[
+  {
+    "name": "customer",
+    "label": "Customer",
+    "kind": "Link",
+    "required": true,
+    "linkTo": "customer",
+    "default": ""
+  },
+  {
+    "name": "from_date",
+    "label": "From date",
+    "kind": "Date",
+    "required": true,
+    "default": "2026-01-01"
+  },
+  {
+    "name": "to_date",
+    "label": "To date",
+    "kind": "Date",
+    "required": false,
+    "default": ""
+  },
+  {
+    "name": "min_amount",
+    "label": "Minimum amount",
+    "kind": "DecimalNumber",
+    "required": false,
+    "scale": 6,
+    "precision": 38,
+    "default": "100.50"
+  },
+  {
+    "name": "min_lines",
+    "label": "Minimum lines",
+    "kind": "IntegerNumber",
+    "required": false,
+    "default": "3"
+  },
+  {
+    "name": "status",
+    "label": "Status",
+    "kind": "Select",
+    "required": false,
+    "options": "Open|Paid|Overdue",
+    "default": "Open"
+  },
+  {
+    "name": "note",
+    "label": "Note contains",
+    "kind": "Text",
+    "required": false,
+    "default": ""
+  }
+]

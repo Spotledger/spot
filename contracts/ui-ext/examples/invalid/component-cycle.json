@@ -1,0 +1,26 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.a",
+      "origin": "app:sample",
+      "props": [],
+      "body": {
+        "node": "use",
+        "component": "sample.b"
+      }
+    },
+    {
+      "id": "sample.b",
+      "origin": "app:sample",
+      "props": [],
+      "body": {
+        "node": "use",
+        "component": "sample.a"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.component_cycle. a uses b uses a."
+}

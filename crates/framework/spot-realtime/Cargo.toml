@@ -1,0 +1,40 @@
+[package]
+name = "spot-realtime"
+description = "In-process realtime event bus: permission-checked rooms, after-commit publish, bounded delivery, reconnect replay and the native WebSocket transport (WP-PLT-08, ADR-25, ADR-055)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["ws"]
+# The native WebSocket transport (`ws::router`): the protocol of
+# `contracts/native-api/realtime.md` over the [`RealtimeBus`].
+ws = ["dep:axum", "dep:spot-http", "dep:serde", "dep:tokio-util"]
+
+[dependencies]
+spot-core = { path = "../spot-core" }
+tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }
+serde_json = "1"
+thiserror = "2"
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting"] }
+tracing = "0.1"
+# `ws`-gated: the axum transport, the site seam (SiteContext) and the shutdown token.
+axum = { version = "0.8.9", features = ["ws"], optional = true }
+spot-http = { path = "../spot-http", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+tokio-util = { version = "0.7", default-features = false, optional = true }
+
+[dev-dependencies]
+# `#[tokio::test]`, the multi-thread runtime for the stress test, and timeouts that turn a
+# stuck bus into a test failure instead of a hang. `net` serves the test websocket listener;
+# `test-util` pauses the tokio clock for the auth-deadline test.
+tokio = { version = "1", default-features = false, features = ["sync", "time", "macros", "rt", "rt-multi-thread", "net", "io-util", "test-util"] }
+tokio-tungstenite = "0.29"
+# The server message schemas are validated against `contracts/native-api/openapi.yaml`.
+jsonschema = { version = "0.58", default-features = false }
+serde_norway = "0.9"
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+{
+  "actor": {
+    "actor": "system",
+    "component": "scheduler",
+    "on_behalf_of": null
+  },
+  "at": 1760000200000000,
+  "changed_fields": [
+    "discount_percent"
+  ],
+  "command_id": null,
+  "diff": [
+    {
+      "after": {
+        "text": "5.00"
+      },
+      "before": {
+        "text": "0.00"
+      },
+      "path": "discount_percent"
+    }
+  ],
+  "diff_digest": null,
+  "doctype": "sales_invoice",
+  "hidden_changes": false,
+  "id": "0192f1c0-0000-7000-8000-000000000004",
+  "method": "apply_discount",
+  "operation": {
+    "method": "apply_discount"
+  },
+  "site": "acme.spotledger.app",
+  "source": "api",
+  "truncated": false,
+  "version": 5
+}

@@ -1,0 +1,56 @@
+# sync_freshness codes (WP-SYN-06.T1, ADR-065). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_freshness.no_samples"
+class = "none"
+summary = "The hub clock offset was requested without any clock samples."
+explanation_key = "error.sync_freshness.no_samples"
+params = []
+remedy = "Complete at least one exchange with the hub before estimating its clock offset."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_freshness.bad_sample"
+class = "none"
+summary = "A clock sample is inconsistent: its response precedes its request (sample {index})."
+explanation_key = "error.sync_freshness.bad_sample"
+params = ["index"]
+remedy = "Discard the sample and record the next exchange with the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_freshness.bad_bounds"
+class = "none"
+summary = "The clock bounds are invalid: values must be non-negative and the age bound under 366 days."
+explanation_key = "error.sync_freshness.bad_bounds"
+params = []
+remedy = "Set a non-negative tolerance and an age bound below 366 days."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_freshness.offset_clamped"
+class = "none"
+summary = "The hub replaced the clock offset claimed by node {node} because it put the stamp outside the window the hub can observe."
+explanation_key = "error.sync_freshness.offset_clamped"
+params = ["node"]
+remedy = "Check the node's clock and its offset estimate; a repeated clamp from one node may be tampering."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_freshness.offset_not_clamped"
+class = "none"
+summary = "The clamp result was computed for a different stamp than the one a hub posting time was requested for."
+explanation_key = "error.sync_freshness.offset_not_clamped"
+params = []
+remedy = "Clamp the offset of this very stamp with clamp_offset and build the posting time from that result."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_freshness.stamp_unrepresentable"
+class = "none"
+summary = "The hub refused a stamp whose time and clock offset cannot be placed on the hub timeline."
+explanation_key = "error.sync_freshness.stamp_unrepresentable"
+params = []
+remedy = "Check the node's clock and software; a stamp this far out of range is garbage or tampering."
+since = "0.1.0"

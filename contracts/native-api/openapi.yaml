@@ -1,0 +1,3275 @@
+openapi: 3.1.1
+info:
+  title: Spotledger native API
+  version: 0.11.1
+  summary: The only way clients reach the Spotledger runtime (ADR-09, ADR-15).
+  description: |
+    Contract v0.4 (WP-CON-03, ADR-055). Normative rules that JSON Schema cannot express are
+    written here and in the descriptions below; `check.py` enforces the mechanical ones.
+
+    ## Feature negotiation
+    A client learns what a server supports by reading `version` from `GET /api/health/live`.
+    A server answering a smaller version keeps serving the older contract, and a client
+    built for `0.6.0` degrades against it: it asks only for the operations the server's
+    version includes and hides what the older server cannot answer (form events, the
+    permission summary, files, password and session management in 0.2.0; the report
+    catalogue, field reveal, bulk export and extraction, and the event stream in 0.3.0 or
+    older; the revealable and attachment-limit parts of the permission summary, the
+    document's currency symbols, multiple select, control hints and picker columns in 0.4.0
+    or older, where a client falls back to its plain controls; the field rule expressions
+    and the provisional lookup fills in 0.5.0 or older, where a client uses the static
+    `required`, `read_only` and `default` and waits for `form_event`; `create_only`, the
+    `consumer_ref` field type and the `consumer` event actor in 0.8.0 or older, where a
+    client shows such a field as plain read-only text once the document exists, and ignores
+    an event whose actor kind it does not know; the notification feed, the consumer session
+    renewal and the `partition.not_owner` code in 0.9.0 or older, where a client shows the
+    notices it received live and signs the consumer in again). Clients must ignore unknown
+    response fields either way.
+
+    ## Sites
+    One tenant is one site (ADR-34). The site is resolved from the request's host name
+    (`Host`, HTTP/2 `:authority`, or `X-Forwarded-Host` from a trusted proxy); it never
+    appears in a path. An unknown host gets `404 http.unknown_site`.
+
+    ## Versioning
+    Paths are prefixed `/api/v1`. Additive changes (new endpoints, new optional request
+    fields, new response fields, new error codes) bump the minor version and do not change the
+    prefix; clients must ignore unknown response fields. Anything else is a breaking change: a
+    new major version and a new prefix, with the old one served for a deprecation window.
+    Health probes (`/api/health/*`) are unversioned.
+
+    ## Names
+    - A DocType is addressed by its **storage name** (`[a-z][a-z0-9_]*`, at most 63 bytes, for
+      example `sales_invoice`), never by its label. Field names are storage names too.
+    - A document is addressed by its **id**: a UUIDv7 in canonical lower-case hyphenated form
+      (ADR-33). The human-readable number is an ordinary field and is found with a query.
+
+    ## Values
+    Every stored value (the storage contract's `Value`) has exactly one JSON encoding:
+
+    | Storage type | JSON | Rule |
+    | --- | --- | --- |
+    | Null | `null` | Distinct from `""`: storage never converts one into the other. |
+    | Bool | boolean | |
+    | Int | integer | 64-bit signed. Clients must parse into a 64-bit integer. |
+    | Decimal | string | `^-?[0-9]+(\.[0-9]+)?$`, no exponent, no `+`. The scale is kept (`"10.50"` stays `"10.50"`). A JSON number for a decimal field is rejected with `document.invalid_value`: money never passes through a float (ADR-12). |
+    | Text | string | UTF-8. |
+    | Date | string | `YYYY-MM-DD`. |
+    | Time | string | `HH:MM:SS` with optional `.ffffff`. |
+    | DateTime | string | RFC 3339. Responses always use UTC with `Z`; requests may carry any offset and are converted to UTC. |
+    | Link (Id) | string | A document id (UUIDv7). |
+    | Json | any JSON | Embedded as JSON, not as a string. Compare semantically. |
+    | Bytes | string | Standard base64 with padding. |
+
+    No schema in this document uses `type: number`; `check.py` fails if one does.
+
+    ## Documents
+    A document is one flat JSON object: its fields, plus the storage system keys `id` and
+    `version`, plus child tables as arrays of row objects (each row has its own `id` and its
+    position `idx`, starting at 1). Keys beginning with `_` are server metadata (for example
+    `_state`); they are read-only and are rejected in requests. `version` is 1 after creation
+    and increases by one on every change (ADR-053).
+
+    ## Optimistic concurrency
+    Every response carrying one document has `ETag: "<version>"`. `PATCH`, `DELETE` and the
+    lifecycle actions require `If-Match: "<version>"`; without it the request fails with
+    `428 api.precondition_required`, and with a different version it fails with
+    `412 document.stale_version`, whose `details.current_version` says what to reload.
+
+    ## Idempotency
+    `POST` requests that change state accept `Idempotency-Key` (1 to 128 visible ASCII
+    characters). A repeat with the same key and the same body within 24 hours returns the
+    stored response with `Idempotency-Replayed: true`; the same key with a different body fails
+    with `409 api.idempotency_conflict`. The key is the command id carried by the outbox events
+    the request produces (ADR-053, WP-CON-04).
+
+    ## Responses
+    Success bodies are `{"data": ..., "messages": [...]}`; `messages` holds non-fatal
+    information and warnings from the document engine and is omitted when empty. Error bodies
+    are the `ErrorEnvelope`. Every response carries `X-Request-Id`.
+
+    ## Error codes
+    `x-spot-error-codes` below is the registry. Codes are stable, dotted and lower-case; the
+    HTTP status of a code never changes within a major version. `message` is short plain
+    language in the request's `Accept-Language` where available; `explanation` is the longer
+    offline help text (ADR-26, WP-PRD-13).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: https://{site}
+    description: A site, addressed by its host name.
+    variables:
+      site:
+        default: localhost
+
+security:
+  - bearer: []
+
+tags:
+  - name: health
+  - name: auth
+  - name: meta
+  - name: lookup
+  - name: resource
+  - name: lifecycle
+  - name: method
+  - name: report
+  - name: export
+  - name: events
+  - name: files
+  - name: print
+  - name: realtime
+
+paths:
+  /api/health/live:
+    get:
+      tags: [health]
+      operationId: health_live
+      summary: Liveness. Answers on any host; no site or authentication needed.
+      security: []
+      responses:
+        "200":
+          description: The process is serving.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Live"}
+              example: {status: live}
+
+  /api/health/ready:
+    get:
+      tags: [health]
+      operationId: health_ready
+      summary: Readiness. Runs every registered readiness check, each bounded by 2 s.
+      description: Returns 503 while the node is shutting down, so load balancers drain it.
+      security: []
+      responses:
+        "200":
+          description: Every check passed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Ready"}
+              example:
+                status: ready
+                checks:
+                  - {name: primary_connection, ok: true, detail: "round trip 1.2 ms"}
+        "503":
+          description: A check failed, or the node is shutting down.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Ready"}
+              example:
+                status: not_ready
+                checks:
+                  - {name: primary_connection, ok: false, detail: "connection refused"}
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: auth_login
+      summary: Exchange credentials for a session token.
+      description: |
+        A user with two-factor authentication gets `401 auth.totp_required` on the first call
+        and repeats it with `totp`. Failed attempts are rate-limited per user and per client
+        address (`429 api.rate_limited` with `Retry-After`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginRequest"}
+            example: {user: ayesha@acme.test, password: "correct horse battery staple"}
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/Session"}
+              example:
+                data:
+                  token: 3q2-7wEBAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhs
+                  expires_at: "2026-09-30T08:00:00Z"
+                  user: {id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f, email: ayesha@acme.test, full_name: Ayesha Khan}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/consumer/renew:
+    post:
+      tags: [auth]
+      operationId: auth_consumer_renew
+      summary: Renew a consumer's session from the renewal cookie (ADR-083, ADR-088 section 7.2).
+      description: |
+        A consumer (ADR-083) who signed in on the web holds a short-lived bearer token and a
+        **renewal cookie**. This call swaps the cookie for a new token without a password, and
+        never puts a token in a URL: the request has no body and no query, the cookie is the
+        only credential, and the new token comes back in the response body. No `Authorization`
+        header is needed or read. Rate class `auth` (the class `auth_login` runs in).
+
+        **The cookie.** Name `__Host-spot_consumer_renew`; attributes `HttpOnly`, `Secure`,
+        `SameSite=Strict`, `Path=/` and `Max-Age=2592000` (30 days). The `__Host-` prefix makes
+        a browser refuse a cookie whose `Path` is not `/` or that has a `Domain`, so the
+        cookie cannot be narrowed to this endpoint by `Path`; the server instead reads it on
+        this one path and ignores it everywhere else. It sets the cookie on a consumer
+        sign-in, replaces it on every renewal (`Set-Cookie` on the `200`), and clears it
+        (`Max-Age=0`) on sign-out.
+
+        **One use, rotating.** A renewal cookie works **once**. A successful renewal revokes
+        the cookie it was sent with and issues the next in the same family. The server also
+        revokes it on sign-out and on a password or device change.
+
+        **Replay revokes the family.** A cookie that was already used (or revoked) and is sent
+        again is treated as stolen: the server revokes the **whole family** (every cookie and
+        every session token issued from that sign-in) and answers `401 auth.session_expired`.
+        A missing, malformed, unknown or expired cookie answers the same
+        `401 auth.session_expired`, with the same body, so a caller learns nothing about which
+        it was. The client then signs in again.
+
+        Errors: `401 auth.session_expired` (all the cases above); `429 api.rate_limited`.
+      security: []
+      parameters:
+        - name: Cookie
+          in: header
+          required: true
+          description: The renewal cookie, `__Host-spot_consumer_renew=<opaque>`. Sent by the browser; a script cannot read it (`HttpOnly`).
+          schema: {type: string}
+      responses:
+        "200":
+          description: A new session token. The renewal cookie is replaced in `Set-Cookie`.
+          headers:
+            Set-Cookie:
+              description: |
+                The next renewal cookie: `__Host-spot_consumer_renew=<opaque>; Max-Age=2592000; Path=/; Secure; HttpOnly; SameSite=Strict`.
+              schema: {type: string}
+            Cache-Control:
+              description: Always `no-store`.
+              schema: {type: string, const: no-store}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/ConsumerSession"}
+              example:
+                data:
+                  token: 3q2-7wEBAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhs
+                  expires_at: "2026-10-31T09:15:00Z"
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: auth_logout
+      summary: End the current session. Idempotent.
+      responses:
+        "204": {description: Signed out.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/session:
+    get:
+      tags: [auth]
+      operationId: auth_session
+      summary: The current session and its user.
+      description: |
+        Answers for a signed-in session only. An API key never reads the session, whatever its
+        expiry (there is no session to describe): the answer is `403 permission.denied`, as for
+        the other session operations.
+      responses:
+        "200":
+          description: The session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/SessionInfo"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/meta/{doctype}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+    get:
+      tags: [meta]
+      operationId: meta_get
+      summary: The DocType's metadata as the client runtime needs it.
+      description: |
+        `ETag` is the metadata version; send it back in `If-None-Match` to get `304` when
+        nothing changed. Since 0.2.0 (ADR-068 §6) each field carries its complete description:
+        label, `read_only`, `default`, base `lookup`, presentation hints, `format` with its
+        parameters, `select` values, a dynamic link's type field and a decimal's `precision`.
+        The metadata model (WP-MET-01) and the UI contract add fields additively.
+      parameters:
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The metadata.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/DocTypeMeta"}
+              example:
+                data:
+                  doctype: sales_invoice
+                  label: Sales Invoice
+                  version: 7
+                  is_posted: true
+                  expr_version: 1
+                  fields:
+                    - name: customer
+                      label: Customer
+                      type: link
+                      required: true
+                      link_to: customer
+                      lookup: {seam: "billing:customer_search", version: 1, params: {only_active: "true"}}
+                      hints: {in_list_view: true, in_standard_filter: true}
+                    - name: grand_total
+                      label: Grand Total
+                      type: decimal
+                      read_only: true
+                      scale: 2
+                      precision: 18
+                      default: "0.00"
+                      format: currency
+                      format_params: {currency_field: currency}
+                    - {name: status, label: Status, type: text, select: [Draft, Paid, Overdue], read_only_depends_on: "doc.status == 'Paid'", default_expr: "'Draft'"}
+                    - {name: discount_reason, label: Discount reason, type: text, depends_on: "doc.discount > 0", mandatory_depends_on: "doc.discount > 10"}
+                    - name: party_type
+                      label: Party type
+                      type: text
+                      select: [Customer, Supplier]
+                    - {name: party, label: Party, type: link, link_type_field: party_type}
+        "304": {description: Unchanged since the given ETag.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/lookup/{doctype}/{field}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - name: field
+        in: path
+        required: true
+        description: The field being filled, by storage name.
+        schema: {$ref: "#/components/schemas/Identifier"}
+    post:
+      tags: [lookup]
+      operationId: lookup_search
+      summary: The candidates for a field (ADR-068 §3.5).
+      description: |
+        One way to ask for the candidate values of a `link`, `dynamic_link`, `select`,
+        `table_multiselect` or `text` field. The **server** resolves which seam answers
+        (the form's view, then the site override, then the field's definition, then the
+        platform default, ADR-068 §3.4); the request has no seam parameter and a client can
+        neither choose nor send one.
+
+        Rules:
+        - **The caller's permissions apply to the seam.** The lookup runs as the session's
+          user, and the seam may show only what that user may see.
+        - **A lookup suggests; it never validates.** A picked row is checked by the save as
+          always (`document.invalid_link`), so a seam that returns an unusable id makes a
+          form that cannot save, not a hole.
+        - **The response cannot contain a secret.** A `secret` field is never a lookup
+          source, and no row, label, description or extra carries a secret value.
+        - **No silent fallback.** A failing or missing seam is `502 lookup.seam_failed` with
+          an `explanation` (ADR-26); the server never answers with the default list instead.
+
+        `doc` is the current document snapshot and `parent` the parent document for a field on
+        a child row, both in the value encoding above. **The server applies the field's
+        filter** (WP-CON-03.T7, ADR-068 §3 and A3) by evaluating it over exactly these two
+        snapshots; the client neither sends nor evaluates a filter, and the request stays
+        closed. Permissions and the filter apply on every request, so a cached page is only a
+        display aid. Errors: `meta.unknown_doctype`;
+        `document.unknown_field` for a field the DocType lacks; `permission.denied` for a field
+        the caller cannot read; `api.invalid_request` for a field with no lookup (not a link,
+        select, table_multiselect or text); `lookup.seam_failed`. Paging is by the opaque
+        `cursor` only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LookupRequest"}
+            example:
+              text: acme
+              doc: {order_type: export, currency: USD}
+      responses:
+        "200":
+          description: A page of candidates.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/LookupPage"}
+              example:
+                data:
+                  rows:
+                    - id: 0192f3c4-0000-7000-8000-00000000c009
+                      label: Acme Trading Co.
+                      description: Karachi, net 30
+                      extras: {currency: USD, payment_terms: "Net 30"}
+                      provides: {customer_name: Acme Trading Co., territory: Karachi}
+                  has_more: false
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+    get:
+      tags: [resource]
+      operationId: resource_list
+      summary: List documents with default fields, newest first. For filters use `query`.
+      parameters:
+        - name: fields
+          in: query
+          description: Comma-separated field names. Default is the DocType's list-view fields.
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 20}
+        - name: cursor
+          in: query
+          schema: {type: string}
+      responses:
+        "200": {$ref: "#/components/responses/DocumentPage"}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [resource]
+      operationId: resource_create
+      summary: Create a document through its full create lifecycle (ADR-51).
+      description: |
+        The body is the new document's fields. `id` is optional: a client that must know the id
+        before saving (POS, offline) sends its own UUIDv7; otherwise the server generates one.
+        Omitted fields get their defaults from the document engine. Unknown fields fail with
+        `document.unknown_field`; `version` and `_`-keys are rejected.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DocumentWrite"}
+            example:
+              customer: 0192f3c4-0000-7000-8000-00000000c001
+              posting_date: "2026-09-29"
+              items:
+                - {item: 0192f3c4-0000-7000-8000-0000000017e1, qty: "2", rate: "1250.00"}
+      responses:
+        "201":
+          description: Created. `Location` is the document's URL.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentResponse"}
+              example:
+                data:
+                  id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f
+                  version: 1
+                  _state: draft
+                  name: SINV-2026-00042
+                  customer: 0192f3c4-0000-7000-8000-00000000c001
+                  posting_date: "2026-09-29"
+                  grand_total: "2500.00"
+                  items:
+                    - {id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e70, idx: 1, item: 0192f3c4-0000-7000-8000-0000000017e1, qty: "2", rate: "1250.00", amount: "2500.00"}
+                messages:
+                  - {level: warning, code: selling.below_last_price, message: "Rate is below the last selling price for this customer.", field: "items[1].rate"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/form-event:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+    post:
+      tags: [resource]
+      operationId: form_event
+      summary: Run the server's `field_changed` steps on an unsaved draft (ADR-51 form steps).
+      description: |
+        In, an unsaved draft; out, what the document engine would change. This is one
+        keystroke's consultation: it writes nothing, takes no lock and is idempotent, so a
+        repeat of the same request answers the same diff. The rate class is `interactive`
+        (the registry's interactive limits apply).
+
+        The body carries the draft as it stands **in the client** (the value encoding, child
+        rows included), the `changed` field path (`field` or `table[idx].field`, idx from 1),
+        and `base_version` when the draft was loaded from a stored document (absent for a
+        draft being created). The server runs the DocType's `field_changed:<field>` steps on
+        the draft as `DocumentService::field_changed` hosts them, without saving.
+
+        The response is a **document diff**, a merge patch in the exact form `resource_update`
+        takes, restricted to fields the server derived or changed; child-row adds, removes and
+        reorders follow `resource_update`'s table-replacement semantics. `messages` carries
+        the engine's non-fatal information and warnings. `rules` is present only when the
+        server computed resolved rule state for the changed region; the client's own instant
+        rules remain primary.
+
+        Permission: the caller must hold `read` on the DocType; a failed check is
+        `403 permission.denied`. The diff never contains a field the caller cannot read, and
+        a masked field the caller may see appears only in its masked form. A user who cannot
+        read a field learns nothing from this operation: the diff omits the field without
+        naming it, and neither the diff, `messages` nor `rules` say that such a field exists.
+
+        Errors: `meta.unknown_doctype`; `document.unknown_field` for a `changed` path the
+        DocType lacks; `form.field_unknown` when the DocType has the field but no
+        `field_changed` steps answer it; `api.invalid_request` for a malformed path or a
+        `changed` path naming a field the caller cannot read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FormEventRequest"}
+            example:
+              doc:
+                id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f
+                customer: 0192f3c4-0000-7000-8000-00000000c001
+                posting_date: "2026-09-29"
+                items:
+                  - id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e70
+                    idx: 1
+                    item: 0192f3c4-0000-7000-8000-0000000017e1
+                    qty: "2"
+                    rate: "1250.00"
+              changed: qty
+              base_version: 1
+      responses:
+        "200":
+          description: The engine answered; the draft is unchanged on the server.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FormEventResponse"}
+              example:
+                data:
+                  patch:
+                    grand_total: "2500.00"
+                    items:
+                      - id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e70
+                        idx: 1
+                        amount: "2500.00"
+                messages:
+                  - {level: warning, code: selling.below_last_price, message: "Rate is below the last selling price for this customer.", field: "items[1].rate"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/query:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+    post:
+      tags: [resource]
+      operationId: resource_query
+      summary: List documents with filters, ordering and keyset paging.
+      description: |
+        Results are permission-filtered. Order is `order` then the document id, so pages are
+        stable (ADR-053). Paging is by an opaque `cursor` only; there is no offset. Filters on
+        child-table fields are not in v0.1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/QueryRequest"}
+            example:
+              fields: [id, name, customer, grand_total, posting_date]
+              filter:
+                and:
+                  - {field: posting_date, op: ge, value: "2026-09-01"}
+                  - {field: grand_total, op: gt, value: "1000.00"}
+                  - not: {field: customer, op: in, value: [0192f3c4-0000-7000-8000-00000000c009]}
+              order: [{field: posting_date, dir: desc, nulls: last}]
+              limit: 50
+      responses:
+        "200": {$ref: "#/components/responses/DocumentPage"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    get:
+      tags: [resource]
+      operationId: resource_get
+      summary: Load one document with its child tables.
+      responses:
+        "200": {$ref: "#/components/responses/Document"}
+        default: {$ref: "#/components/responses/Error"}
+    patch:
+      tags: [resource]
+      operationId: resource_update
+      summary: Update a document through its update lifecycle (merge semantics).
+      description: |
+        Only the given fields change; `null` sets a field to null. A child table that is given
+        replaces the whole table: rows with a known `id` are updated in place, rows without an
+        `id` (or with a new UUIDv7) are inserted, missing rows are deleted, and `idx` follows
+        the new order. On a posted document only fields allowed to change after posting may be
+        given (the `update_posted` operation); others fail with `document.read_only_field`.
+        A field whose metadata says `create_only` keeps the value it was created with: a request
+        that carries a different value fails with `document.read_only_field` on that field and
+        writes nothing; the value it already has is accepted, so a client may send a whole
+        document back.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DocumentWrite"}
+            example: {remarks: "Deliver after 5 pm"}
+      responses:
+        "200": {$ref: "#/components/responses/Document"}
+        default: {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [resource]
+      operationId: resource_delete
+      summary: Delete a draft document. Linked documents block it (`document.linked`).
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204": {description: Deleted.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/post:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    post:
+      tags: [lifecycle]
+      operationId: lifecycle_post
+      summary: Post a draft (ADR-42). Posted documents are never edited.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Document"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    post:
+      tags: [lifecycle]
+      operationId: lifecycle_cancel
+      summary: Cancel a posted document.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Document"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/correct:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    post:
+      tags: [lifecycle]
+      operationId: lifecycle_correct
+      summary: Correct a posted document - cancel it and create its amended draft as one step (ADR-42).
+      description: The response is the new draft; the cancelled original is linked from it.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: The amended draft.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/rename:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    post:
+      tags: [lifecycle]
+      operationId: lifecycle_rename
+      summary: Change a document's human-readable name. The id never changes.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 140}
+            example: {name: CUST-ACME-KHI}
+      responses:
+        "200": {$ref: "#/components/responses/Document"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/methods/{method}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+      - name: method
+        in: path
+        required: true
+        schema: {$ref: "#/components/schemas/Identifier"}
+    post:
+      tags: [method]
+      operationId: document_method_call
+      summary: Call a whitelisted controller method on one document (ADR-16).
+      description: |
+        The server loads the document, checks permission for the method, runs it and returns
+        the document as it is afterwards together with the method's result. A method that
+        changes the document requires `If-Match` (declared by the method; the server answers
+        `428` when it is missing).
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          schema: {type: string}
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MethodCall"}
+            example: {args: {mode_of_payment: cash, amount: "2500.00"}}
+      responses:
+        "200":
+          description: The method ran.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MethodResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/method/{app}/{module}/{function}:
+    parameters:
+      - {name: app, in: path, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+      - {name: module, in: path, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+      - {name: function, in: path, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+    post:
+      tags: [method]
+      operationId: function_call
+      summary: Call a module-level whitelisted function (ADR-16, WP-PLT-17).
+      description: |
+        Every error the dispatcher can answer carries `details.function_code`, the finer
+        `function.*` code behind the envelope's registered `error.code`, so a client tells
+        them apart without parsing the message:
+
+        - `404 method.not_found` (`function_code` `function.not_found`): no function with
+          this key, or an anonymous caller asked for one that is not `guest`. Both answer
+          **exactly** the same error — an anonymous caller asking for a non-guest function
+          gets the unknown-function answer, never a different one, so the endpoint never
+          reveals which functions exist to a guest.
+        - `405 api.method_not_allowed` (`function_code` `function.verb_not_allowed`): the
+          function exists but does not answer this HTTP verb; `details.allow` lists the
+          verbs it does answer. The verbs are in the detail only; no `Allow` response header
+          is sent yet.
+        - `401 auth.required` (`function_code` `function.auth_required`): the function
+          answers this verb only to a signed-in caller (a guest calling a verb that
+          changes things).
+        - `429 api.rate_limited` (`function_code` `function.rate_limited`): the caller
+          spent this function's rate limit; `details.retry_after` is whole seconds
+          (rounded up, at least 1), matching the `Retry-After` header.
+        - `400 api.invalid_request` (`function_code` `function.bad_arguments`): the
+          arguments do not match the function's declared schema; the explanation names the
+          problem and never an argument value.
+
+        These five are checked in that order; nothing further is checked before the
+        handler runs. A handler's own error (for example a field error or a permission
+        refusal specific to the function) passes through unchanged and carries no
+        `function_code`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MethodCall"}
+      responses:
+        "200": {$ref: "#/components/responses/FunctionResult"}
+        default: {$ref: "#/components/responses/Error"}
+    get:
+      tags: [method]
+      operationId: function_call_get
+      summary: Call a function that its manifest declares safe for GET; arguments are query parameters.
+      description: |
+        A function not declared for GET answers `405 api.method_not_allowed` (`function_code`
+        `function.verb_not_allowed`, `details.allow` listing the verbs it does answer). The
+        same error codes and `function_code` details as `function_call` apply here: `404
+        method.not_found` (`function_code` `function.not_found`, also the answer to an
+        anonymous caller asking for a non-guest function — never a different error), `401
+        auth.required` (`function_code` `function.auth_required`), `429 api.rate_limited`
+        (`function_code` `function.rate_limited`, `details.retry_after` in whole seconds) and
+        `400 api.invalid_request` (`function_code` `function.bad_arguments`).
+      responses:
+        "200": {$ref: "#/components/responses/FunctionResult"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/report/{report}/run:
+    parameters:
+      - {name: report, in: path, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+    post:
+      tags: [report]
+      operationId: report_run
+      summary: Run a report with filters (WP-PLT-14). Rows are permission-filtered.
+      description: |
+        `filters` are the report's parameter values keyed by parameter `name` (see
+        `report_describe`). An unknown parameter, or a value that does not fit its parameter's
+        type, is `422 report.bad_argument` naming the parameter (never its value). `limit`
+        never exceeds the report's `max_rows`.
+
+        A caller who may not read the report's data is **not** refused: the result has the same
+        shape with no rows, so the answer does not reveal what exists (`403` is never used for
+        the data). Columns the caller may not report on are absent from `columns` and the rows,
+        and `messages` says how many were removed without naming them. An unknown report, or one
+        the caller's roles do not admit, is `404 report.not_found`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                filters: {type: object}
+                limit: {type: integer, minimum: 1, maximum: 100000}
+      responses:
+        "200":
+          description: The report result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/ReportResult"}
+                  messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+              example:
+                data:
+                  columns:
+                    - {name: account, label: Account, type: link}
+                    - {name: balance, label: Balance, type: decimal}
+                  rows:
+                    - [0192f3c4-0000-7000-8000-00000000a001, "150000.00"]
+                  truncated: false
+        "422":
+          description: A report argument is unknown or of the wrong type (`report.bad_argument`).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/permissions:
+    get:
+      tags: [auth]
+      operationId: auth_permissions
+      summary: What the signed-in user may do, per DocType — a hint to render the UI, never authority.
+      description: |
+        The client-safe projection of the permission engine (ADR-070 §12): per DocType, the
+        document rights as booleans, and the field summary as three lists. Each requested
+        DocType answers with its **definition order** fields.
+
+        Field-level rules (ADR-070 §12): the `hidden` list names the fields the user cannot
+        read at all; `read_only` the fields visible but not writable; `masked` the fields the
+        user sees only in masked form. The answer **names no protection group** and never
+        says who else has access, and the lists are per user: two users of the same DocType
+        can get different answers. A field that appears in no list is readable and writable.
+
+        This is a UI hint, never authority: every operation still checks permissions on the
+        server, and `form_event`, `resource_*` and the lifecycle actions answer
+        `permission.denied` however this operation answered. The `etag` is the permission
+        snapshot version (a monotone counter over the snapshot the engine evaluates); send it
+        back in `If-None-Match` for a `304`.
+
+        With no `doctype` the answer covers every DocType the user holds any right on — the
+        navigation's basis. It omits without a trace a DocType the user holds no right on and
+        any protected field whose existence `meta_get` already hides for this user, so a
+        caller who cannot read a field learns nothing here either.
+
+        Errors: `meta.unknown_doctype` for a named DocType that does not exist (the error
+        names the DocType, never the user's rights on it); `permission.denied` is never
+        returned for rights themselves — an unrighted DocType is omitted, and a query for one
+        answers an empty rights set.
+      parameters:
+        - name: doctype
+          in: query
+          required: false
+          description: Repeat to ask about several DocTypes; absent asks about all the user may see.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: {$ref: "#/components/schemas/Identifier"}
+          style: form
+          explode: true
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The permission summary.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PermissionSummary"}
+              example:
+                data:
+                  doctypes:
+                    - doctype: sales_invoice
+                      rights: {read: true, create: true, write: true, delete: true, submit: true, cancel: true, correct: true, rename: true}
+                      fields: {hidden: [], read_only: [grand_total, status, name], masked: []}
+                etag: "\"42\""
+        "304": {description: The permission snapshot is unchanged since the given ETag.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/files:
+    post:
+      tags: [files]
+      operationId: file_upload
+      summary: Upload one binary file; the answer is its record, never a path.
+      description: |
+        One file per call. Two encodings: `application/octet-stream` (the body is the bytes)
+        and `multipart/form-data` (exactly one `file` part; other parts are refused with
+        `api.invalid_request`). **The client names the file** with `Content-Disposition`:
+        `filename` on the single part for octet-stream — `Content-Disposition: attachment;
+        filename="spec.pdf"` — and on the file part for multipart. A body without one fails
+        with `api.invalid_request`.
+
+        The size limit is the registry's `files.max_upload_bytes` (a server configuration;
+        its value is reported nowhere in the contract). A larger body fails with
+        `413 file.too_large`. Nothing beyond this limit is read.
+
+        The permission follows the file's destination: a user who may write the document the
+        `attach` field belongs to may upload a file for it; without a destination a user may
+        upload for their own use. `permission.denied` otherwise.
+
+        After the bytes are stored, the `file.scan` seam (antivirus, quarantine) runs when
+        the site has one; it is an implementation seam (ADR-08), not part of this contract:
+        the operation's result does not depend on which scanner answers. A failing scan is
+        `502 file.scan_failed` with an explanation (ADR-26) — the bytes are **not** stored and
+        the caller may retry. A scan that finds malware is `422 file.virus_detected`; the
+        upload is refused and recorded in the audit.
+
+        The response is the **record** and only the record: `id`, display `name`, `size`,
+        `content_type`, `digest` (SHA-256, hex, lowercase) and `private`. It never names a
+        path or a storage key; download goes through `file_get` by id. An `attach` field
+        stores this `id`.
+
+        `Idempotency-Key` is honoured: a repeat with the same key and the same body returns
+        the stored record.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+            encoding:
+              file:
+                contentType: application/octet-stream
+      responses:
+        "201":
+          description: Stored. `Location` is the file's URL.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/FileRecord"}
+              example:
+                data:
+                  id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e7f
+                  name: spec.pdf
+                  size: 51403
+                  content_type: application/pdf
+                  digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+                  private: false
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/files/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {$ref: "#/components/schemas/RecordId"}}
+    get:
+      tags: [files]
+      operationId: file_get
+      summary: Download a file by id. Streams the bytes with their content type.
+      description: |
+        The response streams the bytes with `Content-Type`, `Content-Disposition` (the stored
+        display name) and `ETag` (the file record's version, as stored by `file_upload`). The
+        registry's `files.max_upload_bytes` bounds the response size too; there is no other
+        size a client must know.
+
+        `Range` requests are honoured per RFC 9110 (single range; `bytes=start-end` with
+        either end optional): a valid range answers `206 Partial Content` with `Content-Range`
+        and the requested bytes; an unsatisfiable one answers `416` with `Content-Range:
+        bytes */<size>`. Range and `If-None-Match` may be combined; a matching validator
+        short-circuits to `304` first.
+
+        Permission follows the document the file is attached to: read the document, read the
+        file — checked at call time, so revoking access to the document revokes the file. A
+        file not attached to any document belongs to its uploader: only they (and, when
+        policy says so, administrators) may read it. `404 document.not_found` when the id is
+        unknown **or** the caller may not see it, never `permission.denied`, so the id alone
+        reveals nothing.
+
+        Uploads run through the `file.scan` seam; a download of any stored file is of scanned
+        bytes. Errors: `404 document.not_found`; `auth.session_expired`; the shared errors.
+      parameters:
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+        - {name: Range, in: header, required: false, schema: {type: string}, description: 'Single byte range, `bytes=start-end`; see the description.'}
+      responses:
+        "200":
+          description: The bytes.
+          headers:
+            Content-Type: {schema: {type: string}, description: The stored content type.}
+            Content-Disposition:
+              schema: {type: string}
+              description: 'attachment; filename="<the stored name>"'
+            ETag: {$ref: "#/components/headers/ETag"}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        "206":
+          description: The requested range.
+          headers:
+            Content-Type: {schema: {type: string}}
+            Content-Disposition: {schema: {type: string}}
+            ETag: {$ref: "#/components/headers/ETag"}
+            Content-Range: {schema: {type: string}}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        "304": {description: Unchanged since the given ETag.}
+        "416": {description: The requested range is unsatisfiable; Content-Range says the size.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/password:
+    post:
+      tags: [auth]
+      operationId: auth_password_change
+      summary: Change the current user's password.
+      description: |
+        The signed-in user changes their own password: `current` proves who they are, `new`
+        replaces it. The new password is checked against the tenant's password policy and the
+        breach list (ADR-070 §5.1); the failed rules come back inside
+        `422 auth.password_policy` as `details.rules`, each with its `rule` name and short
+        `message`. A wrong `current` fails with `401 auth.invalid_credentials` — the same
+        answer a login gives, so the endpoint cannot be used to test whether a guess is
+        right.
+
+        Changing the password ends every **other** session of the user and keeps the current
+        one (the ADR-070 §5.4 session rule), and the change is audited; the audit never
+        records the password itself. Every session record then carries the method the
+        session signed in with, unchanged.
+
+        For a user whose sign-in is federated (SSO, ADR-070 §7) there is no local password:
+        whether local credentials exist at all is the tenant's policy (ADR-070 §5.2), and the
+        endpoint answers `422 auth.password_policy` naming `local_password_unavailable`
+        rather than pretending the change worked.
+
+        Errors: `422 auth.password_policy`; `401 auth.invalid_credentials`;
+        `429 api.rate_limited` (attempts are rate-limited per user like login).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PasswordChange"}
+            example: {current: "correct horse battery staple", new: "staple horse correct battery"}
+      responses:
+        "204": {description: The password is changed.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/sessions:
+    get:
+      tags: [auth]
+      operationId: auth_session_list
+      summary: The signed-in user's own sessions.
+      description: |
+        Every live session of the current user, current one first: `id`, `created_at`,
+        `expires_at`, last `last_used_at`, and the non-secret details the ADR-070 §5.4 rule
+        records — `method` (password, sso, api_key), `source` address, optional device
+        label, and whether it is the `current` session. The token is never in the answer.
+
+        A user manages only their own sessions; an administrator's ending another user's
+        session is a separate, unaudited-here administration surface (ADR-070 §5.4), not part
+        of this contract.
+      responses:
+        "200":
+          description: The sessions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: "#/components/schemas/SessionRecord"}
+              example:
+                data:
+                  - id: 0192f3c4-5b6a-7c8d-9e0f-00000000se01
+                    created_at: "2026-10-09T18:04:11Z"
+                    expires_at: "2026-10-10T18:04:11Z"
+                    last_used_at: "2026-10-10T09:41:02Z"
+                    method: password
+                    source: 203.0.113.7
+                    device: Ayesha's laptop
+                    current: true
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/auth/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The session's id, from `auth_session_list`.
+        schema: {$ref: "#/components/schemas/SessionId"}
+    delete:
+      tags: [auth]
+      operationId: auth_session_end
+      summary: End one of the user's own sessions.
+      description: |
+        Ends the session with this id if it belongs to the current user; ending the current
+        session this way is allowed and equivalent to `auth_logout`. An unknown id, or one
+        naming another user's session, is `404 auth.session_not_found` — the answers are
+        indistinguishable on purpose, so an id alone reveals nothing about other users. The
+        audit records the ending (ADR-070 §8.4).
+      responses:
+        "204": {description: The session is ended.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/report:
+    get:
+      tags: [report]
+      operationId: report_list
+      summary: The reports the signed-in user may see (WP-PLT-14).
+      description: |
+        The catalogue of reports whose `roles` admit the caller, across all installed apps,
+        ordered by `label`. A report the caller's roles do not admit is not listed and is
+        answered `404 report.not_found` by every other report operation, exactly as a report
+        that does not exist. Listing a report says nothing about the data the caller may see in
+        it: rows are still permission-filtered when it runs. The list is bounded (a site has
+        tens of reports, not thousands), so it is not paged. Rate class `interactive`.
+      responses:
+        "200":
+          description: The reports the caller may see.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: "#/components/schemas/ReportSummary"}}
+              example:
+                data:
+                  - {name: totals_by_customer, label: Totals by customer, app: selling, base_doctype: sales_invoice}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/report/{report}:
+    parameters:
+      - {name: report, in: path, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+    get:
+      tags: [report]
+      operationId: report_describe
+      summary: "Describe a report for the caller: its parameters, the columns the caller may see, and its row limit."
+      description: |
+        What a client needs to draw a report's filter form and its empty result grid before
+        running it. `parameters` are the report's declared parameters, each with its type,
+        label, default, whether it is required and, for `select` and `link`, where its
+        options come from (`options`). `report_run` takes their values as `filters`, keyed by
+        parameter `name`.
+
+        `columns` is the description **for this caller**: the columns the caller may report on,
+        in the order a result carries them. A column removed for the caller (a hidden field,
+        a protection group the caller lacks) is not listed, is not counted, and is not
+        mentioned anywhere in the description (ADR-070 section 12, rules 6 and 7); a column the
+        caller may see only masked is listed normally and arrives masked. `max_rows` is the
+        largest `limit` a run honours.
+
+        A report the caller's roles do not admit, and a report that does not exist, answer
+        the same `404 report.not_found`. Rate class `interactive`.
+      responses:
+        "200":
+          description: The report's description for the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/ReportDescription"}
+              example:
+                data:
+                  name: totals_by_customer
+                  label: Totals by customer
+                  app: selling
+                  base_doctype: sales_invoice
+                  parameters:
+                    - {name: from_date, label: From date, type: date, required: true}
+                    - {name: status, label: Status, type: select, required: false, default: posted, options: {source: values, values: [draft, posted, cancelled]}}
+                    - {name: customer, label: Customer, type: link, required: false, options: {source: link, doctype: customer}}
+                  columns:
+                    - {name: customer, label: Customer, type: link}
+                    - {name: grand_total, label: Total, type: decimal}
+                  max_rows: 100000
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/reveal:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    post:
+      tags: [resource]
+      operationId: field_reveal
+      summary: Reveal the real value of one masked or protected field of one document, with a stated reason (ADR-070 section 12).
+      description: |
+        A masked or protected field is returned masked (or not at all) everywhere else.
+        This is the one place a person holding the reveal right reads the real value, and it
+        is deliberately narrow:
+
+        - it reveals **one field of one document** per call and never batches: there is no
+          list form, no `fields` array and no way to reveal through a query. (The system's own
+          bulk reveal for jobs and migrations is not part of this API.)
+        - `reason` is required, 1 to 500 characters of plain text, and is stored in the audit
+          trail with who, when, which document and which field. **Every call is audited**, on
+          success and on refusal; the value is never written to the audit trail, a log or a
+          metric.
+        - for a field in a trace group the reveal is also written to the field access trace.
+
+        The response is `Cache-Control: no-store` and the request is never replayed from the
+        idempotency store: `Idempotency-Key` is ignored, because a stored response would keep
+        the real value for 24 hours.
+
+        A caller without the right, a field that is not revealable, a document that does not
+        exist and a document the caller may not read all answer the same
+        `403 permission.reveal_denied` with the same body, so the answer says nothing about
+        which it was. Rate class `interactive`, with a stricter per-user limit set by the
+        registry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RevealRequest"}
+            example: {field: bank_account_number, reason: "Customer asked us to confirm the account on ticket 4521."}
+      responses:
+        "200":
+          description: The field's real value, in the field's own value encoding. No example is given on purpose.
+          headers:
+            Cache-Control:
+              description: Always `no-store`.
+              schema: {type: string, const: no-store}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RevealResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/export:
+    post:
+      tags: [export]
+      operationId: export_start
+      summary: Start a bulk export of one DocType and receive its first bounded chunk (WP-INT-03).
+      description: |
+        Moves a DocType out in bulk as CSV or NDJSON without a long-lived stream and without
+        holding a transaction. One request returns **one bounded chunk** (at most the
+        server's rows-per-chunk and bytes-per-chunk limits, by default 1,000 rows or 4 MiB,
+        sent with chunked transfer encoding); the **cursor** for the rest comes in the
+        `X-Export-Cursor` response header, and `export_next` takes it back in a request body.
+        A cursor is never put in a URL. The response has no `X-Export-Cursor` when the chunk
+        was the last one.
+
+        What the caller gets is exactly what the caller may export: the caller needs the
+        DocType's **export** right (distinct from read); the server ANDs the caller's read
+        filter onto `filter`, so the rows are the rows the caller sees in the list; a
+        requested column the caller may not report on is refused with
+        `403 permission.field_denied` naming it (never silently dropped); a filter or sort on
+        a field the caller cannot read is refused the same way (no inference); hidden fields
+        are not offered and masked fields arrive masked. A caller without the export right
+        gets `403 permission.denied`. With no `columns` the default is every column the caller
+        may export.
+
+        Paging is by keyset on `(order, id)`, never by offset: each chunk is its own short read,
+        rows inserted behind the cursor are not delivered, rows changed ahead of it are
+        delivered in their current state, and no row id is delivered twice. Resuming from the
+        same cursor returns the identical bytes.
+
+        Formats: `csv` is `text/csv; charset=utf-8` and `ndjson` is `application/x-ndjson`.
+        Decimals are exact strings with their scale, instants are UTC RFC 3339 with
+        microseconds, dates are ISO, `null` is empty in CSV and `null` in NDJSON. A text cell
+        that starts with `=`, `+`, `-`, `@`, tab or CR is prefixed with `'` in CSV so a
+        spreadsheet does not run it; NDJSON is not altered. With `include_children` a chunk is
+        `multipart/mixed` with one part per table (the parent first, `name` in each part's
+        `Content-Disposition`), each part in the chosen format, and every child row carries its
+        parent's id in a `parent` column.
+
+        `X-Export-Watermark` carries the incremental-extraction watermark taken when the export
+        began; an `export_extract` that starts from it follows the export without a gap (rows
+        that changed during the export are delivered again, which is harmless: apply by id and
+        version).
+
+        The export is audited (who, DocType, column list, filter digest, row count; never filter
+        values or data). Rate class `bulk`: a low-concurrency class, with a per-tenant and
+        per-user cap on exports in flight and a rows-per-second budget; going over either is
+        `429 bulk.limit` with `Retry-After`. A `max_rows` above the site's policy cap is
+        `400 api.invalid_request` with `details.max_rows` naming the cap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ExportSpec"}
+            example:
+              doctype: sales_invoice
+              columns: [name, customer, posting_date, grand_total]
+              filter: {field: posting_date, op: ge, value: "2026-01-01"}
+              order: [{field: posting_date}]
+              format: ndjson
+              include_children: false
+              max_rows: 1000000
+      responses:
+        "200":
+          description: The first chunk.
+          headers:
+            X-Export-Cursor: {$ref: "#/components/headers/ExportCursor"}
+            X-Export-Rows: {$ref: "#/components/headers/ExportRows"}
+            X-Export-Watermark: {$ref: "#/components/headers/ExportWatermark"}
+          content:
+            text/csv:
+              schema: {type: string}
+            application/x-ndjson:
+              schema: {type: string}
+            multipart/mixed:
+              schema: {type: string, format: binary}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/export/next:
+    post:
+      tags: [export]
+      operationId: export_next
+      summary: The next bounded chunk of an export, from the cursor the previous chunk returned.
+      description: |
+        Continues exactly after the last row of the chunk that produced the cursor. The format,
+        columns, order and filter are the ones the export started with; the request cannot
+        change them. The response is the chunk and, unless it is the last, the next cursor in
+        `X-Export-Cursor`.
+
+        A cursor is **opaque, signed and bound** to the caller and to the export it came from:
+        it cannot be edited, used by another user, or used for another export. A malformed,
+        forged, expired or foreign cursor is `422 bulk.cursor_invalid` (the same answer for
+        each, so it does not say which); a caller who has since lost the export right gets
+        `403 permission.denied`. Repeating a request with the same cursor returns the same
+        chunk. Rate class `bulk`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ExportNextRequest"}
+      responses:
+        "200":
+          description: The next chunk, in the export's format.
+          headers:
+            X-Export-Cursor: {$ref: "#/components/headers/ExportCursor"}
+            X-Export-Rows: {$ref: "#/components/headers/ExportRows"}
+            X-Export-Watermark: {$ref: "#/components/headers/ExportWatermark"}
+          content:
+            text/csv:
+              schema: {type: string}
+            application/x-ndjson:
+              schema: {type: string}
+            multipart/mixed:
+              schema: {type: string, format: binary}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/export/extract:
+    post:
+      tags: [export]
+      operationId: export_extract
+      summary: "Incremental extraction: what changed in a DocType since a watermark, with deletions as tombstones."
+      description: |
+        For a consumer that keeps a copy (a warehouse, a BI tool): the **current state** of
+        every document that changed since `watermark` (`upserts`, once each however many times
+        it changed) and the ids of documents deleted since (`deletes`, tombstones, never mere
+        absence), in pages of at most `limit` rows. `new_watermark` is the position after this
+        page; `has_more` says to call again from it. A consumer applies a page and then stores
+        `new_watermark`, so a crash re-reads rather than skips, and applying a page twice is
+        harmless because every upsert carries `id` and `version` (apply it when its version is
+        newer).
+
+        Rows are the rows the caller may export, in the columns the caller may export, with
+        the same rights and refusals as `export_start`. A document that stops being visible to
+        the caller appears as a delete. Where `columns` is absent the default is every column
+        the caller may export. The first watermark comes from `X-Export-Watermark` of a full
+        export.
+
+        A watermark is **opaque, signed and bound** to the caller and the DocType: a forged,
+        edited or foreign one is `422 bulk.cursor_invalid`. A watermark older than the change
+        feed's retention, or from before a resync of the feed, is `410 bulk.watermark_expired`:
+        the consumer must run a full export (`export_start`) and start again from its watermark.
+        The server never answers a partial result silently. Rate class `bulk`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ExtractRequest"}
+            example:
+              doctype: sales_invoice
+              columns: [name, customer, grand_total]
+              watermark: wm1.eyJ2IjoxfQ.c2lnbmVk
+              limit: 1000
+      responses:
+        "200":
+          description: One page of changes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/ExtractPage"}
+              example:
+                data:
+                  upserts:
+                    - {id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f, version: 4, name: SINV-2026-00042, customer: 0192f3c4-0000-7000-8000-00000000c001, grand_total: "2500.00"}
+                  deletes: [0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e99]
+                  new_watermark: wm1.eyJ2IjoyfQ.c2lnbmVk
+                  has_more: false
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/consumers:
+    get:
+      tags: [events]
+      operationId: event_consumer_list
+      summary: The named event consumers the caller owns (the tenant administrator sees all).
+      description: |
+        Part of the named-consumer event stream (ADR-078 sections 4 and 6; delivery level
+        **D1**, at-least-once and resumable). A consumer owned by someone else is not listed
+        and is `404 eventstream.consumer_not_found` everywhere. Rate class `interactive`.
+      responses:
+        "200":
+          description: The consumers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {type: array, items: {$ref: "#/components/schemas/EventConsumer"}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/consumers/{name}:
+    parameters:
+      - $ref: "#/components/parameters/ConsumerName"
+    put:
+      tags: [events]
+      operationId: event_consumer_put
+      summary: Create a named consumer, or update its topics, filter, payload mode or start.
+      description: |
+        A **named consumer** is a durable position in the event feed: its checkpoint survives
+        disconnects, restarts and deploys, and the server keeps the events it still needs
+        (retention is never later than the slowest registered consumer, ADR-061). Delivery
+        level **D1** (ADR-078 section 6): nothing is lost, an event may arrive more than once,
+        and the receiver dedupes on `event_id`; there is no exactly-once claim.
+
+        `topics` are exact topic names or a prefix ending in `.*`. The reserved platform
+        prefixes (`doc_`, `sys_`, `identity_`) are allowed only to an owner who holds the
+        explicit stream right for that class (`403 permission.denied` otherwise). `filter` is an
+        optional expression over the envelope `meta` and `subject`, parsed when the consumer is
+        registered. `partitions` (1 to 64) fixes how a stream is split: a partition is
+        `hash(subject.id) mod partitions`, so one document's events always arrive in one
+        partition, in order; it cannot change once the consumer exists (a different count is a
+        new consumer, `422 eventstream.spec_invalid`). `payload_mode` `ids_only` delivers the
+        envelope with subject and meta and no field data; `fields` adds the document fields the
+        owner may read, masked or removed as everywhere else.
+
+        The caller becomes the owner, and the consumer sees only what its owner may read
+        (events about documents the owner may not read are skipped, never delivered). Registering
+        is audited. Answers `201` when created and `200` when updated. Rate class `interactive`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ConsumerSpec"}
+            example:
+              topics: [doc_posted, billing_invoice_sent]
+              filter: "subject.entity == 'sales_invoice'"
+              partitions: 4
+              payload_mode: ids_only
+              start: {kind: tail}
+      responses:
+        "200":
+          description: The consumer existed and was updated.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EventConsumerResponse"}
+        "201":
+          description: The consumer was created.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EventConsumerResponse"}
+        default: {$ref: "#/components/responses/Error"}
+    get:
+      tags: [events]
+      operationId: event_consumer_get
+      summary: One consumer's definition and where each partition stands.
+      description: |
+        Delivery level **D1** (ADR-078 section 6). `partitions_state` gives each partition's
+        checkpoint (an opaque position, which never reveals how many events the owner may not
+        read) and whether the partition is parked for making no progress. Rate class
+        `interactive`.
+      responses:
+        "200":
+          description: The consumer.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EventConsumerResponse"}
+        default: {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [events]
+      operationId: event_consumer_delete
+      summary: Delete a consumer and release the retention it held.
+      description: |
+        Deleting is audited and irreversible: the checkpoints are gone and a new consumer with
+        the same name starts from its own `start`. Rate class `interactive`.
+      responses:
+        "204":
+          description: The consumer is deleted.
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/consumers/{name}/pull:
+    parameters:
+      - $ref: "#/components/parameters/ConsumerName"
+    post:
+      tags: [events]
+      operationId: event_consumer_pull
+      summary: Pull the next events of one partition, after its checkpoint.
+      description: |
+        Delivery level **D1** (ADR-078 section 6, five rules). Returns the next events of one
+        partition **in order within the partition**; there is no ordering promise across
+        partitions. Reading does not move the checkpoint: only `event_consumer_ack` does
+        (ack-before-advance), and a pull that is repeated before an ack returns the same events
+        again with the same `event_id`s. Acknowledge only after the effect is durably stored.
+
+        `limit` (1 to 1000, default 100) bounds the events returned and `wait_ms` (0 to 30000,
+        default 0) lets the call wait for events when there are none (long poll). `skipped` counts
+        events in the range that the owner may not read; it names no subject and does not
+        change with anything the owner cannot see. When the consumer already has its
+        in-flight window of delivered, unacknowledged events, the pull returns no events,
+        `window_full: true` and an info `message` coded `eventstream.window_full`: acknowledge
+        first. `next_position` is the position to acknowledge once every returned event is
+        applied; it is not committed by the pull.
+
+        Only one connection may consume as a named consumer at a time. The first pull (or
+        stream) takes a **lease** and returns it in `X-Consumer-Lease`; send it back as
+        `X-Consumer-Lease` on every later pull, ack and restart. A pull without it while another
+        holder's lease is live, or with a lease that has been replaced, is `409
+        eventstream.consumer_busy` (retryable after the lease lapses); an old holder cannot
+        acknowledge. A checkpoint older than the feed's retention, or in an older generation, is
+        `410 eventstream.resync_required` with `details.retained_from`, never a silent jump:
+        rebuild from a snapshot and call `event_consumer_restart`.
+      parameters:
+        - $ref: "#/components/parameters/ConsumerLease"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PullRequest"}
+            example: {partition: 0, limit: 100, wait_ms: 10000}
+      responses:
+        "200":
+          description: A batch, possibly empty.
+          headers:
+            X-Consumer-Lease: {$ref: "#/components/headers/ConsumerLease"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/PullBatch"}
+                  messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/consumers/{name}/ack:
+    parameters:
+      - $ref: "#/components/parameters/ConsumerName"
+    post:
+      tags: [events]
+      operationId: event_consumer_ack
+      summary: "Acknowledge a partition up to a position: the events up to it are durably applied."
+      description: |
+        Delivery level **D1** (ADR-078 section 6). Moves the partition's checkpoint to
+        `position`, which must be the `next_position` of a batch this consumer was delivered:
+        a position beyond the last delivered one, one that is not a delivered batch's own, one
+        behind the checkpoint, or a forged or foreign one (positions are opaque and bound to the
+        consumer) is refused, the checkpoint is never moved backwards or sideways, and a holder
+        that has lost its lease cannot acknowledge (`409 eventstream.ack_refused`, or `422
+        eventstream.position_invalid` when the position is not a position of this consumer).
+        Repeating an ack of the checkpoint itself is accepted and changes nothing. The ack is
+        audited (who, up to where). Rate class `interactive`.
+      parameters:
+        - $ref: "#/components/parameters/ConsumerLease"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AckRequest"}
+            example: {partition: 0, position: v1.AAAAAAAAAAEAAAAAAAAAKg}
+      responses:
+        "200":
+          description: The checkpoint after the acknowledgement.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/Checkpoint"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/consumers/{name}/restart:
+    parameters:
+      - $ref: "#/components/parameters/ConsumerName"
+    post:
+      tags: [events]
+      operationId: event_consumer_restart
+      summary: Move a partition's checkpoint to a stated position, after a resync or to replay.
+      description: |
+        Delivery level **D1** (ADR-078 section 6). The only way to move a checkpoint other than
+        forwards by an ack. `from` is `tail` (events from now on), `from_beginning` (the oldest the
+        feed still holds) or a `from_position` previously returned for this consumer. Used after
+        `eventstream.resync_required`, once the consumer has rebuilt its copy from a snapshot
+        (`export_start`, whose `X-Export-Watermark` is a safe place to rebuild from). The restart
+        is audited (who, from where). Rate class `interactive`.
+      parameters:
+        - $ref: "#/components/parameters/ConsumerLease"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RestartRequest"}
+            example: {partition: 0, from: {kind: from_beginning}}
+      responses:
+        "200":
+          description: The checkpoint after the restart.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: "#/components/schemas/Checkpoint"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/events/stream:
+    get:
+      tags: [events]
+      operationId: event_stream
+      summary: Follow one partition of a named consumer as server-sent events (ADR-078 section 4).
+      description: |
+        The one-way, read-only SSE binding of the same consumer the pull API serves; delivery
+        level **D1** (ADR-078 section 6), so every rule of `event_consumer_pull` holds: order
+        within the partition only, at-least-once, ack by `event_consumer_ack` after the effect is
+        stored, one connection per consumer (`409 eventstream.consumer_busy` otherwise), lease
+        returned in `X-Consumer-Lease`.
+
+        **Authentication is the `Authorization` header** and nothing else. A token is never
+        accepted in the URL (ADR-055), so the browser `EventSource` object, which cannot set
+        headers, is not supported; the generated clients include a `fetch`-based SSE reader.
+        Needs HTTP/2 in a browser (ADR-078 section 2). The credential is revalidated while the
+        stream is open and revoking it closes the stream.
+
+        The response is `text/event-stream`, UTF-8. Each event is one frame:
+
+        ```
+        id: <opaque position>
+        event: <topic>
+        data: <the EventEnvelope as one line of JSON>
+        <blank line>
+        ```
+
+        where `id` is the position to acknowledge after applying that event. A comment line
+        `: keepalive` is sent every 25 seconds so intermediaries do not close the connection.
+        **Resume** with `Last-Event-ID` (or `after`, which behaves the same); without either
+        the stream starts at the partition's checkpoint. A position that is no longer held,
+        and a checkpoint older than retention, produce one frame `event: resync_required` whose
+        `data` is `{"retained_from": "<position>"}` and the stream closes, exactly as the pull
+        API answers `410 eventstream.resync_required`.
+
+        Unlike an export cursor, a position grants nothing: it is bound to the consumer and
+        reveals no count of events the owner may not read, so `after` in the URL is safe (ADR-078
+        section 4); `Last-Event-ID` is preferred. Rate class: connections are capped per
+        principal (ADR-078 section 2), not metered per event.
+      parameters:
+        - {name: consumer, in: query, required: true, schema: {$ref: "#/components/schemas/Identifier"}}
+        - {name: partition, in: query, required: true, schema: {type: integer, minimum: 0, maximum: 63}}
+        - {name: after, in: query, required: false, description: "Resume position; `Last-Event-ID` is preferred.", schema: {$ref: "#/components/schemas/EventPosition"}}
+        - {name: Last-Event-ID, in: header, required: false, schema: {$ref: "#/components/schemas/EventPosition"}}
+      responses:
+        "200":
+          description: A stream of frames until the client closes it or the server revalidates, ends the lease or sends `resync_required`.
+          headers:
+            X-Consumer-Lease: {$ref: "#/components/headers/ConsumerLease"}
+            Cache-Control:
+              description: Always `no-store`.
+              schema: {type: string, const: no-store}
+          content:
+            text/event-stream:
+              schema: {type: string}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/print/{doctype}/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DocType"
+      - $ref: "#/components/parameters/DocId"
+    get:
+      tags: [print]
+      operationId: print_get
+      summary: Render one document to a PDF through a print format (WP-PLT-13).
+      description: |
+        The PDF of one document, as the site's print service renders it (WP-PLT-13.T1): the
+        print format named by `format`, or the DocType's default format, applied to the values
+        of that one document. It is read-only — no body, no write, no lock — and a repeat of
+        the same request renders the same page again. Rate class `interactive`, the class
+        `report_run` runs in.
+
+        **Permission is `read` on the document, and nothing else.** A missing document, a
+        document the caller may not read and an unknown DocType all answer
+        `404 document.not_found` with the same body, so a caller without access learns nothing
+        about whether the document exists (the rule `file_get` follows). The permission check
+        comes first: an unreadable document asked for with an unknown `format` is still
+        `404 document.not_found`.
+
+        **The page shows what the caller may read and nothing more.** The renderer runs as the
+        session's user over exactly the document `resource_get` would return for them: a field
+        the caller may not read is absent from the page as it is absent from that document — no
+        value, no label and no blank cell that names it — and a field the caller reads masked is
+        printed in its masked form. The real value of a masked field never reaches a page;
+        `field_reveal` stays the only path to it. The page is a view of the document and is
+        never authority: nothing it shows may be written back.
+
+        `format` is the print format's name and the **only** query parameter. There is no
+        template source, paper size, language or copy count, and no flag, in this version, so a
+        client cannot ask for a template the site did not define; it names a format it knows
+        (from the site's configuration or its own knowledge of the DocType), and a name the
+        DocType does not have is `404 print.format_unknown`. Listing a DocType's print formats
+        is not part of this version.
+
+        Success is `200 application/pdf`: the body is PDF bytes (never base64, never JSON),
+        `Content-Disposition` is `inline; filename="<doctype>-<id>.pdf"` built from the two
+        validated names in the path and never from document content, and `Cache-Control` is
+        `private, no-store`. This version has **no `ETag`, no `If-None-Match`, no `Range`** and
+        no `304`: a print is a fresh render, not a byte-stable resource, so a client that wants
+        the bytes again asks again. Neither a header nor the body names a file, a path or a
+        storage key.
+
+        Errors: `404 document.not_found` (missing, unreadable or an unknown DocType);
+        `404 print.format_unknown` when the DocType defines no print format with that name (a
+        name that belongs to another DocType is the same answer); `500 print.render_failed`
+        when the render fails — retryable false, and neither the message nor `details` carries
+        template text or document content. A site with no print service configured answers
+        `service.not_configured` with status 501, as the other optional services answer.
+      parameters:
+        - name: format
+          in: query
+          required: false
+          description: The print format's name. Omitted means the DocType's default format.
+          schema: {$ref: "#/components/schemas/Identifier"}
+      responses:
+        "200":
+          description: The document as a PDF.
+          headers:
+            Content-Type:
+              description: Always `application/pdf`.
+              schema: {type: string, const: application/pdf}
+            Content-Disposition:
+              description: 'inline; filename="<doctype>-<id>.pdf", built from the validated path names and never from document content.'
+              schema: {type: string}
+            Cache-Control:
+              description: Always `private, no-store`.
+              schema: {type: string, const: 'private, no-store'}
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/notifications:
+    get:
+      tags: [realtime]
+      operationId: notification_list
+      summary: The caller's own notices after a given one (the durable side of `user_notice`).
+      description: |
+        The notices addressed to the **caller**, oldest first, so a client that was offline
+        (or whose realtime room replay reported `resync_required`) can show what it missed.
+        Each item is the `notification` the realtime channel delivers, with the same
+        `event_id`, `event` and `data` (the keys of `data` are in `realtime.md`), plus
+        `created_at`. Rate class `interactive`. Permission: any signed-in user; there is no
+        other permission and no way to ask for another user's notices.
+
+        **No existence oracle.** The feed is always the caller's own: there is no user,
+        room or record parameter, so a caller learns nothing about anyone else's notices, and
+        an `after` that names an event the caller was never sent (a forged id, another user's
+        id, or one already pruned) is the same answer as one that is simply old: the items
+        that follow it in the caller's own feed, or an empty page. `after` is an `event_id`
+        taken from an earlier item or from a live `notification`; omitted means from the oldest
+        notice the site still keeps for the caller. `limit` is 1 to 100, default 50.
+
+        `next` is the `event_id` of the last item to send as the following `after`, or
+        absent when the page is empty; an empty page means the caller is up to date. The
+        server keeps a notice for the notification retention period (ADR-085); a client that
+        needs more than it holds has none to ask for.
+      parameters:
+        - name: after
+          in: query
+          required: false
+          description: The `event_id` of the last notice the client has; the page starts after it.
+          schema: {type: string, minLength: 1, maxLength: 128}
+        - name: limit
+          in: query
+          required: false
+          description: The most items to return.
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        "200":
+          description: The caller's notices after `after`, oldest first.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NotificationPage"}
+              example:
+                items:
+                  - event_id: 0192f3c4-5b6a-7c8d-9e0f-00000000ev01
+                    event: user_notice
+                    data: {title: Invoice posted, severity: info, doctype: sales_invoice, id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f, kind: posted}
+                    created_at: "2026-10-31T08:15:00Z"
+                next: 0192f3c4-5b6a-7c8d-9e0f-00000000ev01
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/realtime:
+    get:
+      tags: [realtime]
+      operationId: realtime_connect
+      summary: Upgrade to the realtime WebSocket (see realtime.md).
+      description: |
+        The first client message must be `auth` within 10 s, because browsers cannot set
+        headers on a WebSocket. Frames are JSON text; the message schemas are
+        `RealtimeClientMessage` and `RealtimeServerMessage`.
+      security: []
+      parameters:
+        - {name: Upgrade, in: header, required: true, schema: {type: string, const: websocket}}
+        - {name: Sec-WebSocket-Protocol, in: header, required: true, schema: {type: string, const: spot.v1}}
+      responses:
+        "101": {description: Switching protocols.}
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <credential>`, where the credential is a session token from
+        `auth_login` or an API key (`spk_<key_id>_<secret>`, WP-PLT-02). Missing credentials
+        give `401 auth.required`; a bad or expired one gives `401 auth.invalid_credentials` or
+        `401 auth.session_expired`.
+
+  headers:
+    ETag:
+      description: The document's version as a strong entity tag, for example `"3"`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+
+    ExportCursor:
+      description: |
+        Opaque, signed cursor for the next chunk of the export; absent when the chunk was the
+        last. Bound to the caller and the export. Send it back in the body of `export_next`.
+      schema: {type: string, minLength: 1, maxLength: 2048}
+    ExportRows:
+      description: Parent rows in this chunk.
+      schema: {type: integer, minimum: 0}
+    ExportWatermark:
+      description: |
+        The incremental-extraction watermark taken when the export began; the same value on
+        every chunk. Start `export_extract` from it to follow the export without a gap.
+      schema: {type: string, minLength: 1, maxLength: 2048}
+    ConsumerLease:
+      description: |
+        The lease token for the single active connection of a named consumer. Opaque; send it
+        back as `X-Consumer-Lease` on later pulls, acks and restarts.
+      schema: {type: string, minLength: 1, maxLength: 512}
+
+  parameters:
+    DocType:
+      name: doctype
+      in: path
+      required: true
+      description: The DocType's storage name.
+      schema: {$ref: "#/components/schemas/Identifier"}
+    DocId:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/RecordId"}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The version the change is based on, as returned in `ETag`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    ConsumerName:
+      name: name
+      in: path
+      required: true
+      description: The consumer's name, unique per site.
+      schema: {$ref: "#/components/schemas/Identifier"}
+    ConsumerLease:
+      name: X-Consumer-Lease
+      in: header
+      required: false
+      description: The lease token from the consumer's first pull or stream; see `event_consumer_pull`.
+      schema: {type: string, minLength: 1, maxLength: 512}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+
+  responses:
+    Error:
+      description: Any error. The status and `error.code` follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait, on 429 and 503.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+          examples:
+            stale:
+              value:
+                error:
+                  code: document.stale_version
+                  message: "This invoice was changed by someone else."
+                  explanation: "Reload it to see the latest version, then make your change again."
+                  retryable: false
+                  request_id: 0192f3c4-5b6a-7c8d-9e0f-00000000beef
+                  details: {current_version: 4}
+            seam_failed:
+              value:
+                error:
+                  code: lookup.seam_failed
+                  message: "The customer list could not be loaded."
+                  explanation: "The search provided by the billing app is not responding. Nothing was changed; try again or ask an administrator."
+                  retryable: false
+                  request_id: req-91c2
+            validation:
+              value:
+                error:
+                  code: document.validation_failed
+                  message: "The invoice has 2 problems."
+                  retryable: false
+                  request_id: req-7f3a
+                  fields:
+                    - {field: "items[2].qty", code: selling.qty_not_positive, message: "Quantity must be more than zero."}
+                    - {field: customer, code: document.required, message: "Customer is required."}
+    Document:
+      description: One document.
+      headers:
+        ETag: {$ref: "#/components/headers/ETag"}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/DocumentResponse"}
+    DocumentPage:
+      description: A page of documents.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/DocumentPage"}
+          example:
+            data:
+              - {id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f, version: 3, name: SINV-2026-00042, grand_total: "2500.00"}
+            next_cursor: eyJrIjpbIjIwMjYtMDktMjkiXX0
+    FunctionResult:
+      description: The function's result.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {description: Any JSON value returned by the function.}
+              messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+
+  schemas:
+    Identifier:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{0,62}$'
+    RecordId:
+      type: string
+      description: A UUIDv7, canonical lower-case hyphenated form.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    Decimal:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+    Date:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    DateTimeUtc:
+      type: string
+      description: RFC 3339 in UTC, ending in `Z`.
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+
+    FieldValue:
+      description: |
+        A field value, encoded by the field's type as in the Values table. Which encoding
+        applies is decided by the DocType's metadata, not by the JSON type.
+      type: [string, integer, boolean, object, array, "null"]
+
+    ChildRow:
+      type: object
+      required: [id, idx]
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        idx: {type: integer, minimum: 1}
+      additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+
+    Document:
+      type: object
+      required: [id, version]
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        version: {type: integer, minimum: 1}
+        _state:
+          type: string
+          enum: [draft, posted, cancelled]
+          description: Present on DocTypes that are posted (ADR-42).
+        _currency:
+          type: object
+          description: |
+            The currency each `currency`-format field of this document is shown in, keyed by the
+            field path (`grand_total`, or `items[2].amount` for a child row), resolved by the
+            **server** from the field's `currency_field` value on this document. Present only
+            when the DocType has such a field and the caller may read it. It is presentation:
+            never written back, never part of a value, and a client that ignores it still has
+            the exact decimal.
+          additionalProperties: {$ref: "#/components/schemas/CurrencyInfo"}
+      additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+
+    CurrencyInfo:
+      type: object
+      additionalProperties: false
+      required: [code, symbol]
+      properties:
+        code: {type: string, pattern: '^[A-Z]{3}$', description: The ISO 4217 code the amount is in.}
+        symbol: {type: string, maxLength: 8, description: The symbol the caller's locale shows for it (ADR-073).}
+
+    DocumentWrite:
+      type: object
+      description: Fields to write. Child tables are arrays of row objects; a row's `id` is optional.
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+      propertyNames:
+        pattern: '^[a-z][a-z0-9_]{0,62}$'
+        not: {const: version}
+      additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+
+    DocumentResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: "#/components/schemas/Document"}
+        messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+
+    DocumentPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data: {type: array, items: {$ref: "#/components/schemas/Document"}}
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque; pass it back to get the next page. `null` on the last page.
+        total:
+          type: integer
+          minimum: 0
+          description: Present only when `with_total` was requested.
+
+    QueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        fields:
+          type: array
+          items: {$ref: "#/components/schemas/Identifier"}
+          description: Fields to return. `id` and `version` are always included.
+        filter: {$ref: "#/components/schemas/Filter"}
+        order:
+          type: array
+          maxItems: 8
+          items: {$ref: "#/components/schemas/OrderKey"}
+        limit: {type: integer, minimum: 1, maximum: 500, default: 20}
+        cursor: {type: [string, "null"]}
+        with_total: {type: boolean, default: false}
+
+    OrderKey:
+      type: object
+      additionalProperties: false
+      required: [field]
+      properties:
+        field: {$ref: "#/components/schemas/Identifier"}
+        dir: {type: string, enum: [asc, desc], default: asc}
+        nulls:
+          type: string
+          enum: [first, last]
+          description: Default is `last` for `asc` and `first` for `desc`, as in PostgreSQL.
+
+    Filter:
+      description: |
+        A filter expression, mapped one to one onto the storage query IR (ADR-053). Comparisons
+        use three-valued logic: a comparison with a null field is not true, so use `is_null`.
+        Text equality and `in` are exact; `lt`/`le`/`gt`/`ge` on text follow the site's
+        collation. `prefix`, `contains` and `suffix` are literal (no wildcards).
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [and]
+          properties:
+            and: {type: array, minItems: 1, items: {$ref: "#/components/schemas/Filter"}}
+        - type: object
+          additionalProperties: false
+          required: [or]
+          properties:
+            or: {type: array, minItems: 1, items: {$ref: "#/components/schemas/Filter"}}
+        - type: object
+          additionalProperties: false
+          required: [not]
+          properties:
+            not: {$ref: "#/components/schemas/Filter"}
+        - type: object
+          additionalProperties: false
+          required: [field, op, value]
+          properties:
+            field: {$ref: "#/components/schemas/Identifier"}
+            op: {type: string, enum: [eq, ne, lt, le, gt, ge]}
+            value:
+              description: Never null; use `is_null`.
+              type: [string, integer, boolean]
+        - type: object
+          additionalProperties: false
+          required: [field, op, value]
+          properties:
+            field: {$ref: "#/components/schemas/Identifier"}
+            op: {type: string, enum: [in]}
+            value:
+              type: array
+              minItems: 1
+              maxItems: 1000
+              items: {type: [string, integer, boolean]}
+        - type: object
+          additionalProperties: false
+          required: [field, op, value]
+          properties:
+            field: {$ref: "#/components/schemas/Identifier"}
+            op: {type: string, enum: [prefix, contains, suffix]}
+            value: {type: string, minLength: 1}
+            case_insensitive: {type: boolean, default: false}
+        - type: object
+          additionalProperties: false
+          required: [field, op]
+          properties:
+            field: {$ref: "#/components/schemas/Identifier"}
+            op: {type: string, enum: [is_null, is_not_null]}
+
+    MethodCall:
+      type: object
+      additionalProperties: false
+      properties:
+        args:
+          type: object
+          description: Named arguments, encoded by the method's declared parameter types.
+
+    MethodResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [document, result]
+          properties:
+            document: {$ref: "#/components/schemas/Document"}
+            result: {description: The method's return value; `null` when it returns nothing.}
+        messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+
+    ReportResult:
+      type: object
+      required: [columns, rows, truncated]
+      properties:
+        columns:
+          type: array
+          items:
+            type: object
+            required: [name, label, type]
+            properties:
+              name: {$ref: "#/components/schemas/Identifier"}
+              label: {type: string}
+              type: {$ref: "#/components/schemas/FieldType"}
+        rows:
+          type: array
+          items: {type: array, items: {$ref: "#/components/schemas/FieldValue"}}
+        truncated: {type: boolean, description: True when `limit` cut the result.}
+
+    FieldType:
+      type: string
+      description: |
+        The value encoding of a field or column, from the Values table. A `select` field has
+        type `text` (with `select` values) and a dynamic link has type `link` (with
+        `link_type_field`). `long_text` is encoded as text; `attach` as a file record id;
+        `table_multiselect` as an array of row objects; a `secret` is never encoded in a
+        document, which holds only whether one is set. A `consumer_ref` (0.9.0) is encoded as
+        the consumer's id, like a `link`'s value, but it is not a link: it has no `link_to`, no
+        lookup and no navigation, and a client shows it as read-only text (the consumer lives
+        outside the DocTypes and a staff client cannot open it). A client that does not know
+        the type treats it as text.
+      enum: [bool, int, decimal, text, long_text, date, time, datetime, link, json, bytes, attach, secret, table, table_multiselect, consumer_ref]
+
+    DocTypeMeta:
+      type: object
+      required: [doctype, label, version, fields]
+      properties:
+        doctype: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string}
+        version: {type: integer, minimum: 1, description: The metadata version (ADR-05).}
+        is_posted: {type: boolean, description: Documents have a draft stage and a Post action (ADR-42).}
+        expr_version:
+          type: integer
+          minimum: 1
+          description: |
+            The version of the shared expression language (`docs/expression-language.md`) that
+            the rule expressions of this DocType's fields (`depends_on`, `mandatory_depends_on`,
+            `read_only_depends_on`, `default_expr`) are written for (WP-CON-03.T7). It is
+            present whenever any field carries one of them and absent otherwise. A client that
+            does not implement this version **ignores every rule expression of the DocType**
+            and uses the static properties (`required`, `read_only`, `default`, `hints.hidden`);
+            the server's `form_event` and its checks on save stay authoritative either way.
+        fields:
+          type: array
+          items: {$ref: "#/components/schemas/FieldMeta"}
+
+    FieldMeta:
+      type: object
+      description: One field's complete description (ADR-068 §6).
+      required: [name, label, type]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string}
+        type: {$ref: "#/components/schemas/FieldType"}
+        required: {type: boolean}
+        read_only: {type: boolean}
+        create_only:
+          type: boolean
+          description: |
+            The field can be set only when the document is created (contract 0.9.0, ADR-068
+            amendment A4). Once the document exists, no operation by any channel changes the
+            stored value; a request that tries fails with `document.read_only_field` on this
+            field. A client offers the field when creating and shows it read-only afterwards.
+            Absent means false. It is a statement about writes, not about who may read the field.
+        default:
+          description: The value a new document starts with, encoded by the field's type.
+          $ref: "#/components/schemas/FieldValue"
+        scale: {type: integer, minimum: 0, maximum: 28, description: For decimals.}
+        precision: {type: integer, minimum: 1, maximum: 38, description: Total digits, for decimals.}
+        link_to: {$ref: "#/components/schemas/Identifier"}
+        link_type_field:
+          allOf: [{$ref: "#/components/schemas/Identifier"}]
+          description: For a dynamic link, the field holding the target DocType.
+        child_doctype: {$ref: "#/components/schemas/Identifier"}
+        link_field:
+          allOf: [{$ref: "#/components/schemas/Identifier"}]
+          description: For a `table_multiselect`, the row field holding the picked document.
+        select:
+          type: array
+          items: {type: string}
+          description: The allowed values of a `select` field, in display order.
+        multiple:
+          type: boolean
+          description: |
+            A `select` field that holds several of its values (WP-CON-03.T6). Its value is an
+            array of the chosen texts, in the order of `select`, with no duplicates; absent or
+            false means one value. A field that holds several *documents* is a
+            `table_multiselect`, not this.
+        max_chars: {type: integer, minimum: 1, description: The limit of a `text` field.}
+        format:
+          type: string
+          description: |
+            How the value is interpreted and shown (ADR-068 §2), for example `email`, `url`,
+            `currency`, `percent`, `markdown`, `image`. Absent means plain. The set grows
+            additively, so a client treats an unknown format as plain.
+        format_params:
+          type: object
+          description: |
+            The format's parameters: `symbology` (barcode), `syntax` (code), `currency_field`
+            (currency), `max` (rating). The currency *symbol* is not a parameter: it depends on
+            the document and arrives in `Document._currency`. Attachment limits are not
+            parameters either: they depend on the user and arrive in `auth_permissions`
+            (`attach_limits`).
+          additionalProperties: {type: [string, integer]}
+        lookup: {$ref: "#/components/schemas/LookupSpec"}
+        hints: {$ref: "#/components/schemas/FieldHints"}
+        depends_on:
+          type: string
+          maxLength: 1024
+          description: |
+            Rule expression (WP-CON-03.T7, ADR-068 §1): the field is shown while it evaluates to
+            `true`. Written in the shared expression language at `DocTypeMeta.expr_version`,
+            over `doc` (and `parent` on a child row). Absent means always shown (subject to
+            `hints.hidden`). A client evaluates it for instant feedback; it never changes what
+            is stored or allowed, and an expression that fails to evaluate leaves the field
+            as the static properties say.
+        mandatory_depends_on:
+          type: string
+          maxLength: 1024
+          description: |
+            Rule expression: the field is required while it evaluates to `true`, in addition to
+            a static `required`. The server enforces it on save regardless of the client.
+        read_only_depends_on:
+          type: string
+          maxLength: 1024
+          description: |
+            Rule expression: the field is read-only while it evaluates to `true`, in addition to
+            a static `read_only`. The server enforces it on save regardless of the client.
+        default_expr:
+          type: string
+          maxLength: 1024
+          description: |
+            Expression for the value a new document starts with (and a new child row), used
+            instead of the static `default` by a client that implements `expr_version`. The
+            result is encoded by the field's type. Evaluated once when the document or row is
+            created, never again, so it cannot overwrite what the user typed.
+
+    FieldHints:
+      type: object
+      description: Presentation hints (ADR-068 §1.3). They never change what is stored.
+      properties:
+        description: {type: string, description: Longer offline help text.}
+        hidden: {type: boolean, description: "The UI hides it; hiding is not security."}
+        in_list_view: {type: boolean}
+        in_standard_filter: {type: boolean}
+        no_copy: {type: boolean}
+        permlevel: {type: integer, minimum: 0, maximum: 9}
+        control:
+          type: string
+          enum: [switch, checkbox, dropdown, radio, segmented, autocomplete, chips, textarea]
+          description: |
+            Which control the author prefers for the field (WP-CON-03.T6), from a closed set
+            that grows additively: `switch` and `checkbox` for a bool; `dropdown`, `radio`,
+            `segmented` for a single `select`; `dropdown`, `chips` for a `multiple` select;
+            `autocomplete` for a link; `textarea` for text. It is a hint: a client uses it
+            when it offers that control for the field's type and falls back to its default for
+            a value it does not know or that does not suit the type. It never changes what is
+            stored or what is allowed.
+
+    LookupSpec:
+      type: object
+      description: |
+        The field's base lookup (ADR-068 §3.2), for information. It is the definition's
+        spec, not necessarily the one that answers: a view or a site override may replace it.
+        A client never sends it back; `lookup_search` has no seam parameter. Conditional
+        (`when`) rules are the server's and are not exposed.
+      properties:
+        seam: {type: string, description: "Absent means the platform default `platform:link_search`."}
+        version: {type: integer, minimum: 1, description: The lookup protocol major.}
+        params:
+          type: object
+          additionalProperties: {type: string}
+
+    LookupRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      description: |
+        There is deliberately no seam here. Unknown properties are rejected with
+        `api.invalid_request`.
+      properties:
+        text: {type: string, maxLength: 1024, description: The text typed so far; may be empty.}
+        cursor: {type: string, description: From a previous page's `cursor`.}
+        doc:
+          type: object
+          description: The current document snapshot, in the value encoding.
+          additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+        parent:
+          type: object
+          description: The parent document, when the field is on a child row.
+          additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+
+    LookupRow:
+      type: object
+      required: [id, label]
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        label: {type: string, description: What the user picks from.}
+        description: {type: string, description: A second line.}
+        extras:
+          type: object
+          description: Values the form may copy into other fields when the row is picked.
+          additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+        provides:
+          type: object
+          description: |
+            Provisional fills (WP-CON-03.T7, ADR-068 A3): the values the form's `fetch_from`
+            fields would copy from this row, by the name of the **form's** field that receives
+            each (on a child row, the row's field). Sent only for values the asker may see, and
+            never a masked or reveal-gated value. A client may fill them at once and must mark
+            them provisional: the answer of `form_event` replaces them and the server
+            recomputes them on save, so a stale hint can flicker but never persist. Absent
+            means nothing to fill. `extras` is unchanged and is not provisional.
+          additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+        cells:
+          type: object
+          description: |
+            The text of each display column for this row, by column name, when the page names
+            `columns` (WP-CON-03.T6). A row may omit a column it has no text for. Display
+            only: a cell is never a value to copy; `extras` is for that.
+          additionalProperties: {type: string, maxLength: 1024}
+
+    LookupPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [rows, has_more]
+          properties:
+            rows: {type: array, items: {$ref: "#/components/schemas/LookupRow"}}
+            columns:
+              type: array
+              maxItems: 8
+              description: |
+                Present when the seam answers with several display columns (WP-CON-03.T6): the
+                picker shows these, in order, with `label` as the text it keeps once a row is
+                picked. Absent means the single-column picker of `label` and `description`.
+              items:
+                type: object
+                additionalProperties: false
+                required: [name, label]
+                properties:
+                  name: {$ref: "#/components/schemas/Identifier"}
+                  label: {type: string}
+            has_more: {type: boolean}
+            cursor: {type: string, description: Present exactly when `has_more` is true.}
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [user, password]
+      properties:
+        user: {type: string, minLength: 1, maxLength: 320, description: E-mail or user name.}
+        password: {type: string, minLength: 1, maxLength: 1024}
+        totp: {type: string, pattern: '^[0-9]{6,8}$'}
+        recovery_code: {type: string, maxLength: 32}
+
+    Session:
+      type: object
+      required: [token, expires_at, user]
+      properties:
+        token: {type: string, description: "Opaque; send as `Authorization: Bearer <token>`."}
+        expires_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        user: {$ref: "#/components/schemas/UserSummary"}
+
+    NotificationPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/NotificationItem"}
+        next:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The `event_id` to send as `after` for the following page. Absent on an empty page.
+
+    NotificationItem:
+      type: object
+      required: [event_id, event, data, created_at]
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        event:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,62}$'
+          description: A short lowercase token; `user_notice` is the only value defined. A client ignores a value it does not know.
+        data:
+          type: object
+          description: The notice's data (at most 2 KiB serialised; the keys are in `realtime.md`).
+        created_at: {$ref: "#/components/schemas/DateTimeUtc"}
+
+    ConsumerSession:
+      type: object
+      required: [token, expires_at]
+      properties:
+        token: {type: string, description: "Opaque; send as `Authorization: Bearer <token>`. Short-lived; never put in a URL."}
+        expires_at: {$ref: "#/components/schemas/DateTimeUtc"}
+
+    SessionInfo:
+      type: object
+      required: [expires_at, user]
+      properties:
+        expires_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        user: {$ref: "#/components/schemas/UserSummary"}
+        site: {type: string}
+
+    UserSummary:
+      type: object
+      required: [id, email, full_name]
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        email: {type: string}
+        full_name: {type: string}
+
+    FormEventRequest:
+      type: object
+      required: [doc, changed]
+      description: |
+        One form event: the unsaved draft as the client holds it, and the field that
+        changed. The field path takes `field` or the child-row form `table[idx].field`
+        (idx from 1). Unknown properties are rejected with `api.invalid_request`.
+      additionalProperties: false
+      properties:
+        doc:
+          type: object
+          description: |
+            The unsaved draft: the fields as the value encoding holds them, child tables as
+            arrays of row objects (`id`, `idx` from 1, then the row fields). The server never
+            stores it; it does not validate it as a whole document (validation is the
+            save's), but it rejects unknown field names and values that do not fit their
+            types, and `version` or `_`-keys as `resource_create` does.
+          additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+        changed: {$ref: "#/components/schemas/FieldPath"}
+        base_version:
+          type: integer
+          minimum: 1
+          description: The version the draft was loaded at, when it came from a stored document. Present only then; the server does not re-read the document for the event.
+
+    FormEventResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [patch]
+          properties:
+            patch:
+              type: object
+              description: The document diff, in the merge-patch form `resource_update` takes, restricted to fields the server derived or changed. No field the caller cannot read appears; a row-level change keeps the row's `id` and `idx`.
+              additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+            rules:
+              type: object
+              description: The resolved rule state for the changed region, only when the server computed it — conditional (ADR-068 §3.2 `when`) rules and validation rules with resolved outcomes. `field` and `message` use the same shapes as `Message`; the client's own instant rules remain primary.
+              additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+        messages: {type: array, items: {$ref: "#/components/schemas/Message"}}
+
+    PermissionSummary:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [doctypes]
+          properties:
+            doctypes:
+              type: array
+              items: {$ref: "#/components/schemas/DoctypePermissions"}
+        etag: {type: string, description: The permission snapshot version, in ETag form. It changes when rules or grants change; a client refreshes the summary when it does.}
+
+    DoctypePermissions:
+      type: object
+      description: |
+        What one user may do with one DocType, and nothing more. It names no protection
+        group, no role and no other user's rights; the lists name field paths only. Fields
+        omitted from every list are readable and writable.
+      required: [doctype, rights, fields]
+      properties:
+        doctype: {$ref: "#/components/schemas/Identifier"}
+        rights:
+          type: object
+          description: Document-independent rights for the signed-in user. `submit` is the engine's `post` right; `correct` needs both `cancel` and `create` (ADR-42). A right is true only when the user holds it for documents generally — condition-restricted grants do not widen it.
+          required: [read, create, write, delete, submit, cancel, correct, rename]
+          additionalProperties: false
+          properties:
+            read: {type: boolean}
+            create: {type: boolean}
+            write: {type: boolean}
+            delete: {type: boolean}
+            submit: {type: boolean}
+            cancel: {type: boolean}
+            correct: {type: boolean}
+            rename: {type: boolean}
+        fields:
+          type: object
+          description: The field summary, per user. The lists are in DocType definition order; a hidden field never appears anywhere else in this answer, so a caller who cannot read it learns nothing of its existence (`meta_get` treats hidden the same way).
+          required: [hidden, read_only, masked]
+          additionalProperties: false
+          properties:
+            hidden:
+              type: array
+              items: {$ref: "#/components/schemas/Identifier"}
+              description: Fields the user cannot read at all — they do not exist for this reader, and no response of this API shows them.
+            read_only:
+              type: array
+              items: {$ref: "#/components/schemas/Identifier"}
+              description: Fields the user can read but not write (engine-maintained ones such as totals appear here as well as permission-restricted ones).
+            masked:
+              type: array
+              items: {$ref: "#/components/schemas/Identifier"}
+              description: |
+                Fields the user reads only in masked form (ADR-070 §12 read_masked). The
+                server forms the masked text and **never sends the real value** of a field
+                until `field_reveal` succeeds, so the mask format is not part of any metadata:
+                a client shows the text it is given and never derives or stores the real value.
+            revealable:
+              type: array
+              items: {$ref: "#/components/schemas/Identifier"}
+              description: |
+                The fields among `masked` the user holds the right to reveal through
+                `field_reveal` (WP-CON-03.T6), in definition order; absent means none. A client
+                offers a reveal action only for these. It is a hint: `field_reveal` decides, and
+                answers the same refusal as for a missing document.
+        attach_limits:
+          type: object
+          description: |
+            For each `attach` field the user may write, what this user may upload to it
+            (WP-CON-03.T6), keyed by field path. The server resolves one global default and any
+            narrower override (for example a department's) and sends the result for **this**
+            user; the client never merges scopes. `file_upload` still enforces it
+            (`413 file.too_large`; a media type outside `accept` is `400 api.invalid_request`) and the registry's `files.max_upload_bytes`
+            stays the ceiling that no override can pass.
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [max_bytes]
+            properties:
+              max_bytes: {type: integer, minimum: 1}
+              accept:
+                type: array
+                maxItems: 64
+                items: {type: string, pattern: '^[a-z0-9.+-]+/[a-z0-9.+*-]+$'}
+                description: Media types allowed, `*` allowed as the subtype; absent means any type.
+
+    FileRecord:
+      type: object
+      description: One stored file. It never names a path or a storage key; there is no URL to bytes, only this record and `GET /api/v1/files/{id}`.
+      required: [id, name, size, content_type, digest, private]
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        name:
+          type: string
+          maxLength: 255
+          description: The display name the upload carried in `Content-Disposition`.
+        size: {type: integer, minimum: 0, description: The size in bytes.}
+        content_type: {type: string, description: The stored content type; the upload's `Content-Type`, or `application/octet-stream` when the upload did not name one.}
+        digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 of the bytes, hex, lower-case. The client may verify its own copy against it.
+        private:
+          type: boolean
+          description: True when the file is unattached and only its uploader may read it; false when it is attached to (or will be attached to) a document whose readers see it.
+      examples:
+        - id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e7f
+          name: spec.pdf
+          size: 51403
+          content_type: application/pdf
+          digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+          private: false
+
+    PasswordChange:
+      type: object
+      additionalProperties: false
+      required: [current, new]
+      properties:
+        current: {type: string, minLength: 1, maxLength: 1024}
+        new: {type: string, minLength: 1, maxLength: 1024, description: Must satisfy the tenant's password policy (ADR-070 §5.1); a failure names the violated rules.}
+
+    SessionId:
+      type: string
+      description: A session's opaque id, from `auth_session_list`. Not the bearer token; the token is never shown or echoed.
+      pattern: '^[A-Za-z0-9_-]{1,64}$'
+
+    SessionRecord:
+      type: object
+      required: [id, created_at, expires_at, method, source, current]
+      properties:
+        id: {$ref: "#/components/schemas/SessionId"}
+        created_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        expires_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        last_used_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        method:
+          type: string
+          enum: [password, sso, api_key]
+          description: How the session signed in (ADR-070 §5.4).
+        source: {type: string, description: The client address the session began from.}
+        device: {type: string, description: The optional device label, when one was set.}
+        current: {type: boolean, description: True for the session this response is served under.}
+
+    Message:
+      type: object
+      required: [level, code, message]
+      properties:
+        level: {type: string, enum: [info, warning]}
+        code: {$ref: "#/components/schemas/ErrorCode"}
+        message: {type: string}
+        field: {$ref: "#/components/schemas/FieldPath"}
+
+    ErrorCode:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+
+    FieldPath:
+      type: string
+      description: A field, or a child-table row field as `table[idx].field` (idx from 1).
+      pattern: '^[a-z][a-z0-9_]*(\[[1-9][0-9]*\]\.[a-z][a-z0-9_]*)?$'
+
+    FieldError:
+      type: object
+      required: [field, code, message]
+      properties:
+        field: {$ref: "#/components/schemas/FieldPath"}
+        code: {$ref: "#/components/schemas/ErrorCode"}
+        message: {type: string}
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, request_id]
+          properties:
+            code: {$ref: "#/components/schemas/ErrorCode"}
+            message: {type: string}
+            explanation: {type: string}
+            retryable: {type: boolean, description: True when the same request may succeed later unchanged.}
+            request_id: {type: string}
+            fields: {type: array, items: {$ref: "#/components/schemas/FieldError"}}
+            details: {type: object, description: Code-specific data, documented per code.}
+
+    Live:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, const: live}
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+          description: |
+            The native API contract version this server serves, for example `0.4.0`
+            (added in 0.3.0). A server from 0.2.0 answers without it, and a 0.3.0 or newer
+            client that finds no `version` treats the server as 0.2.0 and degrades:
+            it asks only for the operations the version includes.
+
+    Ready:
+      type: object
+      required: [status, checks]
+      properties:
+        status: {type: string, enum: [ready, not_ready]}
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, ok]
+            properties:
+              name: {type: string}
+              ok: {type: boolean}
+              detail: {type: string}
+
+    Room:
+      type: string
+      description: "`doc:<doctype>:<id>`, `doctype:<doctype>`, `user:<user id>` or `site`."
+      pattern: '^(doc:[a-z][a-z0-9_]{0,62}:[0-9a-f-]{36}|doctype:[a-z][a-z0-9_]{0,62}|user:[0-9a-f-]{36}|site)$'
+
+    RealtimeClientMessage:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, token]
+          properties:
+            type: {const: auth}
+            token: {type: string}
+        - type: object
+          additionalProperties: false
+          required: [type, ref, room]
+          properties:
+            type: {const: join}
+            ref: {type: string, maxLength: 64, description: Echoed in the reply.}
+            room: {$ref: "#/components/schemas/Room"}
+            resume_after: {type: integer, minimum: 0, description: The last `seq` the client saw in this room.}
+        - type: object
+          additionalProperties: false
+          required: [type, room]
+          properties:
+            type: {const: leave}
+            room: {$ref: "#/components/schemas/Room"}
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: {const: ping}
+      examples:
+        - {type: auth, token: 3q2-7wEBAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhs}
+        - {type: join, ref: j1, room: "doc:sales_invoice:0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f", resume_after: 12}
+        - {type: leave, room: "doctype:sales_invoice"}
+        - {type: ping}
+
+    RealtimeServerMessage:
+      oneOf:
+        - type: object
+          required: [type, user]
+          properties:
+            type: {const: ready}
+            user: {$ref: "#/components/schemas/RecordId"}
+            heartbeat_seconds: {type: integer, minimum: 1}
+        - type: object
+          required: [type, ref, room, outcome]
+          properties:
+            type: {const: joined}
+            ref: {type: string}
+            room: {$ref: "#/components/schemas/Room"}
+            outcome: {type: string, enum: [joined, replayed, resync_required]}
+            replayed: {type: integer, minimum: 0}
+        - type: object
+          required: [type, ref, room, error]
+          properties:
+            type: {const: join_error}
+            ref: {type: string}
+            room: {type: string}
+            error:
+              type: object
+              required: [code, message]
+              properties:
+                code: {$ref: "#/components/schemas/ErrorCode"}
+                message: {type: string}
+        - type: object
+          required: [type, room, seq, kind, payload, published_at]
+          properties:
+            type: {const: event}
+            room: {$ref: "#/components/schemas/Room"}
+            seq: {type: integer, minimum: 1}
+            kind: {type: string, enum: [doc_created, doc_updated, doc_deleted, doc_posted, doc_cancelled, doc_renamed, notification]}
+            payload: {type: object}
+            published_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        - type: object
+          required: [type]
+          properties:
+            type: {const: pong}
+      examples:
+        - {type: ready, user: 0192f3c4-5b6a-7c8d-9e0f-00000000aaaa, heartbeat_seconds: 25}
+        - {type: joined, ref: j1, room: "doc:sales_invoice:0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f", outcome: replayed, replayed: 2}
+        - {type: join_error, ref: j2, room: "doctype:salary_slip", error: {code: permission.denied, message: "You cannot see salary slips."}}
+        - type: event
+          room: "doc:sales_invoice:0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f"
+          seq: 14
+          kind: doc_updated
+          payload: {doctype: sales_invoice, id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f, version: 4}
+          published_at: "2026-09-29T10:15:02.120Z"
+        - {type: pong}
+
+    ReportSummary:
+      type: object
+      required: [name, label, app, base_doctype]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string}
+        app: {$ref: "#/components/schemas/Identifier"}
+        base_doctype: {$ref: "#/components/schemas/Identifier"}
+
+    ReportParameter:
+      type: object
+      required: [name, label, type, required]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string}
+        type:
+          type: string
+          enum: [text, int, decimal, date, link, select]
+        required: {type: boolean}
+        default:
+          $ref: "#/components/schemas/FieldValue"
+          description: The value used when the caller sends none; absent when there is no default.
+        options:
+          description: Present for `select` and `link` parameters only.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [source, values]
+              properties:
+                source: {const: values}
+                values: {type: array, items: {type: string}}
+            - type: object
+              additionalProperties: false
+              required: [source, doctype]
+              properties:
+                source: {const: link}
+                doctype:
+                  $ref: "#/components/schemas/Identifier"
+                  description: The DocType whose candidates `lookup_search` supplies for this parameter.
+
+    ReportDescription:
+      type: object
+      required: [name, label, app, base_doctype, parameters, columns, max_rows]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string}
+        app: {$ref: "#/components/schemas/Identifier"}
+        base_doctype: {$ref: "#/components/schemas/Identifier"}
+        parameters: {type: array, items: {$ref: "#/components/schemas/ReportParameter"}}
+        columns:
+          description: The columns this caller may see, in result order. Never a column removed for the caller.
+          type: array
+          items:
+            type: object
+            required: [name, label, type]
+            properties:
+              name: {$ref: "#/components/schemas/Identifier"}
+              label: {type: string}
+              type: {$ref: "#/components/schemas/FieldType"}
+        max_rows: {type: integer, minimum: 1, description: The largest `limit` a run honours.}
+
+    RevealRequest:
+      type: object
+      additionalProperties: false
+      required: [field, reason]
+      properties:
+        field:
+          $ref: "#/components/schemas/FieldPath"
+          description: One field of the document, or one child-table row field as `table[idx].field`.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Why the caller needs the real value. Stored in the audit trail; plain text.
+
+    RevealResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [value]
+          properties:
+            value:
+              $ref: "#/components/schemas/FieldValue"
+              description: The real value of that one field, in the field's value encoding.
+
+    ExportSpec:
+      type: object
+      additionalProperties: false
+      required: [doctype, format]
+      properties:
+        doctype: {$ref: "#/components/schemas/Identifier"}
+        columns:
+          type: array
+          maxItems: 256
+          items: {$ref: "#/components/schemas/Identifier"}
+          description: Fields to export. Default is every column the caller may export.
+        filter: {$ref: "#/components/schemas/Filter"}
+        order:
+          type: array
+          maxItems: 8
+          items: {$ref: "#/components/schemas/OrderKey"}
+          description: Default is `(modified, id)`. `id` is always appended as the final key.
+        format: {type: string, enum: [csv, ndjson]}
+        include_children:
+          type: boolean
+          default: false
+          description: Child tables as further parts of each chunk (`multipart/mixed`), keyed by parent id.
+        max_rows:
+          type: integer
+          minimum: 1
+          description: Stop after this many parent rows. At most the site's policy cap.
+
+    ExportNextRequest:
+      type: object
+      additionalProperties: false
+      required: [cursor]
+      properties:
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: The `X-Export-Cursor` of the previous chunk. Opaque and signed; never put in a URL.
+
+    ExtractRequest:
+      type: object
+      additionalProperties: false
+      required: [doctype, watermark]
+      properties:
+        doctype: {$ref: "#/components/schemas/Identifier"}
+        columns:
+          type: array
+          maxItems: 256
+          items: {$ref: "#/components/schemas/Identifier"}
+        watermark:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: From `X-Export-Watermark` of a full export, or the `new_watermark` of the previous page. Opaque and signed; never put in a URL.
+        limit: {type: integer, minimum: 1, maximum: 5000, default: 1000}
+
+    ExtractRow:
+      type: object
+      required: [id, version]
+      description: One document's current state in the requested columns, with its `id` and `version`.
+      properties:
+        id: {$ref: "#/components/schemas/RecordId"}
+        version: {type: integer, minimum: 1}
+      additionalProperties: {$ref: "#/components/schemas/FieldValue"}
+
+    ExtractPage:
+      type: object
+      required: [upserts, deletes, new_watermark, has_more]
+      properties:
+        upserts: {type: array, items: {$ref: "#/components/schemas/ExtractRow"}}
+        deletes: {type: array, items: {$ref: "#/components/schemas/RecordId"}}
+        new_watermark: {type: string, description: Opaque and signed. Store it after applying this page.}
+        has_more: {type: boolean}
+
+    EventPosition:
+      type: string
+      description: |
+        An opaque, versioned feed position, bound to the consumer it was issued for. It grants
+        nothing and reveals no count of events the owner cannot read. Compare only for equality.
+      pattern: '^v1\.[A-Za-z0-9_-]{1,255}$'
+
+    ConsumerSpec:
+      type: object
+      additionalProperties: false
+      required: [topics, partitions, payload_mode]
+      properties:
+        topics:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {type: string, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*(\.\*)?$'}
+          description: Exact topic names, or a prefix ending in `.*`.
+        filter:
+          type: [string, "null"]
+          maxLength: 2000
+          description: An expression over the envelope `meta` and `subject` in the shared expression language.
+        partitions: {type: integer, minimum: 1, maximum: 64}
+        payload_mode: {type: string, enum: [ids_only, fields]}
+        start: {$ref: "#/components/schemas/ConsumerStart"}
+
+    ConsumerStart:
+      description: Where a consumer or a restarted partition begins. Default (on create) is `tail`.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: {type: string, enum: [tail, from_beginning]}
+        - type: object
+          additionalProperties: false
+          required: [kind, position]
+          properties:
+            kind: {const: from_position}
+            position: {$ref: "#/components/schemas/EventPosition"}
+
+    EventConsumer:
+      type: object
+      required: [name, owner, topics, partitions, payload_mode, partitions_state]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        owner: {$ref: "#/components/schemas/RecordId"}
+        topics: {type: array, items: {type: string}}
+        filter: {type: [string, "null"]}
+        partitions: {type: integer, minimum: 1, maximum: 64}
+        payload_mode: {type: string, enum: [ids_only, fields]}
+        partitions_state:
+          type: array
+          items:
+            type: object
+            required: [partition, checkpoint, parked]
+            properties:
+              partition: {type: integer, minimum: 0, maximum: 63}
+              checkpoint: {$ref: "#/components/schemas/EventPosition"}
+              parked: {type: boolean, description: True when the partition made no progress for the park timeout and has stopped consuming capacity.}
+
+    EventConsumerResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: "#/components/schemas/EventConsumer"}
+
+    PullRequest:
+      type: object
+      additionalProperties: false
+      required: [partition]
+      properties:
+        partition: {type: integer, minimum: 0, maximum: 63}
+        limit: {type: integer, minimum: 1, maximum: 1000, default: 100}
+        wait_ms: {type: integer, minimum: 0, maximum: 30000, default: 0}
+
+    EventEnvelope:
+      type: object
+      description: |
+        A published event as seen outside its source database. The property names and meanings
+        are exactly those of `EventEnvelope` in `contracts/events` (ADR-056); `check.py` fails if
+        the two differ. `position` is the feed position; gaps in `seq` are normal and mean nothing.
+        Under `payload_mode: ids_only` `data` holds identifiers only.
+      required: [event_id, topic, schema_version, source_id, position, transaction, ordinal, subject, meta, data]
+      properties:
+        event_id: {$ref: "#/components/schemas/RecordId"}
+        topic: {type: string, pattern: '^[a-z][a-z0-9_]{0,62}$'}
+        schema_version: {type: integer, minimum: 1}
+        source_id: {type: string, description: "The producing database: `<site>` or `<site>#<partition>`."}
+        position:
+          type: object
+          additionalProperties: false
+          required: [generation, seq]
+          properties:
+            generation: {type: integer, minimum: 0}
+            seq: {type: integer, minimum: 0}
+        transaction: {$ref: "#/components/schemas/RecordId"}
+        ordinal: {type: integer, minimum: 0}
+        subject:
+          type: object
+          additionalProperties: false
+          required: [entity, id]
+          properties:
+            entity: {$ref: "#/components/schemas/Identifier"}
+            id: {$ref: "#/components/schemas/RecordId"}
+        subject_version: {type: integer, minimum: 1}
+        meta:
+          type: object
+          required: [occurred_at, actor, correlation_id]
+          properties:
+            occurred_at: {$ref: "#/components/schemas/DateTimeUtc"}
+            actor:
+              type: object
+              required: [kind]
+              description: |
+                Who caused the event (ADR-056). `user` and `consumer` carry `id`, the id inside
+                that principal's own store (the same id under the two kinds is two principals);
+                `user` may carry `via`, the real person acting as that user. A `consumer` never
+                carries `via`. `system` carries `component`. The set of kinds equals the
+                variants of `Actor` in `contracts/events` (`check.py`, rule 16). A client that
+                meets a kind it does not know ignores the event's actor.
+              properties:
+                kind: {type: string, enum: [user, consumer, system]}
+            command_id: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+            causation_id: {$ref: "#/components/schemas/RecordId"}
+            correlation_id: {$ref: "#/components/schemas/RecordId"}
+            trace_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+        data: {description: Topic data; protected fields are removed or masked for the owner.}
+
+    PullBatch:
+      type: object
+      required: [events, next_position, skipped, window_full]
+      properties:
+        events:
+          type: array
+          items: {$ref: "#/components/schemas/EventEnvelope"}
+          description: In `(generation, seq, ordinal)` order within the partition.
+        next_position:
+          $ref: "#/components/schemas/EventPosition"
+          description: Acknowledge this after every returned event is durably applied. Not committed by the pull.
+        skipped: {type: integer, minimum: 0, description: "Events in the range the owner may not read. Names no subject."}
+        window_full: {type: boolean}
+
+    AckRequest:
+      type: object
+      additionalProperties: false
+      required: [partition, position]
+      properties:
+        partition: {type: integer, minimum: 0, maximum: 63}
+        position: {$ref: "#/components/schemas/EventPosition"}
+
+    RestartRequest:
+      type: object
+      additionalProperties: false
+      required: [partition, from]
+      properties:
+        partition: {type: integer, minimum: 0, maximum: 63}
+        from: {$ref: "#/components/schemas/ConsumerStart"}
+
+    Checkpoint:
+      type: object
+      required: [partition, position]
+      properties:
+        partition: {type: integer, minimum: 0, maximum: 63}
+        position: {$ref: "#/components/schemas/EventPosition"}
+
+x-spot-error-codes:
+  # code: [HTTP status, retryable, meaning]
+  api.invalid_request: [400, false, "The request is malformed or does not match the schema."]
+  api.invalid_json: [400, false, "The body is not valid JSON."]
+  api.unknown_route: [404, false, "No endpoint at this path."]
+  api.method_not_allowed: [405, false, "The endpoint does not accept this HTTP method."]
+  api.unsupported_media_type: [415, false, "The body is not application/json."]
+  api.precondition_required: [428, false, "If-Match is required for this change."]
+  api.idempotency_conflict: [409, false, "The Idempotency-Key was used with a different body."]
+  api.rate_limited: [429, true, "Too many requests; wait for Retry-After."]
+  http.unknown_site: [404, false, "No site is configured for this host name."]
+  http.body_too_large: [413, false, "The body is larger than the server allows."]
+  http.timeout: [504, true, "The request took longer than the server allows."]
+  http.internal: [500, false, "An unexpected server error; the request id identifies it in the logs."]
+  auth.required: [401, false, "No credentials were sent."]
+  auth.invalid_credentials: [401, false, "The credentials are wrong or no longer valid."]
+  auth.session_expired: [401, false, "The session has ended; sign in again."]
+  auth.totp_required: [401, false, "The user has two-factor authentication; repeat with a one-time code."]
+  auth.totp_invalid: [401, false, "The one-time code is wrong or was already used."]
+  auth.account_disabled: [403, false, "The user account is disabled."]
+  permission.denied: [403, false, "The user may not do this."]
+  meta.unknown_doctype: [404, false, "No DocType with this name."]
+  document.not_found: [404, false, "No document with this id, or the user may not see it."]
+  document.stale_version: [412, false, "The document changed since it was read; details.current_version."]
+  document.validation_failed: [422, false, "One or more fields are invalid; see fields."]
+  document.required: [422, false, "A required field is missing (used in fields)."]
+  document.unknown_field: [422, false, "The DocType has no such field."]
+  document.invalid_value: [422, false, "A value does not fit its field type (for example a JSON number for a decimal)."]
+  document.read_only_field: [422, false, "The field cannot be changed in the document's state."]
+  document.invalid_link: [422, false, "A link points at a document that does not exist or may not be used."]
+  document.duplicate: [409, false, "Another document already has this unique value."]
+  document.linked: [409, false, "Other documents link to this one, so it cannot be deleted."]
+  document.invalid_state: [409, false, "The action is not allowed in the document's state."]
+  realtime.unknown_room: [404, false, "No such room (sent in a realtime join_error)."]
+  realtime.too_many_rooms: [409, false, "The connection is already in the maximum number of rooms (realtime join_error)."]
+  method.not_found: [404, false, "No whitelisted method or function with this name."]
+  report.not_found: [404, false, "No report with this name."]
+  lookup.seam_failed: [502, false, "The seam chosen for the lookup failed or is missing; see explanation. There is no fallback to the default list."]
+  form.field_unknown: [400, false, "The changed field has no server-side form steps on this DocType; the client's own rules are the answer."]
+  file.too_large: [413, true, "The file is larger than the registry's upload limit; a smaller file may succeed."]
+  file.store_failed: [500, true, "The file could not be stored at this time; the same upload may succeed on a retry."]
+  file.scan_failed: [502, false, "The file.scan seam set for the site failed; the upload was not stored. Retry later or ask an administrator."]
+  file.virus_detected: [422, false, "The file.scan seam found malware in the upload; it was kept out of storage and the attempt is recorded."]
+  auth.password_policy: [422, false, "The new password fails the tenant's policy; details.rules names each violated rule."]
+  auth.session_not_found: [404, false, "No such session of yours (it may have ended, or belong to someone else)."]
+  report.bad_argument: [422, false, "A report argument is unknown or does not fit its parameter type; the message names the parameter (never its value)."]
+  print.format_unknown: [404, false, "The DocType defines no print format with this name (a name that belongs to another DocType is the same answer)."]
+  print.render_failed: [500, false, "The print format could not be rendered to a PDF. Nothing was changed; the message and details never carry template text or document content."]
+  permission.field_denied: [403, false, "The user may not report on or export a requested field; the message names the field path (never a value)."]
+  partition.not_owner: [403, false, "This node does not own the partition for this write."]
+  permission.reveal_denied: [403, false, "The reveal was refused. The same answer for a missing document, a forbidden one, a field that cannot be revealed and a caller without the right."]
+  bulk.cursor_invalid: [422, false, "The export cursor or extraction watermark is malformed, forged, expired, or belongs to another caller or request."]
+  bulk.watermark_expired: [410, false, "The watermark is older than the change feed's retention or from before a resync; run a full export and start again."]
+  bulk.limit: [429, true, "Too many exports or extractions in flight, or the rows-per-second budget is used up; wait for Retry-After."]
+  eventstream.consumer_not_found: [404, false, "No such consumer, or it belongs to someone else."]
+  eventstream.consumer_busy: [409, true, "Another connection holds this consumer's lease, or the lease sent has been replaced; retry after Retry-After."]
+  eventstream.resync_required: [410, false, "The checkpoint or position is no longer held; details.retained_from. Rebuild from a snapshot, then restart the partition."]
+  eventstream.window_full: [429, true, "The consumer has its in-flight window of delivered, unacknowledged events; acknowledge before pulling more (a pull answers 200 and carries this code in messages)."]
+  eventstream.position_invalid: [422, false, "The position is malformed, forged, or issued for another consumer."]
+  eventstream.ack_refused: [409, false, "The acknowledgement was refused: beyond what was delivered, not a delivered batch's own position, behind the checkpoint, or from a holder that lost its lease."]
+  eventstream.spec_invalid: [422, false, "The consumer definition is invalid (topic, filter, partition count, start) or changes what cannot change; see fields."]
+  server.unavailable: [503, true, "The service is temporarily unavailable; wait for Retry-After."]
+  server.maintenance: [503, true, "The site is in maintenance (for example during a migration, ADR-22)."]
+  server.conflict_retry_exhausted: [503, true, "Concurrent changes kept conflicting; try again."]

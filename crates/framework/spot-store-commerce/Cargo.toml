@@ -1,0 +1,42 @@
+[package]
+name = "spot-store-commerce"
+description = "The Spotledger app store's back end (WP-STR-08.T1): publisher onboarding and the portal API, the catalogue of reviewed and signed listings, paid checkout through a payment-provider port, signed app licences issued on payment, renewals, grace and lapse, signed revocations, and an append-only revenue ledger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The signed app licence envelope and its offline verification: an app licence is a
+# `spot-license` payload, minted and checked with the same envelope, trusted-key list and
+# lifecycle state machine the platform licence uses.
+spot-license = { path = "../spot-license" }
+# Exact money for prices, orders, fees and payouts (ADR-12): prices are integer minor units.
+spot-money = { path = "../spot-money" }
+# The registry release identity (`Release`, `AppName`, `Version`), its ranked catalogue
+# search (`SearchQuery`/`SearchPage` over an `IndexStore`) and the digest an app version
+# is addressed by.
+spot-registry = { path = "../spot-registry" }
+# Publisher signing keys, publisher certificates and the signed, root-issued revocation
+# list mechanism the entitlement revocations reuse.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The review pipeline a submitted app version is handed to; the store records its report.
+spot-app-review = { path = "../spot-app-review" }
+# The verifying side of the platform's HMAC webhook signature: provider webhooks are
+# verified with the same header scheme as every other inbound webhook.
+spot-webhooks = { path = "../spot-webhooks" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# `OffsetDateTime` for the webhook signature verifier's clock argument.
+time = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# The one cryptographic dependency (already in the workspace lock via spot-license): the
+# test signer's Ed25519 key pair. Production wires a `StoreSigner` over a hardware or
+# software key held by the deployment, never a key compiled in here.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

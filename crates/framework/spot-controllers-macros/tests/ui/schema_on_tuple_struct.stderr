@@ -1,0 +1,5 @@
+error: #[derive(MethodSchema)] needs a struct with named fields (a unit struct has no arguments; leave the `args` parameter out instead)
+  --> tests/ui/schema_on_tuple_struct.rs:19:17
+   |
+19 | pub struct Tuple(String);
+   |                 ^^^^^^^^

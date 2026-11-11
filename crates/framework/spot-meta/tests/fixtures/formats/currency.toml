@@ -1,0 +1,9 @@
+name = "currency"
+label = "Currency"
+title_field = "code"
+
+[[fields]]
+name = "code"
+type = "text"
+max_chars = 3
+unique = true

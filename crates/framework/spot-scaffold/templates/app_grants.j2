@@ -1,0 +1,9 @@
+# {{ title }} DocType grants (spot-permissions' model).
+#
+# One starter role holds every right on the starter DocType. Add more roles and DocTypes
+# here, or with `spot-scaffold doctype add`.
+
+[[entries]]
+role = "{{ role }}"
+doctype = "{{ doctype_name }}"
+rights = ["read", "write", "create", "delete", "report", "select"]

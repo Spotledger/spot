@@ -1,0 +1,46 @@
+# scheduler codes: schedules, leases and fenced runs of spot-scheduler (WP-PLT-07). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "scheduler.lease_lost"
+class = "none"
+summary = "The lease no longer covers the caller, so the fenced operation was refused."
+explanation_key = "error.scheduler.lease_lost"
+params = []
+remedy = "Stop the work and let the current lease holder run it."
+since = "0.1.0"
+
+[[entry]]
+code = "scheduler.fence_mismatch"
+class = "none"
+summary = "The write comes from an older lease generation and was rejected."
+explanation_key = "error.scheduler.fence_mismatch"
+params = []
+remedy = "Re-acquire the lease before writing again."
+since = "0.1.0"
+
+[[entry]]
+code = "scheduler.invalid_zone"
+class = "none"
+summary = "The time zone is not a known IANA zone, or the cron cannot run in it."
+explanation_key = "error.scheduler.invalid_zone"
+params = []
+remedy = "Use an IANA zone name and a cron expression that is valid in it."
+since = "0.1.0"
+
+[[entry]]
+code = "scheduler.high_water_rewound"
+class = "none"
+summary = "The store's high-water mark is later than the state the caller computed from."
+explanation_key = "error.scheduler.high_water_rewound"
+params = []
+remedy = "Reload the schedule state and compute the next run again."
+since = "0.1.0"
+
+[[entry]]
+code = "scheduler.invalid_cron"
+class = "none"
+summary = "The cron expression cannot be run: wrong field count, or a field the scheduler cannot read."
+explanation_key = "error.scheduler.invalid_cron"
+params = []
+remedy = "Use six fields (second minute hour day-of-month month day-of-week) with day of week as numbers 0-7."
+since = "0.1.0"

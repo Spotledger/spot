@@ -1,0 +1,173 @@
+# customise codes: runtime DocTypes, custom fields and property overrides (spot-customise, WP-PLT-16.T1).
+# Library-internal vocabulary: raised by the crate, explained by the host. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "customise.forbidden"
+class = "none"
+summary = "The caller does not hold the platform Customise right."
+explanation_key = "error.customise.forbidden"
+params = []
+remedy = "Ask a platform administrator for a role that holds the Customise right, or have one make the change."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.invalid"
+class = "none"
+summary = "The change does not validate; every problem found is listed."
+explanation_key = "error.customise.invalid"
+params = []
+remedy = "Fix each listed problem (the paths name the DocType and field) and submit the change again."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.destructive_change"
+class = "none"
+summary = "The change would need a destructive or lossy schema step, which a runtime change never applies."
+explanation_key = "error.customise.destructive_change"
+params = []
+remedy = "Make the change additive (add, do not drop or retype), or use the expand and contract migration path."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.schema_failed"
+class = "none"
+summary = "The database refused the schema step; the change was rolled back and nothing is live."
+explanation_key = "error.customise.schema_failed"
+params = []
+remedy = "Check the storage backend's health and the reason on the record, then retry the change."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.store"
+class = "none"
+summary = "The customisation records could not be read or written."
+explanation_key = "error.customise.store"
+params = []
+remedy = "Check the storage backend's health and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.swap_failed"
+class = "none"
+summary = "The new metadata snapshot could not be built, adopted or published."
+explanation_key = "error.customise.swap_failed"
+params = []
+remedy = "Read the metalive code in the message, fix the cause and run recovery."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.divergence"
+class = "none"
+summary = "This node cannot reproduce the metadata another node announced and refuses to serve metadata until it can."
+explanation_key = "error.customise.divergence"
+params = []
+remedy = "Reconcile this node from the shared records (run recovery) before it serves requests."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.not_found"
+class = "none"
+summary = "The customisation to change does not exist or is not applied yet."
+explanation_key = "error.customise.not_found"
+params = []
+remedy = "List the customisations and name one that is applied."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.interrupted"
+class = "none"
+summary = "The pipeline was stopped by a test fault hook after a step."
+explanation_key = "error.customise.interrupted"
+params = []
+remedy = "Run recovery; the hook exists only in tests."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.bad_definition"
+class = "none"
+summary = "A definition, field spec or property value is not valid text."
+explanation_key = "error.customise.bad_definition"
+params = []
+remedy = "Correct the named definition, field spec or property and submit it again."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.name_collision"
+class = "none"
+summary = "A custom DocType name is already taken by an app DocType or another custom DocType."
+explanation_key = "error.customise.name_collision"
+params = []
+remedy = "Choose a different DocType name."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.reserved_name"
+class = "none"
+summary = "A custom DocType name is reserved by the platform."
+explanation_key = "error.customise.reserved_name"
+params = []
+remedy = "Choose a name that does not start with a platform prefix and is not a platform DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.module_not_allowed"
+class = "none"
+summary = "Only a platform administrator may place a custom DocType outside the custom module, and a module cannot change."
+explanation_key = "error.customise.module_not_allowed"
+params = []
+remedy = "Leave the module as custom, or have a platform administrator make the change."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.field_collision"
+class = "none"
+summary = "A custom field collides with a standard or existing field of the DocType."
+explanation_key = "error.customise.field_collision"
+params = []
+remedy = "Pick a field name that the DocType does not use; custom fields start with custom_."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.metadata_invalid"
+class = "none"
+summary = "The metadata registry refused the result of the change."
+explanation_key = "error.customise.metadata_invalid"
+params = []
+remedy = "Fix the problem named in the message; the registry reports every one at once."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.plan_invalid"
+class = "none"
+summary = "The plan compiler refused the result of the change, for example a cycle among defaults and fetches."
+explanation_key = "error.customise.plan_invalid"
+params = []
+remedy = "Remove the cycle or the bad rule named in the message."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.needs_default"
+class = "none"
+summary = "A mandatory custom field on a DocType that holds records needs a default to fill them with."
+explanation_key = "error.customise.needs_default"
+params = []
+remedy = "Give the field a default, or make it optional."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.security_loosened"
+class = "none"
+summary = "A site may only tighten a security property, never loosen it."
+explanation_key = "error.customise.security_loosened"
+params = []
+remedy = "Keep or raise the protection; to lower it, change the standard through an app update."
+since = "0.1.0"
+
+[[entry]]
+code = "customise.referenced"
+class = "none"
+summary = "The field is still referred to by an index, a rule, a view, a permission or another field."
+explanation_key = "error.customise.referenced"
+params = []
+remedy = "Remove or change the listed referrers first, then remove the field."
+since = "0.1.0"

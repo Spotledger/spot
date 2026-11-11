@@ -1,0 +1,24 @@
+{
+  "actor": {
+    "actor": "user:0192f1c0-0000-7000-8000-000000000002",
+    "component": null,
+    "on_behalf_of": null
+  },
+  "at": 1760000500000000,
+  "changed_fields": [],
+  "command_id": "cmd-6c1f42",
+  "diff": [],
+  "diff_digest": null,
+  "doctype": "sales_invoice",
+  "error_class": "document.not_found",
+  "error_code": "document.not_found",
+  "hidden_changes": false,
+  "id": "0192f1c0-0000-7000-8000-000000000008",
+  "node": "branch_khi_01",
+  "operation": "update",
+  "outcome": "denied",
+  "site": "acme.spotledger.app",
+  "source": "api",
+  "truncated": false,
+  "version": 0
+}

@@ -1,0 +1,46 @@
+[package]
+name = "spot-bpm-versioning"
+description = "Process versioning for the Business Process engine (WS8, WP-BPM-09.T1, ADR-49, ADR-071, ADR-080): running Cases stay on the pinned process version, an explicit node mapping plans and applies an optional Case migration with a dry-run, bulk migration runs resumably with per-item outcomes, and a cancellation watcher raises a declared compensation step when an upstream document is cancelled"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The durable Case record, the engine registry the pinned hash is checked against, and the
+# `CaseStore`/`TimerPort` bounds of `Engine`.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# `ProcessVersion`, `NodeId` and the compiled pin a migration targets.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The Case file (a Case's touched documents) and the `Touch` the cancellation watcher looks up.
+spot-bpm-documents = { path = "../spot-bpm-documents" }
+# `NodeStatus` and `RunStatus`: which nodes are current and which are history.
+spot-dag-exec = { path = "../spot-dag-exec" }
+# `NodeId`, the engine's node identifier.
+spot-dag = { path = "../spot-dag" }
+# `OffsetDateTime` and the storage ids (`Name`, `RecordId`, `Version`) the ports carry.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `OutboxRecord`, the committed document-cancelled event the watcher consumes.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The migration plan, the batch run and the audit event are stable serde values.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for plan digests, batch parameters and the audit payload.
+serde_json = "1"
+# SHA-256 over a migration plan's canonical form and a batch instance key.
+sha2 = "0.10"
+# Typed errors with stable `bpm_versioning.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The process text form the version fixtures are written in.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `MemoryCaseFile`, the reference Case file the compensation scenario records through.
+spot-bpm-documents = { path = "../spot-bpm-documents" }
+# `MemoryCaseIndex` and the deterministic record ids the fixtures use.
+spot-storage-contract = { path = "../../../contracts/storage" }
+
+[lints]
+workspace = true

@@ -1,0 +1,467 @@
+# The ADR-087 constructs: geo, range and exclusion, holds, search, extensions.
+#
+# Option B (ADR-087 sections 4.5, 5.5, 7.9): the in-memory fake models only what it can model
+# exactly. It stores and round-trips a geo point, and it answers `Unsupported` — from its
+# `Capabilities`, never from an ad hoc check and never by approximating — for geo filters, range
+# values and overlap, exclusion constraints and search. Those answers are asserted by the cases
+# scoped `fake`; the behaviour itself is proven on real PostgreSQL by the cases scoped `postgres`,
+# which is why the scope is written on every case here. A scope is not a divergence: it is a
+# permanent design choice, recorded as a capability, never in `cases/divergences.toml`.
+#
+# A case names the extensions its scratch database needs (`postgis`, `btree_gist`, `pg_trgm`,
+# `unaccent`: the closed ADR-087 list). The harness stands in for the audited `extension.install`
+# operation (WP-STO-12.T2) by creating them; a case that asserts what happens *without* an
+# extension declares none.
+
+# --- Spatial: storage and round trip (both backends) -------------------------------------------
+
+[[case]]
+id = "geo-01-roundtrip-query"
+rule = "SEM-GEO-01"
+title = "selecting a geo column is Unsupported on PostgreSQL until WP-STO-02.T9 compiles the geo column (the round trip is a load case, and the fake asserts the query path in its own tests)"
+scope = "postgres"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:13.4050 52.5200"']
+op = "query"
+query = { select = ["code", "spot"], order = ["code"] }
+expect = { error = "unsupported" }
+
+[[case]]
+id = "geo-01-roundtrip-load"
+rule = "SEM-GEO-01"
+title = "a geo point written by insert reads back identical through load"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:2.3522 48.8566"']
+op = "load"
+doc = "a"
+fields = ["spot"]
+expect = { rows = [["geo:2.3522 48.8566"]] }
+
+[[case]]
+id = "geo-01-null-is-not-zero-zero"
+rule = "SEM-GEO-01"
+title = "a document with no point loads null, never a point at 0,0 (the 0,0 point is on `a`)"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:0 0"', 'b code="t:b"']
+op = "load"
+doc = "b"
+fields = ["spot"]
+expect = { rows = [["null"]] }
+
+# --- Spatial: validation (both backends: shared validation, no engine needed to check a value;
+# the PostgreSQL store still needs the column PostGIS creates to hold it) -----------------------
+
+[[case]]
+id = "geo-02-write-latitude-above-90"
+rule = "SEM-GEO-02"
+title = "a latitude of 91 is refused on a write with invalid_value"
+catalog = "geo"
+extensions = ["postgis"]
+setup = []
+op = "write"
+write = ['a code="t:a" spot="geo:0 91"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "geo-02-write-longitude-above-180"
+rule = "SEM-GEO-02"
+title = "a longitude of 181 is refused on a write with invalid_value"
+catalog = "geo"
+extensions = ["postgis"]
+setup = []
+op = "write"
+write = ['a code="t:a" spot="geo:181 0"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "geo-02-write-precision-above-seven-places"
+rule = "SEM-GEO-02"
+title = "a coordinate with eight decimal places is refused, never rounded"
+catalog = "geo"
+extensions = ["postgis"]
+setup = []
+op = "write"
+write = ['a code="t:a" spot="geo:13.12345678 52.5"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "geo-02-filter-latitude-above-90"
+rule = "SEM-GEO-02"
+title = "a filter whose centre has a latitude of 91 is refused with invalid_query"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:13.4 52.5"']
+op = "query"
+query = { select = ["code"], filter = '(within-distance spot "geo:0 91" 100)' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "geo-02-filter-radius-above-the-limit"
+rule = "SEM-GEO-02"
+title = "a radius above MAX_GEO_RADIUS_M is refused with invalid_query"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:13.4 52.5"']
+op = "query"
+query = { select = ["code"], filter = '(within-distance spot "geo:13.4 52.5" 500001)' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "geo-05-order-by-a-geo-field"
+rule = "SEM-GEO-05"
+title = "sorting by a geo field is refused with invalid_query; distance ordering is the client's"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:13.4 52.5"']
+op = "query"
+query = { select = ["code"], order = ["spot"] }
+expect = { error = "invalid_query" }
+
+# --- Spatial: the filter itself, on PostgreSQL with PostGIS (option B: the fake refuses) -------
+
+[[case]]
+id = "geo-03-within-distance"
+rule = "SEM-GEO-03"
+title = "within 5 km of Berlin keeps the two points inside the radius and drops the far one"
+scope = "postgres"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['near code="t:near" spot="geo:13.4050 52.5200"', 'also code="t:also" spot="geo:13.4200 52.5100"', 'far code="t:far" spot="geo:13.6000 52.6000"']
+op = "query"
+query = { select = ["code"], filter = '(within-distance spot "geo:13.4050 52.5200" 5000)', order = ["code"] }
+expect = { rows = [["t:also"], ["t:near"]] }
+
+[[case]]
+id = "geo-03-within-box"
+rule = "SEM-GEO-03"
+title = "within-box includes its edges and drops a point just outside"
+scope = "postgres"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['inside code="t:inside" spot="geo:13.4000 52.5000"', 'edge code="t:edge" spot="geo:13.5000 52.6000"', 'outside code="t:outside" spot="geo:13.6000 52.6000"']
+op = "query"
+query = { select = ["code"], filter = '(within-box spot "geo:13.0000 52.0000" "geo:13.5000 52.6000")', order = ["code"] }
+expect = { rows = [["t:edge"], ["t:inside"]] }
+
+[[case]]
+id = "geo-03-fake-refuses-within-distance"
+rule = "SEM-GEO-03"
+title = "the fake answers Unsupported for WithinDistance, from its capability, without approximating"
+scope = "fake"
+catalog = "geo"
+setup = ['a code="t:a" spot="geo:13.4 52.5"']
+op = "query"
+query = { select = ["code"], filter = '(within-distance spot "geo:13.4 52.5" 1000)' }
+expect = { error = "unsupported" }
+
+[[case]]
+id = "geo-03-fake-refuses-within-box"
+rule = "SEM-GEO-03"
+title = "the fake answers Unsupported for WithinBox, from its capability, without approximating"
+scope = "fake"
+catalog = "geo"
+setup = ['a code="t:a" spot="geo:13.4 52.5"']
+op = "query"
+query = { select = ["code"], filter = '(within-box spot "geo:13.0 52.0" "geo:13.5 52.6")' }
+expect = { error = "unsupported" }
+
+[[case]]
+id = "geo-04-prepare-without-postgis"
+rule = "SEM-GEO-04"
+title = "prepare with a geo field and no PostGIS fails with invalid_schema, never a silent text column"
+scope = "postgres"
+catalog = "geo"
+op = "prepare"
+expect = { error = "invalid_schema" }
+
+[[case]]
+id = "ext-01-postgis-makes-the-geo-column-possible"
+rule = "SEM-EXT-01"
+title = "with postgis created the way extension.install would, prepare creates the geo column and a point round-trips through it"
+scope = "postgres"
+catalog = "geo"
+extensions = ["postgis"]
+setup = ['a code="t:a" spot="geo:13.4050 52.5200"']
+op = "load"
+doc = "a"
+fields = ["spot"]
+expect = { rows = [["geo:13.4050 52.5200"]] }
+
+[[case]]
+id = "ext-02-an-extension-outside-the-allow-list-is-refused"
+rule = "SEM-EXT-02"
+title = "an extension outside the platform allow-list is refused with migrate.extension_not_allowed, never installed"
+# The harness stands in for the audited `extension.install` (SEM-EXT-01), so it answers that
+# operation's refusal: `hstore` is a real extension and is not on the closed list (ADR-087
+# section 4.3, the four in `cases::EXTENSIONS`). The answer is the same on every backend,
+# because no database is reached.
+extensions = ["hstore"]
+op = "prepare"
+expect = { error = "migrate.extension_not_allowed" }
+
+# --- Ranges: half-open semantics and validation (PostgreSQL: no range value in the fake) -------
+
+[[case]]
+id = "rng-01-overlaps-respects-touching-bounds"
+rule = "SEM-RNG-01"
+title = "a query for [2026-11-03,2026-11-04) overlaps the ranges that reach into it and not the one that only touches it"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"', 'b code="t:b" room="t:r2" during="range:[date:2026-11-02,date:2026-11-04)"', 'c code="t:c" room="t:r3" during="range:[date:2026-11-03,date:2026-11-05)"']
+op = "query"
+query = { select = ["code"], filter = '(range-overlaps during "range:[date:2026-11-03,date:2026-11-04)")', order = ["code"] }
+expect = { rows = [["t:b"], ["t:c"]] }
+
+[[case]]
+id = "rng-01-contains-a-point-at-the-start-not-the-end"
+rule = "SEM-RNG-01"
+title = "a half-open range contains its start and not its end"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"', 'b code="t:b" room="t:r2" during="range:[date:2026-11-03,date:2026-11-05)"']
+op = "query"
+query = { select = ["code"], filter = '(range-contains during "date:2026-11-03")', order = ["code"] }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "rng-02-empty-range-is-refused"
+rule = "SEM-RNG-02"
+title = "[2026-11-01,2026-11-01) is empty and refused with invalid_value, never stored"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = []
+op = "write"
+write = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-01)"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "rng-06-equal-but-inclusive-is-refused-as-empty"
+rule = "SEM-RNG-06"
+title = "[2026-11-01,2026-11-01] is refused as empty with invalid_value; a point in time is [x,x+1)"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = []
+op = "write"
+write = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-01]"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "rng-07-unbounded-bound-is-refused"
+rule = "SEM-RNG-07"
+title = "an unbounded lower bound would block the resource forever, so it is refused with invalid_value"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = []
+op = "write"
+write = ['a code="t:a" room="t:r1" during="range:(,date:2026-11-02)"']
+expect = { error = "invalid_value" }
+
+# --- Exclusion constraints (PostgreSQL: the fake has no constraint) ----------------------------
+
+[[case]]
+id = "rng-04-overlapping-insert-is-an-exclusion-violation"
+rule = "SEM-RNG-04"
+title = "a second booking that overlaps in the same room fails with exclusion_violation"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"']
+op = "write"
+write = ['b code="t:b" room="t:r1" during="range:[date:2026-11-02,date:2026-11-04)"']
+expect = { error = "exclusion_violation" }
+
+[[case]]
+id = "rng-04-overlapping-update-is-an-exclusion-violation"
+rule = "SEM-RNG-04"
+title = "an update that grows a booking into another one fails with exclusion_violation"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"', 'b code="t:b" room="t:r1" during="range:[date:2026-11-05,date:2026-11-07)"']
+op = "write"
+write = ['update b during="range:[date:2026-11-02,date:2026-11-06)"']
+expect = { error = "exclusion_violation" }
+
+[[case]]
+id = "rng-05-touching-bookings-do-not-conflict"
+rule = "SEM-RNG-05"
+title = "a booking that starts when the previous one ends is accepted, in the same room"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"']
+op = "write"
+write = ['b code="t:b" room="t:r1" during="range:[date:2026-11-03,date:2026-11-05)"']
+expect = { ok = true }
+
+[[case]]
+id = "rng-05-another-room-does-not-conflict"
+rule = "SEM-RNG-05"
+title = "the same dates in another room are accepted: the scope column is the resource"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"']
+op = "write"
+write = ['b code="t:b" room="t:r2" during="range:[date:2026-11-01,date:2026-11-03)"']
+expect = { ok = true }
+
+[[case]]
+id = "rng-03-a-null-range-never-conflicts"
+rule = "SEM-RNG-03"
+title = "two rows with a null range in the same room are accepted, like a null unique key"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" room="t:r1" during=null', 'b code="t:b" room="t:r1" during=null']
+op = "write"
+write = ['c code="t:c" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)"']
+expect = { ok = true }
+
+[[case]]
+id = "rng-05-a-null-scope-never-conflicts"
+rule = "SEM-RNG-05"
+title = "an overlapping range with a null scope column conflicts with nothing"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['a code="t:a" during="range:[date:2026-11-01,date:2026-11-03)"']
+op = "write"
+write = ['b code="t:b" during="range:[date:2026-11-01,date:2026-11-03)"']
+expect = { ok = true }
+
+[[case]]
+id = "rng-08-fake-refuses-a-range-catalog"
+rule = "SEM-RNG-08"
+title = "the fake answers Unsupported for a catalog with a range field and an exclusion, from its capability"
+scope = "fake"
+catalog = "range"
+op = "prepare"
+expect = { error = "unsupported" }
+
+# --- Holds (ADR-087 section 6): an occupancy row, on PostgreSQL --------------------------------
+
+[[case]]
+id = "hld-01-an-expired-hold-blocks-nothing"
+rule = "SEM-HLD-01"
+title = "a tentative hold whose row is deleted blocks nothing: the overlapping booking is accepted"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['h code="t:h" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)" state="t:tentative"', 'delete h']
+op = "write"
+write = ['c code="t:c" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)" state="t:confirmed"']
+expect = { ok = true }
+
+[[case]]
+id = "hld-02-confirming-an-expired-hold-fails"
+rule = "SEM-HLD-02"
+title = "confirming a hold whose row the sweeper removed is answered not_found by storage (the contract's update rule) and never extends it; the confirm operation maps that to stale_version (ADR-087 section 6.3 case 4)"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['h code="t:h" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)" state="t:tentative"', 'delete h']
+op = "write"
+write = ['update h state="t:confirmed" @expected=1']
+# The contract is explicit (`DocumentStore::update`): a stored document that no longer exists is
+# `NotFound`, and only a version that is not the stored one is `StaleVersion`. A confirm whose
+# hold the sweeper already deleted therefore fails here as `NotFound`; reporting it to the caller
+# as `StaleVersion` (never as a confirmed booking, and never extending the hold) is the confirm
+# operation's mapping, which is WP-BPM-12.T1's. SEM-HLD-02's decided sentence is about that
+# operation; this case proves the storage half it rests on: the late confirm cannot resurrect the
+# row.
+expect = { error = "not_found" }
+
+[[case]]
+id = "hld-03-created-and-deleted-in-one-transaction"
+rule = "SEM-HLD-03"
+title = "a document created and deleted in one transaction leaves no change-feed entry"
+setup = ['keep code="t:keep"']
+op = "changes"
+write = ['gone code="t:gone"']
+expect = { rows = [["t:insert", "t:item"]] }
+
+[[case]]
+id = "hld-03-a-hold-created-and-deleted-in-one-transaction"
+rule = "SEM-HLD-03"
+title = "a hold row created and deleted in one transaction leaves no change-feed entry either"
+scope = "postgres"
+catalog = "range"
+extensions = ["btree_gist"]
+setup = ['keep code="t:keep"']
+op = "changes"
+write = ['gone code="t:gone" room="t:r1" during="range:[date:2026-11-01,date:2026-11-03)" state="t:tentative"']
+expect = { rows = [["t:insert", "t:item"]] }
+
+# --- Search (ADR-087 section 7) --------------------------------------------------------------
+
+[[case]]
+id = "sch-01-a-search-needs-a-declared-searchable-field"
+rule = "SEM-SCH-01"
+title = "a search over an entity that declares no searchable field is refused with invalid_query"
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" note)' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "sch-02-a-field-outside-the-declaration-cannot-be-matched"
+rule = "SEM-SCH-02"
+title = "storage matches only declared searchable fields, so no other field (a protected one included) can affect a match"
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search plain "berlin" code)' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "sch-03-search-rank-outside-order-by-is-refused"
+rule = "SEM-SCH-03"
+title = "SearchRank in a select list is refused with invalid_query; it is only ever an order_by key"
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ['(search-rank web "berlin" note)'] }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "sch-03-search-rank-as-a-filter-is-refused"
+rule = "SEM-SCH-03"
+title = "SearchRank in a filter is refused with invalid_query"
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search-rank web "berlin" note)' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "sch-04-fake-refuses-a-search-declaration"
+rule = "SEM-SCH-04"
+title = "the fake answers Unsupported for a search declaration, from its capability: it has no inverted index"
+scope = "fake"
+catalog = "search"
+op = "prepare"
+expect = { error = "unsupported" }
+
+[[case]]
+id = "sch-04-postgres-refuses-a-search-declaration"
+rule = "SEM-SCH-04"
+title = "PostgreSQL refuses a search declaration with Unsupported until the projection exists (WP-STO-13.T1)"
+scope = "postgres"
+catalog = "search"
+op = "prepare"
+expect = { error = "unsupported" }
+
+[[case]]
+id = "sch-05-a-protected-field-cannot-be-searched"
+rule = "SEM-SCH-05"
+title = "storage refuses a search over a field the entity does not declare searchable, so a protected field cannot be searched or ranked"
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" blob)' }
+expect = { error = "invalid_query" }

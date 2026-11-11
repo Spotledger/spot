@@ -1,0 +1,113 @@
+# sync_http codes — the sync transport binding (WP-EDG-02.T2, ADR-062, ADR-078).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. These are the app-facing
+# surface of sync: the binding maps the `sync_protocol.*` state-machine vocabulary onto them, so
+# each rides the native API error envelope with a fixed status. `class = "none"`: the transport
+# layer renders them, it does not raise an `AppError`.
+
+[[entry]]
+code = "sync_http.identity_required"
+class = "none"
+summary = "No client certificate was presented, so the node could not be authenticated."
+explanation_key = "error.sync_http.identity_required"
+params = []
+remedy = "Connect over mutual TLS with the node's enrolled certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.identity_unknown"
+class = "none"
+summary = "The presented client certificate is not in the node directory."
+explanation_key = "error.sync_http.identity_unknown"
+params = []
+remedy = "Enroll the node's certificate in the directory (the control plane owns this) and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.identity_revoked"
+class = "none"
+summary = "The presented client certificate was revoked and may no longer sync."
+explanation_key = "error.sync_http.identity_revoked"
+params = []
+remedy = "Issue the node a new certificate; a revoked identity is never re-admitted."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.partition_violation"
+class = "none"
+summary = "A batch names a source partition the authenticated node does not own."
+explanation_key = "error.sync_http.partition_violation"
+params = []
+remedy = "Send only the streams this node owns; a node never writes another node's partition (ADR-062 G1)."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.batch_too_large"
+class = "none"
+summary = "A batch is larger than the flow-control limit: too many records, too many bytes, or an oversize record payload."
+explanation_key = "error.sync_http.batch_too_large"
+params = []
+remedy = "Send smaller batches; the sender halves its batch size and retries from the last acknowledged sequence."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.version_mismatch"
+class = "none"
+summary = "The two peers' protocol version ranges do not overlap, so no version is common to them."
+explanation_key = "error.sync_http.version_mismatch"
+params = []
+remedy = "Upgrade one side so its protocol range overlaps the other's."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.metadata_epoch"
+class = "none"
+summary = "The two peers' metadata epochs differ beyond the allowed skew."
+explanation_key = "error.sync_http.metadata_epoch"
+params = []
+remedy = "Complete the pending migration so both nodes reach the same metadata epoch before syncing."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.corrupt_batch"
+class = "none"
+summary = "A streamed batch failed its checksum or its framing, so the receiver refused it before reading a record."
+explanation_key = "error.sync_http.corrupt_batch"
+params = []
+remedy = "Re-request the batch from the receiver's checkpoint; a mismatch means the bytes were altered in transit."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.invalid_request"
+class = "none"
+summary = "A sync request is malformed: a bad query parameter, an unreadable body, or a missing framing line."
+explanation_key = "error.sync_http.invalid_request"
+params = []
+remedy = "Send the documented query parameters and a newline-delimited batch body."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.deadline_exceeded"
+class = "none"
+summary = "A sync session's deadline passed before its step completed."
+explanation_key = "error.sync_http.deadline_exceeded"
+params = []
+remedy = "Retry within a fresh deadline, or allow more time for the session."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.circuit_open"
+class = "none"
+summary = "The client's circuit breaker for the hub is open, so the call failed without dialling."
+explanation_key = "error.sync_http.circuit_open"
+params = []
+remedy = "Wait for the next probe; the breaker closes after a successful probe."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_http.unavailable"
+class = "none"
+summary = "The transport failed: the hub is unreachable, the TLS handshake failed, or the hub answered a server error."
+explanation_key = "error.sync_http.unavailable"
+params = []
+remedy = "Retry with backoff; the outbox and checkpoint make a retry safe."
+since = "0.1.0"

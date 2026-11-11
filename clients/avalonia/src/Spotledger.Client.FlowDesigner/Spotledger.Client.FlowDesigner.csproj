@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-BPM-07.T1: the visual process designer. Presentation and editing only: the model,
+       validation and compilation stay server-side (spot-bpm-model), so this project holds an
+       in-memory document that round-trips the process text form, a command stack, a
+       deterministic layout and one canvas control. Every server question goes through
+       IFlowDesignerServer; every user-visible string comes from FlowStrings, which builds it
+       from the ADR-080 run-label pair. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.FlowDesigner.Tests" />
+  </ItemGroup>
+</Project>

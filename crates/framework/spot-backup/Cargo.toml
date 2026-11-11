@@ -1,0 +1,49 @@
+[package]
+name = "spot-backup"
+description = "Scheduled backups to a folder, removable drive or cloud target, with retention, verification and one-click restore (WP-PRD-04)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The schedule grammar and due-slot planner (WP-PLT-07); a backup job is one of its schedules.
+spot-scheduler = { path = "../spot-scheduler" }
+# Persistent jobs: a fired slot becomes one deduplicated job.
+spot-jobs = { path = "../spot-jobs" }
+# `SiteId`, the identity every job and backup manifest carries.
+spot-core = { path = "../spot-core" }
+# The manifest's `[[schedules]]` value types (`Cron`, `Queue`) that a `Schedule` needs.
+spot-manifest = { path = "../spot-manifest" }
+# `StepName`, the step a schedule runs.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Snapshot providers (logical dump or stopped instance) that produce the data a backup packages.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Boxed futures: object-safe ports, as everywhere else in the framework.
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "rt"] }
+# Manifests and package headers are TOML.
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+toml = "0.9"
+# Job arguments cross the job engine as JSON.
+serde_json = "1"
+# Digest and size checks (ADR-068 rule 22).
+sha2 = "0.10"
+# Instants are arguments, never wall-clock reads; RFC 3339 rendering and date buckets.
+time = { version = "0.3.55", default-features = false, features = ["std", "serde", "formatting", "parsing", "macros"] }
+# `Schedule::due_between` speaks `jiff::Timestamp`; the scheduler's own public type.
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+# Typed errors with stable `backup.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Real, throwaway directories for atomic writes and package builds.
+tempfile = "3"
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "rt", "macros", "rt-multi-thread"] }
+# The real L7 registry and the in-memory storage backend the restore test proves invariants on.
+spot-l7-invariants = { path = "../../../harness/rust/l7-invariants" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+
+[lints]
+workspace = true

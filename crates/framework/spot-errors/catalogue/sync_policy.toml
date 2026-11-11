@@ -1,0 +1,306 @@
+# sync_policy codes: per-DocType sync policy declared in metadata (spot-sync-policy,
+# WP-EDG-08.T1, ADR-062). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_policy.unknown_property"
+class = "Validation"
+summary = "A sync policy property key is not one this platform knows."
+explanation_key = "error.sync_policy.unknown_property"
+params = []
+remedy = "Use one of sync_policy, sync_class, sync_direction, sync_trigger, sync_owner_scope or sync_exclude_fields."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.bad_value"
+class = "Validation"
+summary = "A sync policy property value is not valid for its key."
+explanation_key = "error.sync_policy.bad_value"
+params = []
+remedy = "Use a class, direction, trigger, scope key type or field name the policy text form accepts."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.unknown_doctype"
+class = "Validation"
+summary = "A sync policy is declared for a DocType the metadata does not hold."
+explanation_key = "error.sync_policy.unknown_doctype"
+params = []
+remedy = "Declare the policy on a DocType the effective metadata holds, or remove the declaration."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.closed_link"
+class = "Validation"
+summary = "A syncing DocType links to a DocType that never syncs."
+explanation_key = "error.sync_policy.closed_link"
+params = []
+remedy = "Give the linked DocType a syncing policy, or stop the link from leaving the origin."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.direction_conflict"
+class = "Validation"
+summary = "A sync policy's direction contradicts its class."
+explanation_key = "error.sync_policy.direction_conflict"
+params = []
+remedy = "Match the direction to the class: local sends nothing, master flows down, transactional flows up."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.owner_scope_missing"
+class = "Validation"
+summary = "A sync policy flows upward but names no owner scope key type."
+explanation_key = "error.sync_policy.owner_scope_missing"
+params = []
+remedy = "Name the owner_scope key type the creating node must hold for a record it sends up."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.excluded_field"
+class = "Validation"
+summary = "A field excluded from sync is required, is a link, or does not exist."
+explanation_key = "error.sync_policy.excluded_field"
+params = []
+remedy = "Exclude only optional, non-link fields that the DocType actually declares."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.orphan_queued"
+class = "InvalidState"
+summary = "A sync policy change would leave already queued records undeliverable."
+explanation_key = "error.sync_policy.orphan_queued"
+params = []
+remedy = "Drain the queued records, or keep a direction that can still deliver them."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.excluded_field_received"
+class = "Validation"
+summary = "A received document carries a field the policy excludes from sync."
+explanation_key = "error.sync_policy.excluded_field_received"
+params = []
+remedy = "Reject the document; the sender must build its outgoing view without the excluded field."
+since = "0.1.0"
+
+# ADR-063 preset model (WP-SYN-01.T1): PresetPolicy::validate.
+# class = "none": a library-internal vocabulary until the host maps it onto app-facing codes
+# (spot-unattended-support help lives outside this task's owned paths; see the task report).
+
+[[entry]]
+code = "sync_policy.preset_relay_not_record"
+class = "none"
+summary = "A sync policy sets `relay` on a preset other than `record`."
+explanation_key = "error.sync_policy.preset_relay_not_record"
+params = []
+remedy = "Remove `relay`, or change the preset to `record`."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_adopt_not_handover"
+class = "none"
+summary = "A sync policy sets `adopt` on a preset other than `handover`."
+explanation_key = "error.sync_policy.preset_adopt_not_handover"
+params = []
+remedy = "Remove `adopt`, or change the preset to `handover`."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_owner_key_not_owned"
+class = "none"
+summary = "A sync policy sets `owner_key` on a preset a node does not create."
+explanation_key = "error.sync_policy.preset_owner_key_not_owned"
+params = []
+remedy = "Remove `owner_key`, or use the `record` or `handover` preset."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_scope_on_local"
+class = "none"
+summary = "A `local` sync policy sets a `scope`, though it is never sent."
+explanation_key = "error.sync_policy.preset_scope_on_local"
+params = []
+remedy = "Remove `scope`, or choose a preset that syncs."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_excluded_duplicate"
+class = "none"
+summary = "A field is listed more than once in a sync policy's excluded fields."
+explanation_key = "error.sync_policy.preset_excluded_duplicate"
+params = []
+remedy = "List each field in exactly one of local, down or up."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_effective_needs_mandatory"
+class = "none"
+summary = "A sync policy names an `effective_from_field` but its obligation is not mandatory."
+explanation_key = "error.sync_policy.preset_effective_needs_mandatory"
+params = []
+remedy = "Set the obligation to mandatory, or remove `effective_from_field`."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_local_has_settings"
+class = "none"
+summary = "A `local` sync policy carries settings besides the preset."
+explanation_key = "error.sync_policy.preset_local_has_settings"
+params = []
+remedy = "Remove the other settings, or choose a preset that syncs."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_bad_group"
+class = "none"
+summary = "A sync policy selects a group with an empty or unprintable tag."
+explanation_key = "error.sync_policy.preset_bad_group"
+params = []
+remedy = "Name a group tag registered in the node registry."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.preset_closure_bounds"
+class = "none"
+summary = "A sync policy's closure bounds are zero or contradict each other."
+explanation_key = "error.sync_policy.preset_closure_bounds"
+params = []
+remedy = "Use positive bounds with `max_records` not above `hard_limit_records`."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_closed_link"
+class = "none"
+summary = "A synced DocType links to a local DocType, so the destination could never resolve the link."
+explanation_key = "error.sync_policy.lint_closed_link"
+params = []
+remedy = "Make the target sync, or remove the link, or make this DocType local."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_dynamic_link_undeclared"
+class = "none"
+summary = "A dynamic link on a synced DocType declares no allowed_targets, so its reach cannot be checked."
+explanation_key = "error.sync_policy.lint_dynamic_link_undeclared"
+params = []
+remedy = "Declare the closed list of DocTypes the dynamic link may point to."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_master_depends_on_branch"
+class = "none"
+summary = "A master links to a record or handover DocType, so hub data would depend on branch data."
+explanation_key = "error.sync_policy.lint_master_depends_on_branch"
+params = []
+remedy = "Mark the link requires_adopted, or link to a master instead."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_excluded_required"
+class = "none"
+summary = "An excluded field is required and has no default, so the destination cannot store the document."
+explanation_key = "error.sync_policy.lint_excluded_required"
+params = []
+remedy = "Make the field optional, give it a default, or do not exclude it."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_excluded_unknown_field"
+class = "none"
+summary = "An excluded field is not a field of the DocType, so it excludes nothing."
+explanation_key = "error.sync_policy.lint_excluded_unknown_field"
+params = []
+remedy = "Correct the field name or remove it from excluded_fields."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_scope_field"
+class = "none"
+summary = "A scope selector or owner key reads a field that cannot name a key."
+explanation_key = "error.sync_policy.lint_scope_field"
+params = []
+remedy = "Read a link, enum or key-typed field."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_child_policy"
+class = "none"
+summary = "A child table declares a sync policy of its own."
+explanation_key = "error.sync_policy.lint_child_policy"
+params = []
+remedy = "Remove the child's policy; it follows its parent's."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_derived_synced"
+class = "none"
+summary = "A derived DocType has a policy that syncs it."
+explanation_key = "error.sync_policy.lint_derived_synced"
+params = []
+remedy = "Make the derived DocType local; the destination rebuilds it."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_unique_key"
+class = "none"
+summary = "A unique key on a record or handover DocType can collide between nodes."
+explanation_key = "error.sync_policy.lint_unique_key"
+params = []
+remedy = "Scope the key by origin node or generate it from a per-node series."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_reach_gap"
+class = "none"
+summary = "A master links to a master that does not reach every node the referrer reaches."
+explanation_key = "error.sync_policy.lint_reach_gap"
+params = []
+remedy = "Widen the target's scope to cover the referrer's, or mark the link as carried by reference."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_reach_undecided"
+class = "none"
+summary = "Whether a linked master reaches every node the referrer reaches cannot be decided from the selectors."
+explanation_key = "error.sync_policy.lint_reach_undecided"
+params = []
+remedy = "Use the same group or the scope all on the target, or mark the link as carried by reference."
+since = "0.1.0"
+
+# Retired-vocabulary lint flag (WP-SYN-01.T6, decision C6 option a) and lint S2.
+# class = "none": lint vocabulary, user help unchanged (decision S1).
+
+[[entry]]
+code = "sync_policy.retired_vocabulary"
+class = "none"
+summary = "A DocType still declares its sync policy in the retired class, direction and owner scope vocabulary."
+explanation_key = "error.sync_policy.retired_vocabulary"
+params = []
+remedy = "Declare a preset (local, master, record or handover) instead; the finding names the proposed rewrite or the question a person must answer."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.retired_trigger"
+class = "none"
+summary = "A sync policy sets a trigger, which is accepted and ignored because nothing implements it."
+explanation_key = "error.sync_policy.retired_trigger"
+params = []
+remedy = "Remove the trigger; the preset decides when a version is sent."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_requires_adopted_record"
+class = "none"
+summary = "A link marked requires_adopted points to a record entity, which is never adopted, so the link could never be saved."
+explanation_key = "error.sync_policy.lint_requires_adopted_record"
+params = []
+remedy = "Point the link at a handover entity, or remove the requires_adopted mark."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.lint_adopt_never"
+class = "none"
+summary = "A handover entity sets adopt to never, so it would never be adopted."
+explanation_key = "error.sync_policy.lint_adopt_never"
+params = []
+remedy = "Use the record preset, or set adopt to manual or auto."
+since = "0.1.0"

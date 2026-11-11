@@ -1,0 +1,126 @@
+# DocType rights of the shipped system roles (WP-IAM-02.T2). `Tenant Administrator` needs no
+# row: it holds every right by definition (ADR-070 section 12, rule 4). Session, API Key and
+# Login Attempt are read-only to managers; revoking goes through a method, not a write.
+
+[[entries]]
+role = "System Manager"
+doctype = "user"
+rights = ["read", "write", "create", "report", "select", "export", "print"]
+
+[[entries]]
+role = "System Manager"
+doctype = "user_recovery_digest"
+rights = ["read"]
+
+[[entries]]
+role = "System Manager"
+doctype = "role"
+rights = ["read", "write", "create", "report", "select", "export", "print", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "role_duty"
+rights = ["read", "write", "create", "report", "select", "export", "print", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "role_assignment"
+rights = ["read", "write", "create", "report", "select", "export", "print", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "role_assignment_scope"
+rights = ["read", "write", "create", "report", "select", "export", "print", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "linked_identity"
+rights = ["read", "write", "create", "report", "select", "export", "print", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "api_key"
+rights = ["read", "report", "select", "export"]
+
+[[entries]]
+role = "System Manager"
+doctype = "api_key_scope"
+rights = ["read"]
+
+[[entries]]
+role = "System Manager"
+doctype = "session"
+rights = ["read", "report", "select", "export"]
+
+[[entries]]
+role = "System Manager"
+doctype = "login_attempt"
+rights = ["read", "report", "select", "export"]
+
+[[entries]]
+role = "User Manager"
+doctype = "user"
+rights = ["read", "write", "create", "report", "select"]
+
+[[entries]]
+role = "User Manager"
+doctype = "user_recovery_digest"
+rights = ["read"]
+
+[[entries]]
+role = "User Manager"
+doctype = "role"
+rights = ["read", "select"]
+
+[[entries]]
+role = "User Manager"
+doctype = "role_duty"
+rights = ["read"]
+
+[[entries]]
+role = "User Manager"
+doctype = "role_assignment"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "User Manager"
+doctype = "role_assignment_scope"
+rights = ["read", "write", "create", "delete"]
+
+[[entries]]
+role = "User Manager"
+doctype = "linked_identity"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "User Manager"
+doctype = "api_key"
+rights = ["read", "report"]
+
+[[entries]]
+role = "User Manager"
+doctype = "api_key_scope"
+rights = ["read"]
+
+[[entries]]
+role = "User Manager"
+doctype = "session"
+rights = ["read", "report"]
+
+# Customisation records (WP-PLT-16.T2). A removal is a tombstone through the service, never a
+# row delete, so no role holds `delete`. The gate on persisting is the host's `CustomiseAccess`.
+
+[[entries]]
+role = "System Manager"
+doctype = "custom_doctype"
+rights = ["read", "write", "create", "report", "select", "export", "print"]
+
+[[entries]]
+role = "System Manager"
+doctype = "custom_field"
+rights = ["read", "write", "create", "report", "select", "export", "print"]
+
+[[entries]]
+role = "System Manager"
+doctype = "property_setter"
+rights = ["read", "write", "create", "report", "select", "export", "print"]

@@ -1,0 +1,138 @@
+# agent_memory codes: the agent memory crate's refusals (WP-AI-09.T1, WS13, ADR-26). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md. These are a library-internal
+# vocabulary (the agent host maps them onto its own errors), so no entry names an AppError class.
+
+[[entry]]
+code = "agent_memory.invalid_id"
+class = "none"
+summary = "The {what} {value} is not valid: {reason}."
+explanation_key = "error.agent_memory.invalid_id"
+params = ["reason", "value", "what"]
+remedy = "Give the id its documented shape: dotted lower-case segments, each starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.unsanitised"
+class = "none"
+summary = "The content carries a {class} value in the {shape} shape, and memory may reference records only by type and id."
+explanation_key = "error.agent_memory.unsanitised"
+params = ["class", "shape"]
+remedy = "Replace the value with the record's DocType and id, or drop it: memory never holds a record's value."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.content_too_long"
+class = "none"
+summary = "The content cannot be stored: {detail}."
+explanation_key = "error.agent_memory.content_too_long"
+params = ["detail"]
+remedy = "Shorten the text to a summary, and remove any control character a document's bytes carried."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.entry_invalid"
+class = "none"
+summary = "The {kind} entry {id} is invalid: {reason}."
+explanation_key = "error.agent_memory.entry_invalid"
+params = ["id", "kind", "reason"]
+remedy = "Record the entry through its constructor so every structural rule holds before it is stored."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.tier_refused"
+class = "none"
+summary = "A {agent} agent may not read the {required} procedure {procedure}."
+explanation_key = "error.agent_memory.tier_refused"
+params = ["agent", "procedure", "required"]
+remedy = "Read the procedure with an agent at the tier that learned it or above; recall omits it otherwise."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.query_too_long"
+class = "none"
+summary = "The query is {bytes} bytes long, and {max} is the maximum."
+explanation_key = "error.agent_memory.query_too_long"
+params = ["bytes", "max"]
+remedy = "Shorten the recall query to the words that describe the symptom."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.embed_failed"
+class = "none"
+summary = "The embedding provider failed: {detail}."
+explanation_key = "error.agent_memory.embed_failed"
+params = ["detail"]
+remedy = "Check the host's embedding provider, then record the entry again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.store_failed"
+class = "none"
+summary = "The memory store failed: {detail}."
+explanation_key = "error.agent_memory.store_failed"
+params = ["detail"]
+remedy = "Check the tenant's memory database and retry; a refused write leaves the entry unchanged."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.unproven"
+class = "none"
+summary = "The procedure {procedure} has {confirmations} confirming incidents and needs {required}."
+explanation_key = "error.agent_memory.unproven"
+params = ["confirmations", "procedure", "required"]
+remedy = "Wait for more resolved incidents, or lower the policy's minimum in a reviewed change."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.harmful"
+class = "none"
+summary = "The procedure {procedure} caused harm in {incidents} recorded incidents."
+explanation_key = "error.agent_memory.harmful"
+params = ["incidents", "procedure"]
+remedy = "Never propose a remedy from a procedure that caused harm; investigate the incidents instead."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.status_invalid"
+class = "none"
+summary = "The candidate {candidate} is {status}, and {action} needs it to be {required}."
+explanation_key = "error.agent_memory.status_invalid"
+params = ["action", "candidate", "required", "status"]
+remedy = "Move the candidate through its pipeline in order: proposed, in CI, passed, then promoted."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.ci_run_missing"
+class = "none"
+summary = "The candidate {candidate} cannot be promoted: {reason}."
+explanation_key = "error.agent_memory.ci_run_missing"
+params = ["candidate", "reason"]
+remedy = "Promote only a passed candidate, and name the CI run id that passed it."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.candidate_invalid"
+class = "none"
+summary = "The candidate {candidate} is invalid: {reason}."
+explanation_key = "error.agent_memory.candidate_invalid"
+params = ["candidate", "reason"]
+remedy = "Fix the procedure's steps and parameters, or its confidence, before proposing it again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.bundle_failed"
+class = "none"
+summary = "The candidate bundle for {candidate} could not be rendered: {detail}."
+explanation_key = "error.agent_memory.bundle_failed"
+params = ["candidate", "detail"]
+remedy = "Fix the candidate's spec fields, then enqueue it again; nothing is written for a failed bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_memory.serialise"
+class = "none"
+summary = "The {what} could not be serialised: {detail}."
+explanation_key = "error.agent_memory.serialise"
+params = ["detail", "what"]
+remedy = "Check the record's fields against the renderer's expectations, then export or load it again."
+since = "0.1.0"

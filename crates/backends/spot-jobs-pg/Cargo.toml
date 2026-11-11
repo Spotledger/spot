@@ -1,0 +1,25 @@
+[package]
+name = "spot-jobs-pg"
+description = "PostgreSQL JobStore: durable jobs with SKIP LOCKED claims, fenced completion and a durable outbox intake position (WP-PLT-06.T2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-jobs = { path = "../../framework/spot-jobs" }
+spot-core = { path = "../../framework/spot-core" }
+spot-scheduler = { path = "../../framework/spot-scheduler" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3", "with-serde_json-1"] }
+deadpool-postgres = "0.14"
+serde_json = "1"
+time = "0.3.55"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

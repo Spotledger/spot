@@ -1,0 +1,28 @@
+# sync_obligations codes: the `ObligationError` vocabulary of spot-sync-obligations (ADR-065). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_obligations.settings_invalid"
+class = "none"
+summary = "An obligation setting is out of range: {field}."
+explanation_key = "error.sync_obligations.settings_invalid"
+params = ["field"]
+remedy = "Set the named value inside its range: a positive delivery window and non-negative margins and grace."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_obligations.hold_unknown"
+class = "none"
+summary = "A hold names stream position {position}, which is not a known mandatory event."
+explanation_key = "error.sync_obligations.hold_unknown"
+params = ["position"]
+remedy = "Pass every held mandatory event in the event list, or drop the stale hold."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_obligations.prefix_regressed"
+class = "none"
+summary = "The applied prefix moved backwards from {before} to {after}."
+explanation_key = "error.sync_obligations.prefix_regressed"
+params = ["after", "before"]
+remedy = "Ignore the stale report, or re-sync the node's state; an applied prefix only moves forward."
+since = "0.1.0"

@@ -1,0 +1,42 @@
+[package]
+name = "spot-app-review"
+description = "The app store review pipeline (WP-STR-05): static checks, a security scan, a bounded resource profile under the real WASM host, contract probes and one report a human reviewer reads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The bundle format: `Bundle::open`, `check_privileges`, `component_imports` and the digest.
+spot-bundle = { path = "../spot-bundle" }
+# The typed manifest model the static hygiene checks read.
+spot-manifest = { path = "../spot-manifest" }
+# The author-side checks the contract probe re-runs on an extracted directory (reuse, not fork).
+spot-pack = { path = "../spot-pack" }
+# The real WASM host the resource profile runs the component under.
+spot-wasm = { path = "../spot-wasm" }
+# The address classifier the endpoint scan uses (no network call is made).
+spot-egress = { path = "../spot-egress" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+sha2 = "0.10"
+# The embedded-key scan set only.
+regex = "1"
+thiserror = "2"
+# `review` is synchronous: it builds one current-thread runtime to drive `AppInstance::call`.
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+
+[dev-dependencies]
+# Test components are written as WebAssembly text and assembled here; no toolchain target.
+wat = "1"
+# The property test: arbitrary bytes never panic and always produce a report.
+proptest = "1"
+
+[lints]
+workspace = true
+
+[lib]
+name = "spot_app_review"
+path = "src/lib.rs"

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-ADM-09.T1: the Admin Center console frame (connections, tool registry, role and
+       edition gating, equivalent-command pane, generated settings screens, signing flow).
+       Plain MVVM on the shell's ObservableObject; no private keys are held here. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="App/**" />
+    <!-- The thin desktop host lives in App/ (inside the owned path) and is its own project. -->
+    <InternalsVisibleTo Include="Spotledger.AdminCenter.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+  </ItemGroup>
+</Project>

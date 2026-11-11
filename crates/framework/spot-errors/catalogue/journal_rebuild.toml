@@ -1,0 +1,154 @@
+# journal_rebuild codes: the refusals of the journal rebuild executor (WP-JRN-05.T3, ADR-061 s6), which runs a rebuild plan against the journal store and hands records to an apply sink. A rebuild refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_rebuild.options_invalid"
+class = "none"
+summary = "The rebuild options are not usable: the source is empty or the progress interval is zero."
+explanation_key = "error.journal_rebuild.options_invalid"
+params = []
+remedy = "Pass the source of the journal being rebuilt and a non-zero progress interval."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.plan_invalid"
+class = "none"
+summary = "The rebuild plan contradicts itself, so the executor refuses to run it."
+explanation_key = "error.journal_rebuild.plan_invalid"
+params = []
+remedy = "Compute the plan again with the rebuild planner from the current catalogue and do not edit it by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.verify_failed"
+class = "none"
+summary = "The journal verification reported evidence of tampering or loss: {kind} for generation {generation}, positions {first_seq} to {last_seq} ({count} finding(s))."
+explanation_key = "error.journal_rebuild.verify_failed"
+params = ["count", "first_seq", "generation", "kind", "last_seq"]
+remedy = "Read the verification report, restore the damaged or missing objects from the object store's other copy, and run the rebuild again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.verify_unavailable"
+class = "none"
+summary = "The journal verification could not run: {code}."
+explanation_key = "error.journal_rebuild.verify_unavailable"
+params = ["code"]
+remedy = "Fix the store or the expectation named by the code and run the rebuild again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.manifest_invalid"
+class = "none"
+summary = "The manifest of generation {generation} cannot be trusted: {reason}."
+explanation_key = "error.journal_rebuild.manifest_invalid"
+params = ["generation", "reason"]
+remedy = "Check the tenant's journal public keys and that the manifest belongs to this source and generation; restore the manifest from another copy if it is damaged."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.snapshot_failed"
+class = "none"
+summary = "The base snapshot cannot be read: {code}."
+explanation_key = "error.journal_rebuild.snapshot_failed"
+params = ["code"]
+remedy = "Choose another verified snapshot or roll forward from a backup; a snapshot copied from another tenant or position is refused on purpose."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.store_failed"
+class = "none"
+summary = "The journal store failed: {code}."
+explanation_key = "error.journal_rebuild.store_failed"
+params = ["code"]
+remedy = "Retry when the object store is available again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.segment_missing"
+class = "none"
+summary = "No segment holds generation {generation}, positions {first_seq} to {last_seq}."
+explanation_key = "error.journal_rebuild.segment_missing"
+params = ["first_seq", "generation", "last_seq"]
+remedy = "Restore the missing segments from the object store's other copy, or choose a target before the hole."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.segment_invalid"
+class = "none"
+summary = "The segment of generation {generation}, positions {first_seq} to {last_seq}, is invalid: {reason}."
+explanation_key = "error.journal_rebuild.segment_invalid"
+params = ["first_seq", "generation", "last_seq", "reason"]
+remedy = "Restore the segment from another copy; its bytes must hash to the value in the signed manifest and its header must name this source."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.foreign_entry"
+class = "none"
+summary = "The entry at generation {generation}, position {seq}, belongs to another source than the rebuild's."
+explanation_key = "error.journal_rebuild.foreign_entry"
+params = ["generation", "seq"]
+remedy = "Treat this as tampering: the segment holds an entry that was not produced by this source. Restore the segment from another copy."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.entry_invalid"
+class = "none"
+summary = "The entry at generation {generation}, position {seq}, is invalid: {reason}."
+explanation_key = "error.journal_rebuild.entry_invalid"
+params = ["generation", "reason", "seq"]
+remedy = "Restore the segment from another copy; a state entry must carry the operation, schema version and image the journal format defines."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.position_gap"
+class = "none"
+summary = "Generation {generation}: the executor expected position {expected} next but found {found}."
+explanation_key = "error.journal_rebuild.position_gap"
+params = ["expected", "found", "generation"]
+remedy = "Restore the missing segments or compute the plan again; positions must be consecutive."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.version_regressed"
+class = "none"
+summary = "{entity} {id}: version {found} at generation {generation}, position {seq}, is not above the version {applied} already applied."
+explanation_key = "error.journal_rebuild.version_regressed"
+params = ["applied", "entity", "found", "generation", "id", "seq"]
+remedy = "Treat this as a damaged or reordered journal; verify it deeply and restore the affected segments from another copy."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.missing_upcast"
+class = "none"
+summary = "{entity} has no upcaster from schema {from} towards schema {to}."
+explanation_key = "error.journal_rebuild.missing_upcast"
+params = ["entity", "from", "to"]
+remedy = "Ship an image upcaster for the shape change at the schema where the chain stops; no entry was applied."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.upcast_failed"
+class = "none"
+summary = "The {entity} image cannot be brought to the target schema: {code}."
+explanation_key = "error.journal_rebuild.upcast_failed"
+params = ["code", "entity"]
+remedy = "Fix the upcaster the code names, or rebuild to the schema the image was written under."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.sink_failed"
+class = "none"
+summary = "The apply sink refused: {reason}."
+explanation_key = "error.journal_rebuild.sink_failed"
+params = ["reason"]
+remedy = "Fix what the sink reports; the sink was told to abort and nothing is visible."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild.cancelled"
+class = "none"
+summary = "The rebuild was cancelled after {processed} entries; the sink was told to abort."
+explanation_key = "error.journal_rebuild.cancelled"
+params = ["processed"]
+remedy = "Start the rebuild again when ready; nothing is visible from the cancelled run."
+since = "0.1.0"

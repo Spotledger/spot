@@ -1,0 +1,118 @@
+# backup codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "backup.target_unavailable"
+class = "none"
+summary = "The backup target {target} is not available: {reason}."
+explanation_key = "error.backup.target_unavailable"
+params = ["reason", "target"]
+remedy = "Insert the removable media or point the job at a reachable target; a waiting job resumes when the media appears."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.same_physical_disk"
+class = "none"
+summary = "The backup target {target} is on the live data's physical disk {disk} and the setting forbids that."
+explanation_key = "error.backup.same_physical_disk"
+params = ["disk", "target"]
+remedy = "Choose a target on a different physical disk, or turn off the same-disk refusal in the backup settings."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.manifest_invalid"
+class = "none"
+summary = "The backup manifest is not valid: {reason}."
+explanation_key = "error.backup.manifest_invalid"
+params = ["reason"]
+remedy = "Use a backup produced by this platform version; do not edit backup.toml by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.verify_failed"
+class = "none"
+summary = "Backup verification failed: {reason}."
+explanation_key = "error.backup.verify_failed"
+params = ["reason"]
+remedy = "Take the backup again and keep the failed package for diagnosis; an unverified backup is never restorable."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.retention_refused"
+class = "none"
+summary = "Retention refused to delete {id}: {reason}."
+explanation_key = "error.backup.retention_refused"
+params = ["id", "reason"]
+remedy = "Keep the protected backup; adjust the retention window only after confirming another verified backup exists."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.restore_refused"
+class = "none"
+summary = "The restore was refused before any data changed: {reason}."
+explanation_key = "error.backup.restore_refused"
+params = ["reason"]
+remedy = "Resolve every preflight blocker (app set, free space, empty target, tenant) and run the restore again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.newer_schema"
+class = "none"
+summary = "The backup schema {backup_schema} is newer than the target schema {target_schema}."
+explanation_key = "error.backup.newer_schema"
+params = ["backup_schema", "target_schema"]
+remedy = "Upgrade the target platform first, or repeat the restore with the explicit newer-schema override."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.not_found"
+class = "none"
+summary = "No backup {id} exists on the target."
+explanation_key = "error.backup.not_found"
+params = ["id"]
+remedy = "List the target's backups and choose an id it holds."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.invariants_failed"
+class = "none"
+summary = "The restore finished but invariants failed: {violations}."
+explanation_key = "error.backup.invariants_failed"
+params = ["violations"]
+remedy = "Keep the service closed, inspect the violations and restore again from another verified backup."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.restore_failed"
+class = "none"
+summary = "The restore failed at {stage}: {reason}."
+explanation_key = "error.backup.restore_failed"
+params = ["reason", "stage"]
+remedy = "The site stays closed; fix the reported stage and restore again from a verified backup."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.unsupported"
+class = "none"
+summary = "The requested backup feature is not available: {feature}."
+explanation_key = "error.backup.unsupported"
+params = ["feature"]
+remedy = "Wire the missing platform adapter (scratch site, invariant runner or volume probe) and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.snapshot"
+class = "none"
+summary = "The snapshot provider failed: {reason}."
+explanation_key = "error.backup.snapshot"
+params = ["reason"]
+remedy = "Check the PostgreSQL instance and the bundled client tools, then run the backup again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.io"
+class = "none"
+summary = "A backup operation failed underneath the request."
+explanation_key = "error.backup.io"
+params = []
+remedy = "Retry once the disk, mount or connection is healthy; a partial package is never listed."
+since = "0.1.0"

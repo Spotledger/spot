@@ -1,0 +1,31 @@
+# Fedora 44, booted, for the packaging scenarios (WP-PRD-09.T2).
+#
+# This is a *test* image, not the product image: packaging/linux/container/Containerfile
+# ships the runtime image that customers run. Here systemd is PID 1 so `podman run
+# --systemd=always` gives a real service manager, and the package tooling the scenarios
+# drive (rpm/dnf, systemd-analyze, curl for the health probe, stat/getent/kill) is present.
+#
+#   podman build -t localhost/spot-pkgverify-fedora-44:44 -f Containerfile .
+#   podman run -d --name spot-pkgverify-fedora-44 --systemd=always \
+#       -v "$PWD/dist:/run/spot-pkgs:ro,z" localhost/spot-pkgverify-fedora-44:44
+#
+# tools/packaging/verify/run.py builds this image itself; the commands above are only for
+# poking at it by hand.
+FROM registry.fedoraproject.org/fedora:44
+
+# systemd is the point of the image; util-linux and procps-ng give stat, install, kill and
+# getent is in glibc-common (a base dependency). shadow-utils is what systemd-sysusers and
+# the RPM %pre scriptlet use to create the spot account.
+RUN dnf -y install \
+        --setopt=install_weak_deps=0 \
+        systemd \
+        util-linux \
+        procps-ng \
+        shadow-utils \
+        curl-minimal \
+        glibc-common \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# No ENTRYPOINT: `--systemd=always` runs /sbin/init, and `podman exec` runs the scenarios.
+CMD ["/sbin/init"]

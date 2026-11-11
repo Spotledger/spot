@@ -1,0 +1,46 @@
+[package]
+name = "spot-edge-pg"
+description = "PostgreSQL edge store for the business graph (WP-DAG-04.T2): the `spot_graph_edge` table, `PgEdgeWriter` on the caller's transaction, the `edge_verify` scan job that writes a drift report, and the `edge_repair` operation, tested on a real database"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The object-safe `EdgeWriter` this crate implements, and the pure derive/diff/invariant functions.
+spot-edge-sync = { path = "../../framework/spot-edge-sync" }
+# The app API document the invariant checker reads, and `AppError`/`ErrorClass`.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `NodeRef`, `RecordId`, `Name`, `Value`, the storage `Catalog` and the transaction the writer runs in.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The stable `EdgeTypeId` an edge carries.
+spot-graph-model = { path = "../../framework/spot-graph-model" }
+# `JobContext` and `HandlerResult` for the `edge_verify` handler.
+spot-jobs = { path = "../../framework/spot-jobs" }
+# The caller's `PgTransaction` and its raw-SQL seam. The seam (`raw_query`, `raw_execute`) is
+# `#[cfg(feature = "testing")]` today; WP-DAG-02.T3 un-gates it and this feature line goes away.
+# The feature also gives the tests `spot_postgres::testing::TestDb`.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3", "with-serde_json-1"] }
+# The edge properties are a `jsonb` document.
+serde_json = "1"
+# Record ids and edge ends are stored as `uuid`.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+# Instants are arguments, never read from a clock (ADR-077).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+thiserror = "2"
+
+[dev-dependencies]
+# The effective metadata the tests compile a catalog and an edge schema from.
+spot-meta = { path = "../../framework/spot-meta" }
+# The in-memory job store and `SiteId` the handler test drives the `edge_verify` handler with.
+spot-core = { path = "../../framework/spot-core" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+# The real document engine the end-to-end test (`tests/engine_pg.rs`) runs the edge participant in.
+spot-document = { path = "../../framework/spot-document" }
+# The empty seam registry the engine is built with.
+spot-seams = { path = "../../framework/spot-seams" }
+
+[lints]
+workspace = true

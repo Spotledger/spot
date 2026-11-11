@@ -1,0 +1,50 @@
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    # wasmtime and cranelift (WP-EXT-05.T1).
+    "Apache-2.0 WITH LLVM-exception",
+    # Lead decision 2026-11-10 (webpki-roots CA bundle data); also in tools/opensource-licenses/policy.toml.
+    "CDLA-Permissive-2.0",
+    # Permissive licences that the first hosted cargo deny run reported as not allowed (2026-11-11).
+    # 0BSD and CC0-1.0 are already shipped without review by tools/opensource-licenses/policy.toml;
+    # BSL-1.0 is the Boost licence (permissive, no copyleft, no attribution burden in binaries).
+    "0BSD",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+# Workspace crates are Apache-2.0 (LICENSE) and never published to a registry; skip them.
+private = { ignore = true }
+
+[sources]
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+# Unmaintained-crate notices (not vulnerabilities) found by the first hosted cargo deny run on
+# 2026-11-11. Each is listed with its reason so the list is a decision, not a silence; vulnerability
+# and unsound advisories are never ignored here. Revisit when the crate that pulls each one moves.
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2025-0141", reason = "unmaintained, no vulnerability; pulled in by syntect (typst syntax highlighting), not used for any Spotledger format" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained, no vulnerability; a compile-time macro helper pulled in by biblatex and hayagriva (typst bibliography)" },
+    { id = "RUSTSEC-2026-0441", reason = "unmaintained, no vulnerability; a tiny helper pulled in by async-imap" },
+    { id = "RUSTSEC-2026-0206", reason = "unmaintained, no vulnerability; pulled in by krilla and typst-layout (PDF text shaping)" },
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained, no vulnerability; pulled in by fontdb and rustybuzz (PDF fonts)" },
+    { id = "RUSTSEC-2024-0449", reason = "unmaintained, no vulnerability; pulled in by serde_yaml 0.9, which is itself deprecated (replacing the YAML reader is a separate change)" },
+    # Vulnerability advisories, ignored because no fixed release can be reached (decision 2026-11-11,
+    # re-check when typst or citationberg moves): quick-xml 0.38.4 is pulled in by citationberg 0.7.0
+    # (the latest release) <- hayagriva 0.10.1 <- typst-library 0.15.1 <- spot-print. Both are
+    # denial of service only (no memory-safety or confidentiality impact). The parser runs only when
+    # a print template loads a bibliography style (CSL XML); templates are written by app authors,
+    # not end users, and spot-print itself has no bibliography code. Every other quick-xml in the
+    # lock is >= 0.41.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38.4 via typst's citationberg; DoS only, reachable only through a template-supplied CSL style, no fixed citationberg release" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38.4 via typst's citationberg; DoS only, reachable only through a template-supplied CSL style, no fixed citationberg release" },
+    { id = "RUSTSEC-2024-0320", reason = "unmaintained, no vulnerability; pulled in by syntect (typst syntax highlighting)" },
+]

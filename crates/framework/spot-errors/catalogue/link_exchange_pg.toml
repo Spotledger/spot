@@ -1,0 +1,11 @@
+# link_exchange_pg codes — the PostgreSQL stores for link exchange (WP-CTL-10.T3).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "link_exchange_pg.migration_failed"
+class = "Internal"
+summary = "The link exchange tables could not be created in the tenant's schema."
+explanation_key = "error.link_exchange_pg.migration_failed"
+params = []
+remedy = "Check that the tenant's schema exists and that the database user may create tables in it, then prepare again."
+since = "0.1.0"

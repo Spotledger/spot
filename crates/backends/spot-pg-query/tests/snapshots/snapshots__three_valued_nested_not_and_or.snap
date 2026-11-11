@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE ((NOT ("p"."note" IS NULL)) OR (NOT (("p"."visits" = $1) AND ("p"."active" = $2)))) ORDER BY "p"."id" ASC OFFSET $3
+$1 = Int8(1)
+$2 = Bool(false)
+$3 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

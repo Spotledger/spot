@@ -1,0 +1,31 @@
+[package]
+name = "spot-coordinator-pg"
+description = "PostgreSQL Coordinator backend (WP-PLT-18.T2, ADR-20): fenced leases, counters, rate limits and node presence in rows, so a multi-node cluster coordinates without Redis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The Coordinator trait, its types and its errors; the implementation under test.
+spot-coordinator = { path = "../../framework/spot-coordinator" }
+# The connection pool the caller builds; a coordinator call never shares a business transaction.
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-time-0_3"] }
+# `Notify` for the lock waker, and `Handle::try_current` to withdraw a dropped guard.
+tokio = { version = "1", default-features = false, features = ["sync", "rt", "time"] }
+# `Lease.expires_at` and the node heartbeat are instants.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# Per-test scratch databases and a raw client for the fenced "ran" table.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# `contract` and the `InProcessCoordinator` used to show second-node detection.
+spot-coordinator = { path = "../../framework/spot-coordinator", features = ["testing"] }
+# A `Clock` for the in-process coordinator's presence test.
+spot-core = { path = "../../framework/spot-core" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,45 @@
+name = "role_assignment_scope"
+label = "Role Assignment Scope"
+app = "platform"
+module = "identity"
+is_child = true
+
+[[fields]]
+name = "doctype"
+label = "DocType"
+type = "text"
+description = "Restricts only documents of this DocType; empty means every DocType."
+
+[[fields]]
+name = "field_or_link_doctype"
+label = "Field or Link DocType"
+type = "text"
+required = true
+description = "A qualified field path (`doctype.field`) or a bare link target DocType."
+
+[[fields]]
+name = "allowed"
+label = "Allowed"
+type = "json"
+required = true
+description = "A JSON array of the record ids (or select values) the holder may use."
+
+[[fields]]
+name = "applies_to"
+label = "Applies To"
+type = "select"
+options = "all_doctypes\nonly"
+required = true
+default = "all_doctypes"
+
+[[fields]]
+name = "applies_to_doctypes"
+label = "Applies To DocTypes"
+type = "json"
+description = "With `only`: a JSON array of the DocType names the restriction reaches."
+
+[[fields]]
+name = "include_descendants"
+label = "Include Descendants"
+type = "bool"
+default = "false"

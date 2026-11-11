@@ -1,0 +1,29 @@
+[package]
+name = "spot-consumer-admission"
+description = "Pre-work admission for the consumer front door: canonicalises the destination so case, spacing and plus-address tricks cannot dodge one bucket, prices a code request and enforces a resend cooldown over one coordinator-backed throttle (WP-IAM-11.T14, ADR-083 tasks 9 and 14)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `CoordinatorThrottle`, `Attempt`, `Kind`, `SourceAddr`, `ThrottlePolicy` and the `SaltRing`:
+# every count this crate makes is a `take` on the shared throttle (WP-IAM-11.T7, T12).
+spot-throttle-coordinator = { path = "../spot-throttle-coordinator" }
+# `Coordinator`: needed to build the one-unit-per-destination resend bucket over the very same
+# store and salt ring the caller's throttle already counts on.
+spot-coordinator = { path = "../spot-coordinator" }
+
+[dev-dependencies]
+# The in-process coordinator and its testing feature: the store every case counts on.
+spot-coordinator = { path = "../spot-coordinator", features = ["testing"] }
+# `ManualClock`: the in-process coordinator reads time from it, so the cooldown window is an
+# argument in the tests and no case sleeps.
+spot-core = { path = "../spot-core" }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+proptest = "1"
+
+[lints]
+workspace = true

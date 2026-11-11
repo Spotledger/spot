@@ -1,0 +1,21 @@
+[package]
+name = "spot-tenancy"
+description = "Control-plane core (WP-CTL-01.T1, ADR-34, ADR-058): the tenant registry and placement map, the tenant state machine, provisioning as a journaled resumable workflow with compensations, and deprovisioning with archive, retention delay and two-person approval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Tenant ids are UUIDv7; the caller supplies the time and the entropy, so nothing here reads a clock.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7", "serde"] }
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `tenancy.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

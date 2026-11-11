@@ -1,0 +1,45 @@
+# Snapshot providers for tenant databases and managed instances (WP-MIG-05.T1).
+#
+# Dependencies are exactly the brief's list. Each crate declares its own versions;
+# the versions here match the ones Cargo.lock already pins for the workspace.
+[package]
+name = "spot-snapshot"
+description = "Snapshot and restore providers for tenant databases and managed PostgreSQL instances, with a canonical manifest and invariant checks (WP-MIG-05)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-pg-supervisor = { path = "../../framework/spot-pg-supervisor" }
+spot-postgres = { path = "../spot-postgres" }
+spot-core = { path = "../../framework/spot-core" }
+# Object-safe async traits and channel-based progress.
+tokio = { version = "1.47", default-features = false, features = ["process", "fs", "io-util", "sync", "time", "rt", "macros"] }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3"] }
+deadpool-postgres = "0.14"
+# File checksums (ADR-068 rule 22).
+sha2 = "0.10"
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+toml = "0.9"
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+thiserror = "2"
+time = { version = "0.3.55", default-features = false, features = ["std", "serde"] }
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+spot-storage-contract = { path = "../../../contracts/storage" }
+tempfile = "3"
+tokio = { version = "1.47", default-features = false, features = ["process", "fs", "io-util", "sync", "time", "rt", "rt-multi-thread", "macros", "net"] }
+
+# The test-only fake PostgreSQL bundle (see tests/support/fake_pg.rs): behaves like
+# initdb/postgres/pg_ctl, so the stopped-instance provider's guard and failure paths
+# and the bench fixture run on every machine without a bundled PostgreSQL.
+[[bin]]
+name = "fake-pg"
+path = "tests/support/fake_pg.rs"
+test = false
+
+[lints]
+workspace = true

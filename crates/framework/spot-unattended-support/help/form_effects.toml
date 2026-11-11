@@ -1,0 +1,51 @@
+# Help for the form_effects error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "form_effects.compile_failed"
+what_happened = "A form script's TypeScript source did not compile."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the reported syntax or type error; the diagnostic names the line and column.", "If it keeps happening, tell your administrator and quote the code form_effects.compile_failed."]
+audience = "user"
+
+[[help]]
+code = "form_effects.limit_exceeded"
+what_happened = "A form script produced more effects, or larger ones, than the caps allow."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Emit fewer and smaller effects; a form event is a small declarative answer.", "If it keeps happening, tell your administrator and quote the code form_effects.limit_exceeded."]
+audience = "operator"
+
+[[help]]
+code = "form_effects.missing_handler"
+what_happened = "A form script does not export the handler its event needs."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Export the function the event names, such as `on_change` for a field change.", "If it keeps happening, tell your administrator and quote the code form_effects.missing_handler."]
+audience = "user"
+
+[[help]]
+code = "form_effects.patch_invalid"
+what_happened = "A form script returned a document patch that does not fit the document type."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Patch fields the document type declares, with values of the type the field expects.", "If it keeps happening, tell your administrator and quote the code form_effects.patch_invalid."]
+audience = "operator"
+
+[[help]]
+code = "form_effects.protocol_version"
+what_happened = "An effects batch names a protocol version this server does not speak."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Upgrade the client or the server so both speak the same protocol version.", "If it keeps happening, tell your administrator and quote the code form_effects.protocol_version."]
+audience = "user"
+
+[[help]]
+code = "form_effects.script_failed"
+what_happened = "A form script failed for a reason the user must not see."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Read the server log for the script's name and cause, then fix the script.", "If it keeps happening, tell your administrator and quote the code form_effects.script_failed."]
+audience = "operator"
+
+[[help]]
+code = "form_effects.script_record_invalid"
+what_happened = "A registered form script's record is missing or malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the script a name, a document type, an event, a valid target and TypeScript source.", "If it keeps happening, tell your administrator and quote the code form_effects.script_record_invalid."]
+audience = "user"

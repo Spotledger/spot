@@ -1,0 +1,129 @@
+# bundle_merge codes: raised by spot-bundle-merge (WP-ALM-03) as the stable identity of a
+# conflict kind and of the ways a resolution set is refused. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bundle_merge.conflict_both_modified"
+class = "none"
+summary = "Both sides changed one item, differently."
+explanation_key = "error.bundle_merge.conflict_both_modified"
+params = []
+remedy = "Choose our side, their side, the common ancestor or a custom value for the item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.conflict_modified_vs_removed"
+class = "none"
+summary = "One side changed an item the other side removed."
+explanation_key = "error.bundle_merge.conflict_modified_vs_removed"
+params = []
+remedy = "Choose whether the item stays with the change or is removed."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.conflict_both_added_differently"
+class = "none"
+summary = "Both sides added an item with the same key, differently."
+explanation_key = "error.bundle_merge.conflict_both_added_differently"
+params = []
+remedy = "Choose which added version to keep, or supply a custom value."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.semantic_override_on_removed_field"
+class = "none"
+summary = "An override survives a merge that removed the custom field it targets."
+explanation_key = "error.bundle_merge.semantic_override_on_removed_field"
+params = []
+remedy = "Keep the field, or drop the override that names it."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.semantic_insert_after_removed_field"
+class = "none"
+summary = "A custom field anchors after a field the merge removed."
+explanation_key = "error.bundle_merge.semantic_insert_after_removed_field"
+params = []
+remedy = "Restore the anchor field, or re-anchor or remove the field that depends on it."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.semantic_insert_after_collision"
+class = "none"
+summary = "Two sides anchor different custom fields to the same predecessor."
+explanation_key = "error.bundle_merge.semantic_insert_after_collision"
+params = []
+remedy = "Choose which field keeps the anchor, or re-anchor the other."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.semantic_script_hook_collision"
+class = "none"
+summary = "Two sides changed different scripts bound to the same hook point."
+explanation_key = "error.bundle_merge.semantic_script_hook_collision"
+params = []
+remedy = "Choose one script for the hook point, or merge the two changes by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.semantic_invalid_meta"
+class = "none"
+summary = "The merged metadata fails validation against the app definitions."
+explanation_key = "error.bundle_merge.semantic_invalid_meta"
+params = []
+remedy = "Fix the merged custom field or override the message names."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.upgrade_conflict"
+class = "none"
+summary = "A platform upgrade conflicts with a customisation in the bundle."
+explanation_key = "error.bundle_merge.upgrade_conflict"
+params = []
+remedy = "Resolve the release conflict named in the item before promoting the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.invalid_item"
+class = "none"
+summary = "An item's canonical bytes do not parse back into their typed value."
+explanation_key = "error.bundle_merge.invalid_item"
+params = []
+remedy = "Supply an item whose bytes are the canonical form its section defines."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.pack_failed"
+class = "none"
+summary = "The merged sections could not be packed into a bundle."
+explanation_key = "error.bundle_merge.pack_failed"
+params = []
+remedy = "Correct what the message names and retry the merge."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.unresolved_conflict"
+class = "none"
+summary = "A conflict has no resolution in the choices supplied to resolve."
+explanation_key = "error.bundle_merge.unresolved_conflict"
+params = []
+remedy = "Supply one resolution for every conflict before building the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.unknown_conflict"
+class = "none"
+summary = "A resolution names a conflict id the merge result does not carry."
+explanation_key = "error.bundle_merge.unknown_conflict"
+params = []
+remedy = "Resolve only the conflicts the merge result lists."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle_merge.duplicate_resolution"
+class = "none"
+summary = "Two resolutions name the same conflict."
+explanation_key = "error.bundle_merge.duplicate_resolution"
+params = []
+remedy = "Keep one resolution per conflict."
+since = "0.1.0"

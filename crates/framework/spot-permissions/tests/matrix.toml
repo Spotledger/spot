@@ -1,0 +1,435 @@
+# The document permission matrix, read by tests/matrix.rs (one test reads this file).
+#
+# A row names a principal (`roles` is shorthand for one unscoped assignment called `default`;
+# `assignments` lists assignments with their own scope), the action (`Action::as_str`), the
+# document facts and the expectation: `allowed`, the reason kinds in `codes` (in the engine's
+# deterministic order, `assignment` reasons left out) and, optionally, the `assignments` that
+# covered (`id:covers`) or did not (`id:outside`).
+#
+# Record values are the `customer_N` aliases the reader turns into record ids; `doc_a`..`doc_c`
+# are shared ids. The role names are the grants in tests/common/mod.rs.
+
+version = 1
+crate = "spot-permissions"
+
+[[scenarios]]
+name = "a single role reads"
+principal = { user = "dave", roles = ["Reader"] }
+action = "read"
+doctype = "project"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "another single role reads"
+principal = { user = "dave", roles = ["Writer"] }
+action = "read"
+doctype = "project"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "two roles both grant read"
+principal = { user = "dave", roles = ["Reader", "Writer"] }
+action = "read"
+doctype = "project"
+allowed = true
+codes = ["role_grant", "role_grant"]
+
+[[scenarios]]
+name = "the union gives the write only one role has"
+principal = { user = "dave", roles = ["Reader", "Writer"] }
+action = "update"
+doctype = "project"
+state = "draft"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a role without write is refused"
+principal = { user = "dave", roles = ["Reader"] }
+action = "update"
+doctype = "project"
+state = "draft"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "no roles, no right"
+principal = { user = "dave", roles = [] }
+action = "read"
+doctype = "project"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "an owner-only grant applies to the creator"
+principal = { user = "dave", roles = ["OwnerRole"] }
+action = "update"
+doctype = "project"
+state = "draft"
+created_by = "dave"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "an owner-only grant skips a document of someone else"
+principal = { user = "dave", roles = ["OwnerRole"] }
+action = "update"
+doctype = "project"
+state = "draft"
+created_by = "erin"
+allowed = false
+codes = ["owner_only", "no_grant"]
+
+[[scenarios]]
+name = "an owner-only read applies to the creator"
+principal = { user = "dave", roles = ["OwnerRole"] }
+action = "read"
+doctype = "project"
+created_by = "dave"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a new document has no creator yet"
+principal = { user = "dave", roles = ["OwnerRole"] }
+action = "update"
+doctype = "project"
+state = "draft"
+allowed = false
+codes = ["owner_only", "no_grant"]
+
+[[scenarios]]
+name = "a plain grant ignores the creator"
+principal = { user = "dave", roles = ["Writer"] }
+action = "update"
+doctype = "project"
+state = "draft"
+created_by = "erin"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a share grants read on its document"
+principal = { user = "sam", roles = [] }
+action = "read"
+doctype = "project"
+id = "doc_a"
+allowed = true
+codes = ["share"]
+
+[[scenarios]]
+name = "a read share does not grant write"
+principal = { user = "sam", roles = [] }
+action = "update"
+doctype = "project"
+state = "draft"
+id = "doc_a"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "a write share grants write"
+principal = { user = "sam", roles = [] }
+action = "update"
+doctype = "project"
+state = "draft"
+id = "doc_b"
+allowed = true
+codes = ["share"]
+
+[[scenarios]]
+name = "a share never lifts a state rule"
+principal = { user = "sam", roles = [] }
+action = "update"
+doctype = "sales_invoice"
+state = "posted"
+id = "doc_b"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "a share adds to a role"
+principal = { user = "sam", roles = ["Reader"] }
+action = "update"
+doctype = "project"
+state = "draft"
+id = "doc_b"
+allowed = true
+codes = ["share"]
+
+[[scenarios]]
+name = "a share does not reach another document"
+principal = { user = "sam", roles = [] }
+action = "read"
+doctype = "project"
+id = "doc_c"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "a share never lifts a scope that blocks every assignment"
+principal = { user = "sam", assignments = [{ id = "only-c1", roles = [], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }] }
+action = "read"
+doctype = "project"
+id = "doc_a"
+values = { customer = "customer_2" }
+allowed = false
+codes = ["user_permission_blocked"]
+
+[[scenarios]]
+name = "a posted invoice is not edited"
+principal = { user = "dave", roles = ["Editor"] }
+action = "update"
+doctype = "sales_invoice"
+state = "posted"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "update_posted changes a posted invoice"
+principal = { user = "dave", roles = ["Editor"] }
+action = "update_posted"
+doctype = "sales_invoice"
+state = "posted"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "update_posted needs a posted invoice"
+principal = { user = "dave", roles = ["Editor"] }
+action = "update_posted"
+doctype = "sales_invoice"
+state = "draft"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "a draft is posted"
+principal = { user = "dave", roles = ["Submitter"] }
+action = "post"
+doctype = "sales_invoice"
+state = "draft"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a posted invoice is not posted again"
+principal = { user = "dave", roles = ["Submitter"] }
+action = "post"
+doctype = "sales_invoice"
+state = "posted"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "a cancelled invoice is read"
+principal = { user = "dave", roles = ["Reader"] }
+action = "read"
+doctype = "sales_invoice"
+state = "cancelled"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a cancelled invoice is not edited"
+principal = { user = "dave", roles = ["Writer"] }
+action = "update"
+doctype = "sales_invoice"
+state = "cancelled"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "a posted invoice is cancelled"
+principal = { user = "dave", roles = ["Canceler"] }
+action = "cancel"
+doctype = "sales_invoice"
+state = "posted"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "a draft is not cancelled"
+principal = { user = "dave", roles = ["Canceler"] }
+action = "cancel"
+doctype = "sales_invoice"
+state = "draft"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "correct needs cancel and create: both present"
+principal = { user = "dave", roles = ["Canceler", "Corrector"] }
+action = "correct"
+doctype = "sales_invoice"
+state = "posted"
+allowed = true
+codes = ["role_grant", "role_grant"]
+
+[[scenarios]]
+name = "correct without create"
+principal = { user = "dave", roles = ["Canceler"] }
+action = "correct"
+doctype = "sales_invoice"
+state = "posted"
+allowed = false
+codes = ["role_grant", "no_grant"]
+
+[[scenarios]]
+name = "correct without cancel"
+principal = { user = "dave", roles = ["Corrector"] }
+action = "correct"
+doctype = "sales_invoice"
+state = "posted"
+allowed = false
+codes = ["role_grant", "no_grant"]
+
+[[scenarios]]
+name = "correct needs a posted original"
+principal = { user = "dave", roles = ["Canceler", "Corrector"] }
+action = "correct"
+doctype = "sales_invoice"
+state = "draft"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "a scoped assignment covers its own value"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_1" }
+allowed = true
+codes = ["role_grant"]
+assignments = ["a:covers"]
+
+[[scenarios]]
+name = "a scoped assignment does not cover another value"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_2" }
+allowed = false
+codes = ["user_permission_blocked"]
+assignments = ["a:outside"]
+
+[[scenarios]]
+name = "a scope on the link target reaches every link to it"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader"], scope = [{ field_or_link_doctype = "customer", allowed = ["customer_1"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_2" }
+allowed = false
+codes = ["user_permission_blocked"]
+
+[[scenarios]]
+name = "applies_to keeps a scope off other doctypes"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader"], scope = [{ field_or_link_doctype = "customer", allowed = ["customer_1"], applies_to = { only = ["sales_invoice"] } }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_2" }
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "Company B Viewer cannot write what Company A Manager can"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Manager"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }, { id = "b", roles = ["Viewer"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_2"] }] }] }
+action = "update"
+doctype = "project"
+state = "draft"
+values = { customer = "customer_2" }
+allowed = false
+codes = ["user_permission_blocked", "no_grant"]
+assignments = ["a:outside", "b:covers"]
+
+[[scenarios]]
+name = "Company B yields only the Viewer right"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Manager"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }, { id = "b", roles = ["Viewer"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_2"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_2" }
+allowed = true
+codes = ["role_grant", "user_permission_blocked"]
+assignments = ["a:outside", "b:covers"]
+
+[[scenarios]]
+name = "Company A yields the Manager right"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Manager"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }, { id = "b", roles = ["Viewer"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_2"] }] }] }
+action = "update"
+doctype = "project"
+state = "draft"
+values = { customer = "customer_1" }
+allowed = true
+codes = ["role_grant", "user_permission_blocked"]
+assignments = ["a:covers", "b:outside"]
+
+[[scenarios]]
+name = "a company outside both assignments is refused"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Manager"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }, { id = "b", roles = ["Viewer"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_2"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_3" }
+allowed = false
+codes = ["user_permission_blocked", "user_permission_blocked"]
+
+[[scenarios]]
+name = "an unscoped assignment covers what a scoped one blocks"
+principal = { user = "dave", assignments = [{ id = "u", roles = ["Reader"] }, { id = "s", roles = ["Reader"], scope = [{ field_or_link_doctype = "project.customer", allowed = ["customer_1"] }] }] }
+action = "read"
+doctype = "project"
+values = { customer = "customer_2" }
+allowed = true
+codes = ["role_grant", "user_permission_blocked"]
+assignments = ["s:outside", "u:covers"]
+
+[[scenarios]]
+name = "the system may do anything"
+principal = { user = "dave", roles = [], is_system = true }
+action = "delete"
+doctype = "project"
+allowed = true
+codes = ["system"]
+
+[[scenarios]]
+name = "an unknown doctype is refused"
+principal = { user = "dave", roles = ["Reader"] }
+action = "read"
+doctype = "ghost"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "the Tenant Administrator holds every right"
+principal = { user = "dave", roles = ["Tenant Administrator"] }
+action = "update"
+doctype = "project"
+state = "draft"
+allowed = true
+codes = ["role_grant"]
+
+[[scenarios]]
+name = "the Tenant Administrator is still bound by state rules"
+principal = { user = "dave", roles = ["Tenant Administrator"] }
+action = "update"
+doctype = "sales_invoice"
+state = "posted"
+allowed = false
+codes = ["posted_state"]
+
+[[scenarios]]
+name = "delete needs its own right"
+principal = { user = "dave", roles = ["Writer"] }
+action = "delete"
+doctype = "project"
+allowed = false
+codes = ["no_grant"]
+
+[[scenarios]]
+name = "a manager deletes"
+principal = { user = "dave", roles = ["Manager"] }
+action = "delete"
+doctype = "project"
+allowed = true
+codes = ["role_grant"]

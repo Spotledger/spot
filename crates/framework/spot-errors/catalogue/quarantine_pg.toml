@@ -1,0 +1,11 @@
+# quarantine_pg codes: the PostgreSQL quarantine store (WP-EDG-06.T4). One [[entry]] per code;
+# see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "quarantine_pg.migration_failed"
+class = "Internal"
+summary = "The quarantine store's tables could not be created in the database."
+explanation_key = "error.quarantine_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, triggers and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"

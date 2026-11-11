@@ -1,0 +1,46 @@
+[package]
+name = "spot-replica-apply"
+description = "The replication apply path (WP-EDG-06.T1, ADR-062, ADR-058): store a received document version with its child tables and its ledger and stock entries without business logic, side effects or new events; ownership and version checks; idempotent by name and version"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The only writes the apply path performs: documents, child rows and the transaction that
+# commits them atomically (ADR-053). The apply path never sees a backend type.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The sync wire model: `Record` and `RecordName` are the unit a batch carries, and `SourceId`
+# identifies the sender whose sequence the audit marker records (ADR-056, WP-EDG-02.T1).
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The receive-side ownership check: `ReplicaRecord`, `OwnerCheck::allow_replica` and the
+# effective-dated `PartitionRegistry` the apply path resolves the item's instant against
+# (WP-EDG-03.T1, ADR-062 G1).
+spot-partition = { path = "../spot-partition" }
+# Every apply writes a `replicated` audit marker through the tamper-evident audit chain
+# (ADR-061, WP-AI-11).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The record image and the replicated audit marker cross a process boundary as JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The record image carries exact decimals and instants (ADR-12); never a float.
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+time = { version = "0.3.55", default-features = false, features = ["std", "parsing", "formatting", "macros"] }
+# Record ids travel as UUIDv7 text (ADR-33).
+uuid = { version = "1.26", default-features = false, features = ["std"] }
+# Typed rejection reasons with stable `replica_apply.*` codes.
+thiserror = "2"
+# Object-safe async traits return boxed futures, as in spot-effect-hold.
+futures = "0.3"
+# The per-sender chain map behind an async mutex; `append` is awaited while it is held.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+
+[dev-dependencies]
+# The in-memory storage fake the acceptance tests run on (WP-CON-01.T2).
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# `#[tokio::test]` and a multi-thread runtime for the concurrency cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

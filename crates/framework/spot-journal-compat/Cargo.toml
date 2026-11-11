@@ -1,0 +1,33 @@
+[package]
+name = "spot-journal-compat"
+description = "The rebuild-from-the-previous-release test (WP-JRN-06.T2, ADR-061 s6): a frozen journal written by the previous release's fixtures — two sealed segments, a signed manifest, one signed snapshot — with the generator that writes those bytes, the loader that reads them into a memory store, today's upcaster registry, and the tests that rebuild the frozen journal with today's code and compare the result with a committed golden state"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The object-store seam the frozen journal is loaded into (the memory backend).
+spot-journal-store = { path = "../spot-journal-store" }
+# The sealed segment writer the generator seals the frozen entries with.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The signed manifest the fixture carries, and its verifying key set.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The snapshot writer the fixture's single snapshot is written with, and its reader.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The catalogue and plan the rebuild test drives.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# The rebuild executor under test, and its recording sink.
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+# Today's upcaster registry: the registry, its step builders and `check_patch`.
+spot-image-upcast = { path = "../spot-image-upcast" }
+# The fixture's documents, the golden state and the envelope lines are JSON.
+serde_json = "1"
+# The `Position` a segment entry is pushed at (the segment writer's own entry type).
+spot-events-contract = { path = "../../../contracts/events" }
+# Signs the fixture's manifest and snapshot index with a fixed TEST-ONLY key (never a real key).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,29 @@
+[package]
+name = "spot-sync-node"
+description = "Receiver side of sync (WP-SYN-04.T1, ADR-064 sections 6 and 7, ADR-065 section 1): apply a bundle atomically when its closure is complete, park it when a reference is missing, acknowledge only the applied prefix and feed the freshness tracker from the hub's horizons"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Bundles, record keys and roles: the unit the node receives.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# The freshness tracker the hub's horizons feed.
+spot-sync-freshness = { path = "../spot-sync-freshness" }
+# Per-record version-skew triage: an undecodable record is held, never parked or applied.
+spot-sync-skew = { path = "../spot-sync-skew" }
+# The hub source id a delivery must come from.
+spot-events-contract = { path = "../../../contracts/events" }
+# Typed node errors with stable `sync_node.*` codes.
+thiserror = "2"
+# Record images are JSON values; their compact length is the parked byte size.
+serde_json = "1"
+
+[dev-dependencies]
+# Arrival order is arbitrary: the applied set must not depend on it.
+proptest = "1"
+
+[lints]
+workspace = true

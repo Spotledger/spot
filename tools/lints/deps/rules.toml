@@ -1,0 +1,7 @@
+[classes]
+framework = "crates/framework"
+backend = "crates/backends"
+app = "crates/apps"
+
+[allowed]
+crate_names = ["spot-app-api"]

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-02.T4: tests for the realtime client. A scripted fake server drives it through
+       the in-memory transport; time comes from a manual TimeProvider, so no test sleeps for
+       a real duration to expire a backoff or a heartbeat. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+    <!-- Test names read as sentences and pin the contract's examples as literal arrays;
+         xUnit1051 asks for a CancellationToken on every awaited call, which these scripted
+         fake-server tests do not thread through. Same list as the other client test projects. -->
+    <NoWarn>$(NoWarn);CA1707;CA1861;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.Realtime/Spotledger.Client.Realtime.csproj" />
+  </ItemGroup>
+</Project>

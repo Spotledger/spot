@@ -1,0 +1,65 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "schema/widen_numeric:party.amount",
+      "area": "schema",
+      "kind": "schema_widen_type",
+      "rule": "schema/widen_type",
+      "target": "party.amount",
+      "description": "Do `widen_numeric:party.amount`.",
+      "before": "live schema",
+      "after": "catalogue",
+      "risk": "additive",
+      "blocking": "online"
+    }
+  ],
+  "risk": "additive",
+  "estimate": {
+    "low": 1,
+    "expected": 1,
+    "high": 2,
+    "per_change": [
+      {
+        "change_id": "schema/widen_numeric:party.amount",
+        "low": 1,
+        "expected": 1,
+        "high": 2,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "online",
+    "unknown": false
+  },
+  "plan_digest": "5a75e3362b65301d978c6d1013b29147f11f08fc2aaf187455b6dcf4cf0d4150",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "amount",
+              "type": "decimal",
+              "scale": 4,
+              "precision": 18
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

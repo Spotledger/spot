@@ -1,0 +1,47 @@
+# serverscript codes: the document-event Server Script tier (WP-EXT-06.T1). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "serverscript.compile_failed"
+class = "Validation"
+summary = "A Server Script's TypeScript source did not compile."
+explanation_key = "error.serverscript.compile_failed"
+params = []
+remedy = "Fix the reported syntax error on the source field; the diagnostic names the line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.limit_exceeded"
+class = "Internal"
+summary = "A Server Script exceeded one of its limits."
+explanation_key = "error.serverscript.limit_exceeded"
+params = []
+remedy = "Make the script faster and lighter, or raise its timeout; the operation was not saved."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.phase_violation"
+class = "Internal"
+summary = "A Server Script did something its lifecycle phase does not allow."
+explanation_key = "error.serverscript.phase_violation"
+params = []
+remedy = "Move the work to an event whose phase allows it: derive in before_*, check in validate, act in after_*."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.record_invalid"
+class = "Validation"
+summary = "A Server Script record is missing or malformed."
+explanation_key = "error.serverscript.record_invalid"
+params = []
+remedy = "Give the script a name, a DocType, one of the document events and TypeScript source."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.store_failed"
+class = "Internal"
+summary = "The script store could not load or record what it was asked to."
+explanation_key = "error.serverscript.store_failed"
+params = []
+remedy = "Report the failure with the request details; the store's backend is unavailable or misconfigured."
+since = "0.1.0"

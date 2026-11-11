@@ -1,0 +1,76 @@
+name = "custom_field"
+label = "Custom Field"
+app = "platform"
+module = "customisation"
+title_field = "field_name"
+
+# A field a site added to a DocType (WP-PLT-16.T1). The name must start with `custom_`, so it can
+# never collide with a field an app ships or adds later. Same pending/applied life as a
+# Custom DocType.
+
+[[fields]]
+name = "doctype"
+label = "DocType"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+in_standard_filter = true
+description = "The DocType the field is added to."
+
+[[fields]]
+name = "field_name"
+label = "Field name"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+description = "The field's storage name, starting with custom_."
+
+[[fields]]
+name = "spec"
+label = "Field spec"
+type = "long_text"
+required = true
+description = "The field, as the TOML text of a spot-meta field spec."
+
+[[fields]]
+name = "insert_after"
+label = "Insert after"
+type = "text"
+max_chars = 63
+description = "Place the field right after this one; at the end when empty."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\napplied\nfailed\nremoving\nremoved"
+required = true
+default = "pending"
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "reason"
+label = "Reason"
+type = "long_text"
+
+[[fields]]
+name = "intent"
+label = "Intent"
+type = "int"
+required = true
+read_only = true
+
+[[fields]]
+name = "actor"
+label = "Actor"
+type = "text"
+required = true
+max_chars = 140
+read_only = true
+
+[[indexes]]
+fields = ["doctype", "field_name"]
+unique = true

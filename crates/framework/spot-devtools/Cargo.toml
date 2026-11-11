@@ -1,0 +1,43 @@
+[package]
+name = "spot-devtools"
+description = "Developer debugging and tracing (WP-DX-03): a Debug Adapter Protocol server for TypeScript scripts, a unified trace across the layers, a developer trace viewer API and a WASM boundary view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId` and the injected `Clock` (this crate never reads the wall clock).
+spot-core = { path = "../spot-core" }
+# The engine a debug session runs a script on. The crate has no debug hooks of its own; the
+# line hooks this crate needs are injected into the transpiled source (see `debug::instrument`).
+spot-ts = { path = "../spot-ts" }
+# TypeScript in, JavaScript plus a v3 source map out: the source of breakpoint mappings.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# Every span attribute leaves the process through the same redactor as the logs.
+spot-redact = { path = "../spot-redact" }
+# The trace sink emits on the `tracing` pipeline that `spot-telemetry` installs.
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# This crate's own tests exercise the gated server entries.
+spot-devtools = { path = ".", features = ["dev-server"] }
+# The telemetry pipeline and its test subscriber: the trace-sink test proves a span reaches it.
+spot-telemetry = { path = "../spot-telemetry" }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[features]
+# The debug server's network and stdio entry points (`bind`, `serve_stdio`, `serve_tcp`,
+# `serve_one`, `serve_connection`). Off by default and never enabled by a production profile:
+# `tests/production_build.rs` fails when `spot-cli` (or the workspace) turns it on. Devtools are
+# compiled out of production builds.
+default = []
+dev-server = []
+
+[lints]
+workspace = true

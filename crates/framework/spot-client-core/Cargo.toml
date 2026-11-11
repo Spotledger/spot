@@ -1,0 +1,22 @@
+[package]
+name = "spot-client-core"
+description = "Sans-IO client core: request queue, retry policy, problem-details parsing, read cache and realtime resync as a state machine with no DOM, HTTP client, clock or storage (WP-WEB-10.T1, ADR-088 option C)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The optional persistence capability: with it on, the core asks the host to store
+# and read back the pending queue (never the session token). Off by default; the crate
+# builds and passes its corpus with it off.
+storage = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

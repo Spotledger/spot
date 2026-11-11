@@ -1,0 +1,42 @@
+# small-trader: unit and integration tests that need a realistic mix, about
+# 5k invoices plus 3k payments (600 per mille paid) over one year. Runs in
+# seconds; also used for the streaming (peak RSS) test.
+
+[period]
+start = "2026-01-01"
+end = "2026-12-31"
+
+[counts]
+companies = 3
+warehouses_per_company = 2
+items = 400
+customers = 250
+suppliers = 120
+sales_invoices = 3400
+purchase_invoices = 1600
+payments = 3000
+journal_entries = 500
+stock_transfers = 800
+stock_adjustments = 600
+
+[distributions]
+item_popularity_skew = 3
+customer_activity_skew = 2
+paid_share_per_mille = 600
+sales_return_per_mille = 80
+purchase_return_per_mille = 100
+opening_stock_coverage_per_mille = 600
+opening_stock_min_milli = 100
+opening_stock_max_milli = 50000
+opening_receivable_per_mille = 80
+opening_payable_per_mille = 150
+monthly_seasonality = [7, 6, 9, 8, 8, 10, 12, 11, 9, 10, 12, 14]
+
+[distributions.lines_per_invoice]
+min = 1
+peak = 2
+max = 6
+
+[distributions.payment_delay]
+min_days = 5
+max_days = 45

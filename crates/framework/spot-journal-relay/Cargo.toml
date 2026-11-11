@@ -1,0 +1,32 @@
+[package]
+name = "spot-journal-relay"
+description = "The journal relay (WP-JRN-03.T4, ADR-061 s5 and s10): a library over traits that takes batches of event-envelope lines for one tenant and source, makes them durable in the journal store in order (remote-sync tail chunk first, then sealed segments, then the signed manifest, then tail-chunk clean-up), repairs a crash between any two steps without losing or duplicating an entry, and stops on a split brain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The feed position (generation, seq) carried by every entry.
+spot-events-contract = { path = "../../../contracts/events" }
+# Sealed segment format, hash chain and sealing policy.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The signed manifest and its append-only growth rule.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The object-store seam and the per-tenant key layout.
+spot-journal-store = { path = "../spot-journal-store" }
+# SHA-256 for the tail chunk checksum and the hex form of a segment hash (the store's etag).
+sha2 = "0.10"
+# Typed errors with stable `journal_relay.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Drives the relay's futures in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# The fixed-key signer test double and the verifying key set (same version as spot-journal-manifest).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+proptest = "1"
+
+[lints]
+workspace = true

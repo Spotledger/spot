@@ -1,0 +1,53 @@
+[package]
+name = "spot-bpm-governance"
+description = "Governance for process-first operation (WS8, WP-BPM-08.T1, ADR-49, ADR-080): a per-company, per-record-type mode that is free by default, a pre-create guard that lets a record be created only inside its running request (or through the audited outside-process permission with a reason), and an audit record for every exception and refusal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The lifecycle hook points, the `Controller`/`HookContext` a guard step runs as, the
+# `Invocation`, the `Actor` and the `Document` a create attempt carries.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The `Topic`, `PayloadDocument` and `EventMeta` the governance audit event is built from, so it
+# rides the outbox in the same transaction as the record write (ADR-056, ADR-061).
+spot-events-contract = { path = "../../../contracts/events" }
+# `Outbox`, `OutboxEvent`, `NodeRef`, `Name`, `RecordId` and `Version`: the transactional enqueue
+# the audit event is written through.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The typed settings schema: the mode and the reason-length floor are settings, read through
+# `resolve`, never from a store directly (ADR-44).
+spot-settings = { path = "../spot-settings" }
+# `Principal`, the identity the outside-process permission is asked about (ADR-070).
+spot-permissions = { path = "../spot-permissions" }
+# `AuditRecord`, `Payload`, `PayloadValue` and `Subject`: the tamper-evident shape every
+# governance audit entry takes (WP-AI-11.T1).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Stable, derive-based serde on the policy, the case context and the audit entry.
+serde = { version = "1", features = ["derive"] }
+# The canonical JSON payload of the governance audit outbox event.
+serde_json = "1"
+# The one error type, with stable `bpm_governance.*` codes.
+thiserror = "2"
+# The instants the policy is effective-dated with; time is always an argument.
+time = { version = "0.3", features = ["serde"] }
+
+[dev-dependencies]
+# The real document engine, driven end to end so the guard is proven at the pre-create hook for
+# every channel (API, import and script all go through the same create lifecycle).
+spot-document = { path = "../spot-document" }
+# The in-memory storage backend the engine and the atomic-audit test run over.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The effective metadata the engine fixtures compile.
+spot-meta = { path = "../spot-meta" }
+# The empty step registry the engine fixtures build.
+spot-seams = { path = "../spot-seams" }
+# `ManualClock`: the engine reads time only through a clock.
+spot-core = { path = "../spot-core" }
+# The async runtime the storage backend and the audit enqueue need.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[lints]
+workspace = true

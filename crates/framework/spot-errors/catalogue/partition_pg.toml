@@ -1,0 +1,22 @@
+# partition_pg codes: the PostgreSQL partition registry and range allocator (WP-EDG-03.T8). A
+# failed call at run time is the trait's own partition.store (or the domain code such as
+# partition.ownership_conflict); these codes cover construction and preparation.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "partition_pg.prepare_failed"
+class = "none"
+summary = "The partition registry and range tables could not be created in the database."
+explanation_key = "error.partition_pg.prepare_failed"
+params = []
+remedy = "Check that the database user may create tables, functions and triggers and that the server is reachable, then retry prepare; the DDL is idempotent."
+since = "0.1.0"
+
+[[entry]]
+code = "partition_pg.unsupported_context"
+class = "none"
+summary = "The partition store cannot be built here: {reason}."
+explanation_key = "error.partition_pg.unsupported_context"
+params = ["reason"]
+remedy = "Build and use the store from a control-plane process, a CLI command or a job worker on a plain thread, with a bridge whose max_in_flight fits the pool; never from a request handler."
+since = "0.1.0"

@@ -1,0 +1,177 @@
+# Help for the webhook error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "webhook.bulkhead_full"
+what_happened = "Too many deliveries to this address are in progress at the same time."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait for concurrent deliveries to complete or increase the bulkhead limit.", "If it keeps happening, tell your administrator and quote the code webhook.bulkhead_full."]
+audience = "admin"
+
+[[help]]
+code = "webhook.circuit_open"
+what_happened = "Deliveries to this address are paused because it kept failing."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["The delivery will be retried when the circuit breaker allows probes.", "If it keeps happening, tell your administrator and quote the code webhook.circuit_open."]
+audience = "admin"
+
+[[help]]
+code = "webhook.condition_evaluation_failed"
+what_happened = "Webhook condition evaluation failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the condition expression or the event data it references.", "If it keeps happening, tell your administrator and quote the code webhook.condition_evaluation_failed."]
+audience = "operator"
+
+[[help]]
+code = "webhook.dead_letter"
+what_happened = "The webhook is in dead-letter state."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Review the delivery log, fix the underlying issue, and replay the delivery.", "If it keeps happening, tell your administrator and quote the code webhook.dead_letter."]
+audience = "operator"
+
+[[help]]
+code = "webhook.delivery_blocked"
+what_happened = "The webhook delivery was blocked by egress policy."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Contact your administrator to review the egress policy for this destination.", "If it keeps happening, tell your administrator and quote the code webhook.delivery_blocked."]
+audience = "user"
+
+[[help]]
+code = "webhook.delivery_failed"
+what_happened = "The webhook delivery failed after several attempts."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the delivery log for details. The webhook may be in dead-letter state.", "If it keeps happening, tell your administrator and quote the code webhook.delivery_failed."]
+audience = "operator"
+
+[[help]]
+code = "webhook.delivery_not_found"
+what_happened = "The webhook delivery was not found."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the delivery ID and try again.", "If it keeps happening, tell your administrator and quote the code webhook.delivery_not_found."]
+audience = "user"
+
+[[help]]
+code = "webhook.delivery_rate_limited"
+what_happened = "The webhook delivery was rate limited."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["The delivery will be retried automatically after the specified interval.", "If it keeps happening, tell your administrator and quote the code webhook.delivery_rate_limited."]
+audience = "admin"
+
+[[help]]
+code = "webhook.disabled"
+what_happened = "The webhook is disabled."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Enable the webhook in the webhook configuration.", "If it keeps happening, tell your administrator and quote the code webhook.disabled."]
+audience = "user"
+
+[[help]]
+code = "webhook.intake_failed"
+what_happened = "Webhook intake failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the system logs for details on the intake failure.", "If it keeps happening, tell your administrator and quote the code webhook.intake_failed."]
+audience = "operator"
+
+[[help]]
+code = "webhook.invalid_condition"
+what_happened = "Invalid condition expression."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the condition expression syntax and try again.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_condition."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_config"
+what_happened = "Invalid webhook configuration."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Review the webhook configuration and fix any errors.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_config."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_filter"
+what_happened = "Invalid filter."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Ensure at least one event type is specified and the document type exists.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_filter."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_headers"
+what_happened = "Invalid headers."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Check the header names and values for validity.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_headers."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_max_attempts"
+what_happened = "Invalid max attempts."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set max attempts between 1 and 100.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_max_attempts."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_payload_mode"
+what_happened = "Invalid content mode."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use one of: ids, fields, full.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_payload_mode."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_secret"
+what_happened = "Invalid secret."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the secret configuration and ensure it is properly sealed.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_secret."]
+audience = "operator"
+
+[[help]]
+code = "webhook.invalid_timeout"
+what_happened = "Invalid timeout."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set timeout between 1 and 300 seconds.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_timeout."]
+audience = "user"
+
+[[help]]
+code = "webhook.invalid_url"
+what_happened = "Invalid URL."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Provide a valid HTTP or HTTPS URL.", "If it keeps happening, tell your administrator and quote the code webhook.invalid_url."]
+audience = "user"
+
+[[help]]
+code = "webhook.not_found"
+what_happened = "The webhook was not found."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the webhook ID and try again, or create a new webhook.", "If it keeps happening, tell your administrator and quote the code webhook.not_found."]
+audience = "user"
+
+[[help]]
+code = "webhook.payload_too_large"
+what_happened = "The webhook content is too large."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Reduce the content size or use 'ids' content mode.", "If it keeps happening, tell your administrator and quote the code webhook.payload_too_large."]
+audience = "user"
+
+[[help]]
+code = "webhook.replay_failed"
+what_happened = "Webhook replay failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the delivery record exists and is in a replayable state.", "If it keeps happening, tell your administrator and quote the code webhook.replay_failed."]
+audience = "operator"
+
+[[help]]
+code = "webhook.secret_rotation_failed"
+what_happened = "Webhook secret rotation failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the secret configuration and try rotating again.", "If it keeps happening, tell your administrator and quote the code webhook.secret_rotation_failed."]
+audience = "operator"
+
+[[help]]
+code = "webhook.signature_verification_failed"
+what_happened = "Webhook signature verification failed."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Verify the signing secret matches and the content was not tampered with.", "If it keeps happening, tell your administrator and quote the code webhook.signature_verification_failed."]
+audience = "user"
+
+[[help]]
+code = "webhook.test_failed"
+what_happened = "Webhook test failed."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the webhook configuration and endpoint availability.", "If it keeps happening, tell your administrator and quote the code webhook.test_failed."]
+audience = "operator"

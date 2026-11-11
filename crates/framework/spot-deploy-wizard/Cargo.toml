@@ -1,0 +1,39 @@
+[package]
+name = "spot-deploy-wizard"
+description = "The guided deployment engine behind the Admin Center's 'Add server' wizard (WP-ADM-13.T1, blueprint WS22, ADR-44): topology validation, pre-flight checks over agent facts, an ordered and resumable plan of catalogued operations, a durable progress journal, signed-command execution and a time estimate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue every step is an entry in (WP-ADM-01.T1).
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The console signs the command each step submits; the wizard only builds the envelope.
+spot-signed-command = { path = "../spot-signed-command" }
+# The role and profile vocabulary a topology assigns and a step writes (WP-ADM-06.T1),
+# so the wizard and the agent modules cannot drift apart.
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+# Stable, derive-based serde on the topology, facts, plan and journal entries, so the
+# wizard's state rides the management API and a journal can be persisted.
+serde = { version = "1", features = ["derive"] }
+# The signed command's parameters are JSON; the plan hash and journal binding use SHA-256.
+serde_json = "1"
+sha2 = "0.10"
+# Typed errors with stable `deploy_wizard.*` codes.
+thiserror = "2"
+
+[features]
+# Test-only constructors (`Authorised::for_testing`, `ServerFacts::for_testing`). Never enabled
+# by a production build; the crate's own integration tests turn it on through the
+# self dev-dependency below.
+testing = []
+
+[dev-dependencies]
+spot-deploy-wizard = { path = ".", features = ["testing"] }
+# Random topologies: validation is total and reports every violation it finds.
+proptest = "1"
+
+[lints]
+workspace = true

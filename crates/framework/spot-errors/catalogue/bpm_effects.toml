@@ -1,0 +1,141 @@
+# bpm_effects codes (WP-BPM-15.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# These errors are raised on the host-driven path of a request's rewind and undo; they never ride
+# an `AppError`, so they have no error class. `point_of_no_return` and `reversal_refused` are
+# reason codes reported inside an undo decision rather than errors.
+
+[[entry]]
+code = "bpm_effects.request_locked"
+class = "none"
+summary = "An undo holds the request, so a forward step, a rewind or a second undo with a different plan was refused."
+explanation_key = "error.bpm_effects.request_locked"
+params = []
+remedy = "Wait for the undo to finish, resume it with the same plan, or abandon it at its open decision."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.node_unknown"
+class = "none"
+summary = "The node a rewind or undo targets has no entry or visit in the request's record file."
+explanation_key = "error.bpm_effects.node_unknown"
+params = []
+remedy = "Name a node the request has already finished."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.request_unknown"
+class = "none"
+summary = "The request has no record file, so there is nothing to rewind, plan or undo."
+explanation_key = "error.bpm_effects.request_unknown"
+params = []
+remedy = "Check the request id; a request that has run no step has no file."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.rewind_would_duplicate"
+class = "none"
+summary = "A rewind would make the revised path create a record a second time, and the process declares no revision mapping for that node."
+explanation_key = "error.bpm_effects.rewind_would_duplicate"
+params = []
+remedy = "Declare in the process how the node revises its record (update or correct), or undo the request instead of rewinding."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.stale_plan"
+class = "none"
+summary = "The undo plan was made for a record file that has changed since."
+explanation_key = "error.bpm_effects.stale_plan"
+params = []
+remedy = "Plan the undo again and execute the new plan."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.dependency_cycle"
+class = "none"
+summary = "The entries of the request depend on one another in a cycle, so no reversal order is safe."
+explanation_key = "error.bpm_effects.dependency_cycle"
+params = []
+remedy = "Review the links between the request's records; the lifecycle's own dependants rules decide what can be reversed first."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.limit_exceeded"
+class = "none"
+summary = "A bound was exceeded: entries in a request file, links of one entry, or effects in one receipt."
+explanation_key = "error.bpm_effects.limit_exceeded"
+params = []
+remedy = "Split the work across requests or reduce what one step reports."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.entry_invalid"
+class = "none"
+summary = "An entry is malformed: the receipt names no record, or the acting principal is empty or malformed."
+explanation_key = "error.bpm_effects.entry_invalid"
+params = []
+remedy = "Record the receipt exactly as the lifecycle returned it and pass a real acting principal."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.port_unavailable"
+class = "none"
+summary = "The lifecycle port could not complete a reversal; the undo stays held and can be resumed."
+explanation_key = "error.bpm_effects.port_unavailable"
+params = []
+remedy = "Fix the cause and run the same undo plan again; finished reversals are not repeated."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.cancellation_failed"
+class = "none"
+summary = "The partner cancellation message could not be sent; the undo stays held and can be resumed."
+explanation_key = "error.bpm_effects.cancellation_failed"
+params = []
+remedy = "Check the conversation and its contract, then run the same undo plan again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.no_such_decision"
+class = "none"
+summary = "No open decision accepts this choice: there is none, or the alternative is not one the record type offered."
+explanation_key = "error.bpm_effects.no_such_decision"
+params = []
+remedy = "Pick one of the alternatives listed on the open decision, or abandon."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.graph_unavailable"
+class = "none"
+summary = "The business graph could not answer which records depend on a record, so the undo failed closed."
+explanation_key = "error.bpm_effects.graph_unavailable"
+params = []
+remedy = "Check the graph projection and plan the undo again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.no_undo"
+class = "none"
+summary = "No undo is in progress for the request."
+explanation_key = "error.bpm_effects.no_undo"
+params = []
+remedy = "Plan and execute an undo first."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.point_of_no_return"
+class = "none"
+summary = "An effect of the request cannot be undone (irreversible, or no declaration covers it), so the undo runs nothing."
+explanation_key = "error.bpm_effects.point_of_no_return"
+params = []
+remedy = "Choose a later node as the target, or abandon; a point of no return is never forced."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_effects.reversal_refused"
+class = "none"
+summary = "The lifecycle refused a reversal without a stable reason code of its own."
+explanation_key = "error.bpm_effects.reversal_refused"
+params = []
+remedy = "Read the blockers on the open decision and pick an alternative or abandon."
+since = "0.1.0"

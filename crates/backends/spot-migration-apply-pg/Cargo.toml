@@ -1,0 +1,61 @@
+[package]
+name = "spot-migration-apply-pg"
+description = "The PostgreSQL wiring of the apply engine (WP-MIG-07.T2, ADR-22): the write-ahead journal in a control schema, the maintenance gate every request path consults (fail-closed, TTL cache, push invalidation), the step runner over spot-pg-migrate, the snapshot port over spot-snapshot with timing capture, and migration.progress over spot-realtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The engine, its journal/gate/step/snapshot/progress seams and its state machine.
+spot-migration-apply = { path = "../../framework/spot-migration-apply" }
+# The approved `ReleasePlan` and its `ApplyStep`s the runner executes.
+spot-migration-plan = { path = "../../framework/spot-migration-plan" }
+# `apply`, `plan`, `LiveSchema` and the plan's run kinds: the schema work is never re-implemented here.
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The providers the snapshot port wraps (`pg_dump` and stopped instance) and their manifest ids.
+spot-snapshot = { path = "../spot-snapshot" }
+# `PgBackend`, `PgConfig` and the pool configuration the host builds.
+spot-postgres = { path = "../spot-postgres" }
+# The `Catalog` the live schema is diffed against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `SiteId` and the injected `Clock` (no wall clock is ever read here).
+spot-core = { path = "../../framework/spot-core" }
+# The `migration.progress` notifications and the room authorizer seam.
+spot-realtime = { path = "../../framework/spot-realtime" }
+# The `Coordinator` trait the gate uses for its cluster-wide invalidation epoch.
+spot-coordinator = { path = "../../framework/spot-coordinator" }
+# The pool the host builds; the journal and the gate never share a business transaction.
+deadpool-postgres = "0.14"
+# `jsonb` journal records, and the SQLSTATE of a refused statement.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+# The progress payload, the journal record rendering, and the timing records a host may
+# serialise into its own report.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `BoxFuture`, `sleep` in the drain and the refresher, and `Notify` for push invalidation.
+tokio = { version = "1", default-features = false, features = ["rt", "time", "sync"] }
+# Typed errors with stable `migration_apply_pg.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# A unique, self-removing snapshot destination per test.
+tempfile = "3"
+# The in-memory reference gate, hold and progress sink, `site_id` and `sample_plan`.
+spot-migration-apply = { path = "../../framework/spot-migration-apply", features = ["testing"] }
+# The ticket the engine requires; additive plans auto-approve under the default policy.
+spot-migration-approval = { path = "../../framework/spot-migration-approval" }
+# Scratch databases and a raw client for the kill tests.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The real coordinator backend the gate's invalidation epoch is exercised with.
+spot-coordinator-pg = { path = "../spot-coordinator-pg" }
+# `ManualClock` in the tests: cache ages and timing capture are driven, never slept out.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# The fake provider's manifest checksums.
+sha2 = "0.10"
+# `#[tokio::test]` and the multi-thread runtime the kill child and probes use.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync", "process"] }
+
+[lints]
+workspace = true

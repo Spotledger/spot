@@ -1,0 +1,26 @@
+[package]
+name = "spot-manifest"
+description = "Spotledger app manifests (ADR-17): typed model, TOML parser with line/column errors and stable manifest.* codes, validation against the app API contract (WP-EXT-04.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one crates apps may depend on (gate G4): HookPoint, StepName, StepDecl, StepOverride,
+# OverrideKind, Phase/Target come from here, and storage Name for name checks via the prelude.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Span-aware TOML tables so every error can carry a line and a column.
+toml_edit = "0.22"
+# Version and VersionReq for requires_host, [app].version and depends.
+semver = "1"
+# The scheduler's cron grammar (WP-PLT-07): a schedule must parse here and there, so the
+# manifest accepts exactly what the scheduler can run.
+cron = "0.12"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

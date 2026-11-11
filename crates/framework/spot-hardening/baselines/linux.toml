@@ -1,0 +1,167 @@
+# The Linux hardening baseline (WP-ADM-10.T1, blueprint WS22, ADR-44).
+#
+# A fresh Linux server must reach this state automatically; every deviation is reported. The
+# controls are written from first principles and public security guidance in our own words —
+# they are not copied from any licensed benchmark. Each control names the facts an agent
+# reports (the `check`), the operation that remediates it (`remedy`, when one exists in the
+# management catalogue), and whether applying that remedy can cut off access to the host
+# (`lockout_risk`).
+#
+# Facts are the agent's normalised view of the host, for example `ssh.permit_root_login` is
+# the effective `PermitRootLogin` directive and `mac.mode` is the active mandatory-access-
+# control mode. A fact the host does not report makes its control not applicable.
+
+os_family = "linux"
+
+# SSH: root login must be off, or the SSH service must not be running at all. The remedy
+# disables the service, so it carries lock-out risk and is only applied with a guard.
+[[control]]
+id = "ssh.root_login"
+title = "SSH root login is disabled"
+os_family = "linux"
+severity = "high"
+reversible = true
+lockout_risk = true
+
+[control.check]
+kind = "any"
+checks = [
+    { kind = "bool", fact = "ssh.enabled", expect = false },
+    { kind = "text_in", fact = "ssh.permit_root_login", allow = ["no"] },
+]
+
+[control.remedy]
+op = "os.service.disable"
+params = { unit = { Text = "sshd" } }
+
+# SSH: password authentication must be off, or the SSH service must not be running. The
+# remedy is shared with the root-login control and carries the same lock-out risk.
+[[control]]
+id = "ssh.password_auth"
+title = "SSH password authentication is disabled"
+os_family = "linux"
+severity = "high"
+reversible = true
+lockout_risk = true
+
+[control.check]
+kind = "any"
+checks = [
+    { kind = "bool", fact = "ssh.enabled", expect = false },
+    { kind = "text_in", fact = "ssh.password_authentication", allow = ["no"] },
+]
+
+[control.remedy]
+op = "os.service.disable"
+params = { unit = { Text = "sshd" } }
+
+# Mandatory access control (SELinux or AppArmor) must be enforcing, not permissive or off.
+[[control]]
+id = "mac.enforcing"
+title = "Mandatory access control is enforcing"
+os_family = "linux"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "text_in"
+fact = "mac.mode"
+allow = ["enforcing"]
+
+# The inbound firewall must default to deny, not to allow.
+[[control]]
+id = "firewall.default_deny"
+title = "Inbound firewall defaults to deny"
+os_family = "linux"
+severity = "high"
+reversible = false
+lockout_risk = true
+
+[control.check]
+kind = "bool"
+fact = "firewall.default_inbound_deny"
+expect = true
+
+# Only the ports the deployment declares may be open inbound.
+[[control]]
+id = "firewall.declared_ports"
+title = "Only declared ports are open inbound"
+os_family = "linux"
+severity = "medium"
+reversible = false
+lockout_risk = true
+
+[control.check]
+kind = "subset"
+fact = "firewall.open_inbound_ports"
+allowed_fact = "firewall.declared_ports"
+
+# Security updates must be installed automatically (or on a fixed, unattended schedule).
+[[control]]
+id = "updates.security_auto"
+title = "Security updates are applied automatically"
+os_family = "linux"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "bool"
+fact = "updates.security_updates_automatic"
+expect = true
+
+# Only the services the node's role allows may be running.
+[[control]]
+id = "services.unnecessary"
+title = "Only role-allow-listed services are running"
+os_family = "linux"
+severity = "medium"
+reversible = false
+
+[control.check]
+kind = "subset"
+fact = "services.running"
+allowed_fact = "services.allowed"
+
+# Time must be synchronised, so logs, tokens and audit records agree.
+[[control]]
+id = "time.sync"
+title = "System time is synchronised"
+os_family = "linux"
+severity = "medium"
+reversible = true
+
+[control.check]
+kind = "bool"
+fact = "time.synchronised"
+expect = true
+
+[control.remedy]
+op = "os.service.enable"
+params = { unit = { Text = "chronyd" } }
+
+# The kernel hardening sysctls must be in place (for example restricted pointer exposure,
+# protected symlinks and hardlinks, and a non-zero `rp_filter`).
+[[control]]
+id = "kernel.sysctls"
+title = "Kernel hardening sysctls are set"
+os_family = "linux"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "bool"
+fact = "kernel.hardening_sysctls"
+expect = true
+
+# The Spotledger directories must not be world-readable or world-writable.
+[[control]]
+id = "files.spotledger_permissions"
+title = "Spotledger directories have safe permissions"
+os_family = "linux"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "bool"
+fact = "files.spotledger_dirs_secure"
+expect = true

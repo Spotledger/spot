@@ -1,0 +1,55 @@
+[package]
+name = "spot-nocode-publish"
+description = "Packaging and publishing a designer-built no-code app (WP-DX-08.T1): turn DocTypes, views, scripts, processes, reports and fixtures into a signed, validated .spotapp bundle, publish it through the store registry with a review hand-off, and install it on another tenant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one ZIP an app ships as: deterministic packing, the shared validator, the canonical digest.
+spot-bundle = { path = "../spot-bundle" }
+# The publisher signature over the canonical digest, and the verification the installer reuses.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The store registry: publish, version rules and verified fetch.
+spot-registry = { path = "../spot-registry" }
+# The install planner and executor the finished bundle is handed to.
+spot-installer = { path = "../spot-installer" }
+# The review report published beside the bundle before it is listed.
+spot-app-review = { path = "../spot-app-review" }
+# The manifest this crate writes and validates.
+spot-manifest = { path = "../spot-manifest" }
+# Capturing the site's customisation-type content into a content-addressed bundle.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# The designer's drafts, guard rails and plain-language validation.
+spot-nocode-model = { path = "../spot-nocode-model" }
+# DocType definitions carried in the declarative payload.
+spot-meta = { path = "../spot-meta" }
+# Form views carried in the declarative payload.
+spot-views = { path = "../spot-views" }
+# `SiteId` for validating drafts against the site they were designed on.
+spot-core = { path = "../spot-core" }
+# Versions and requirements.
+semver = "1"
+# The declarative payload, the manifest document and the review report.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+# Stable `nocode_publish.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory registry stores and the signing fixtures a real publish needs.
+spot-registry = { path = "../spot-registry" }
+# The executor fakes and failure injection; the end-to-end test runs the real installer.
+spot-installer = { path = "../spot-installer", features = ["testing"] }
+# The per-site lease the executor takes.
+spot-coordinator = { path = "../spot-coordinator" }
+# `ManualClock` and `SiteId` in the harness.
+spot-core = { path = "../spot-core" }
+time = { version = "0.3", features = ["std"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time", "test-util"] }
+
+[lints]
+workspace = true

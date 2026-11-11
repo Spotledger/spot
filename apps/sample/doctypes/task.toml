@@ -1,0 +1,128 @@
+# The Task: the work item every Time Entry books against (WP-DX-05.T1).
+#
+# Exercises: a link to the parent Project, the platform `User` link with a filtered
+# lookup (`assignee` only enabled users), the shared hours scale, a read-only
+# derived field (`logged_hours`: the controller owns it, users never send it), a
+# child table (`checklist`), the protection-group field (`details`, group
+# `confidential`, read by managers only), and the dynamic link (`related_to`: any
+# Project or Task, its DocType named per document in `related_type`).
+name = "task"
+label = "Task"
+app = "sample"
+module = "tasks"
+title_field = "subject"
+
+[[fields]]
+name = "subject"
+label = "Subject"
+type = "text"
+max_chars = 140
+required = true
+
+[[fields]]
+name = "project"
+label = "Project"
+type = "link"
+options = "project"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "assignee"
+label = "Assignee"
+type = "link"
+options = "user"
+in_list_view = true
+# A lookup with a site filter: the seam search users, and the parameter keeps the
+# choice to enabled users only (ADR-068 §3.2: params are fixed strings the seam
+# parses; the decision stays with the seam, never in the definition).
+[fields.lookup]
+params = { enabled_only = "true" }
+
+[[fields]]
+name = "project_owner"
+label = "Project Owner"
+type = "link"
+options = "user"
+read_only = true
+# The `fetch_from` field (WP-MET-02): a copy of the linked Project's `owner`,
+# derived by the controller's before-save step until the definition format
+# carries `fetch_from`. Read-only: the step fills it, users never set it.
+
+[[fields]]
+name = "priority"
+label = "Priority"
+type = "select"
+options = "Low\nMedium\nHigh\nUrgent"
+default = "Medium"
+in_standard_filter = true
+
+[[fields]]
+name = "due_date"
+label = "Due Date"
+type = "date"
+in_list_view = true
+
+[[fields]]
+name = "estimated_hours"
+label = "Estimated Hours"
+type = "decimal"
+scale = 2
+precision = 18
+# The same format as `time_entry.hours`: one rounding choice, shared (ADR-068 §2:
+# a format never changes the stored type, it fixes how the value reads).
+
+[[fields]]
+name = "logged_hours"
+label = "Logged Hours"
+type = "decimal"
+scale = 2
+precision = 18
+read_only = true
+description = "Rolls up from submitted Time Entries. Set only by the sample controller; a user value is refused."
+
+[[fields]]
+name = "status"
+label = "Status"
+type = "select"
+options = "Open\nIn Progress\nBlocked\nReview\nDone"
+default = "Open"
+required = true
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "details"
+label = "Details"
+type = "long_text"
+description = "Confidential notes: in the protection group `confidential`, which only Project Managers may read."
+
+[[fields]]
+name = "checklist"
+label = "Checklist"
+type = "table"
+options = "checklist_item"
+
+[[fields]]
+name = "blocked_reason"
+label = "Blocked Reason"
+type = "long_text"
+# The depends-on rule of ADR-068 §1.3: shown only when `status` is `Blocked`.
+# The definition format holds no `depends_on` property yet (WP-MET-02 reserved
+# `depends_on` in the descriptor table), so the condition is declared in the
+# description until the format arrives; the UI reads the description, the engine
+# needs nothing.
+description = "Visible only when the status is Blocked (a depends-on field rule, WP-MET-02)."
+
+[[fields]]
+name = "related_to"
+label = "Related To"
+type = "dynamic_link"
+options = "related_type"
+
+[[fields]]
+name = "related_type"
+label = "Related Type"
+type = "select"
+options = "project\ntask"

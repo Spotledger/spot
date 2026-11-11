@@ -1,0 +1,32 @@
+[package]
+name = "spot-desired-state"
+description = "Desired state and drift detection for groups of servers and tenants (WP-ADM-08.T1, blueprint WS22): typed settings, packages and services as the desired state, deterministic drift detection from agent reports, catalogue-operation remediation plans that need approval and a rehearsal, and bulk rollout in canary waves that halts on failure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed settings schema, its scopes and inheritance (fleet to group to server to tenant),
+# its resolution and its diff: a desired state is the same schema, never a second one.
+spot-settings = { path = "../spot-settings" }
+# ParamValue, OpId and Risk: every remediation step is a typed catalogue operation.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The wave/pause state machine (canary first, fleet-wide pause, explicit resume) reused as is.
+spot-fleet-rollout = { path = "../spot-fleet-rollout" }
+# Plain serde values for states, drifts, plans and reports.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for the plan digest, so an approval binds to exactly what apply runs.
+serde_json = "1"
+# SHA-256 over a domain prefix and the canonical plan text.
+sha2 = "0.10"
+# Typed errors with stable `desired_state.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every code this crate raises has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

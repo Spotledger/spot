@@ -1,0 +1,87 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "schema/add_column:party.note",
+      "area": "schema",
+      "kind": "schema_add_column",
+      "rule": "schema/add_column",
+      "target": "party.note",
+      "description": "Do `add_column:party.note`.",
+      "before": "live schema",
+      "after": "catalogue",
+      "risk": "additive",
+      "blocking": "online"
+    },
+    {
+      "id": "metadata/party/field_added/note",
+      "area": "metadata",
+      "kind": "field_added",
+      "rule": "metadata/field_added",
+      "target": "party.note",
+      "description": "Field `party.note` is added.",
+      "before": "absent",
+      "after": "Text",
+      "risk": "additive",
+      "blocking": "brief_lock"
+    }
+  ],
+  "risk": "additive",
+  "estimate": {
+    "low": 2,
+    "expected": 3,
+    "high": 6,
+    "per_change": [
+      {
+        "change_id": "metadata/party/field_added/note",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "brief_lock",
+        "unknown": false
+      },
+      {
+        "change_id": "schema/add_column:party.note",
+        "low": 1,
+        "expected": 1,
+        "high": 2,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "brief_lock",
+    "unknown": false
+  },
+  "plan_digest": "d8bcdf71769b080a101c10297a92a090271a6a8e99c70c63f585309cd08c2b8c",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            },
+            {
+              "name": "note",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

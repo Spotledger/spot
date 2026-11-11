@@ -1,0 +1,46 @@
+# journal_audit_job codes: the refusals of the scheduled journal audit job (WP-JRN-07.T5, ADR-061 s8). A refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. An audit that finds a mismatch or whose rebuild fails is a result row and a condition, not one of these. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_audit_job.provider_failed"
+class = "none"
+summary = "The {provider} provider of the journal audit job could not answer, so the audit that needed it did not run."
+explanation_key = "error.journal_audit_job.provider_failed"
+params = ["provider"]
+remedy = "Check that the tenant directory, the audit inputs and the result store are reachable; the job runs again on its next schedule."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_job.tenant_mismatch"
+class = "none"
+summary = "The {side} opened for a tenant's journal audit belong to another tenant than the schedule entry, so nothing was read or rebuilt."
+explanation_key = "error.journal_audit_job.tenant_mismatch"
+params = ["side"]
+remedy = "Open the audit inputs for the tenant the directory named; one audit audits one tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_job.condition_failed"
+class = "none"
+summary = "The conditions framework refused to raise or clear a journal audit condition: {code}."
+explanation_key = "error.journal_audit_job.condition_failed"
+params = ["code"]
+remedy = "Register the journal audit conditions with register_conditions on the registry the condition engine was built from."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_job.tenant_panicked"
+class = "none"
+summary = "The audit of one tenant panicked; the panic was contained and the other tenants were still audited."
+explanation_key = "error.journal_audit_job.tenant_panicked"
+params = []
+remedy = "Report the failure to the platform team; the next scheduled run audits the tenant again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_job.pass_aborted"
+class = "none"
+summary = "The blocking task that ran a journal audit pass did not finish, so the job asked to be retried."
+explanation_key = "error.journal_audit_job.pass_aborted"
+params = []
+remedy = "Report the failure to the platform team; the job runs the pass again on retry."
+since = "0.1.0"

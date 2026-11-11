@@ -1,0 +1,31 @@
+name = "invoice_line"
+is_child = true
+
+[[fields]]
+name = "item"
+type = "link"
+options = "item"
+
+[[fields]]
+name = "item_name"
+type = "text"
+read_only = true
+
+[[fields]]
+name = "qty"
+type = "decimal"
+scale = 3
+precision = 14
+
+[[fields]]
+name = "rate"
+type = "decimal"
+scale = 2
+precision = 14
+
+[[fields]]
+name = "amount"
+type = "decimal"
+scale = 2
+precision = 14
+read_only = true

@@ -1,0 +1,57 @@
+# fieldguard codes (WP-SEC-04.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. `permission.field_denied` and
+# `permission.reveal_denied` are catalogued in permission.toml; the guard raises them too.
+
+[[entry]]
+code = "fieldguard.reason_required"
+class = "Validation"
+summary = "A reveal needs a reason, and none was given."
+explanation_key = "error.fieldguard.reason_required"
+params = []
+remedy = "Say why the value is needed; the reason is kept in the audit record."
+since = "0.1.0"
+
+[[entry]]
+code = "fieldguard.reveal_bulk_refused"
+class = "PermissionDenied"
+summary = "Bulk reveal is for back-end services holding the bulk right; a person cannot use it."
+explanation_key = "error.fieldguard.reveal_bulk_refused"
+params = []
+remedy = "Reveal one document at a time, or run the work as a service with the reveal_bulk right."
+since = "0.1.0"
+
+[[entry]]
+code = "fieldguard.undeclared_system_access"
+class = "PermissionDenied"
+summary = "A job, sync or migration read a protected field of a group its manifest does not declare: {path}."
+explanation_key = "error.fieldguard.undeclared_system_access"
+params = ["path"]
+remedy = "Declare the protection group in the actor's manifest, or stop reading the field."
+since = "0.1.0"
+
+[[entry]]
+code = "fieldguard.trace_unavailable"
+class = "Unavailable"
+summary = "The field access trace could not take a record, so the protected value was withheld."
+explanation_key = "error.fieldguard.trace_unavailable"
+params = []
+remedy = "Retry shortly; if it persists, the trace consumer is behind and an operator must clear it."
+since = "0.1.0"
+
+[[entry]]
+code = "fieldguard.audit_unavailable"
+class = "Unavailable"
+summary = "The audit record of a reveal could not be written, so nothing was revealed."
+explanation_key = "error.fieldguard.audit_unavailable"
+params = []
+remedy = "Retry shortly; if it persists, the audit consumer is behind and an operator must clear it."
+since = "0.1.0"
+
+[[entry]]
+code = "fieldguard.unknown_doctype"
+class = "UnknownDocType"
+summary = "The DocType has no protection facts, so nothing of it can leave through this channel: {doctype}."
+explanation_key = "error.fieldguard.unknown_doctype"
+params = ["doctype"]
+remedy = "Check the DocType name, or load the metadata that defines it."
+since = "0.1.0"

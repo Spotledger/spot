@@ -1,0 +1,102 @@
+# retrieval codes — permission-aware retrieval (WP-AI-10.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. Every code stays library-internal: the host maps
+# them onto app-facing errors, so `class = "none"`.
+
+[[entry]]
+code = "retrieval.policy_parse"
+class = "none"
+summary = "The retrieval index policy is not valid TOML, or uses a key the policy does not accept: {detail}."
+explanation_key = "error.retrieval.policy_parse"
+params = ["detail"]
+remedy = "Fix the policy document; a new prefix is a new catalogue file, not a new key."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.policy_field_restricted"
+class = "none"
+summary = "The retrieval index policy indexes field {field} of {doctype}, which the permission rules restrict."
+explanation_key = "error.retrieval.policy_field_restricted"
+params = ["doctype", "field"]
+remedy = "Remove the field from the policy, or list it under restricted_ok to tag its chunks."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.policy_unknown_doctype"
+class = "none"
+summary = "The retrieval index policy names DocType {doctype}, which the metadata does not know."
+explanation_key = "error.retrieval.policy_unknown_doctype"
+params = ["doctype"]
+remedy = "Correct the DocType name in the policy, or remove the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.policy_unknown_field"
+class = "none"
+summary = "The retrieval index policy names field {field} of {doctype}, which does not exist."
+explanation_key = "error.retrieval.policy_unknown_field"
+params = ["doctype", "field"]
+remedy = "Correct the field name in the policy, or remove the field."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.policy_invalid"
+class = "none"
+summary = "The retrieval index policy is internally inconsistent: {detail}."
+explanation_key = "error.retrieval.policy_invalid"
+params = ["detail"]
+remedy = "Fix the policy: remove the duplicate, or make the overlap smaller than the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.embed_failed"
+class = "none"
+summary = "The retrieval embedding provider failed: {detail}."
+explanation_key = "error.retrieval.embed_failed"
+params = ["detail"]
+remedy = "Check the provider; the indexer leaves the feed position unchanged and retries."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.store_failed"
+class = "none"
+summary = "The retrieval vector store failed: {detail}."
+explanation_key = "error.retrieval.store_failed"
+params = ["detail"]
+remedy = "Check the store; the indexer leaves the feed position unchanged and retries."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.position_failed"
+class = "none"
+summary = "The retrieval position store failed: {detail}."
+explanation_key = "error.retrieval.position_failed"
+params = ["detail"]
+remedy = "Check the store; the next indexer run redelivers the unpersisted range."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.feed_failed"
+class = "none"
+summary = "Reading the change feed for retrieval failed: {detail}."
+explanation_key = "error.retrieval.feed_failed"
+params = ["detail"]
+remedy = "Check the feed; the indexer advances nothing and retries."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.document_too_large"
+class = "none"
+summary = "A document has more indexable characters than the indexer allows: {doctype}/{id} with {chars} characters."
+explanation_key = "error.retrieval.document_too_large"
+params = ["chars", "doctype", "id"]
+remedy = "Raise the indexer's limit, or split the document's text across fields."
+since = "0.1.0"
+
+[[entry]]
+code = "retrieval.query_too_long"
+class = "none"
+summary = "The retrieval query is longer than the retriever allows: {chars} characters."
+explanation_key = "error.retrieval.query_too_long"
+params = ["chars"]
+remedy = "Shorten the query, or raise the retriever's query limit."
+since = "0.1.0"

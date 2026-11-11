@@ -1,0 +1,35 @@
+[package]
+name = "spot-throttle-coordinator"
+description = "Coordinator-backed sign-in throttle for any front door (staff, partner, consumer): four independent rate dimensions, keyed digests only, fail closed (WP-IAM-11.T7, ADR-083 task 7)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Coordinator::take`, `RateLimit` and `Admit`: the shared, restart-proof counters this throttle is made of.
+spot-coordinator = { path = "../spot-coordinator" }
+# `KeyProvider` and its HKDF-derived key material: the master key `DerivedSalt` derives a
+# per-tenant, per-version salt from, so no raw salt is stored (WP-IAM-11.T12).
+spot-secrets = { path = "../spot-secrets" }
+# Keyed digest of every account name, address, e-mail and phone, so no raw value reaches the store.
+hmac = "0.12"
+sha2 = "0.10"
+# `OffsetDateTime`, the instant type a caller passes to `SaltRing::safe_to_retire`: the crate
+# reads no clock, so the rotation window is an argument. The same dependency `spot-coordinator`
+# uses for lease expiry, with the same features.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# The contract-suite feature of the coordinator, the in-process backend and `ManualClock`.
+spot-coordinator = { path = "../spot-coordinator", features = ["testing"] }
+spot-core = { path = "../spot-core" }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# The same cases run against the PostgreSQL coordinator when `SPOT_TEST_PG_URL` is set.
+spot-coordinator-pg = { path = "../../backends/spot-coordinator-pg" }
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

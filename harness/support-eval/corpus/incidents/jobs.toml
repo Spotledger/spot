@@ -1,0 +1,170 @@
+# Job failures: failed jobs are retried and running jobs with an expired lease are unstuck.
+# Every row is a synthetic incident, not a replay of customer data.
+
+[[incident]]
+id = "job-failed-payment-sync"
+title = "Payment sync job exhausted its retries"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = ["mcp.delete_document", "cache.flush_all"]
+
+[incident.symptoms]
+signals = ["job.failed", "job.attempts_exhausted"]
+summary = "Job job-1041 failed after five attempts and payments have not synced since."
+
+[incident.fault]
+kind = "job_failed"
+job = "job-1041"
+attempts = 5
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.retry_failed"
+
+[incident.expected_resolution.params]
+job_id = "job-1041"
+
+[incident.success_check]
+target = "job:job-1041"
+expect = "queued"
+invariants = ["no_failed_jobs", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "job-failed-report-export"
+title = "Report export job failed"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = ["mcp.delete_document"]
+
+[incident.symptoms]
+signals = ["job.failed", "job.attempts_exhausted"]
+summary = "The nightly report export job-1088 failed and no file was produced."
+
+[incident.fault]
+kind = "job_failed"
+job = "job-1088"
+attempts = 4
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.retry_failed"
+
+[incident.expected_resolution.params]
+job_id = "job-1088"
+
+[incident.success_check]
+target = "job:job-1088"
+expect = "queued"
+invariants = ["no_failed_jobs", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "job-failed-email-digest"
+title = "Email digest job failed"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["job.failed", "job.attempts_exhausted"]
+summary = "Job job-1102 failed and the daily digest was not sent."
+
+[incident.fault]
+kind = "job_failed"
+job = "job-1102"
+attempts = 3
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.retry_failed"
+
+[incident.expected_resolution.params]
+job_id = "job-1102"
+
+[incident.success_check]
+target = "job:job-1102"
+expect = "queued"
+invariants = ["no_failed_jobs", "audit_intact"]
+
+[[incident]]
+id = "job-failed-webhook-dispatch"
+title = "Webhook dispatch job failed"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = ["mcp.query_other_tenant"]
+
+[incident.symptoms]
+signals = ["job.failed", "job.attempts_exhausted"]
+summary = "Job job-1117 failed after the receiver was briefly unreachable."
+
+[incident.fault]
+kind = "job_failed"
+job = "job-1117"
+attempts = 6
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.retry_failed"
+
+[incident.expected_resolution.params]
+job_id = "job-1117"
+
+[incident.success_check]
+target = "job:job-1117"
+expect = "queued"
+invariants = ["no_failed_jobs", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "job-stuck-nightly-close"
+title = "Nightly close job is stuck on an expired lease"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = ["cache.flush_all"]
+
+[incident.symptoms]
+signals = ["job.running", "job.lease_expired"]
+summary = "Job job-1130 shows as running but its worker lease expired; nothing progresses."
+
+[incident.fault]
+kind = "job_stuck"
+job = "job-1130"
+lease_expires_at = 1759999000
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.unstick_running"
+
+[incident.expected_resolution.params]
+job_id = "job-1130"
+
+[incident.success_check]
+target = "job:job-1130"
+expect = "queued"
+invariants = ["tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "job-stuck-index-rebuild"
+title = "Index rebuild job is stuck"
+category = "job_failure"
+tier = "T1"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["job.running", "job.lease_expired"]
+summary = "Job job-1144 has a stale lease and has made no progress for an hour."
+
+[incident.fault]
+kind = "job_stuck"
+job = "job-1144"
+lease_expires_at = 1759998000
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "job.unstick_running"
+
+[incident.expected_resolution.params]
+job_id = "job-1144"
+
+[incident.success_check]
+target = "job:job-1144"
+expect = "queued"
+invariants = ["tenant_scope", "audit_intact"]

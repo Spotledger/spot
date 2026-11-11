@@ -1,0 +1,5 @@
+error: #[controller] goes on the type's own `impl` block (`impl MyController { .. }`), not on a trait impl; delegate `Controller::methods` and `call_method` to the generated `whitelisted_methods` and `whitelisted_call`
+  --> tests/ui/trait_impl.rs:21:6
+   |
+21 | impl T for C {
+   |      ^

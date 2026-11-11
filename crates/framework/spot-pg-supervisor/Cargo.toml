@@ -1,0 +1,52 @@
+# Spotledger PostgreSQL supervisor (WP-PRD-02.T1).
+#
+# Dependencies are deliberately few: tokio (process/time/sync/net) for the runtime,
+# thiserror for typed errors and tracing for diagnostics. The two platform
+# dependencies implement the process-death guarantees (see `platform.rs`).
+[package]
+name = "spot-pg-supervisor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio = { version = "1.47", features = ["fs", "io-util", "macros", "net", "process", "rt", "signal", "sync", "time"] }
+thiserror = "2"
+tracing = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+# The test-only `fake-postgres` program: behaves like initdb/pg_ctl/postgres driven by
+# environment variables, because CI machines have no PostgreSQL (see tests/support/).
+[[bin]]
+name = "fake-postgres"
+path = "tests/support/fake_postgres.rs"
+test = false
+
+# The workspace forbids `unsafe`; this crate needs exactly two small platform blocks
+# (prctl PR_SET_PDEATHSIG on Unix, the kill-on-close job object on Windows — see
+# `platform.rs`). Cargo merges `workspace = true` lists, so they are spelled out here
+# with the same values as [workspace.lints] in the root Cargo.toml.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

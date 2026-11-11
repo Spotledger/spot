@@ -1,0 +1,42 @@
+[package]
+name = "spot-effect-hold"
+description = "The side-effect hold (WP-MIG-08.T1, ADR-22): classify every external effect, hold all but fiscal transmissions while a migration is unverified, then release in the original order or discard, over a durable fail-closed ledger (feature `testing` for the backend-independent contract suite)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent ledger contract suite (`contract::run_all`), public so the PostgreSQL
+# ledger of a later task runs the same cases.
+testing = []
+
+[dependencies]
+# `SiteId`: which tenant an effect or hold belongs to (ADR-34).
+spot-core = { path = "../spot-core" }
+# The release lease: one releaser per site at a time.
+spot-coordinator = { path = "../spot-coordinator" }
+# Every hold transition is recorded in the tamper-evident audit chain (WP-AI-11).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Classification, the ledger records and the audit payloads derive serde so a database backend
+# can persist them; `serde_json` renders a record for the audit trail and for debugging.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `hold.*` codes.
+thiserror = "2"
+# `Notify`-style snapshots and the per-site audit mutex are async; `time` bounds the drain.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# `BoxFuture` for the object-safe async traits.
+futures = "0.3"
+
+[dev-dependencies]
+# `#[tokio::test]` and the multi-thread runtime for the racing and crash cases.
+tokio = { version = "1", default-features = false, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+# Random operation sequences for the invariant property test.
+proptest = "1"
+# The suite is a dev-dependency feature of this very crate for `tests/`.
+spot-effect-hold = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

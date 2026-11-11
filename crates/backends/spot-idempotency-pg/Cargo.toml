@@ -1,0 +1,60 @@
+[package]
+name = "spot-idempotency-pg"
+description = "PostgreSQL IdempotencyStore (WP-PLT-05.T7, ADR-082): an Idempotency-Key reservation and its stored response survive a restart and are seen by every node; a duplicate waits for the first and gets its response; the store failing closes the request"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `IdempotencyStore` port, `Reservation`, `KeyScope`, `StoredResponse` and the fail-closed
+# `IdempotencyError` this store reports.
+spot-http = { path = "../../framework/spot-http" }
+# `Clock`: every statement reads its time from the injected clock, never the system's.
+spot-core = { path = "../../framework/spot-core" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its one table.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# The stored headers are a JSON array of pairs, bound as text and cast in SQL.
+serde_json = "1"
+# The bounded wait between polls and the per-operation timeout.
+tokio = { version = "1", default-features = false, features = ["time"] }
+
+[dev-dependencies]
+# The `IdempotencyStore` contract suite and the router's own test support.
+spot-http = { path = "../../framework/spot-http", features = ["testing"] }
+# The migrator the table must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# `#[tokio::test]` and the multi-thread runtime for the restart and racing cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+# The router test support included from spot-http's tests (`tests/support`).
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1"
+base64 = "0.22"
+time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
+rust_decimal = "1"
+# WP-PLT-05.T10: the engine-backed secret-field suite (`tests/secret_field.rs`). The engine behind
+# the real router, with the sealed-field vault the host builds (`SecretBox` over a keyring).
+# The adapters between the router's service traits and the engine (`EngineResources`).
+spot-api-services = { path = "../../framework/spot-api-services" }
+# The engine, its `SecretBox` vault trait and `SecretCaller`/`SecretAccess`.
+spot-document = { path = "../../framework/spot-document", features = ["testing"] }
+# The DocType definitions and `Registry` the engine is built over.
+spot-meta = { path = "../../framework/spot-meta" }
+# The empty controller registry the engine requires.
+spot-seams = { path = "../../framework/spot-seams" }
+# `SecretBox`, `MemoryKeyring`, `Sealed`: the vault as the secrets service hosts it.
+spot-secrets = { path = "../../framework/spot-secrets" }
+# WP-PLT-05.T13: `Principal`, `Action`, `DocFacts` and `Decision`, the types of the `Authorizer` double in `tests/common/engine.rs`.
+spot-permissions = { path = "../../framework/spot-permissions" }
+
+[lints]
+workspace = true

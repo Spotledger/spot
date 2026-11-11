@@ -1,0 +1,43 @@
+[package]
+name = "spot-realtime-bridge"
+description = "The realtime feed and the permission rules (WP-PLT-08.T3, ADR-25): FeedPump maps committed change-feed and outbox entries onto room events, PermissionRoomAuthorizer decides every join over the permission core with revalidate for snapshot swaps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# SiteId: the pump serves one site, the authorizer is asked per site.
+spot-core = { path = "../spot-core" }
+# The bus, rooms, wire principals and the authorizer seam this crate implements.
+spot-realtime = { path = "../spot-realtime" }
+# The decision core: `can(Read)` and the DocFacts a document decision asks.
+spot-permissions = { path = "../spot-permissions" }
+# The change feed, positions and errors; the outbox records the notifications come from.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Lifecycle and identity topic vocabularies and the payload documents (actor, changed fields).
+spot-events-contract = { path = "../../../contracts/events" }
+# Typed `rtbridge.*` codes.
+thiserror = "2"
+# One warn line on a feed failure/resync; payloads are plain `serde_json::json!` values.
+serde_json = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+# `#[tokio::test]`, the multi-thread runtime for the stall test, and timeouts that turn a
+# stuck pump into a test failure instead of a hang.
+tokio = { version = "1", default-features = false, features = ["sync", "macros", "rt", "rt-multi-thread", "time"] }
+# The permission fixture: an EffectiveMeta the loaded model's grants must name, exactly as
+# spot-permissions' own tests build one.
+spot-meta = { path = "../spot-meta" }
+# `OffsetDateTime` for the manual bus clock.
+time = "0.3"
+# The notice suite only: the engine owns the `sys_user_notice` literal and the stored
+# `{user, payload}` shape, so one test asserts this crate's copy of the literal equals
+# `spot_document::engine::TOPIC_NOTICE` and that the engine's own reader accepts the event
+# this pump maps. A dev-dependency, never a dependency: the pump compiles without the engine.
+spot-document = { path = "../spot-document" }
+
+[lints]
+workspace = true

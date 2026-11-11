@@ -1,0 +1,541 @@
+# nocode_model codes: the no-code DocType and form designer (spot-nocode-model, WP-DX-06.T1).
+# Library-internal vocabulary: raised by the crate, explained to a designer by the host.
+# The summary is the plain-language message a business user reads; the remedy is the fix.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+# --- guard rails (raised by the draft itself) ---
+
+[[entry]]
+code = "nocode_model.reserved_name"
+class = "none"
+summary = "This name is reserved by the platform and cannot be used for a field or a DocType."
+explanation_key = "error.nocode_model.reserved_name"
+params = []
+remedy = "Choose another name; system columns and engine-managed fields keep their names."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_name"
+class = "none"
+summary = "This name is not a valid name."
+explanation_key = "error.nocode_model.bad_name"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.max_fields"
+class = "none"
+summary = "The DocType has more fields than the platform allows."
+explanation_key = "error.nocode_model.max_fields"
+params = []
+remedy = "Remove fields until the DocType is within the limit, or split it into two DocTypes."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.max_depth"
+class = "none"
+summary = "The design is nested deeper than the platform allows."
+explanation_key = "error.nocode_model.max_depth"
+params = []
+remedy = "Flatten the design: a child table cannot hold another child table, and a form holds at most fifty sections."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.no_script"
+class = "none"
+summary = "A value looks like script, and a design never runs code."
+explanation_key = "error.nocode_model.no_script"
+params = []
+remedy = "Enter plain data; use a rule or a condition builder instead of script."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.no_sql"
+class = "none"
+summary = "A value looks like a raw SQL statement, which a design may never carry."
+explanation_key = "error.nocode_model.no_sql"
+params = []
+remedy = "Enter plain data; the platform builds every query itself."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.protected_doctype"
+class = "none"
+summary = "This is a protected system DocType and cannot be edited by the designer."
+explanation_key = "error.nocode_model.protected_doctype"
+params = []
+remedy = "Design a new DocType instead, or ask a platform administrator for the change."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.needs_data_loss_confirmation"
+class = "none"
+summary = "Removing this field would delete its stored values and needs explicit confirmation."
+explanation_key = "error.nocode_model.needs_data_loss_confirmation"
+params = []
+remedy = "Confirm the deletion with the data-loss token, or keep the field."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.unknown_field"
+class = "none"
+summary = "The design names a field it does not have."
+explanation_key = "error.nocode_model.unknown_field"
+params = []
+remedy = "Add the field first, or correct its name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.unknown_child"
+class = "none"
+summary = "The design names a child DocType it does not have."
+explanation_key = "error.nocode_model.unknown_child"
+params = []
+remedy = "Add the child table first, or correct its name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.duplicate_field"
+class = "none"
+summary = "Two fields share this name."
+explanation_key = "error.nocode_model.duplicate_field"
+params = []
+remedy = "Give each field a unique name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.duplicate_section"
+class = "none"
+summary = "Two form sections share this id."
+explanation_key = "error.nocode_model.duplicate_section"
+params = []
+remedy = "Give each section a unique id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.duplicate_tab"
+class = "none"
+summary = "Two form tabs share this id."
+explanation_key = "error.nocode_model.duplicate_tab"
+params = []
+remedy = "Give each tab a unique id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.unknown_section"
+class = "none"
+summary = "The layout names a section it does not declare."
+explanation_key = "error.nocode_model.unknown_section"
+params = []
+remedy = "Add the section first, or correct its id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.unknown_tab"
+class = "none"
+summary = "The layout names a tab it does not declare."
+explanation_key = "error.nocode_model.unknown_tab"
+params = []
+remedy = "Add the tab first, or correct its id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_layout"
+class = "none"
+summary = "The form layout cannot take the shape asked of it."
+explanation_key = "error.nocode_model.bad_layout"
+params = []
+remedy = "A form carries tabs or top-level sections, never both; keep to one style."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_condition"
+class = "none"
+summary = "The condition could not be built into a rule."
+explanation_key = "error.nocode_model.bad_condition"
+params = []
+remedy = "Give every row a field, an operator and a value."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_naming"
+class = "none"
+summary = "The naming pattern is not one the platform accepts."
+explanation_key = "error.nocode_model.bad_naming"
+params = []
+remedy = "Use a series such as INV-.YYYY.-.#####, or field:<name>, or hash."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_target"
+class = "none"
+summary = "This DocType cannot be the target of a link or a child table."
+explanation_key = "error.nocode_model.bad_target"
+params = []
+remedy = "Link to a normal DocType, or make the target a child and add it as a child table."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.type_change_refused"
+class = "none"
+summary = "The field's type cannot change without losing or corrupting its values."
+explanation_key = "error.nocode_model.type_change_refused"
+params = []
+remedy = "Keep the type, add a new field of the wanted type, or map the values first."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.type_change_lossy"
+class = "none"
+summary = "The field's type can change, but some existing values will be cut, rounded or reinterpreted."
+explanation_key = "error.nocode_model.type_change_lossy"
+params = []
+remedy = "Review the values the change affects before publishing."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.publish_forbidden"
+class = "none"
+summary = "The caller does not hold the designer.publish permission."
+explanation_key = "error.nocode_model.publish_forbidden"
+params = []
+remedy = "Ask a platform administrator for the designer.publish permission."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.publish_failed"
+class = "none"
+summary = "The publish was refused or the store it writes to failed."
+explanation_key = "error.nocode_model.publish_failed"
+params = []
+remedy = "Read the publisher's message, fix the cause and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.not_ready"
+class = "none"
+summary = "The design is not valid, so it cannot be published yet."
+explanation_key = "error.nocode_model.not_ready"
+params = []
+remedy = "Fix every listed problem in the validation panel, then publish."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.existing_needs_prefix"
+class = "none"
+summary = "A new field on an existing DocType must be a custom field."
+explanation_key = "error.nocode_model.existing_needs_prefix"
+params = []
+remedy = "Let the designer name the field with the custom_ prefix."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.not_custom_field"
+class = "none"
+summary = "An app field cannot be removed from an existing DocType."
+explanation_key = "error.nocode_model.not_custom_field"
+params = []
+remedy = "Hide the field in the view instead of removing it."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.unsupported_op"
+class = "none"
+summary = "This edit is not supported for the element it names."
+explanation_key = "error.nocode_model.unsupported_op"
+params = []
+remedy = "Use the edit that fits the element, such as adding a child table with its child."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.bad_options"
+class = "none"
+summary = "The list of choices is empty or repeats a value."
+explanation_key = "error.nocode_model.bad_options"
+params = []
+remedy = "Give the field at least one choice, with no repeats."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.referenced"
+class = "none"
+summary = "The field is still referred to by another field, so it cannot be removed."
+explanation_key = "error.nocode_model.referenced"
+params = []
+remedy = "Remove or change the field that refers to it first."
+since = "0.1.0"
+
+# --- the metadata registry's codes, in plain language ---
+
+[[entry]]
+code = "nocode_model.meta_io"
+class = "none"
+summary = "The DocType definition could not be read."
+explanation_key = "error.nocode_model.meta_io"
+params = []
+remedy = "Save the design again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_parse"
+class = "none"
+summary = "The DocType definition could not be understood."
+explanation_key = "error.nocode_model.meta_parse"
+params = []
+remedy = "Correct the named element and save again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_file_name"
+class = "none"
+summary = "The definition's file name does not match the DocType it defines."
+explanation_key = "error.nocode_model.meta_file_name"
+params = []
+remedy = "Rename the DocType so the file and the DocType agree."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_invalid_name"
+class = "none"
+summary = "A name is not a valid storage name."
+explanation_key = "error.nocode_model.meta_invalid_name"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_reserved_name"
+class = "none"
+summary = "A name is reserved by the platform."
+explanation_key = "error.nocode_model.meta_reserved_name"
+params = []
+remedy = "Choose another name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_duplicate"
+class = "none"
+summary = "A DocType or field is defined more than once."
+explanation_key = "error.nocode_model.meta_duplicate"
+params = []
+remedy = "Remove the duplicate definition."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_unknown_target"
+class = "none"
+summary = "A link or child table points at a DocType that does not exist or cannot be targeted."
+explanation_key = "error.nocode_model.meta_unknown_target"
+params = []
+remedy = "Point the field at an installed DocType, or create the target first."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_table"
+class = "none"
+summary = "A child table is set up wrongly."
+explanation_key = "error.nocode_model.meta_bad_table"
+params = []
+remedy = "Make the target a child DocType used by exactly one table field."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_title_field"
+class = "none"
+summary = "The title field is missing or is not a text field."
+explanation_key = "error.nocode_model.meta_bad_title_field"
+params = []
+remedy = "Choose an existing text, long-text or select field as the title."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_property"
+class = "none"
+summary = "A field's property is missing, out of range, or not allowed for its type."
+explanation_key = "error.nocode_model.meta_bad_property"
+params = []
+remedy = "Correct the named property, or remove it from a field type that does not take it."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_default"
+class = "none"
+summary = "A field's default does not fit its type."
+explanation_key = "error.nocode_model.meta_bad_default"
+params = []
+remedy = "Enter a default the field's type accepts, or clear it."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_options"
+class = "none"
+summary = "A select field has no choices, or empty or repeated ones."
+explanation_key = "error.nocode_model.meta_bad_options"
+params = []
+remedy = "Give the field at least one choice, with no repeats."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_index"
+class = "none"
+summary = "An index names a field that does not exist or cannot be indexed."
+explanation_key = "error.nocode_model.meta_bad_index"
+params = []
+remedy = "Index a stored field; a table or secret field has no column to index."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_custom_field"
+class = "none"
+summary = "A custom field breaks the custom-field rules."
+explanation_key = "error.nocode_model.meta_bad_custom_field"
+params = []
+remedy = "Name a custom field with the custom_ prefix and give it a valid type."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_bad_override"
+class = "none"
+summary = "A property override is refused."
+explanation_key = "error.nocode_model.meta_bad_override"
+params = []
+remedy = "Change only the properties a site may override, and only in the allowed direction."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_unknown_seam"
+class = "none"
+summary = "A lookup names a seam this platform does not know."
+explanation_key = "error.nocode_model.meta_unknown_seam"
+params = []
+remedy = "Choose a lookup the platform offers, or use the default search."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_not_yet_supported"
+class = "none"
+summary = "A property is kept but not yet supported by the platform."
+explanation_key = "error.nocode_model.meta_not_yet_supported"
+params = []
+remedy = "Remove the unsupported property for now."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_unknown_name"
+class = "none"
+summary = "A change names a DocType or field that does not exist."
+explanation_key = "error.nocode_model.meta_unknown_name"
+params = []
+remedy = "Correct the name, or create the element first."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.meta_compile"
+class = "none"
+summary = "The design could not be compiled into the platform's metadata."
+explanation_key = "error.nocode_model.meta_compile"
+params = []
+remedy = "Fix the other listed problems; this one usually follows from them."
+since = "0.1.0"
+
+# --- the view layer's codes, in plain language ---
+
+[[entry]]
+code = "nocode_model.view_parse"
+class = "none"
+summary = "The form layout could not be read."
+explanation_key = "error.nocode_model.view_parse"
+params = []
+remedy = "Correct the named element and save again."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_bad_id"
+class = "none"
+summary = "A section, tab or group id is not a valid name."
+explanation_key = "error.nocode_model.view_bad_id"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_unknown_field"
+class = "none"
+summary = "The form shows a field the DocType does not have."
+explanation_key = "error.nocode_model.view_unknown_field"
+params = []
+remedy = "Remove the field from the form, or add the field to the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_unknown_control"
+class = "none"
+summary = "The form uses a control the platform does not offer."
+explanation_key = "error.nocode_model.view_unknown_control"
+params = []
+remedy = "Choose a control the platform offers."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_unknown_section"
+class = "none"
+summary = "The form names a section it does not declare."
+explanation_key = "error.nocode_model.view_unknown_section"
+params = []
+remedy = "Add the section, or correct its id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_unknown_tab"
+class = "none"
+summary = "The form names a tab it does not declare."
+explanation_key = "error.nocode_model.view_unknown_tab"
+params = []
+remedy = "Add the tab, or correct its id."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_unknown_anchor"
+class = "none"
+summary = "A move anchors to a field that is not in the target section."
+explanation_key = "error.nocode_model.view_unknown_anchor"
+params = []
+remedy = "Anchor to a field that is in the target section."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_duplicate"
+class = "none"
+summary = "Two sections, tabs, groups or actions share a name."
+explanation_key = "error.nocode_model.view_duplicate"
+params = []
+remedy = "Give each section, tab, group and action a unique name."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_bad_shape"
+class = "none"
+summary = "The form's parts do not fit its kind."
+explanation_key = "error.nocode_model.view_bad_shape"
+params = []
+remedy = "Keep to the parts a form allows."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_bad_op"
+class = "none"
+summary = "A layout operation is not valid for this form."
+explanation_key = "error.nocode_model.view_bad_op"
+params = []
+remedy = "Use an operation that suits the form."
+since = "0.1.0"
+
+[[entry]]
+code = "nocode_model.view_hidden_required"
+class = "none"
+summary = "The form hides a required field that has no default, so a save could be stranded."
+explanation_key = "error.nocode_model.view_hidden_required"
+params = []
+remedy = "Show the field, give it a default, or make it optional."
+since = "0.1.0"

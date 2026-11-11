@@ -1,0 +1,31 @@
+[package]
+name = "spot-agent-memory-pg"
+description = "PostgreSQL + pgvector MemoryStore for agent memory (WP-AI-09.T2): a separate database and role per tenant, episodic, procedural and deployment-fact tables with vector(n) embeddings, an HNSW or IVFFlat index chosen by size, hybrid recall with metadata filters and a recency boost, and a candidate-remedy queue whose promoted rows must carry a CI run id"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `MemoryStore` trait, the three entry kinds, the recall request, the sanitiser and the
+# `MemoryError` vocabulary this store implements.
+spot-agent-memory = { path = "../../framework/spot-agent-memory" }
+# `AppError`/`ErrorClass` for the schema-migration and provisioning errors.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `PgConfig`, the admin helpers that create a database, and the connection layer: a memory
+# database is created with this crate's own statement but the same validated-identifier rules.
+spot-postgres = { path = "../spot-postgres" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# The runtime the synchronous `MemoryStore` methods block on.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread"] }
+# The `actions`, `steps`, `confirmations` and fact-value columns are jsonb; the export is JSON.
+serde_json = "1"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

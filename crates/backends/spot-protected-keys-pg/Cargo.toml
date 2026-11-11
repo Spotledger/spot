@@ -1,0 +1,33 @@
+[package]
+name = "spot-protected-keys-pg"
+description = "PostgreSQL KeyStore for the protected-group key hierarchy (WP-SEC-10.T4): wrapped group keys per tenant, group and epoch with a compare-and-set epoch head, wrapped node keys, leases, revocation records and an append-only key history; only wrapped forms are stored, tenant-scoped, reached through the shared blocking bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `KeyStore` trait, its records and `KeyStoreError`.
+spot-protected-keys = { path = "../../framework/spot-protected-keys" }
+# The one shared blocking bridge (ADR-082 addendum 1); this crate never writes its own `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool whose size the constructor validates the bridge against.
+deadpool-postgres = "0.14"
+# The driver: transactions, SQLSTATE codes, bytea and bigint bindings.
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases and a raw client for the schema checks.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# Every code has a catalogue entry.
+spot-errors = { path = "../../framework/spot-errors" }
+# The setup runtime that prepares and inspects the scratch database from outside the bridge.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

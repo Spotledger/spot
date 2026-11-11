@@ -1,0 +1,59 @@
+[package]
+name = "spot-bpm-entry"
+description = "Process-first entry for the Business Process engine (WS8, WP-BPM-13.T1, ADR-080): the form step handler and its draft-record semantics, draft ownership by the request, the process_only guard with no bypass in any channel, entry-process resolution with a generated minimal default, batch start for imports with checkpoints and per-item outcomes, and the run label pair (default Request)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The lifecycle hook points, `Controller`/`HookContext`, `Document`, `Invocation`, `AppError`
+# and the prelude types (`Name`, `Value`, `RecordId`, `OffsetDateTime`) the draft port speaks.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The node-handler contract the form step plugs into: `NodeHandler`, `NodeCtx`, `NodeOutcome`,
+# `WaitSpec` and the `CaseId`.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The typed `FormConfig`/`DraftMode`, the process model the generated entry process is built
+# from, and the run-label keys and defaults (ADR-080 section 3).
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The mode (`free|governed|process_only`), the effective-dated `PolicyStore`, the audit sink and
+# the request context an invocation carries; the process_only guard sits beside governance.
+spot-bpm-governance = { path = "../spot-bpm-governance" }
+# The task inbox the form step opens its task in (`TaskService`, `TaskSpec`).
+spot-bpm-tasks = { path = "../spot-bpm-tasks" }
+# `NodeId`, the node identifier the engine hands a handler.
+spot-dag = { path = "../spot-dag" }
+# `Transition`, `complete` and `Unit::commit_with`: the step transition committed in the same
+# storage transaction as the draft write.
+spot-dag-exec = { path = "../spot-dag-exec" }
+# The `Transaction` the unit's work receives.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Stable, derive-based serde on the configs and reports.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for node configs, outputs and the task form payload.
+serde_json = "1"
+# The one error type, with stable `bpm_entry.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The real document engine: the guard and the ownership rule are proven at its lifecycle hooks
+# for every channel (API, import and script all create through the same lifecycle).
+spot-document = { path = "../spot-document" }
+# The in-memory storage backend the engine and the unit-of-work test run over.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The effective metadata the engine fixtures compile.
+spot-meta = { path = "../spot-meta" }
+# The empty step registry the engine fixtures build.
+spot-seams = { path = "../spot-seams" }
+# `ManualClock`: the engine reads time only through a clock.
+spot-core = { path = "../spot-core" }
+# `Principal`, for the (ignored) outside-process permission in the no-bypass test.
+spot-permissions = { path = "../spot-permissions" }
+# The async runtime the storage backend needs.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[lints]
+workspace = true

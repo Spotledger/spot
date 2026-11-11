@@ -1,0 +1,12 @@
+# fix_pipeline_pg codes: the setup refusal of the PostgreSQL fix journal (WP-AI-08.T2,
+# ADR-082 class C). Read and write failures reuse fix_pipeline.journal_failed; only what is new
+# is here. No message carries SQL, a connection string or a journal record.
+
+[[entry]]
+code = "fix_pipeline_pg.setup_failed"
+class = "none"
+summary = "The PostgreSQL fix journal could not be set up: the bridge configuration does not fit the pool, the runtime is current-thread, or the tables could not be prepared."
+explanation_key = "error.fix_pipeline_pg.setup_failed"
+params = []
+remedy = "Build the journal on a plain thread with a bridge sized for the pool (see the README), and check the database and the code in the message."
+since = "0.1.0"

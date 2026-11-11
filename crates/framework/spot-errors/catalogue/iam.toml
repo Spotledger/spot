@@ -1,0 +1,290 @@
+# iam codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The user directory's decision logic (spot-iam-directory) raises these; the API layer maps them.
+
+[[entry]]
+code = "iam.invalid_sign_in_name"
+class = "none"
+summary = "The sign-in name is neither an e-mail address nor a valid username."
+explanation_key = "error.iam.invalid_sign_in_name"
+params = []
+remedy = "Use an e-mail address, or a username of lower-case letters, digits, dots, underscores and hyphens."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invalid_display_name"
+class = "none"
+summary = "The display name is empty, too long or contains control characters."
+explanation_key = "error.iam.invalid_display_name"
+params = []
+remedy = "Give the user a display name of up to 200 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.party_link"
+class = "none"
+summary = "Only a portal user can be linked to a customer or supplier."
+explanation_key = "error.iam.party_link"
+params = []
+remedy = "Remove the party link, or make the user a portal user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.manager_self"
+class = "none"
+summary = "A user cannot be their own manager or receive their own open tasks."
+explanation_key = "error.iam.manager_self"
+params = []
+remedy = "Choose another user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invalid_state"
+class = "none"
+summary = "The user's enabled flag and deactivation time disagree."
+explanation_key = "error.iam.invalid_state"
+params = []
+remedy = "Correct the record so that an enabled user has no deactivation time and the time is not before creation."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.reason_required"
+class = "none"
+summary = "Enabling or disabling a user needs a reason."
+explanation_key = "error.iam.reason_required"
+params = []
+remedy = "Give a short reason, up to 500 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.last_admin"
+class = "none"
+summary = "The change would remove the last enabled administrator of a kind."
+explanation_key = "error.iam.last_admin"
+params = []
+remedy = "Appoint another administrator first, then repeat the change."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.break_glass_minimum"
+class = "none"
+summary = "Single sign-on is required, and fewer than two break-glass administrators would remain."
+explanation_key = "error.iam.break_glass_minimum"
+params = []
+remedy = "Appoint another break-glass administrator, or relax the sign-in policy first."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.has_acted"
+class = "none"
+summary = "A user that has acted cannot be deleted."
+explanation_key = "error.iam.has_acted"
+params = []
+remedy = "Deactivate or anonymise the user instead."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.anonymised"
+class = "none"
+summary = "An anonymised user cannot be enabled again."
+explanation_key = "error.iam.anonymised"
+params = []
+remedy = "Create a new user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invalid_email"
+class = "none"
+summary = "The invitation's address is not an e-mail address."
+explanation_key = "error.iam.invalid_email"
+params = []
+remedy = "Check the address and invite again."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invitation_type"
+class = "none"
+summary = "Only internal and portal users are invited by e-mail."
+explanation_key = "error.iam.invitation_type"
+params = []
+remedy = "Create service and agent users directly, as an administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invitation_used"
+class = "none"
+summary = "The invitation was already accepted."
+explanation_key = "error.iam.invitation_used"
+params = []
+remedy = "Sign in, or ask an administrator for a new invitation."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invitation_expired"
+class = "none"
+summary = "The invitation has expired."
+explanation_key = "error.iam.invitation_expired"
+params = []
+remedy = "Ask an administrator for a new invitation."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invitation_cancelled"
+class = "none"
+summary = "The invitation was cancelled."
+explanation_key = "error.iam.invitation_cancelled"
+params = []
+remedy = "Ask an administrator for a new invitation."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invalid_identity"
+class = "none"
+summary = "A linked identity needs an issuer and a subject of reasonable length."
+explanation_key = "error.iam.invalid_identity"
+params = []
+remedy = "Provide the issuer and subject exactly as the identity provider reports them."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.identity_taken"
+class = "none"
+summary = "This identity is already linked to another user."
+explanation_key = "error.iam.identity_taken"
+params = []
+remedy = "Unlink it from the other user first, or use a different identity."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.portal_role"
+class = "none"
+summary = "A portal user can hold no desk role."
+explanation_key = "error.iam.portal_role"
+params = []
+remedy = "Assign a portal role instead."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.no_password"
+class = "none"
+summary = "Service and agent users do not sign in with a password."
+explanation_key = "error.iam.no_password"
+params = []
+remedy = "Use an API key or client credentials."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.recovery_not_allowed"
+class = "none"
+summary = "The policy or the requester's standing does not allow this recovery."
+explanation_key = "error.iam.recovery_not_allowed"
+params = []
+remedy = "Ask an administrator, or ask for the policy to allow self-service recovery."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.invalid_name"
+class = "none"
+summary = "A role or duty name is empty, too long or contains control characters."
+explanation_key = "error.iam.invalid_name"
+params = []
+remedy = "Use a name of up to 100 characters without leading or trailing spaces."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.duplicate_name"
+class = "none"
+summary = "Two roles, or two duties, have the same name."
+explanation_key = "error.iam.duplicate_name"
+params = []
+remedy = "Rename one of them."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.grant_role"
+class = "none"
+summary = "A grant inside a duty or role names a different role than its owner."
+explanation_key = "error.iam.grant_role"
+params = []
+remedy = "Set the grant's role to the name of the duty or role that holds it."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.unknown_duty"
+class = "none"
+summary = "A role includes a duty that does not exist."
+explanation_key = "error.iam.unknown_duty"
+params = []
+remedy = "Add the duty, or remove it from the role."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.duty_version"
+class = "none"
+summary = "A role pins a duty version that the registry does not have."
+explanation_key = "error.iam.duty_version"
+params = []
+remedy = "Update the pin to the installed version, or install that version."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.unknown_parent"
+class = "none"
+summary = "A role inherits from a role that does not exist."
+explanation_key = "error.iam.unknown_parent"
+params = []
+remedy = "Add the parent role, or remove the inheritance."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.unknown_role"
+class = "none"
+summary = "An assignment gives a role that does not exist."
+explanation_key = "error.iam.unknown_role"
+params = []
+remedy = "Create the role, or correct the assignment."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.role_cycle"
+class = "none"
+summary = "Role inheritance forms a cycle."
+explanation_key = "error.iam.role_cycle"
+params = []
+remedy = "Remove one inheritance link in the named path."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.role_depth"
+class = "none"
+summary = "Role inheritance is deeper than eight roles."
+explanation_key = "error.iam.role_depth"
+params = []
+remedy = "Flatten the chain by removing an intermediate role."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.reference_readonly"
+class = "none"
+summary = "A reference role is read-only."
+explanation_key = "error.iam.reference_readonly"
+params = []
+remedy = "Copy the role and change the copy."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.duplicate_assignment"
+class = "none"
+summary = "Two assignments are the same assignment."
+explanation_key = "error.iam.duplicate_assignment"
+params = []
+remedy = "Remove the duplicate."
+since = "0.1.0"
+
+[[entry]]
+code = "iam.assignment_window"
+class = "none"
+summary = "An assignment ends at or before the time it starts."
+explanation_key = "error.iam.assignment_window"
+params = []
+remedy = "Set valid_to after valid_from."
+since = "0.1.0"

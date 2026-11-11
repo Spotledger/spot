@@ -1,0 +1,156 @@
+# sealed_fields codes (WP-SEC-10.T2). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. Messages name groups, fields and nodes only; never a
+# value, a key or a sealed blob.
+
+[[entry]]
+code = "sealed_fields.class_unset"
+class = "none"
+summary = "Protection group {group} is tagged secret, pii or financial and no sync class was chosen."
+explanation_key = "error.sealed_fields.class_unset"
+params = ["group"]
+remedy = "Choose a sync class for the group; a tagged group has no default."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.class_invalid"
+class = "none"
+summary = "Protection group {group} names sync class `{value}`, which is not one of everywhere, encrypted, sealed or home_only."
+explanation_key = "error.sealed_fields.class_invalid"
+params = ["group", "value"]
+remedy = "Set the group's class to one of the four documented names."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.setting_invalid"
+class = "none"
+summary = "The sync-class setting is not in the expected shape: {detail}."
+explanation_key = "error.sealed_fields.setting_invalid"
+params = ["detail"]
+remedy = "Write the table as one `group = class` line per protection group."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.unknown_group"
+class = "none"
+summary = "No protection group {group} is declared for this tenant."
+explanation_key = "error.sealed_fields.unknown_group"
+params = ["group"]
+remedy = "Declare the protection group before choosing its sync class."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.sealed_unreadable"
+class = "PermissionDenied"
+summary = "Sealed field {field} is written on this node and never read back on it."
+explanation_key = "error.sealed_fields.sealed_unreadable"
+params = ["field"]
+remedy = "Read the value at the hub, where the sealing key is held."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.tampered"
+class = "none"
+summary = "A sealed value or a protected field failed authentication."
+explanation_key = "error.sealed_fields.tampered"
+params = []
+remedy = "Do not trust the value; re-create it from its source."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.malformed"
+class = "none"
+summary = "A sealed value or a protected field is not in the expected shape."
+explanation_key = "error.sealed_fields.malformed"
+params = []
+remedy = "Produce the value again through the sealing path."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.lease_expired"
+class = "none"
+summary = "The key lease for group {group} has passed and the read fails closed."
+explanation_key = "error.sealed_fields.lease_expired"
+params = ["group"]
+remedy = "Request a fresh key release while the node's tier bound is still valid."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.node_revoked"
+class = "PermissionDenied"
+summary = "Node {node} is revoked and may hold no key and reveal nothing."
+explanation_key = "error.sealed_fields.node_revoked"
+params = ["node"]
+remedy = "Register a new node identity; a revoked node is never reinstated."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.hub_unavailable"
+class = "Unavailable"
+summary = "The hub did not answer, so the operation could not be completed."
+explanation_key = "error.sealed_fields.hub_unavailable"
+params = []
+remedy = "Check the node's connection to the hub and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.home_only"
+class = "Unavailable"
+summary = "Group {group} does not sync to a branch and is unavailable there."
+explanation_key = "error.sealed_fields.home_only"
+params = ["group"]
+remedy = "View the field at the hub, or ask the tenant to change the group's sync class."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.channel_unregistered"
+class = "none"
+summary = "Channel {channel} has no guard registration."
+explanation_key = "error.sealed_fields.channel_unregistered"
+params = ["channel"]
+remedy = "Register the channel with the guard before it emits a protected field."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.reveal_denied"
+class = "PermissionDenied"
+summary = "The field cannot be revealed for this principal and document."
+explanation_key = "error.sealed_fields.reveal_denied"
+params = []
+remedy = "Ask for the reveal right on the field's protection group."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.reveal_offline"
+class = "Unavailable"
+summary = "Reveal needs a live connection to the hub and this node is offline."
+explanation_key = "error.sealed_fields.reveal_offline"
+params = []
+remedy = "Reconnect to the hub and reveal again; the masked form works offline."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.reveal_bulk_denied"
+class = "PermissionDenied"
+summary = "Bulk reveal is for service principals only."
+explanation_key = "error.sealed_fields.reveal_bulk_denied"
+params = []
+remedy = "Reveal one document at a time, or declare the group in a service manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.group_undeclared"
+class = "PermissionDenied"
+summary = "Group {group} is not declared in the service principal's manifest."
+explanation_key = "error.sealed_fields.group_undeclared"
+params = ["group"]
+remedy = "Declare the group the service reads in its manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields.audit_unavailable"
+class = "Unavailable"
+summary = "The reveal could not be audited, so nothing was released."
+explanation_key = "error.sealed_fields.audit_unavailable"
+params = []
+remedy = "Restore the audit sink and reveal again."
+since = "0.1.0"

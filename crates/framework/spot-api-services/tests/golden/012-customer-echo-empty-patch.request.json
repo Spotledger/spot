@@ -1,0 +1,8 @@
+{
+  "changed": "customer",
+  "doc": {
+    "customer": "01970000-0000-7000-8000-0000000000c1",
+    "customer_name": "Acme Ltd",
+    "number": "INV-12"
+  }
+}

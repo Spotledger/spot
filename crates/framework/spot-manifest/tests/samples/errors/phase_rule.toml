@@ -1,0 +1,8 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[events]]
+doctype = "Sales Invoice"
+event = "committed_create"
+step = "erp_selling:x"

@@ -1,0 +1,7 @@
+name = "note_row"
+is_child = true
+
+[[fields]]
+name = "text"
+type = "text"
+required = true

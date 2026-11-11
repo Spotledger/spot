@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.FieldDialog">
+  <!-- A palette drop's dialog: the field's label and storage name, before the field exists. The
+       draft model has no change-a-label op, so naming it here is the only chance to get it right. -->
+  <Border Background="#88000000" IsVisible="{Binding FieldDialog.IsOpen}">
+    <Border MaxWidth="480" Margin="24" Padding="16" CornerRadius="6"
+            Background="{DynamicResource Color.Surface.Raised}"
+            BorderBrush="{DynamicResource Color.Border.Strong}"
+            BorderThickness="1">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding FieldDialog.TypeTitle}"
+                   FontSize="{DynamicResource Font.Size.Heading}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBlock Text="{Binding FieldDialog.TypeDescription}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBlock Text="Label" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding FieldDialog.Label, Mode=TwoWay}" PlaceholderText="What people see on the form" />
+        <TextBlock Text="Name" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding FieldDialog.Name, Mode=TwoWay}" PlaceholderText="What reports and the API use" />
+        <TextBlock Text="{Binding FieldDialog.NameHint}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+          <Button Content="Cancel" Command="{Binding FieldDialog.CancelCommand}" />
+          <Button Content="Add field" Command="{Binding FieldDialog.CreateCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Border>
+</UserControl>

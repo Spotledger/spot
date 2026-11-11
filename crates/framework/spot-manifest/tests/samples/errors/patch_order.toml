@@ -1,0 +1,13 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[patches]]
+id = "2026_02_b"
+file = "patches/b.toml"
+intent = "data"
+
+[[patches]]
+id = "2026_01_a"
+file = "patches/a.toml"
+intent = "data"

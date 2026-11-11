@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/apps/app-one",
+    "crates/framework/core",
+]
+resolver = "2"

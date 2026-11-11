@@ -1,0 +1,55 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.project_health",
+      "origin": "app:sample",
+      "props": [
+        {
+          "name": "open",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "total",
+          "type": "int",
+          "required": true
+        }
+      ],
+      "slots": [
+        "footer"
+      ],
+      "body": {
+        "node": "column",
+        "title": "Project health",
+        "children": [
+          {
+            "node": "control",
+            "control": "heading",
+            "text": "Project health"
+          },
+          {
+            "node": "when",
+            "test": "doc.total > 0",
+            "then": {
+              "node": "control",
+              "control": "progress",
+              "value": "doc.total - doc.open"
+            }
+          },
+          {
+            "node": "control",
+            "control": "number",
+            "value": "doc.open"
+          },
+          {
+            "node": "slot",
+            "name": "footer"
+          }
+        ]
+      }
+    }
+  ]
+}

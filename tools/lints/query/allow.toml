@@ -1,0 +1,30 @@
+# Exceptional source files require a narrow path, a regex matching the G5 finding,
+# and a reason. Prefer removing the backend-specific code over adding an exception.
+# [[allow]]
+# path = "crates/apps/example/src/legacy.rs"
+# pattern = "SQL SELECT"
+# reason = "Temporary compatibility bridge; remove after migration"
+[[allow]]
+path = "crates/framework/spot-document/tests/secrets/raw_rows.rs"
+pattern = "SQL SELECT"
+reason = "WP-SEC-03.T3: the secret-field tests read every stored row back as raw text to prove no plaintext credential reaches storage; this one helper file is the only place such SQL lives, in tests only"
+
+[[allow]]
+path = "crates/framework/spot-migration-apply/tests/traversal_index_pg.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "WP-STO-07.T3: the test proves with EXPLAIN on a real PostgreSQL that the planned traversal index serves a recursive traversal; the plan text exists only in a database, so this one test file reads it through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/identity_chain.rs"
+pattern = "SQL (SELECT|UPDATE|DELETE|ALTER|DROP)"
+reason = "WP-PRD-01.T16: the identity-chain tests prove the audit table's guard and the chain's verification by reading the stored row, tampering with it as the table owner under the documented maintenance switch, and breaking the store on purpose; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/audit_verify_cmd.rs"
+pattern = "SQL (UPDATE|DELETE|DROP)"
+reason = "WP-PRD-01.T50: the `spot audit verify` command tests prove the verifier detects a broken chain by tampering with stored audit entries as the table owner (update, delete) and by dropping the table, in a throwaway test database; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/secrets_host.rs"
+pattern = "SQL SELECT"
+reason = "WP-SEC-03.T9: the secrets-host test reads the stored sealed column of a throwaway test database back as raw bytes to prove the credential value is not in the database in the clear; such a read exists only in a database, so this one test file issues the single SELECT through the pool. Tests only."

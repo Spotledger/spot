@@ -1,0 +1,200 @@
+# connector codes (WP-INT-05.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "connectors.not_found"
+class = "none"
+summary = "No connector with the id {id} is installed."
+explanation_key = "error.connectors.not_found"
+params = ["id"]
+remedy = "Install the connector before invoking it, or check the id."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.bad_bundle"
+class = "none"
+summary = "The connector bundle is not valid: {reason}."
+explanation_key = "error.connectors.bad_bundle"
+params = ["reason"]
+remedy = "Rebuild the bundle from a valid connector source and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.unverified"
+class = "none"
+summary = "The connector bundle's signature did not verify: {reason}."
+explanation_key = "error.connectors.unverified"
+params = ["reason"]
+remedy = "Sign the bundle with a certificate that chains to a trusted root and is not revoked."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.bad_input"
+class = "none"
+summary = "The operation's input is not valid: {reason}."
+explanation_key = "error.connectors.bad_input"
+params = ["reason"]
+remedy = "Send input that matches the operation's input schema."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.bad_request"
+class = "none"
+summary = "The outbound request is malformed: {reason}."
+explanation_key = "error.connectors.bad_request"
+params = ["reason"]
+remedy = "Fix the request the connector builds; only GET, POST, PUT, PATCH and DELETE are allowed."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.unknown_operation"
+class = "none"
+summary = "The connector has no operation named {operation}."
+explanation_key = "error.connectors.unknown_operation"
+params = ["operation"]
+remedy = "Check the connector's operations in its description."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.unsupported"
+class = "none"
+summary = "The connector does not support {what}."
+explanation_key = "error.connectors.unsupported"
+params = ["what"]
+remedy = "Use a connector that supports the feature, or stop calling it."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.egress_denied"
+class = "none"
+summary = "The outbound destination {host} is not allowed by policy."
+explanation_key = "error.connectors.egress_denied"
+params = ["host"]
+remedy = "Ask your administrator to add the destination to the tenant's allow-list."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.endpoints_required"
+class = "none"
+summary = "The connector {connector} injects authentication but declares no endpoints."
+explanation_key = "error.connectors.endpoints_required"
+params = ["connector"]
+remedy = "List the hosts the credential may be sent to in the connector's endpoints, or remove the authentication."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.secret_denied"
+class = "none"
+summary = "The connector may not read the credential {reference}."
+explanation_key = "error.connectors.secret_denied"
+params = ["reference"]
+remedy = "Declare the reference on the connector, or let the host inject it instead."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.secret_unavailable"
+class = "none"
+summary = "The credential {reference} could not be resolved."
+explanation_key = "error.connectors.secret_unavailable"
+params = ["reference"]
+remedy = "Store the credential in the vault under that reference."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.host_failure"
+class = "none"
+summary = "The connector host failed: {reason}."
+explanation_key = "error.connectors.host_failure"
+params = ["reason"]
+remedy = "Check the host logs; retry the call."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.timeout"
+class = "none"
+summary = "The connector did not finish within {millis} milliseconds."
+explanation_key = "error.connectors.timeout"
+params = ["millis"]
+remedy = "Raise the connector's wall-clock limit or make the operation faster."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.out_of_fuel"
+class = "none"
+summary = "The connector used all {fuel} units of fuel."
+explanation_key = "error.connectors.out_of_fuel"
+params = ["fuel"]
+remedy = "Raise the connector's fuel limit or make the operation do less work."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.trapped"
+class = "none"
+summary = "The connector trapped: {reason}."
+explanation_key = "error.connectors.trapped"
+params = ["reason"]
+remedy = "Fix the connector; the trap is a bug in the component."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.too_many_host_calls"
+class = "none"
+summary = "The connector made more than {limit} host calls."
+explanation_key = "error.connectors.too_many_host_calls"
+params = ["limit"]
+remedy = "Raise the connector's host-call limit or reduce its host calls."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.output_too_large"
+class = "none"
+summary = "The connector's result is larger than {limit} bytes."
+explanation_key = "error.connectors.output_too_large"
+params = ["limit"]
+remedy = "Raise the connector's output limit or return less data."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.circuit_open"
+class = "none"
+summary = "The connector's circuit breaker is open for {retry_after_secs} seconds."
+explanation_key = "error.connectors.circuit_open"
+params = ["retry_after_secs"]
+remedy = "Wait for the breaker to half-open, or fix the connector's failures."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.mapping"
+class = "none"
+summary = "The mapping rule {rule} failed: {reason}."
+explanation_key = "error.connectors.mapping"
+params = ["reason", "rule"]
+remedy = "Fix the rule's source path, expression or coercion."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.kv_limit"
+class = "none"
+summary = "The connector's key-value store is at its {limit}-byte limit."
+explanation_key = "error.connectors.kv_limit"
+params = ["limit"]
+remedy = "Raise the connector's key-value budget or store less state."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.oauth_refresh"
+class = "none"
+summary = "An OAuth2 token refresh failed: {reason}."
+explanation_key = "error.connectors.oauth_refresh"
+params = ["reason"]
+remedy = "Check the token endpoint and the client credentials, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "connectors.guest"
+class = "none"
+summary = "The connector returned its own error {code}: {message}."
+explanation_key = "error.connectors.guest"
+params = ["code", "message"]
+remedy = "Read the connector's error and fix the call or the connector."
+since = "0.1.0"

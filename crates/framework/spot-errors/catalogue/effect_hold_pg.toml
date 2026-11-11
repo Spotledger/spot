@@ -1,0 +1,15 @@
+# effect_hold_pg codes: the PostgreSQL ledger of the side-effect hold (WP-MIG-08.T2). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# Database and pool failures while reading or writing the ledger are not separate codes: they are
+# reported as the hold's own `effect_hold.ledger_unavailable`, which the hold treats as "stay
+# held". This code is the backend's only own code: `prepare` could not create its tables.
+
+[[entry]]
+code = "effect_hold_pg.migration_failed"
+class = "Internal"
+summary = "The side-effect hold ledger's tables could not be created in the database."
+explanation_key = "error.effect_hold_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and that the server is reachable, then retry prepare."
+since = "0.1.0"

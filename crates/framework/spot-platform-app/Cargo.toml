@@ -1,0 +1,30 @@
+[package]
+name = "spot-platform-app"
+description = "The platform's own app (WP-IAM-02.T2): User, Role, Role Assignment, Linked Identity, API Key, Session and Login Attempt as app metadata with credential fields in closed protection groups, the system role grants, and the idempotent bootstrap of the Administrator and the system roles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Definition`, the TOML format of a DocType, and `MetaError`.
+spot-meta = { path = "../spot-meta" }
+# `ModelTexts`, `Model` and `load`: the shipped grants load through the permission loader.
+spot-permissions = { path = "../spot-permissions" }
+# `DocumentStore`, `DocumentData`, `RecordId`, `Value`: the bootstrap writes through storage.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The bootstrap data file is TOML.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[dev-dependencies]
+# Proves storage accepts the compiled catalogue and that `seed` writes what it declares.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The manifest must parse as an app manifest.
+spot-manifest = { path = "../spot-manifest" }
+# The async seed tests run on a current-thread runtime.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

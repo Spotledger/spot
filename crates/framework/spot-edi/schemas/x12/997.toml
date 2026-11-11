@@ -1,0 +1,138 @@
+# A minimal X12 997 functional acknowledgement (our own definition, WP-INT-06.T1).
+id = "x12_997"
+syntax = "x12"
+version = "004010"
+title = "Functional acknowledgement"
+functional_group = "FA"
+
+[[segment]]
+tag = "ST"
+min = 1
+max = 1
+[[segment.element]]
+name = "set_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "AK1"
+min = 1
+max = 1
+[[segment.element]]
+name = "group_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "group_control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "AK2"
+min = 0
+max = 0
+[[segment.element]]
+name = "set_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "set_control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "AK3"
+min = 0
+max = 0
+[[segment.element]]
+name = "segment_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "position"
+kind = "numeric"
+min = 0
+max = 1
+
+[[segment]]
+tag = "AK4"
+min = 0
+max = 0
+[[segment.element]]
+name = "element_position"
+kind = "numeric"
+min = 0
+max = 1
+[[segment.element]]
+name = "component_position"
+kind = "numeric"
+min = 0
+max = 1
+[[segment.element]]
+name = "error_code"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "AK5"
+min = 0
+max = 1
+[[segment.element]]
+name = "action"
+kind = "enum"
+min = 1
+max = 1
+values = ["A", "E", "R"]
+
+[[segment]]
+tag = "AK9"
+min = 1
+max = 1
+[[segment.element]]
+name = "action"
+kind = "enum"
+min = 1
+max = 1
+values = ["A", "E", "R", "P"]
+[[segment.element]]
+name = "included"
+kind = "numeric"
+min = 0
+max = 1
+[[segment.element]]
+name = "received"
+kind = "numeric"
+min = 0
+max = 1
+[[segment.element]]
+name = "accepted"
+kind = "numeric"
+min = 0
+max = 1
+
+[[segment]]
+tag = "SE"
+min = 1
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1

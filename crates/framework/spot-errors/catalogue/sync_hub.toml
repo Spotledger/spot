@@ -1,0 +1,137 @@
+# sync_hub codes: the hub relay of spot-sync-hub (WP-SYN-02.T1, ADR-062, ADR-063). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto conditions (ADR-067), so `class = "none"`.
+
+[[entry]]
+code = "sync_hub.invalid_config"
+class = "none"
+summary = "A hub relay setting is unusable: {reason}."
+explanation_key = "error.sync_hub.invalid_config"
+params = ["reason"]
+remedy = "Set the tenant and source, keep every bound above zero and the closure limits consistent."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.unknown_destination"
+class = "none"
+summary = "The destination is not registered with the hub relay: {dest}."
+explanation_key = "error.sync_hub.unknown_destination"
+params = ["dest"]
+remedy = "Register the node with the relay before acknowledging or upgrading it."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.duplicate_destination"
+class = "none"
+summary = "The destination is already registered with the hub relay: {dest}."
+explanation_key = "error.sync_hub.duplicate_destination"
+params = ["dest"]
+remedy = "Register each node once; update a node's report through the upgrade call."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.prefix_regressed"
+class = "none"
+summary = "A destination acknowledged an earlier prefix than before: {dest}, {before} then {after}."
+explanation_key = "error.sync_hub.prefix_regressed"
+params = ["after", "before", "dest"]
+remedy = "The acknowledgement is ignored. Check the node for a restored backup or a replayed message; its next handshake re-establishes the prefix."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.prefix_ahead_of_stream"
+class = "none"
+summary = "A destination acknowledged a prefix the hub has not processed: {dest}, {prefix} against cursor {cursor}."
+explanation_key = "error.sync_hub.prefix_ahead_of_stream"
+params = ["cursor", "dest", "prefix"]
+remedy = "The acknowledgement is ignored. A node cannot have applied what the hub never sent: check for a restored hub state or a mismatched stream."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.stream_failed"
+class = "none"
+summary = "The hub stream could not be read: {reason}."
+explanation_key = "error.sync_hub.stream_failed"
+params = ["reason"]
+remedy = "Fix the stream adapter or the store behind it; the relay has not moved and the next tick retries."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.stream_disorder"
+class = "none"
+summary = "The hub stream returned position {position} after position {after}."
+explanation_key = "error.sync_hub.stream_disorder"
+params = ["after", "position"]
+remedy = "Fix the stream adapter: positions must strictly ascend and exceed the cursor. The relay has not moved."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.stream_split_txn"
+class = "none"
+summary = "The hub stream split source transaction {txn}: a transaction is read whole and a bundle is applied in one transaction."
+explanation_key = "error.sync_hub.stream_split_txn"
+params = ["txn"]
+remedy = "Fix the stream adapter: when the read limit falls inside a transaction, it must return the rest of that transaction. The read is refused, nothing is queued and the cursor has not moved."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.stream_entity_limit"
+class = "none"
+summary = "The hub stream named more entities than the lane map may hold and the new entity {entity} at position {position} was refused against the bound of {bound}."
+explanation_key = "error.sync_hub.stream_entity_limit"
+params = ["bound", "entity", "position"]
+remedy = "Raise RelayConfig::max_entities if the site really has more entities, or fix the stream: the read is refused whole and the next tick asks again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.lane_not_entity"
+class = "none"
+summary = "The entity {entity} came in another lane than before, so a record's versions would swap between the mandatory lane and bulk."
+explanation_key = "error.sync_hub.lane_not_entity"
+params = ["entity"]
+remedy = "Fix the stream adapter or the metadata that sets the lane: the lane must be a function of the entity. The read is refused, nothing is queued and the cursor has not moved."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.queue_failed"
+class = "none"
+summary = "The send queue failed: {reason}."
+explanation_key = "error.sync_hub.queue_failed"
+params = ["reason"]
+remedy = "Fix the queue adapter or its store; the destination is caught up from the stream on a later tick."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.image_missing"
+class = "none"
+summary = "A record named by the stream has no image at the hub: {entity} {id}."
+explanation_key = "error.sync_hub.image_missing"
+params = ["entity", "id"]
+remedy = "Treat it as an integrity problem at the hub: restore the record or correct the stream. The destination stays behind until then."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.ack_beyond_head"
+class = "none"
+summary = "The destination {dest} acknowledged position {claimed}, above the hub stream head {head}; the acknowledgement was refused."
+explanation_key = "error.sync_hub.ack_beyond_head"
+params = ["claimed", "dest", "head"]
+remedy = "Nothing was recorded. A node cannot have applied what the hub has not written: treat the node as suspect and check its software."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.stamp_rejected"
+class = "none"
+summary = "The stamp from {node} cannot be placed on the hub timeline; the document was refused."
+explanation_key = "error.sync_hub.stamp_rejected"
+params = ["node"]
+remedy = "The stamp time or offset is out of range, which a healthy node never produces. Check the node's clock and software, then have it post the document again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub.held_by_dependency"
+class = "none"
+summary = "A destination was withheld a record because a record its closure needs is held: {dest} waits for {held}."
+explanation_key = "error.sync_hub.held_by_dependency"
+params = ["dest", "held"]
+remedy = "Nothing to do: the entry is held with its dependency and queued with it after the node upgrades."
+since = "0.1.0"

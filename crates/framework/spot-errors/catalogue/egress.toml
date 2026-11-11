@@ -1,0 +1,109 @@
+# egress codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "egress.denied_address"
+class = "none"
+summary = "The destination address is not allowed by your outbound policy."
+explanation_key = "error.egress.denied_address"
+params = []
+remedy = "Ask your administrator to add the address to the allow-list."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.denied_by_policy"
+class = "none"
+summary = "The destination is not allowed by your outbound policy."
+explanation_key = "error.egress.denied_by_policy"
+params = []
+remedy = "Check your outbound policy or ask your administrator to add the destination to the allow-list."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.denied_port"
+class = "none"
+summary = "The port is not allowed (it is a dangerous port: {port})."
+explanation_key = "error.egress.denied_port"
+params = ["port"]
+remedy = "Use a different port or ask your administrator to allow it."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.redirect_denied"
+class = "none"
+summary = "A redirect was not allowed by your outbound policy."
+explanation_key = "error.egress.redirect_denied"
+params = []
+remedy = "Check your outbound policy or ask your administrator to allow the redirect destination."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.too_many_redirects"
+class = "none"
+summary = "The request followed too many redirects (maximum {max} allowed)."
+explanation_key = "error.egress.too_many_redirects"
+params = ["max"]
+remedy = "The endpoint may be misconfigured or under attack; check the URL and try a different one."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.resolution_mixed"
+class = "Internal"
+summary = "A DNS lookup returned a mix of allowed and denied addresses (possible attack)."
+explanation_key = "error.egress.resolution_mixed"
+params = []
+remedy = "The DNS record may be misconfigured; check with your DNS provider."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.response_too_large"
+class = "none"
+summary = "The response body exceeded the maximum allowed size ({limit} bytes)."
+explanation_key = "error.egress.response_too_large"
+params = ["limit"]
+remedy = "Request a smaller response or ask your administrator to increase the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.request_too_large"
+class = "none"
+summary = "The request body exceeded the maximum allowed size ({limit} bytes)."
+explanation_key = "error.egress.request_too_large"
+params = ["limit"]
+remedy = "Send a smaller request body or ask your administrator to increase the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.resolution_failed"
+class = "none"
+summary = "Could not resolve the hostname: {host}."
+explanation_key = "error.egress.resolution_failed"
+params = ["host"]
+remedy = "Check the hostname for typos or ask your administrator to add DNS records."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.invalid_url"
+class = "Internal"
+summary = "The request URL is malformed."
+explanation_key = "error.egress.invalid_url"
+params = []
+remedy = "Check the URL for syntax errors."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.invalid_config"
+class = "Internal"
+summary = "The egress policy configuration is invalid: {reason}."
+explanation_key = "error.egress.invalid_config"
+params = ["reason"]
+remedy = "Check the policy configuration and fix any syntax errors."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.pinned_required"
+class = "Internal"
+summary = "The egress guard authorised the destination but returned no address to dial."
+explanation_key = "error.egress.pinned_required"
+params = []
+remedy = "Check the egress policy and the destination's DNS records; nothing was sent."
+since = "0.1.0"

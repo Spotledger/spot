@@ -1,0 +1,47 @@
+{
+  "overrides": [
+    {
+      "app": "erp",
+      "kind": "disable",
+      "target_step": "core:c",
+      "doctype": "item",
+      "hook_point": "before_save",
+      "reason": "no longer used by this site",
+      "effective_order": 3
+    },
+    {
+      "app": "ext",
+      "kind": "wrap",
+      "target_step": "core:b",
+      "doctype": "item",
+      "hook_point": "before_save",
+      "reason": "Wrap core:b",
+      "effective_order": 2
+    },
+    {
+      "app": "ext",
+      "kind": "reorder",
+      "target_step": "core:a",
+      "doctype": "item",
+      "hook_point": "before_save",
+      "reason": "Before core:a",
+      "effective_order": 0
+    }
+  ],
+  "seams": [
+    {
+      "name": "tax:line",
+      "version": 1,
+      "provider_app": "tax",
+      "replaced_by": "local_tax",
+      "reason": "local tax rules"
+    },
+    {
+      "name": "tax:line",
+      "version": 2,
+      "provider_app": "tax",
+      "replaced_by": null,
+      "reason": ""
+    }
+  ]
+}

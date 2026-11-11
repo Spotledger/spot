@@ -1,0 +1,346 @@
+# bpm_contract codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The process contract (spot-bpm-contract, ADR-080 section 5, WP-BPM-12). These
+# codes never ride an AppError: a checker returns them as a list of problems, so
+# every class is "none".
+
+[[entry]]
+code = "bpm_contract.invalid_id"
+class = "none"
+summary = "The contract id is not a valid name."
+explanation_key = "error.bpm_contract.invalid_id"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter, at most 64 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.version_zero"
+class = "none"
+summary = "The contract version is 0; contract versions start at 1."
+explanation_key = "error.bpm_contract.version_zero"
+params = []
+remedy = "Number the version starting at 1; a change is always a new version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.no_participants"
+class = "none"
+summary = "The contract names no participants."
+explanation_key = "error.bpm_contract.no_participants"
+params = []
+remedy = "Name the roles taking part, and whether each is a tenant or an external system."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_role"
+class = "none"
+summary = "A participant role is not a valid role name."
+explanation_key = "error.bpm_contract.invalid_role"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.duplicate_role"
+class = "none"
+summary = "The same role appears twice in the participants."
+explanation_key = "error.bpm_contract.duplicate_role"
+params = []
+remedy = "Keep one participant per role."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.role_inactive"
+class = "none"
+summary = "A participant role neither sends, receives nor waits for anything."
+explanation_key = "error.bpm_contract.role_inactive"
+params = []
+remedy = "Give the role a message, a wait limit or an order rule, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_message"
+class = "none"
+summary = "A message name is not a valid name."
+explanation_key = "error.bpm_contract.invalid_message"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.duplicate_message"
+class = "none"
+summary = "The same message name appears twice."
+explanation_key = "error.bpm_contract.duplicate_message"
+params = []
+remedy = "Keep one message per name; a new schema is a new message name or a new schema version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.unknown_role"
+class = "none"
+summary = "A message, order rule or wait limit names a role the contract does not declare."
+explanation_key = "error.bpm_contract.unknown_role"
+params = []
+remedy = "Declare the role in the participants, or correct the spelling."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_topic"
+class = "none"
+summary = "A message topic is not a valid link topic."
+explanation_key = "error.bpm_contract.invalid_topic"
+params = []
+remedy = "Use at least two dotted lower-case segments, for example bpm.request."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.self_message"
+class = "none"
+summary = "A message's sender and receiver are the same role."
+explanation_key = "error.bpm_contract.self_message"
+params = []
+remedy = "Address the message to the other participant; a tenant does not send to itself over a link."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.schema"
+class = "none"
+summary = "A message schema is wrong: a zero schema version, or a text bound on a field that is not text."
+explanation_key = "error.bpm_contract.schema"
+params = []
+remedy = "Start schema versions at 1 and set a text bound only on a text field."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_field"
+class = "none"
+summary = "A field name is not a valid field name."
+explanation_key = "error.bpm_contract.invalid_field"
+params = []
+remedy = "Use dotted lower-case segments of at most 128 characters, for example order.reference."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.duplicate_field"
+class = "none"
+summary = "The same field appears twice in one message."
+explanation_key = "error.bpm_contract.duplicate_field"
+params = []
+remedy = "Keep one field entry per name."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.secret_field"
+class = "none"
+summary = "A message field list names a field the metadata classifies as secret."
+explanation_key = "error.bpm_contract.secret_field"
+params = []
+remedy = "Remove the field; a secret never leaves its tenant, not even to a contract participant."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.unknown_message"
+class = "none"
+summary = "An order rule names a message the contract does not define."
+explanation_key = "error.bpm_contract.unknown_message"
+params = []
+remedy = "Define the message, or correct the name in the order rule."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_outcome"
+class = "none"
+summary = "An outcome name is not a valid name."
+explanation_key = "error.bpm_contract.invalid_outcome"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.duplicate_outcome"
+class = "none"
+summary = "The same outcome appears twice."
+explanation_key = "error.bpm_contract.duplicate_outcome"
+params = []
+remedy = "Keep one outcome per name."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.unknown_outcome"
+class = "none"
+summary = "An order rule or wait limit names an outcome the contract does not declare."
+explanation_key = "error.bpm_contract.unknown_outcome"
+params = []
+remedy = "Declare the outcome, or correct the name."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.order_mismatch"
+class = "none"
+summary = "An order rule says a role may send a message the contract sends from another role."
+explanation_key = "error.bpm_contract.order_mismatch"
+params = []
+remedy = "Name the message's sender in the order rule."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.duplicate_transition"
+class = "none"
+summary = "The same order rule appears twice."
+explanation_key = "error.bpm_contract.duplicate_transition"
+params = []
+remedy = "Keep one rule per message, follow-up and role."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.invalid_bound"
+class = "none"
+summary = "An order rule has a repetition bound of 0."
+explanation_key = "error.bpm_contract.invalid_bound"
+params = []
+remedy = "Use a bound of at least 1, or omit it for a rule taken once."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.message_unreachable"
+class = "none"
+summary = "No order rule starts with a message or leads to it, so it can never be exchanged."
+explanation_key = "error.bpm_contract.message_unreachable"
+params = []
+remedy = "Add the order rule that introduces the message, or remove the message."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.dead_end"
+class = "none"
+summary = "From a message no path reaches an outcome, so the conversation can never be declared finished."
+explanation_key = "error.bpm_contract.dead_end"
+params = []
+remedy = "Give the message a follow-up rule, or a rule that ends the conversation in an outcome."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.unbounded_cycle"
+class = "none"
+summary = "A loop in the order rules has no bounded transition."
+explanation_key = "error.bpm_contract.unbounded_cycle"
+params = []
+remedy = "Set a repetition bound on a transition inside the loop."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.outcome_unreachable"
+class = "none"
+summary = "No order rule ever ends the conversation in an outcome."
+explanation_key = "error.bpm_contract.outcome_unreachable"
+params = []
+remedy = "Add the rule that ends in the outcome, or remove the outcome."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.timeout"
+class = "none"
+summary = "A wait limit is wrong: an unknown message or role, a waiting role that does not receive the message, zero seconds, a duplicate or an unknown outcome."
+explanation_key = "error.bpm_contract.timeout"
+params = []
+remedy = "Name the awaited message, the role that waits, a positive number of seconds and a declared outcome."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.signature"
+class = "none"
+summary = "A signature does not cover this version, names an unknown role or repeats a signer."
+explanation_key = "error.bpm_contract.signature"
+params = []
+remedy = "Re-sign the version that is being agreed, once per role."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_role"
+class = "none"
+summary = "The role the process half plays is not a participant of the contract."
+explanation_key = "error.bpm_contract.conformance_role"
+params = []
+remedy = "Name the contract's role in the process's participants, or check the half against the right contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_participants"
+class = "none"
+summary = "The process's declared participants do not match the contract's roles or their kinds."
+explanation_key = "error.bpm_contract.conformance_participants"
+params = []
+remedy = "Make the process participants name every contract role, with the contract's kinds, and say which one it plays."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_contract"
+class = "none"
+summary = "A message step names a different contract than the one being checked."
+explanation_key = "error.bpm_contract.conformance_contract"
+params = []
+remedy = "Point the step at the contract this half belongs to."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_message"
+class = "none"
+summary = "A message step names a message the contract does not define."
+explanation_key = "error.bpm_contract.conformance_message"
+params = []
+remedy = "Use a contract message, or add the message to the contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_direction"
+class = "none"
+summary = "A send step sends a message the role receives, or a wait waits for a message the role sends."
+explanation_key = "error.bpm_contract.conformance_direction"
+params = []
+remedy = "Send the messages the contract sends from this role and wait for the ones sent to it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_order"
+class = "none"
+summary = "The process's message steps are not in an order the contract permits."
+explanation_key = "error.bpm_contract.conformance_order"
+params = []
+remedy = "Reorder the steps, or add the order rule to the contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_obligation"
+class = "none"
+summary = "The process does not reach a message the contract obliges the role to exchange."
+explanation_key = "error.bpm_contract.conformance_obligation"
+params = []
+remedy = "Add a reachable step for the message, or remove the obligation from the contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_timeout"
+class = "none"
+summary = "A wait has no timeout branch, or its time limit is longer than the contract allows."
+explanation_key = "error.bpm_contract.conformance_timeout"
+params = []
+remedy = "Give the wait a time limit within the contract's and a branch to take when it passes."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.conformance_form"
+class = "none"
+summary = "A form step in the process half is incomplete: it names no fields, no assignee, or no record type while it creates or updates a draft."
+explanation_key = "error.bpm_contract.conformance_form"
+params = []
+remedy = "Name the fields the person enters, who is asked, and the record type the draft belongs to."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_contract.too_large"
+class = "none"
+summary = "The contract has more roles, messages, fields, order rules, outcomes, wait limits or signatures than a contract may, or a text in it is too long."
+explanation_key = "error.bpm_contract.too_large"
+params = []
+remedy = "Split the conversation into smaller contracts, or shorten the names; the bounds are in the limits module of the contract crate."
+since = "0.1.0"

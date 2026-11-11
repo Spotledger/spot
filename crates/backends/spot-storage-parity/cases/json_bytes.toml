@@ -1,0 +1,340 @@
+# JSON documents and raw bytes.
+
+[[case]]
+id = "jsn-01-invalid-json"
+rule = "SEM-JSN-01"
+title = "text that is not JSON is refused"
+op = "write"
+write = ['insert a code="t:a" doc="json:{not json"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "jsn-01-empty-json"
+rule = "SEM-JSN-01"
+title = "empty text is not a JSON document"
+op = "write"
+write = ['insert a code="t:a" doc="json:"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "jsn-01-trailing-garbage"
+rule = "SEM-JSN-01"
+title = "a document followed by other text is refused"
+op = "write"
+write = ['insert a code="t:a" doc="json:{\"a\":1} x"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "jsn-01-single-quotes"
+rule = "SEM-JSN-01"
+title = "single-quoted strings are not JSON"
+op = "write"
+write = ["insert a code=\"t:a\" doc=\"json:{'a':1}\""]
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "jsn-01-invalid-on-update"
+rule = "SEM-JSN-01"
+title = "an update with invalid JSON is refused"
+setup = ['a code="t:a"']
+op = "write"
+write = ['update a doc="json:[1,"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "jsn-02-key-order-and-whitespace"
+rule = "SEM-JSN-02"
+title = "key order and whitespace do not matter after a round trip"
+setup = ['a code="t:a" doc="json:{ \"b\" : 1,\n \"a\":[1, 2], \"c\":{\"y\":2,\"x\":1} }"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:{"a":[1,2],"b":1,"c":{"x":1,"y":2}}']] }
+
+[[case]]
+id = "jsn-02-array-order-matters"
+rule = "SEM-JSN-02"
+title = "array order is significant"
+setup = ['a code="t:a" doc="json:[3,1,2]"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:[3,1,2]']] }
+
+[[case]]
+id = "jsn-02-top-level-scalars"
+rule = "SEM-JSN-02"
+title = "a top-level string, number, boolean, empty object and empty array round-trip"
+setup = ['a code="t:a" doc="json:\"text\""', 'b code="t:b" doc="json:123"', 'c code="t:c" doc="json:true"', 'd code="t:d" doc="json:{}"', 'e code="t:e" doc="json:[]"']
+op = "query"
+query = { select = ["doc"], order = ["code"] }
+expect = { rows = [['json:"text"'], ['json:123'], ['json:true'], ['json:{}'], ['json:[]']] }
+
+[[case]]
+id = "jsn-02-nested"
+rule = "SEM-JSN-02"
+title = "a document nested 20 levels deep round-trips"
+setup = ['a code="t:a" doc="json:{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-02-strings-with-structure-characters"
+rule = "SEM-JSN-02"
+title = "quotes, braces and newlines inside strings survive"
+setup = ['a code="t:a" doc="json:{\"k\":\"a\\\"b{c}[d]\\nline\\ttab\\\\\"}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:{"k":"a\"b{c}[d]\nline\ttab\\"}']] }
+
+[[case]]
+id = "jsn-02-update-path"
+rule = "SEM-JSN-02"
+title = "JSON written by update reads back the same way"
+setup = ['a code="t:a"', 'update a doc="json:{ \"z\":1 , \"y\":2 }"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:{"y":2,"z":1}']] }
+
+[[case]]
+id = "jsn-03-unicode-escape"
+rule = "SEM-JSN-03"
+title = "an escaped é and a literal é are the same document"
+setup = ['a code="t:a" doc="json:{\"k\":\"\\u00e9\"}"', 'b code="t:b" doc="json:{\"k\":\"é\"}"']
+op = "query"
+query = { select = ["doc"], order = ["code"] }
+expect = { rows = [['json:{"k":"é"}'], ['json:{"k":"é"}']] }
+
+[[case]]
+id = "jsn-03-surrogate-pair"
+rule = "SEM-JSN-03"
+title = "an escaped surrogate pair is one character outside the BMP"
+setup = ['a code="t:a" doc="json:{\"k\":\"\\ud83d\\ude00\"}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:{"k":"😀"}']] }
+
+[[case]]
+id = "jsn-03-escaped-key"
+rule = "SEM-JSN-03"
+title = "an escaped key equals its literal spelling"
+setup = ['a code="t:a" doc="json:{\"\\u00e9\":1}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { rows = [['json:{"é":1}']] }
+
+[[case]]
+id = "jsn-04-json-null-is-a-value"
+rule = "SEM-JSN-04"
+title = "the JSON document null is stored, and a null field is not that"
+setup = ['a code="t:a" doc="json:null"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "(null? doc)", "doc"], order = ["code"] }
+expect = { rows = [["t:a", "b:false", "json:null"], ["t:b", "b:true", "null"]] }
+
+[[case]]
+id = "jsn-05-duplicate-keys"
+rule = "SEM-JSN-05"
+title = "an object with a duplicate key (open: which value, or refused)"
+op = "write"
+write = ['insert a code="t:a" doc="json:{\"a\":1,\"a\":2}"']
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-05-duplicate-keys-read-back"
+rule = "SEM-JSN-05"
+title = "what a duplicate-key object reads back as (open)"
+setup = ['a code="t:a" doc="json:{\"a\":1,\"b\":0,\"a\":2}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-06-number-forms"
+rule = "SEM-JSN-06"
+title = "number spellings: 1.0, 1e2, 1.10, -0, a 35-digit integer (open)"
+setup = ['a code="t:a" doc="json:[1.0]"', 'b code="t:b" doc="json:[1e2]"', 'c code="t:c" doc="json:[1.10]"', 'd code="t:d" doc="json:[-0]"', 'e code="t:e" doc="json:[12345678901234567890123456789012345]"', 'f code="t:f" doc="json:[0.1e-5]"']
+op = "query"
+query = { select = ["doc"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-06-exact-decimal-in-json"
+rule = "SEM-JSN-06"
+title = "a decimal with 25 digits inside JSON (open: kept exactly or converted)"
+setup = ['a code="t:a" doc="json:{\"amount\":1234567890123456789012.345}"']
+op = "load"
+doc = "a"
+fields = ["doc"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-07-equality-whitespace"
+rule = "SEM-JSN-07"
+title = "= on JSON with different spacing (open: semantic or exact)"
+setup = ['a code="t:a" doc="json:{ \"a\" : 1 }"']
+op = "query"
+query = { select = ["code"], filter = '(= doc "json:{\"a\":1}")' }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-07-equality-key-order"
+rule = "SEM-JSN-07"
+title = "= on JSON with a different key order (open)"
+setup = ['a code="t:a" doc="json:{\"a\":1,\"b\":2}"']
+op = "query"
+query = { select = ["code"], filter = '(= doc "json:{\"b\":2,\"a\":1}")' }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "jsn-07-group-by-json"
+rule = "SEM-JSN-07"
+title = "group by a JSON field (open)"
+setup = ['a code="t:a" doc="json:{\"a\":1}"', 'b code="t:b" doc="json:{ \"a\":1 }"', 'c code="t:c" doc="json:{\"a\":2}"']
+op = "query"
+query = { select = ["(count)"], group = ["doc"] }
+expect = { same_as_reference = true, unordered = true }
+
+[[case]]
+id = "jsn-08-nul-escape"
+rule = "SEM-JSN-08"
+title = "a JSON string holding the escape for U+0000 (open: refused or stored)"
+op = "write"
+write = ['insert a code="t:a" doc="json:{\"k\":\"\\u0000\"}"']
+expect = { same_as_reference = true }
+
+[[case]]
+id = "byt-01-all-byte-values"
+rule = "SEM-BYT-01"
+title = "bytes 0 to 255 in order round-trip"
+setup = ['a code="t:a" blob=bytes:all']
+op = "load"
+doc = "a"
+fields = ["blob"]
+expect = { rows = [["bytes:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"]] }
+
+[[case]]
+id = "byt-01-text-looking-bytes"
+rule = "SEM-BYT-01"
+title = "bytes that look like text or a NUL-terminated string are kept whole"
+setup = ['a code="t:a" blob=bytes:6100620000', 'b code="t:b" blob=bytes:00']
+op = "query"
+query = { select = ["blob"], order = ["code"] }
+expect = { rows = [["bytes:6100620000"], ["bytes:00"]] }
+
+[[case]]
+id = "byt-01-empty"
+rule = "SEM-BYT-01"
+title = "empty bytes round-trip as empty"
+setup = ['a code="t:a" blob=bytes:']
+op = "load"
+doc = "a"
+fields = ["blob"]
+expect = { rows = [["bytes:"]] }
+
+[[case]]
+id = "byt-01-one-megabyte"
+rule = "SEM-BYT-01"
+title = "a megabyte of bytes round-trips"
+setup = ['a code="t:a" blob=brep:1048576:ab']
+op = "query"
+query = { select = ["(= blob \"brep:1048576:ab\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "byt-01-update-path"
+rule = "SEM-BYT-01"
+title = "bytes written by update read back unchanged"
+setup = ['a code="t:a"', 'update a blob=bytes:ff00ff']
+op = "load"
+doc = "a"
+fields = ["blob"]
+expect = { rows = [["bytes:ff00ff"]] }
+
+[[case]]
+id = "byt-02-empty-is-not-null"
+rule = "SEM-BYT-02"
+title = "IsNull finds the null blob, not the empty one"
+setup = ['a code="t:a" blob=bytes:', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "(null? blob)", "blob"], order = ["code"] }
+expect = { rows = [["t:a", "b:false", "bytes:"], ["t:b", "b:true", "null"]] }
+
+[[case]]
+id = "byt-02-empty-equality"
+rule = "SEM-BYT-02"
+title = "= with empty bytes finds the empty blob only"
+setup = ['a code="t:a" blob=bytes:', 'b code="t:b"', 'c code="t:c" blob=bytes:00']
+op = "query"
+query = { select = ["code"], filter = '(= blob "bytes:")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "byt-03-equality"
+rule = "SEM-BYT-03"
+title = "= on bytes is exact: leading zeros and length matter"
+setup = ['a code="t:a" blob=bytes:0001', 'b code="t:b" blob=bytes:01', 'c code="t:c" blob=bytes:000100']
+op = "query"
+query = { select = ["code"], filter = '(= blob "bytes:0001")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "byt-03-in"
+rule = "SEM-BYT-03"
+title = "In on bytes"
+setup = ['a code="t:a" blob=bytes:0001', 'b code="t:b" blob=bytes:01', 'c code="t:c" blob=bytes:ff']
+op = "query"
+query = { select = ["code"], filter = '(in blob "bytes:01" "bytes:ff")' }
+expect = { rows = [["t:b"], ["t:c"]] }
+
+[[case]]
+id = "byt-03-not-equal"
+rule = "SEM-BYT-03"
+title = "<> on bytes excludes null"
+setup = ['a code="t:a" blob=bytes:0001', 'b code="t:b"', 'c code="t:c" blob=bytes:ff']
+op = "query"
+query = { select = ["code"], filter = '(<> blob "bytes:ff")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "byt-03-group-by"
+rule = "SEM-BYT-03"
+title = "group by bytes keeps different blobs apart"
+setup = ['a code="t:a" blob=bytes:0001', 'b code="t:b" blob=bytes:0001', 'c code="t:c" blob=bytes:01']
+op = "query"
+query = { select = ["blob", "(count)"], group = ["blob"] }
+expect = { rows = [["bytes:0001", "i:2"], ["bytes:01", "i:1"]], unordered = true }
+
+[[case]]
+id = "byt-04-ordering"
+rule = "SEM-BYT-04"
+title = "sorting bytes (open: unsigned, byte by byte, shorter first)"
+setup = ['a code="t:a" blob=bytes:ff', 'b code="t:b" blob=bytes:01', 'c code="t:c" blob=bytes:0100', 'd code="t:d" blob=bytes:7f', 'e code="t:e" blob=bytes:80', 'f code="t:f" blob=bytes:', 'g code="t:g" blob=bytes:00']
+op = "query"
+query = { select = ["code"], order = ["blob"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "byt-04-range"
+rule = "SEM-BYT-04"
+title = "range comparison on bytes (open)"
+setup = ['a code="t:a" blob=bytes:ff', 'b code="t:b" blob=bytes:01', 'c code="t:c" blob=bytes:80']
+op = "query"
+query = { select = ["code"], filter = '(> blob "bytes:7f")' }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "byt-04-min-max"
+rule = "SEM-BYT-04"
+title = "Min and Max of bytes (open)"
+setup = ['a code="t:a" blob=bytes:ff', 'b code="t:b" blob=bytes:01', 'c code="t:c" blob=bytes:0100']
+op = "query"
+query = { select = ["(min blob)", "(max blob)"] }
+expect = { same_as_reference = true }

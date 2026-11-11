@@ -1,0 +1,58 @@
+# rtbridge codes — the realtime bridge's feed and authorizer (WP-PLT-08.T3).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. Storage failures
+# pass through with their own `storage.*` codes and are not listed here. Every code stays
+# library-internal: the host maps them onto app-facing errors, so `class = "none"`.
+
+[[entry]]
+code = "rtbridge.feed_read_failed"
+class = "none"
+summary = "Reading the realtime feed failed: {message}."
+explanation_key = "error.rtbridge.feed_read_failed"
+params = ["message"]
+remedy = "Retry later; the pump publishes nothing for the failed run."
+since = "0.1.0"
+
+[[entry]]
+code = "rtbridge.position_lost"
+class = "none"
+summary = "The realtime feed position can no longer be continued: {message}."
+explanation_key = "error.rtbridge.position_lost"
+params = ["message"]
+remedy = "Refetch: the pump has notified the rooms and redelivers from the start."
+since = "0.1.0"
+
+[[entry]]
+code = "rtbridge.position_store_failed"
+class = "none"
+summary = "The realtime position store failed: {message}."
+explanation_key = "error.rtbridge.position_store_failed"
+params = ["message"]
+remedy = "Fix the store; the next pump run redelivers anything left unpersisted."
+since = "0.1.0"
+
+[[entry]]
+code = "rtbridge.doctype_unknown"
+class = "none"
+summary = "A realtime room join cannot be verified against the permission snapshot: {room}."
+explanation_key = "error.rtbridge.doctype_unknown"
+params = ["room"]
+remedy = "The refusal reads as a permission denial on the wire; see the join_error contract."
+since = "0.1.0"
+
+[[entry]]
+code = "rtbridge.bad_principal"
+class = "none"
+summary = "A realtime room join names a principal whose permission assignments cannot be loaded: {user}."
+explanation_key = "error.rtbridge.bad_principal"
+params = ["user"]
+remedy = "The refusal reads as a permission denial on the wire; sign in again."
+since = "0.1.0"
+
+[[entry]]
+code = "rtbridge.notice_rejected"
+class = "none"
+summary = "A user notice was outside the realtime boundary and was not sent."
+explanation_key = "error.rtbridge.notice_rejected"
+params = []
+remedy = "Send a notice whose stored user is a record id and whose payload is an object of ids and short scalars within 2 KiB; the entry is counted and skipped and the payload is never logged."
+since = "0.1.0"

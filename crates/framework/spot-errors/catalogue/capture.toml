@@ -1,0 +1,42 @@
+# capture codes: the journal capture of the document engine (WP-JRN-02.T2, ADR-061 s3). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# No message carries a document value, an image or an id list: the exclusion codes name the
+# DocType the configuration named (a catalogue name, not data), and `event_failed` is a fixed
+# sentence.
+
+[[entry]]
+code = "capture.exclusion_unowned"
+class = "Internal"
+summary = "A DocType is excluded from the journal capture without an owner or without a reason."
+explanation_key = "error.capture.exclusion_unowned"
+params = []
+remedy = "Give the exclusion the owner that declares the DocType derived or local-only, and a reason code; an exclusion nobody owns is refused at engine construction."
+since = "0.1.0"
+
+[[entry]]
+code = "capture.exclusion_unknown"
+class = "Internal"
+summary = "A capture exclusion names a DocType the catalogue does not have, or a child DocType."
+explanation_key = "error.capture.exclusion_unknown"
+params = []
+remedy = "Name a top-level DocType of the effective metadata; a typo is a startup error so an exclusion can never silently miss."
+since = "0.1.0"
+
+[[entry]]
+code = "capture.exclusion_duplicate"
+class = "Internal"
+summary = "The same DocType is excluded from the journal capture twice."
+explanation_key = "error.capture.exclusion_duplicate"
+params = []
+remedy = "List each excluded DocType once, with the owner and reason that apply."
+since = "0.1.0"
+
+[[entry]]
+code = "capture.event_failed"
+class = "Internal"
+summary = "The state event of a written document could not be built."
+explanation_key = "error.capture.event_failed"
+params = []
+remedy = "The operation was rolled back, so nothing was written without its state event. Retry it; if it persists, report it with the trace id."
+since = "0.1.0"

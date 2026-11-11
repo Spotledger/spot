@@ -1,0 +1,22 @@
+# print codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# Both are the native API contract's runtime codes (0.7.0, `print_get`); neither message ever
+# carries template text or document content.
+
+[[entry]]
+code = "print.format_unknown"
+class = "none"
+summary = "The DocType defines no print format with this name."
+explanation_key = "error.print.format_unknown"
+params = []
+remedy = "Pick a print format the DocType defines, or omit `format` for its default."
+since = "0.1.0"
+
+[[entry]]
+code = "print.render_failed"
+class = "none"
+summary = "The print format could not be rendered to a PDF."
+explanation_key = "error.print.render_failed"
+params = []
+remedy = "Retry; if it persists, ask the site administrator to check the print format."
+since = "0.1.0"

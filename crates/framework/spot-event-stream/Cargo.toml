@@ -1,0 +1,55 @@
+[package]
+name = "spot-event-stream"
+description = "The event stream engine (WP-INT-02.T1, ADR-078 section 4/6, delivery level D1): named consumers over the outbox and change feed with checkpoints and ack-before-advance, partitions with per-partition order, permission-filtered envelopes, resync-required handling, parked slow consumers and the SSE frame encoder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent `ConsumerStore` contract suite (`contract::run_all`), public so a
+# database backend (a later work package) runs the same cases.
+testing = []
+
+[dependencies]
+# `Clock` (the host passes it; the engine spawns no timers) and `SiteId`.
+spot-core = { path = "../spot-core" }
+# The change feed, positions, outbox records and storage errors the engine reads.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The external `EventEnvelope`, `Position`, topics, sources and payload metadata.
+spot-events-contract = { path = "../../../contracts/events" }
+# The permission decision core: `can(Read)` for the read filter and `field_access` behind
+# the field guard.
+spot-permissions = { path = "../spot-permissions" }
+# The one field-level protection component every channel uses (ADR-070 section 12 rule 6).
+spot-field-guard = { path = "../spot-field-guard" }
+# `Document` (the shape the field guard redacts) and the value re-exports.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The shared expression language the consumer filter is written in (ADR-28).
+spot-expr = { path = "../spot-expr" }
+# Fenced leases: one active connection per named consumer.
+spot-coordinator = { path = "../spot-coordinator" }
+# The TOML/JSON consumer definition and the stored records.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+# Opaque, versioned position tokens in the SSE `id:` field.
+base64 = "0.22"
+# Typed `eventstream.*` codes.
+thiserror = "2"
+# `OffsetDateTime` for parked-since stamps.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting"] }
+
+[dev-dependencies]
+# `#[tokio::test]` and the multi-thread runtime for the fencing and isolation cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+# The checkpoint-never-goes-backwards property.
+proptest = "1"
+# Real effective metadata and a real permission snapshot for the read-filter oracle.
+spot-meta = { path = "../spot-meta" }
+# The contract suite (`testing` feature) for `tests/store_contract.rs`.
+spot-event-stream = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

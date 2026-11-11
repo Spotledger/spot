@@ -1,0 +1,163 @@
+# journal_verify codes: the continuous journal verification of spot-journal-verify (WP-JRN-03.T5, ADR-061 s8): the refusals that stop a pass and the findings it reports. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_verify.expected_invalid"
+class = "none"
+summary = "The expected tenant, source or generation of a journal verification is not usable."
+explanation_key = "error.journal_verify.expected_invalid"
+params = []
+remedy = "Name a non-empty source and a generation of 1 or later; leaving the generation unset on the unpinned form only verifies the newest manifest (discovery), so pin it when it is known."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.store_failed"
+class = "none"
+summary = "The journal store failed while a verification was reading it."
+explanation_key = "error.journal_verify.store_failed"
+params = []
+remedy = "Check the object store's availability and credentials, then run the verification again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.budget_too_small"
+class = "none"
+summary = "The byte budget of a verification cannot cover the manifest plus the next segment it must read."
+explanation_key = "error.journal_verify.budget_too_small"
+params = []
+remedy = "Raise the budget above the size of the largest segment plus the manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.missing_manifest"
+class = "none"
+summary = "The manifest of the generation being verified is not in the store."
+explanation_key = "error.journal_verify.missing_manifest"
+params = []
+remedy = "Restore the manifest from a replica or rebuild it from the sealed segments, and treat the loss as tampering until explained."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.manifest_rejected"
+class = "none"
+summary = "The manifest does not decode, is not signed by a key trusted for its generation, or breaks a manifest invariant."
+explanation_key = "error.journal_verify.manifest_rejected"
+params = []
+remedy = "Compare the manifest with a replica and check the tenant's journal keys; do not trust anything the manifest lists."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.foreign_manifest"
+class = "none"
+summary = "The manifest is authentic but belongs to another source or another generation than the key it was found under."
+explanation_key = "error.journal_verify.foreign_manifest"
+params = []
+remedy = "Find how a manifest of another source or generation reached this tenant's prefix; this is a bucket-level mix-up or tampering."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.foreign_segment"
+class = "none"
+summary = "A segment's header names another source than the one expected for the tenant."
+explanation_key = "error.journal_verify.foreign_segment"
+params = []
+remedy = "Report it, find how another source's segment reached this prefix and restore the correct segment."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.missing_segment"
+class = "none"
+summary = "The manifest lists a segment and the store does not hold it."
+explanation_key = "error.journal_verify.missing_segment"
+params = []
+remedy = "Restore the segment from a replica; the range named in the finding is what is lost."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.unlisted_segment"
+class = "none"
+summary = "The store holds a segment of the generation that the manifest does not list."
+explanation_key = "error.journal_verify.unlisted_segment"
+params = []
+remedy = "Usually a crash between sealing and the manifest update: let the relay resume, and investigate if it persists."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.hash_mismatch"
+class = "none"
+summary = "A listed segment's bytes hash to something else than the manifest says."
+explanation_key = "error.journal_verify.hash_mismatch"
+params = []
+remedy = "Restore the segment from a replica and compare it with the manifest's hash."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.position_gap"
+class = "none"
+summary = "Positions between the manifest's coverage and later stored segments are held by no segment."
+explanation_key = "error.journal_verify.position_gap"
+params = []
+remedy = "Seal and append the missing range, or find out why the later segment was written ahead of it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.reordered"
+class = "none"
+summary = "A listed segment is stored under a position range the manifest does not give it."
+explanation_key = "error.journal_verify.reordered"
+params = []
+remedy = "Restore the segment under its listed range and find who copied or moved it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.fork_not_recorded"
+class = "none"
+summary = "The store holds a generation, or positions in an abandoned generation, that the manifest's fork history does not account for."
+explanation_key = "error.journal_verify.fork_not_recorded"
+params = []
+remedy = "Compare the stored generations with the fork history and find the writer that is not accounted for."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.segment_corrupt"
+class = "none"
+summary = "A segment cannot be opened or one of its block checksums fails."
+explanation_key = "error.journal_verify.segment_corrupt"
+params = []
+remedy = "Restore the segment from a replica."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.chain_broken"
+class = "none"
+summary = "A segment's header does not link to the segment the manifest lists before it."
+explanation_key = "error.journal_verify.chain_broken"
+params = []
+remedy = "Restore the segment from a replica and verify the chain from the previous segment."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.header_mismatch"
+class = "none"
+summary = "A segment's header disagrees with the manifest's summary of it: generation, positions or entry count."
+explanation_key = "error.journal_verify.header_mismatch"
+params = []
+remedy = "Restore the segment from a replica and compare its header with the manifest."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.manifest_regressed"
+class = "none"
+summary = "The manifest no longer lists what an earlier verified pass saw: fewer segments, or earlier segments changed."
+explanation_key = "error.journal_verify.manifest_regressed"
+params = []
+remedy = "Treat it as a rolled-back or rewritten manifest: restore the newest manifest from a replica and run a full verification."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.newer_generation_present"
+class = "none"
+summary = "The store holds a manifest of a higher generation than the one the caller pinned."
+explanation_key = "error.journal_verify.newer_generation_present"
+params = []
+remedy = "The pinned generation is stale: confirm the newer generation against the recorded forks, then update the expected generation; if no fork was recorded, treat it as a writer that is not accounted for."
+since = "0.1.0"

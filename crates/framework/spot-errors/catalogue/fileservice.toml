@@ -1,0 +1,23 @@
+# fileservice codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The file service (crates/framework/spot-files-service, WP-PLT-10.T3) reuses the contract's
+# `file.*` family, `document.not_found`, `permission.denied` and `api.invalid_request` where
+# one fits; these two cover the outcomes the contract registry does not name yet.
+
+[[entry]]
+code = "fileservice.type_mismatch"
+class = "none"
+summary = "The declared content type {declared} does not match the bytes, which look like {sniffed}."
+explanation_key = "error.fileservice.type_mismatch"
+params = ["declared", "sniffed"]
+remedy = "Send the file with the content type that matches its bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "fileservice.quarantined"
+class = "none"
+summary = "The file is quarantined by the site's file.scan check and cannot be downloaded."
+explanation_key = "error.fileservice.quarantined"
+params = []
+remedy = "Ask an administrator to review the quarantine before downloading."
+since = "0.1.0"

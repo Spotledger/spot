@@ -1,0 +1,7 @@
+error: #[controller] needs the DocType it serves: #[controller(doctype = "time_entry")]
+  --> tests/ui/missing_doctype.rs:18:1
+   |
+18 | #[controller]
+   | ^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `controller` (in Nightly builds, run with -Z macro-backtrace for more info)

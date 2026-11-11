@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(&\nok(&\nslot_with(\"price\", RangeTest::Overlaps\n{ start: Value::Decimal(dec(1050, 2)), end: Value::Decimal(dec(2000, 2)), }),\n& cat))"
+---
+SELECT $1 AS "one" FROM "slot" AS "x" WHERE ("x"."price" && numrange($2, $3, '[)')) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Int8(1)
+$2 = Numeric(10.50)
+$3 = Numeric(20.00)
+$4 = Int8(0)
+columns = ["one"]
+decode = [Int]

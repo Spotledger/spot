@@ -1,0 +1,26 @@
+[package]
+name = "spot-storage-fake"
+description = "In-memory backend of the storage contract, for tests and early starts (WP-CON-01.T2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Lock waits: `Notify` and the lock timeout.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# JSON values are validated, as PostgreSQL's `jsonb` would.
+serde_json = "1"
+# Query evaluation: exact decimal arithmetic, and text ordering by the catalog's collation
+# (compiled data, default features; `icu_locale_core` only parses the locale for it).
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+icu_collator = "2"
+icu_locale_core = "2"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "time", "macros", "rt"] }
+
+[lints]
+workspace = true

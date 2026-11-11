@@ -1,0 +1,20 @@
+Source: spot
+Section: admin
+Priority: optional
+Maintainer: Spotledger Packaging <packaging@spotledger.invalid>
+Build-Depends: debhelper-compat (= 13), dh-sequence-installsystemd
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://spotledger.example/
+
+Package: spot
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd
+Recommends: postgresql-18
+Description: Spotledger site host
+ Spotledger is a single-binary site host on PostgreSQL. This package installs
+ the daemon, a hardened systemd unit with its sysusers and tmpfiles data, and
+ a safe default configuration under /etc/spot.
+ .
+ The service is installed but deliberately not started or enabled: an
+ administrator provisions a site first and then starts it.

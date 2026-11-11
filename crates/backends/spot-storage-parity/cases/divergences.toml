@@ -1,0 +1,97 @@
+# Known, accepted differences between the backends, and known shared deviations from a
+# decided rule. Each entry names a rule from docs/storage-semantics.md, optionally the one
+# case, why it is accepted and who owns ending it. A listed entry that no longer fails fails
+# the run: remove it then.
+
+[[divergence]]
+rule = "SEM-TXT-02"
+case = "txt-02-ci-greek-final-sigma"
+reason = "Both backends fold case by lower-casing (PostgreSQL lower() under the ICU collation, the fake Rust to_lowercase), which gives the Greek capital sigma a final form by context; simple case folding maps both sigmas to the same letter, so a case-insensitive match misses the capital and final-sigma spellings. Fix in spot-pg-query and spot-storage-fake (fold, not lower-case), outside this task's files."
+owner = "lead (core lane, a storage follow-up)"
+
+[[divergence]]
+rule = "SEM-TXT-11"
+case = "txt-11-nul-character"
+reason = "PostgreSQL refuses U+0000 in text with InvalidValue; the fake stores it. The rule is open: once the lead decides, the fake (or both) changes. The fake is outside this task's files."
+owner = "lead decides SEM-TXT-11; fake owner (WP-CON-01.T2) implements"
+
+[[divergence]]
+rule = "SEM-TXT-02"
+case = "txt-02-ci-turkish-collation"
+reason = "PostgreSQL lower() runs under the tenant's ICU collation, so under tr the capital I lowers to the dotless i and a case-insensitive match for i misses it; the fake (Rust to_lowercase) folds I to i, as simple case folding does. spot-pg-query already names this as a WP-STO-10 parity item. Fix in spot-pg-query (fold under the root locale), outside this task's files."
+owner = "lead (core lane, a spot-pg-query follow-up)"
+
+[[divergence]]
+rule = "SEM-DAT-05"
+case = "dat-05-sub-microsecond-read-back"
+reason = "Open rule. The fake keeps nanoseconds (an instant with 9 fractional digits reads back with 9); PostgreSQL keeps microseconds and the driver drops the rest. Until the lead decides truncate, round or refuse, both are recorded and differ."
+owner = "lead decides SEM-DAT-05; the fake (WP-CON-01.T2) or the PostgreSQL value mapping then changes"
+
+[[divergence]]
+rule = "SEM-DAT-05"
+case = "dat-05-sub-microsecond-rounds-up-to-the-next-second"
+reason = "Open rule, same difference at the 0.9999995 second edge: the fake keeps 999999500 ns, PostgreSQL reads 999999 microseconds (truncated, not rounded up to the next second)."
+owner = "lead decides SEM-DAT-05"
+
+[[divergence]]
+rule = "SEM-DAT-08"
+reason = "Open rule. A wall-clock time with sub-microsecond digits: the fake keeps nanoseconds, PostgreSQL reads microseconds (truncated)."
+owner = "lead decides SEM-DAT-08"
+
+[[divergence]]
+rule = "SEM-NUM-11"
+reason = "Open rule. A decimal written with fewer digits than the column's scale reads back padded to the scale from PostgreSQL (1.50) and as written from the fake (1.5). Values are equal; only the scale differs. The lead decides which is the contract; the fake would then pad to the field's scale (or PostgreSQL would be read back without padding)."
+owner = "lead decides SEM-NUM-11; fake owner (WP-CON-01.T2) implements"
+
+[[divergence]]
+rule = "SEM-JSN-06"
+case = "jsn-06-number-forms"
+reason = "Open rule. Number spellings in JSON: PostgreSQL jsonb normalises 1e2 to 100 and -0 to 0; the fake keeps the text as written (1e2, -0). Semantic equality of such documents is not specified."
+owner = "lead decides SEM-JSN-06"
+
+[[divergence]]
+rule = "SEM-JSN-08"
+case = "jsn-08-nul-escape"
+reason = "Open rule. PostgreSQL jsonb refuses a string with the U+0000 escape (InvalidValue); the fake stores it."
+owner = "lead decides SEM-JSN-08; fake owner implements"
+
+[[divergence]]
+rule = "SEM-QRY-05"
+case = "nul-11-coalesce-mixed-types"
+reason = "Open rule. Coalesce of a text and an integer: PostgreSQL refuses it (InvalidQuery); the fake returns the first non-null operand. Query::validate does not check operand types of Coalesce."
+owner = "lead decides SEM-QRY-05; contract validate (WP-CON-01) or the fake changes"
+
+[[divergence]]
+rule = "SEM-LIM-03"
+case = "lim-03-long-in-list"
+reason = "Open rule. An In list of 70,000 values runs on the fake and fails on PostgreSQL with Unavailable (its 65,535 bind-parameter limit). ADR-069 (proposed) would cap lists at 1,000 for every backend."
+owner = "lead decides ADR-069 and SEM-LIM-03"
+
+[[divergence]]
+rule = "SEM-LIM-02"
+reason = "A defect in the PostgreSQL backend: with two entities whose 63-character names share their first 62 characters, prepare fails with SQLSTATE 42P07 (a derived index, constraint or table name is truncated to 63 bytes and collides). The fake is fine. Fix in spot-postgres or spot-pg-query (derive names with a hash suffix), outside this task's files."
+owner = "lead (core lane, a spot-postgres follow-up)"
+
+[[divergence]]
+rule = "SEM-QRY-06"
+case = "qry-06-group-by-comparison"
+reason = "A defect in spot-pg-query: grouping by an expression that contains a literal fails with ErrorKind::Internal on PostgreSQL (the literal is bound as a separate parameter in the select list and in group by, so the database does not see the same expression). The fake is fine. Fix in spot-pg-query, outside this task's files."
+owner = "lead (core lane, a spot-pg-query follow-up)"
+
+[[divergence]]
+rule = "SEM-QRY-06"
+case = "qry-06-group-by-arithmetic"
+reason = "Same defect as qry-06-group-by-comparison: a literal inside a grouping expression."
+owner = "lead (core lane, a spot-pg-query follow-up)"
+
+[[divergence]]
+rule = "SEM-QRY-06"
+case = "qry-06-group-by-coalesce"
+reason = "Same defect as qry-06-group-by-comparison: a literal inside a grouping expression."
+owner = "lead (core lane, a spot-pg-query follow-up)"
+
+[[divergence]]
+rule = "SEM-QRY-06"
+case = "qry-06-select-key-expression-in-order"
+reason = "Same defect as qry-06-group-by-comparison: a literal inside a grouping expression."
+owner = "lead (core lane, a spot-pg-query follow-up)"

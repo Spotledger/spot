@@ -1,0 +1,21 @@
+[package]
+name = "spot-sync-skew"
+description = "Version skew for sync (WP-SYN-08.T1, ADR-066 section 5): session decision from the handshake reports, negotiated schema majors, fleet-gated retirement of an old major, upward acceptance and per-record holds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Reports, holds and decisions travel in handshakes and the node state (ADR-065).
+serde = { version = "1", features = ["derive"] }
+# Typed skew errors.
+thiserror = "2"
+
+[dev-dependencies]
+# Property run: served majors are always decodable by the node.
+proptest = "1"
+
+[lints]
+workspace = true

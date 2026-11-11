@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Avalonia.Headless.XUnit 12 brings xunit v3; do not also reference xunit 2. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.FlowDesigner/Spotledger.Client.FlowDesigner.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+    <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The canonical text form of every BPM template, produced by the server crate
+         (spot-bpm-model::to_text) so the client's writer is compared with the real one. -->
+    <None Include="Goldens/*.golden" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Goldens/*.toml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-DX-07.T2: headless tests. They drive the real view-models over an
+       in-memory server that behaves like spot-nocode-model's draft, so the tests prove the
+       commands the UI issues rather than the client's own idea of the design. The views are shown
+       in a headless Avalonia window (a real rasterizer, so the picture checks see real pixels) and
+       driven through their controls. No network, and no real server. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+    <NoWarn>$(NoWarn);CA1707;CA1861;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- Avalonia.Headless.XUnit 12 brings xunit v3; do not also reference xunit 2. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <!-- The picture checks need a real rasterizer (UseHeadlessDrawing=false). -->
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Designer.Reports/Spotledger.Designer.Reports.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,172 @@
+# tenancy codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tenancy.invalid_name"
+class = "none"
+summary = "The tenant name is not valid: {reason}."
+explanation_key = "error.tenancy.invalid_name"
+params = ["reason"]
+remedy = "Use 3 to 63 lower-case letters, digits or hyphens, starting with a letter, and not a platform word."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.name_taken"
+class = "none"
+summary = "The tenant name {name} is already in use."
+explanation_key = "error.tenancy.name_taken"
+params = ["name"]
+remedy = "Choose a different name."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.name_reserved"
+class = "none"
+summary = "The tenant name {name} is reserved until {until}."
+explanation_key = "error.tenancy.name_reserved"
+params = ["name", "until"]
+remedy = "Choose a different name or wait for the reservation to end."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.not_found"
+class = "none"
+summary = "Tenant {tenant} was not found."
+explanation_key = "error.tenancy.not_found"
+params = ["tenant"]
+remedy = "Check the tenant id."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.version_conflict"
+class = "none"
+summary = "Tenant {tenant} changed since it was read."
+explanation_key = "error.tenancy.version_conflict"
+params = ["tenant"]
+remedy = "Read the tenant again and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.invalid_transition"
+class = "none"
+summary = "Tenant {tenant} cannot make that state change."
+explanation_key = "error.tenancy.invalid_transition"
+params = ["tenant"]
+remedy = "Check the tenant's current state and the allowed transitions."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.wrong_state"
+class = "none"
+summary = "Tenant {tenant} is in a state that does not allow {operation}."
+explanation_key = "error.tenancy.wrong_state"
+params = ["operation", "tenant"]
+remedy = "Bring the tenant to the required state first."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.no_placement"
+class = "none"
+summary = "No cluster in region {region} can take the tenant."
+explanation_key = "error.tenancy.no_placement"
+params = ["region"]
+remedy = "Add capacity in that region or enable a database there; the region cannot be changed."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.invalid_placement"
+class = "none"
+summary = "The placement is not valid: {reason}."
+explanation_key = "error.tenancy.invalid_placement"
+params = ["reason"]
+remedy = "Use the schema derived from the tenant id and a database no other live tenant holds."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.invalid_request"
+class = "none"
+summary = "The request is not valid: {reason}."
+explanation_key = "error.tenancy.invalid_request"
+params = ["reason"]
+remedy = "Correct the named field and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.step_failed"
+class = "none"
+summary = "Step {step} of tenant {tenant} failed: {reason}."
+explanation_key = "error.tenancy.step_failed"
+params = ["reason", "step", "tenant"]
+remedy = "Resume the run to retry from the failed step, or roll the provisioning back."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.journal_corrupt"
+class = "none"
+summary = "The workflow journal of tenant {tenant} is inconsistent: {reason}."
+explanation_key = "error.tenancy.journal_corrupt"
+params = ["reason", "tenant"]
+remedy = "Stop and ask an operator to inspect the journal; do not resume."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.approval_required"
+class = "none"
+summary = "Deleting tenant {tenant} needs two distinct approvers other than the requester."
+explanation_key = "error.tenancy.approval_required"
+params = ["tenant"]
+remedy = "Obtain two approvals from people other than the requester."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.retention_pending"
+class = "none"
+summary = "Tenant {tenant} is retained until {until}."
+explanation_key = "error.tenancy.retention_pending"
+params = ["tenant", "until"]
+remedy = "Wait for the retention delay to end."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.archive_unverified"
+class = "none"
+summary = "Tenant {tenant} has no verified final backup."
+explanation_key = "error.tenancy.archive_unverified"
+params = ["tenant"]
+remedy = "Take and verify a final backup before deleting."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.legal_hold"
+class = "none"
+summary = "Tenant {tenant} is under legal hold."
+explanation_key = "error.tenancy.legal_hold"
+params = ["tenant"]
+remedy = "Release the legal hold through the legal process first."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.audit_failed"
+class = "none"
+summary = "The audit trail could not record {action}."
+explanation_key = "error.tenancy.audit_failed"
+params = ["action"]
+remedy = "Check the audit store, re-read the tenant and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.store_failed"
+class = "none"
+summary = "The control store failed: {reason}."
+explanation_key = "error.tenancy.store_failed"
+params = ["reason"]
+remedy = "Check the control store and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy.capacity_exceeded"
+class = "none"
+summary = "Database {database} on cluster {cluster} cannot take another tenant."
+explanation_key = "error.tenancy.capacity_exceeded"
+params = ["cluster", "database"]
+remedy = "Add a database with room in the tenant's region, or move tenants off this one."
+since = "0.1.0"

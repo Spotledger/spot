@@ -1,0 +1,268 @@
+# The Linux module conformance matrix (WP-ADM-04.T3, blueprint WS22, ADR-44).
+#
+# This file is the single checked-in source of truth for "the module suite is green on
+# Fedora, a RHEL-compatible distribution and Ubuntu LTS" (WP-ADM-04's acceptance). It
+# lists the three container targets, the capabilities each one gives, and the real-system
+# integration tests, each with the capabilities it needs. The orchestrator
+# (`agent_linux_harness/`) reads it, decides per target which tests can run, runs them
+# against the genuine distribution, and prints the matrix.
+#
+# Nothing here executes anything on its own; `run.sh` and `vm/run.sh` do. The matrix is
+# deliberately data, so a new distribution or a new real test is a review-visible change
+# to this file rather than a code change.
+
+version = 1
+
+# The capability vocabulary. A target gives some of these; a test needs some of them.
+# The orchestrator refuses to invent capabilities, so a typo in either list is an error.
+#
+#   systemd     systemd is PID 1 in the container (`--systemd=always`), so `systemctl`
+#               talks to a real systemd and units can be started, stopped and masked.
+#   privileged  the container runs `--privileged`, so it can mount, load modules and use
+#               loop devices. Needed by the storage and snapshot tests.
+#   packages    the distribution's package manager (dnf/rpm or apt/dpkg) is present and
+#               its local metadata is usable. `package.list` needs no network.
+#   network     outbound package-manager network access (a mirror is reachable), so a
+#               throwaway package can actually be installed and removed.
+#   btrfs_loop  a btrfs filesystem can be created on a loop device and snapshotted.
+#   lvm_loop    an LVM volume group can be created on a loop device and snapshotted.
+#   sysctl      `/proc/sys` is writable for the allow-listed keys the sysctl module owns.
+#   chrony      chronyd (or chronyc) is installed and can report its tracking.
+#   selinux     SELinux is present and `getenforce` reports a mode.
+#   apparmor    AppArmor is present and `aa-status` reports profiles.
+#   firewalld   firewalld is installed and running.
+#   ufw         ufw is installed.
+#
+# selinux, apparmor, firewalld and ufw are only ever marked on a VM target: a container
+# shares the host's LSM and firewall, so running them in a container would test the host,
+# not the distribution. Every test that needs one is `vm_only = true`.
+
+[defaults]
+# Applied to a target that does not list capabilities of its own.
+capabilities = []
+# Where the orchestrator collects JUnit XML by default, relative to this directory.
+junit_dir = "junit"
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+# `image_source = "pull"` pulls `image`; `image_source = "build"` builds `dockerfile`.
+# `family` is the distribution family the modules detect from /etc/os-release and the
+# value the `distro_family_matches_target` test asserts against.
+
+[[target]]
+name = "fedora-44"
+family = "fedora"
+image = "localhost/spot-agent-linux-fedora-44:44"
+image_source = "build"
+dockerfile = "docker/fedora-44/Dockerfile"
+# Fedora is the development target and the most capable container: a recent systemd, a
+# recent kernel with loop devices, and SELinux on the host (so the container runs with
+# `--security-opt label=disable`). The LSM tests are still vm_only because the container
+# shares the host's policy. The image installs the tools the tests drive (btrfs-progs,
+# lvm2, chrony, iproute, ...), which the base image does not carry.
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+]
+
+[[target]]
+name = "almalinux-10"
+family = "rhel"
+image = "localhost/spot-agent-linux-almalinux-10:10"
+image_source = "build"
+dockerfile = "docker/almalinux-10/Dockerfile"
+# AlmaLinux is the RHEL-compatible production recommendation. Its container image is
+# systemd-capable under `--systemd=always`.
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+]
+
+[[target]]
+name = "ubuntu-2404"
+family = "ubuntu"
+image = "localhost/spot-agent-linux-ubuntu-2404:24.04"
+image_source = "build"
+dockerfile = "docker/ubuntu-2404/Dockerfile"
+# Ubuntu 24.04 LTS: the apt/dpkg family and AppArmor on the host.
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+]
+
+# The VM targets. `vm/run.sh` boots these as qemu cloud images and runs the same real
+# tests, including the `vm_only` ones. They are not container targets and the container
+# orchestrator never selects them.
+[[target]]
+name = "fedora-44-vm"
+family = "fedora"
+image = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.0.x86_64.qcow2"
+image_source = "qemu"
+mode = "vm"
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+    "selinux",
+    "firewalld",
+]
+
+[[target]]
+name = "almalinux-10-vm"
+family = "rhel"
+image = "https://repo.almalinux.org/almalinux/10/cloud/x86_64/images/AlmaLinux-10-GenericCloud-latest.x86_64.qcow2"
+image_source = "qemu"
+mode = "vm"
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+    "selinux",
+    "firewalld",
+]
+
+[[target]]
+name = "ubuntu-2404-vm"
+family = "ubuntu"
+image = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+image_source = "qemu"
+mode = "vm"
+capabilities = [
+    "systemd",
+    "privileged",
+    "packages",
+    "network",
+    "btrfs_loop",
+    "lvm_loop",
+    "sysctl",
+    "chrony",
+    "apparmor",
+    "ufw",
+]
+
+# ---------------------------------------------------------------------------
+# Real-system tests
+# ---------------------------------------------------------------------------
+# Each entry names one `#[ignore]`d test function in the standalone cargo crate
+# `spot-agent-linux-real` (`tests-real/`). The orchestrator runs `name` in the target's
+# container (or VM) and records pass/fail/skip. `requires` names capabilities from the
+# vocabulary above; `vm_only` marks a test that must not run in a container.
+
+[[test]]
+name = "distro_family_matches_target"
+requires = []
+vm_only = false
+description = "Read /etc/os-release through the real filesystem and assert the detected package backend and family match the target."
+
+[[test]]
+name = "package_list_plan_apply_verify"
+requires = ["packages"]
+vm_only = false
+description = "os.package.list plan/apply/verify against the real package manager; proves the backend parses genuine output."
+
+[[test]]
+name = "service_status_and_failed"
+requires = ["systemd"]
+vm_only = false
+description = "os.service.status and os.service.failed against real systemd; proves systemctl parsing on a live manager."
+
+[[test]]
+name = "user_create_lock_unlock_delete_roundtrip"
+requires = ["privileged"]
+vm_only = false
+description = "Create a uniquely-prefixed throwaway account, lock it, unlock it, read its groups and delete it, cleaning up in a finally."
+
+[[test]]
+name = "storage_facts_are_read"
+requires = []
+vm_only = false
+description = "os.storage.facts: lsblk/findmnt JSON parsed into typed block devices and mounts."
+
+[[test]]
+name = "certificates_list_is_read"
+requires = []
+vm_only = false
+description = "os.cert.list against the real trust store (the family's anchor directory)."
+
+[[test]]
+name = "time_status_is_read"
+requires = ["chrony"]
+vm_only = false
+description = "os.time.status: chronyc tracking parsed on a real chronyd."
+
+[[test]]
+name = "sysctl_get_reads_a_key"
+requires = ["sysctl"]
+vm_only = false
+description = "os.sysctl.get for kernel.hostname through the real /proc/sys."
+
+[[test]]
+name = "network_facts_are_read"
+requires = []
+vm_only = false
+description = "os.network.facts: interfaces, routes and DNS from the real network stack."
+
+[[test]]
+name = "btrfs_snapshot_roundtrip"
+requires = ["privileged", "btrfs_loop"]
+vm_only = false
+description = "Create a btrfs filesystem on a loop device, snapshot a subvolume, list it, verify and delete it."
+
+[[test]]
+name = "lvm_snapshot_roundtrip"
+requires = ["privileged", "lvm_loop"]
+vm_only = false
+description = "Create an LVM volume group and logical volume on loop devices, snapshot it, list it, verify and delete it."
+
+[[test]]
+name = "mac_status_selinux"
+requires = ["selinux"]
+vm_only = true
+description = "os.mac.status against a real SELinux host. A container shares the host LSM, so this is vm-only."
+
+[[test]]
+name = "mac_status_apparmor"
+requires = ["apparmor"]
+vm_only = true
+description = "os.mac.status against a real AppArmor host. A container shares the host LSM, so this is vm-only."
+
+[[test]]
+name = "firewall_status_firewalld"
+requires = ["firewalld"]
+vm_only = true
+description = "os.firewall.status and os.firewall.list against a real firewalld. A container shares the host firewall, so this is vm-only."
+
+[[test]]
+name = "firewall_status_ufw"
+requires = ["ufw"]
+vm_only = true
+description = "os.firewall.status and os.firewall.list against a real ufw. A container shares the host firewall, so this is vm-only."

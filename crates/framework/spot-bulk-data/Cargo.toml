@@ -1,0 +1,51 @@
+[package]
+name = "spot-bulk-data"
+description = "Bulk export and incremental extraction (WP-INT-03.T1): permission-filtered, field-guarded, keyset-paged streaming of a DocType to CSV and NDJSON, signed resumable cursors, a change-feed based incremental extract with tombstones, and the memory and rate bounds that let 10 million rows move"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed query IR, `Rows`, `Value`, `ChangeFeed` and the feed positions.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The decision core the export plan asks for the export right and the read filter.
+spot-permissions = { path = "../spot-permissions" }
+# `PermissionFilter::for_read`: the principal's read rights as one storage filter.
+spot-perm-query = { path = "../spot-perm-query" }
+# `FieldGuard::columns(Channel::Export)` and `check_query_fields_for`: the field guard.
+spot-field-guard = { path = "../spot-field-guard" }
+# Exact decimals (ADR-12): `to_string` keeps every digit, never a float.
+rust_decimal = "1"
+# UTC instants, dates and times, formatted by hand so the text form is exact and stable.
+time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
+# JSON string escaping for NDJSON lines.
+serde_json = "1"
+# HMAC-SHA-256 for the signed export cursor.
+hmac = "0.12"
+sha2 = "0.10"
+# URL-safe, unpadded base64 for the opaque cursor token.
+base64 = "0.22"
+# Typed errors with stable `bulk.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory backend the acceptance tests run against.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Effective metadata for the fixture DocTypes and the round trip.
+spot-meta = { path = "../spot-meta" }
+# The round trip: a file exported here must import back through `spot-import`'s converter.
+spot-import = { path = "../spot-import" }
+# A deterministic clock for the audit stamps.
+spot-core = { path = "../spot-core" }
+# Async tests.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+# The TOML fixture for principals and protection facts.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+# Parsing the hyphenated record ids the export writes.
+uuid = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,48 @@
+[package]
+name = "spot-connectors"
+description = "The connector SDK and host (WP-INT-05.T1): the `connector` WIT world, a Rust guest template, and the host that runs signed connector components on the same sandbox as apps (fuel, epoch, memory caps, egress policy) with credential references, data mappings and per-connector monitoring"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The runtime. Pinned with `=`, the same version and features `spot-wasm` uses, so a
+# connector runs on the identical engine configuration as an app.
+wasmtime = { version = "=49.0.5", default-features = false, features = ["component-model", "pooling-allocator", "async", "cranelift", "runtime", "std"] }
+# The shared sandbox vocabulary: limits, the tick, the typed `wasm.*` errors.
+spot-wasm = { path = "../spot-wasm" }
+spot-egress = { path = "../spot-egress" }
+spot-secrets = { path = "../spot-secrets" }
+spot-bundle = { path = "../spot-bundle" }
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+spot-expr = { path = "../spot-expr" }
+spot-telemetry = { path = "../spot-telemetry" }
+spot-core = { path = "../spot-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+time = { version = "0.3", features = ["serde"] }
+async-trait = "0.1"
+url = "2"
+http = "1"
+semver = "1"
+base64 = "0.22"
+rust_decimal = "1"
+metrics = "0.24"
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "time"] }
+
+[dev-dependencies]
+# Test connector components are written as WebAssembly text and compiled here.
+wat = "1"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+serde_json = "1"
+
+[features]
+default = ["testkit"]
+# The mock host: recorded HTTP exchanges and the mapping checker, for connector authors.
+testkit = []
+
+[lints]
+workspace = true

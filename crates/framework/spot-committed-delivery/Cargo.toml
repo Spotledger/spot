@@ -1,0 +1,32 @@
+[package]
+name = "spot-committed-delivery"
+description = "The job handler that runs the *_committed steps of a document write from the job engine (WP-DOC-04.T4): per-step done markers so a retry never reruns a finished step, ordering per document, and the failure policy of ADR-51 phase 4"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, `Invocation`, `AppError` and the prelude types.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `CommittedJobArgs`, `CommittedSteps`, `StepSource`: what the engine wrote and how it runs a step.
+spot-document = { path = "../spot-document" }
+# The job model, the store the ordering check reads, and the handler registry.
+spot-jobs = { path = "../spot-jobs" }
+# The site a job belongs to.
+spot-core = { path = "../spot-core" }
+
+[dev-dependencies]
+# The real engine over the in-memory backend: the tests drive documents through it.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-meta = { path = "../spot-meta" }
+spot-seams = { path = "../spot-seams" }
+serde_json = "1"
+time = { version = "0.3", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

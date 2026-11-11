@@ -1,0 +1,48 @@
+# Spotledger runtime image. It packages a prebuilt release binary; there is no
+# compiler stage. tools/packaging/build.py copies the binary and the default
+# configuration into a temporary build context and passes VERSION/SOURCE_DATE_EPOCH.
+#
+# Build by hand:
+#   podman build --build-arg VERSION=1.2.3 -t spot:1.2.3 packaging/linux/container
+#
+# The context must contain `spot` (the release binary) and `spot.toml`.
+
+ARG VERSION=0.0.0
+
+FROM scratch AS payload
+ARG VERSION
+COPY spot /spot
+
+FROM registry.fedoraproject.org/fedora-minimal:44 AS runtime
+ARG VERSION=0.0.0
+ARG SOURCE_DATE_EPOCH=315532800
+
+LABEL org.opencontainers.image.title="spot" \
+      org.opencontainers.image.description="Spotledger site host" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://spotledger.example/" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# curl-minimal is only for HEALTHCHECK; no shell utilities are needed at runtime.
+RUN microdnf install -y --setopt=install_weak_deps=0 curl-minimal shadow-utils \
+ && microdnf clean all \
+ && useradd --system --home-dir /var/lib/spot --shell /sbin/nologin spot \
+ && install -d -o spot -g spot -m 0750 /var/lib/spot /var/log/spot /run/spot \
+ && install -d -o root -g root -m 0755 /etc/spot
+
+COPY --from=payload /spot /usr/bin/spot
+COPY spot.toml /etc/spot/spot.toml
+
+VOLUME ["/var/lib/spot"]
+EXPOSE 8000
+STOPSIGNAL SIGTERM
+
+# Non-root, no writable root filesystem assumptions beyond the volume.
+USER spot:spot
+WORKDIR /var/lib/spot
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["/usr/bin/curl", "-fsS", "http://127.0.0.1:8000/api/health/live"]
+
+ENTRYPOINT ["/usr/bin/spot"]
+CMD ["serve", "--root", "/var/lib/spot"]

@@ -1,0 +1,29 @@
+# tenant_link_pg codes: the PostgreSQL link store and its administration operations
+# (WP-CTL-09.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tenant_link_pg.migration_failed"
+class = "Internal"
+summary = "The tenant link tables could not be created in the database."
+explanation_key = "error.tenant_link_pg.migration_failed"
+params = []
+remedy = "Check that the tenant schema exists, that the database user may create tables in it and in the control schema, and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link_pg.permission_denied"
+class = "none"
+summary = "The caller does not hold the link.manage right for this link operation."
+explanation_key = "error.tenant_link_pg.permission_denied"
+params = []
+remedy = "Ask a tenant administrator to grant the link.manage role to the caller, or run the operation as an administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_link_pg.granted"
+class = "none"
+summary = "The audit record kind written when a link's grant for a topic is set."
+explanation_key = "error.tenant_link_pg.granted"
+params = []
+remedy = "Not an error: read the link's audit references to see who changed which topic and when."
+since = "0.1.0"

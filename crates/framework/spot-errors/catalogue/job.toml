@@ -1,0 +1,82 @@
+# job codes: the job engine (WP-PLT-06) error vocabulary. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "job.invalid_name"
+class = "none"
+summary = "A job name is not valid (not in `app:job` format)."
+explanation_key = "error.job.invalid_name"
+params = []
+remedy = "Job names must be qualified by app, separated by a colon: `app:job`."
+since = "0.1.0"
+
+[[entry]]
+code = "job.unknown_queue"
+class = "none"
+summary = "The queue name is not recognized."
+explanation_key = "error.job.unknown_queue"
+params = []
+remedy = "Check the job's queue name against the site's configured queues."
+since = "0.1.0"
+
+[[entry]]
+code = "job.claim_lost"
+class = "none"
+summary = "The job's claim is no longer valid (fencing); the job may be claimed by another worker."
+explanation_key = "error.job.claim_lost"
+params = []
+remedy = "The worker's lease expired or was superseded. Do not retry the completion; the job will be reclaimed."
+since = "0.1.0"
+
+[[entry]]
+code = "job.worker_lost"
+class = "none"
+summary = "The worker holding the claim was lost (lease expired)."
+explanation_key = "error.job.worker_lost"
+params = []
+remedy = "Not an error; the job will be retried after the worker's lease expires."
+since = "0.1.0"
+
+[[entry]]
+code = "job.handler_panicked"
+class = "none"
+summary = "The job handler panicked during execution."
+explanation_key = "error.job.handler_panicked"
+params = []
+remedy = "The job handler has a bug. Fix the handler and retry manually or let the retry policy run the job again."
+since = "0.1.0"
+
+[[entry]]
+code = "job.timeout"
+class = "none"
+summary = "The job exceeded its timeout."
+explanation_key = "error.job.timeout"
+params = []
+remedy = "The job took longer than allowed. Either increase the queue's timeout policy or optimize the handler."
+since = "0.1.0"
+
+[[entry]]
+code = "job.intake_resync"
+class = "none"
+summary = "The intake encountered a resync boundary in the outbox feed."
+explanation_key = "error.job.intake_resync"
+params = []
+remedy = "The outbox feed has been restored or reset. The operator must investigate the feed state and adjust the intake position."
+since = "0.1.0"
+
+[[entry]]
+code = "job.handler_not_found"
+class = "none"
+summary = "No handler is registered for the job's name."
+explanation_key = "error.job.handler_not_found"
+params = []
+remedy = "Register a handler for the job name, or enqueue a job the installed apps handle."
+since = "0.1.0"
+
+[[entry]]
+code = "job.context_too_large"
+class = "none"
+summary = "A merged job context would exceed the size (64 KiB) or key (256) limit; nothing was written."
+explanation_key = "error.job.context_too_large"
+params = []
+remedy = "Record less progress in the job context, or keep bulky data in the app's own tables and store only a reference."
+since = "0.1.0"

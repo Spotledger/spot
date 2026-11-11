@@ -1,0 +1,9 @@
+# Help for the link_exchange_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "link_exchange_pg.migration_failed"
+what_happened = "The link exchange tables could not be created in the tenant's schema."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the tenant's schema exists and that the database user may create tables in it, then prepare again.", "If it keeps happening, tell your administrator and quote the code link_exchange_pg.migration_failed."]
+audience = "operator"

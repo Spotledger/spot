@@ -1,0 +1,9 @@
+Release plan: metadata 0 -> 0
+Risk: destructive
+Estimate: 2s expected (1s low, 4s high), blocking: maintenance window
+1 change (schema 0, metadata 1, patches 0, behaviour 0)
+
+Destructive (1)
+  - [metadata] party.new_name — Field `party.old_name` is renamed to `new_name`. (old_name -> new_name)
+      why: a rename moves stored values; the backend cannot do it online
+      instead: add the new field, backfill it, keep the old one, then drop it in a later release

@@ -1,0 +1,389 @@
+# Document-level round trips: every value kind at its edge values, written by insert and by update,
+# read back by load, query (in a transaction) and read (outside one).
+
+[[case]]
+id = "rnd-01-insert-text"
+rule = "SEM-RND-01"
+title = "text edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" note="t:"', 'e1 code="t:e1" note="t:  "', 'e2 code="t:e2" note="t:\u{301}\u{301}"', 'e3 code="t:e3" note="trep:38:9"', 'e4 code="t:e4" note="t:\u{1F600}x"', 'e5 code="t:e5" note="trep:1000:x"', 'e6 code="t:e6" note="t:Ali"']
+op = "query"
+query = { select = ["note"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["t:"], ["t:  "], ["t:́́"], ["trep:38:9"], ["t:😀x"], ["trep:1000:x"], ["t:Ali"]] }
+
+[[case]]
+id = "rnd-01-load-text"
+rule = "SEM-RND-01"
+title = "the first text edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" note="t:"']
+op = "load"
+doc = "e0"
+fields = ["note"]
+expect = { rows = [["t:"]] }
+
+[[case]]
+id = "rnd-02-update-text"
+rule = "SEM-RND-02"
+title = "text edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'e5 code="t:e5"', 'e6 code="t:e6"', 'update e0 note="t:"', 'update e1 note="t:  "', 'update e2 note="t:\u{301}\u{301}"', 'update e3 note="trep:38:9"', 'update e4 note="t:\u{1F600}x"', 'update e5 note="trep:1000:x"', 'update e6 note="t:Ali"']
+op = "query"
+query = { select = ["note"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["t:"], ["t:  "], ["t:́́"], ["trep:38:9"], ["t:😀x"], ["trep:1000:x"], ["t:Ali"]] }
+
+[[case]]
+id = "rnd-02-load-text"
+rule = "SEM-RND-02"
+title = "a text edge value replaced by update reads back through load"
+setup = ['e0 code="t:e0" note="t:  "', 'update e0 note="t:"']
+op = "load"
+doc = "e0"
+fields = ["note"]
+expect = { rows = [["t:"]] }
+
+[[case]]
+id = "rnd-01-insert-int"
+rule = "SEM-RND-01"
+title = "int edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" qty="i:9223372036854775807"', 'e1 code="t:e1" qty="i:-9223372036854775808"', 'e2 code="t:e2" qty="i:0"', 'e3 code="t:e3" qty="i:-1"', 'e4 code="t:e4" qty="i:1"']
+op = "query"
+query = { select = ["qty"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["i:9223372036854775807"], ["i:-9223372036854775808"], ["i:0"], ["i:-1"], ["i:1"]] }
+
+[[case]]
+id = "rnd-01-load-int"
+rule = "SEM-RND-01"
+title = "the first int edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" qty="i:9223372036854775807"']
+op = "load"
+doc = "e0"
+fields = ["qty"]
+expect = { rows = [["i:9223372036854775807"]] }
+
+[[case]]
+id = "rnd-02-update-int"
+rule = "SEM-RND-02"
+title = "int edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'update e0 qty="i:9223372036854775807"', 'update e1 qty="i:-9223372036854775808"', 'update e2 qty="i:0"', 'update e3 qty="i:-1"', 'update e4 qty="i:1"']
+op = "query"
+query = { select = ["qty"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["i:9223372036854775807"], ["i:-9223372036854775808"], ["i:0"], ["i:-1"], ["i:1"]] }
+
+[[case]]
+id = "rnd-01-insert-bool"
+rule = "SEM-RND-01"
+title = "bool edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" flag="b:true"', 'e1 code="t:e1" flag="b:false"']
+op = "query"
+query = { select = ["flag"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["b:true"], ["b:false"]] }
+
+[[case]]
+id = "rnd-01-load-bool"
+rule = "SEM-RND-01"
+title = "the first bool edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" flag="b:true"']
+op = "load"
+doc = "e0"
+fields = ["flag"]
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "rnd-02-update-bool"
+rule = "SEM-RND-02"
+title = "bool edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'update e0 flag="b:true"', 'update e1 flag="b:false"']
+op = "query"
+query = { select = ["flag"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["b:true"], ["b:false"]] }
+
+[[case]]
+id = "rnd-01-insert-money"
+rule = "SEM-RND-01"
+title = "money edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" money="d:9999999999999999.99"', 'e1 code="t:e1" money="d:-9999999999999999.99"', 'e2 code="t:e2" money="d:0.00"', 'e3 code="t:e3" money="d:0.01"', 'e4 code="t:e4" money="d:-0.01"']
+op = "query"
+query = { select = ["money"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:9999999999999999.99"], ["d:-9999999999999999.99"], ["d:0.00"], ["d:0.01"], ["d:-0.01"]] }
+
+[[case]]
+id = "rnd-01-load-money"
+rule = "SEM-RND-01"
+title = "the first money edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" money="d:9999999999999999.99"']
+op = "load"
+doc = "e0"
+fields = ["money"]
+expect = { rows = [["d:9999999999999999.99"]] }
+
+[[case]]
+id = "rnd-02-update-money"
+rule = "SEM-RND-02"
+title = "money edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'update e0 money="d:9999999999999999.99"', 'update e1 money="d:-9999999999999999.99"', 'update e2 money="d:0.00"', 'update e3 money="d:0.01"', 'update e4 money="d:-0.01"']
+op = "query"
+query = { select = ["money"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:9999999999999999.99"], ["d:-9999999999999999.99"], ["d:0.00"], ["d:0.01"], ["d:-0.01"]] }
+
+[[case]]
+id = "rnd-02-load-money"
+rule = "SEM-RND-02"
+title = "a money edge value replaced by update reads back through load"
+setup = ['e0 code="t:e0" money="d:-9999999999999999.99"', 'update e0 money="d:9999999999999999.99"']
+op = "load"
+doc = "e0"
+fields = ["money"]
+expect = { rows = [["d:9999999999999999.99"]] }
+
+[[case]]
+id = "rnd-01-insert-small"
+rule = "SEM-RND-01"
+title = "small edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" small="d:99.99"', 'e1 code="t:e1" small="d:-99.99"', 'e2 code="t:e2" small="d:0.00"']
+op = "query"
+query = { select = ["small"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:99.99"], ["d:-99.99"], ["d:0.00"]] }
+
+[[case]]
+id = "rnd-01-load-small"
+rule = "SEM-RND-01"
+title = "the first small edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" small="d:99.99"']
+op = "load"
+doc = "e0"
+fields = ["small"]
+expect = { rows = [["d:99.99"]] }
+
+[[case]]
+id = "rnd-02-update-small"
+rule = "SEM-RND-02"
+title = "small edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'update e0 small="d:99.99"', 'update e1 small="d:-99.99"', 'update e2 small="d:0.00"']
+op = "query"
+query = { select = ["small"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:99.99"], ["d:-99.99"], ["d:0.00"]] }
+
+[[case]]
+id = "rnd-01-insert-wide"
+rule = "SEM-RND-01"
+title = "wide edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" wide="d:999999999999999999.9999999999"', 'e1 code="t:e1" wide="d:-999999999999999999.9999999999"', 'e2 code="t:e2" wide="d:0.0000000001"']
+op = "query"
+query = { select = ["wide"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:999999999999999999.9999999999"], ["d:-999999999999999999.9999999999"], ["d:0.0000000001"]] }
+
+[[case]]
+id = "rnd-01-load-wide"
+rule = "SEM-RND-01"
+title = "the first wide edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" wide="d:999999999999999999.9999999999"']
+op = "load"
+doc = "e0"
+fields = ["wide"]
+expect = { rows = [["d:999999999999999999.9999999999"]] }
+
+[[case]]
+id = "rnd-02-update-wide"
+rule = "SEM-RND-02"
+title = "wide edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'update e0 wide="d:999999999999999999.9999999999"', 'update e1 wide="d:-999999999999999999.9999999999"', 'update e2 wide="d:0.0000000001"']
+op = "query"
+query = { select = ["wide"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["d:999999999999999999.9999999999"], ["d:-999999999999999999.9999999999"], ["d:0.0000000001"]] }
+
+[[case]]
+id = "rnd-01-insert-date"
+rule = "SEM-RND-01"
+title = "date edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" day="date:0001-01-01"', 'e1 code="t:e1" day="date:9999-12-31"', 'e2 code="t:e2" day="date:2024-02-29"', 'e3 code="t:e3" day="date:1970-01-01"']
+op = "query"
+query = { select = ["day"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["date:0001-01-01"], ["date:9999-12-31"], ["date:2024-02-29"], ["date:1970-01-01"]] }
+
+[[case]]
+id = "rnd-01-load-date"
+rule = "SEM-RND-01"
+title = "the first date edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" day="date:0001-01-01"']
+op = "load"
+doc = "e0"
+fields = ["day"]
+expect = { rows = [["date:0001-01-01"]] }
+
+[[case]]
+id = "rnd-02-update-date"
+rule = "SEM-RND-02"
+title = "date edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'update e0 day="date:0001-01-01"', 'update e1 day="date:9999-12-31"', 'update e2 day="date:2024-02-29"', 'update e3 day="date:1970-01-01"']
+op = "query"
+query = { select = ["day"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["date:0001-01-01"], ["date:9999-12-31"], ["date:2024-02-29"], ["date:1970-01-01"]] }
+
+[[case]]
+id = "rnd-01-insert-time"
+rule = "SEM-RND-01"
+title = "time edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" clock="time:00:00:00"', 'e1 code="t:e1" clock="time:23:59:59.999999"', 'e2 code="t:e2" clock="time:12:00:00.500000"', 'e3 code="t:e3" clock="time:00:00:00.000001"']
+op = "query"
+query = { select = ["clock"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["time:00:00:00"], ["time:23:59:59.999999"], ["time:12:00:00.500000"], ["time:00:00:00.000001"]] }
+
+[[case]]
+id = "rnd-01-load-time"
+rule = "SEM-RND-01"
+title = "the first time edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" clock="time:00:00:00"']
+op = "load"
+doc = "e0"
+fields = ["clock"]
+expect = { rows = [["time:00:00:00"]] }
+
+[[case]]
+id = "rnd-02-update-time"
+rule = "SEM-RND-02"
+title = "time edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'update e0 clock="time:00:00:00"', 'update e1 clock="time:23:59:59.999999"', 'update e2 clock="time:12:00:00.500000"', 'update e3 clock="time:00:00:00.000001"']
+op = "query"
+query = { select = ["clock"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["time:00:00:00"], ["time:23:59:59.999999"], ["time:12:00:00.500000"], ["time:00:00:00.000001"]] }
+
+[[case]]
+id = "rnd-01-insert-instant"
+rule = "SEM-RND-01"
+title = "instant edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" seen="dt:0001-01-01T00:00:00Z"', 'e1 code="t:e1" seen="dt:9999-12-31T23:59:59.999999Z"', 'e2 code="t:e2" seen="dt:1970-01-01T00:00:00Z"', 'e3 code="t:e3" seen="dt:1970-01-01T00:00:00.000001Z"', 'e4 code="t:e4" seen="dt:1969-12-31T23:59:59.999999Z"', 'e5 code="t:e5" seen="dt:2026-06-15T12:00:00+02:00"']
+op = "query"
+query = { select = ["seen"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["dt:0001-01-01T00:00:00Z"], ["dt:9999-12-31T23:59:59.999999Z"], ["dt:1970-01-01T00:00:00Z"], ["dt:1970-01-01T00:00:00.000001Z"], ["dt:1969-12-31T23:59:59.999999Z"], ["dt:2026-06-15T10:00:00Z"]] }
+
+[[case]]
+id = "rnd-01-load-instant"
+rule = "SEM-RND-01"
+title = "the first instant edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" seen="dt:0001-01-01T00:00:00Z"']
+op = "load"
+doc = "e0"
+fields = ["seen"]
+expect = { rows = [["dt:0001-01-01T00:00:00Z"]] }
+
+[[case]]
+id = "rnd-02-update-instant"
+rule = "SEM-RND-02"
+title = "instant edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'e5 code="t:e5"', 'update e0 seen="dt:0001-01-01T00:00:00Z"', 'update e1 seen="dt:9999-12-31T23:59:59.999999Z"', 'update e2 seen="dt:1970-01-01T00:00:00Z"', 'update e3 seen="dt:1970-01-01T00:00:00.000001Z"', 'update e4 seen="dt:1969-12-31T23:59:59.999999Z"', 'update e5 seen="dt:2026-06-15T12:00:00+02:00"']
+op = "query"
+query = { select = ["seen"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["dt:0001-01-01T00:00:00Z"], ["dt:9999-12-31T23:59:59.999999Z"], ["dt:1970-01-01T00:00:00Z"], ["dt:1970-01-01T00:00:00.000001Z"], ["dt:1969-12-31T23:59:59.999999Z"], ["dt:2026-06-15T10:00:00Z"]] }
+
+[[case]]
+id = "rnd-02-load-instant"
+rule = "SEM-RND-02"
+title = "a instant edge value replaced by update reads back through load"
+setup = ['e0 code="t:e0" seen="dt:9999-12-31T23:59:59.999999Z"', 'update e0 seen="dt:0001-01-01T00:00:00Z"']
+op = "load"
+doc = "e0"
+fields = ["seen"]
+expect = { rows = [["dt:0001-01-01T00:00:00Z"]] }
+
+[[case]]
+id = "rnd-01-insert-json"
+rule = "SEM-RND-01"
+title = "json edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" doc="json:{}"', 'e1 code="t:e1" doc="json:[]"', 'e2 code="t:e2" doc="json:null"', 'e3 code="t:e3" doc="json:\"x\""', 'e4 code="t:e4" doc="json:{\"a\":[1,{\"b\":null}]}"', 'e5 code="t:e5" doc="json:{\"k\":\"\\u00e9\\ud83d\\ude00\"}"']
+op = "query"
+query = { select = ["doc"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["json:{}"], ["json:[]"], ["json:null"], ["json:\"x\""], ["json:{\"a\":[1,{\"b\":null}]}"], ["json:{\"k\":\"é😀\"}"]] }
+
+[[case]]
+id = "rnd-01-load-json"
+rule = "SEM-RND-01"
+title = "the first json edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" doc="json:{}"']
+op = "load"
+doc = "e0"
+fields = ["doc"]
+expect = { rows = [["json:{}"]] }
+
+[[case]]
+id = "rnd-02-update-json"
+rule = "SEM-RND-02"
+title = "json edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'e5 code="t:e5"', 'update e0 doc="json:{}"', 'update e1 doc="json:[]"', 'update e2 doc="json:null"', 'update e3 doc="json:\"x\""', 'update e4 doc="json:{\"a\":[1,{\"b\":null}]}"', 'update e5 doc="json:{\"k\":\"\\u00e9\\ud83d\\ude00\"}"']
+op = "query"
+query = { select = ["doc"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["json:{}"], ["json:[]"], ["json:null"], ["json:\"x\""], ["json:{\"a\":[1,{\"b\":null}]}"], ["json:{\"k\":\"é😀\"}"]] }
+
+[[case]]
+id = "rnd-02-load-json"
+rule = "SEM-RND-02"
+title = "a json edge value replaced by update reads back through load"
+setup = ['e0 code="t:e0" doc="json:[]"', 'update e0 doc="json:{}"']
+op = "load"
+doc = "e0"
+fields = ["doc"]
+expect = { rows = [["json:{}"]] }
+
+[[case]]
+id = "rnd-01-insert-bytes"
+rule = "SEM-RND-01"
+title = "bytes edge values written by insert read back through query and read"
+setup = ['e0 code="t:e0" blob="bytes:all"', 'e1 code="t:e1" blob="bytes:"', 'e2 code="t:e2" blob="bytes:00"', 'e3 code="t:e3" blob="bytes:ff"', 'e4 code="t:e4" blob="bytes:0001"']
+op = "query"
+query = { select = ["blob"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["bytes:all"], ["bytes:"], ["bytes:00"], ["bytes:ff"], ["bytes:0001"]] }
+
+[[case]]
+id = "rnd-01-load-bytes"
+rule = "SEM-RND-01"
+title = "the first bytes edge value written by insert reads back through load"
+setup = ['e0 code="t:e0" blob="bytes:all"']
+op = "load"
+doc = "e0"
+fields = ["blob"]
+expect = { rows = [["bytes:all"]] }
+
+[[case]]
+id = "rnd-02-update-bytes"
+rule = "SEM-RND-02"
+title = "bytes edge values written by update read back through query and read"
+setup = ['e0 code="t:e0"', 'e1 code="t:e1"', 'e2 code="t:e2"', 'e3 code="t:e3"', 'e4 code="t:e4"', 'update e0 blob="bytes:all"', 'update e1 blob="bytes:"', 'update e2 blob="bytes:00"', 'update e3 blob="bytes:ff"', 'update e4 blob="bytes:0001"']
+op = "query"
+query = { select = ["blob"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["bytes:all"], ["bytes:"], ["bytes:00"], ["bytes:ff"], ["bytes:0001"]] }
+
+[[case]]
+id = "rnd-02-load-bytes"
+rule = "SEM-RND-02"
+title = "a bytes edge value replaced by update reads back through load"
+setup = ['e0 code="t:e0" blob="bytes:"', 'update e0 blob="bytes:all"']
+op = "load"
+doc = "e0"
+fields = ["blob"]
+expect = { rows = [["bytes:all"]] }
+
+[[case]]
+id = "rnd-01-insert-id"
+rule = "SEM-RND-01"
+title = "id edge values written by insert read back through query and read"
+setup = ['t0 code="t:target"', 'e0 code="t:e0" ref="id:t0"', 'e1 code="t:e1" ref="id:t0"']
+op = "query"
+query = { select = ["ref"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["id:t0"], ["id:t0"]] }
+
+[[case]]
+id = "rnd-01-load-id"
+rule = "SEM-RND-01"
+title = "the first id edge value written by insert reads back through load"
+setup = ['t0 code="t:target"', 'e0 code="t:e0" ref="id:t0"']
+op = "load"
+doc = "e0"
+fields = ["ref"]
+expect = { rows = [["id:t0"]] }
+
+[[case]]
+id = "rnd-02-update-id"
+rule = "SEM-RND-02"
+title = "id edge values written by update read back through query and read"
+setup = ['t0 code="t:target"', 'e0 code="t:e0"', 'e1 code="t:e1"', 'update e0 ref="id:t0"', 'update e1 ref="id:t0"']
+op = "query"
+query = { select = ["ref"], filter = '(prefix code "e")', order = ["code"] }
+expect = { rows = [["id:t0"], ["id:t0"]] }
+

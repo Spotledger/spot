@@ -1,0 +1,85 @@
+# The Windows hardening baseline (WP-ADM-10.T1, blueprint WS22, ADR-44).
+#
+# A fresh Windows server must reach this state automatically; every deviation is reported. The
+# controls are written from first principles and public security guidance in our own words —
+# they are not copied from any licensed benchmark. Facts are the agent's normalised view of
+# the host; a fact the host does not report makes its control not applicable.
+
+os_family = "windows"
+
+# All three Windows Firewall profiles must be on.
+[[control]]
+id = "windows.firewall_profiles"
+title = "Windows Firewall profiles are enabled"
+os_family = "windows"
+severity = "high"
+reversible = false
+lockout_risk = true
+
+[control.check]
+kind = "all"
+checks = [
+    { kind = "bool", fact = "windows.firewall.domain_enabled", expect = true },
+    { kind = "bool", fact = "windows.firewall.private_enabled", expect = true },
+    { kind = "bool", fact = "windows.firewall.public_enabled", expect = true },
+]
+
+# SMB version 1 must be off (its driver disabled and its service not running).
+[[control]]
+id = "windows.smbv1"
+title = "SMB version 1 is disabled"
+os_family = "windows"
+severity = "high"
+reversible = true
+
+[control.check]
+kind = "bool"
+fact = "windows.smb1_enabled"
+expect = false
+
+[control.remedy]
+op = "os.service.set_start_type"
+params = { name = { Text = "mrxsmb10" }, start_type = { Text = "disabled" } }
+
+# Remote Desktop must require Network Level Authentication.
+[[control]]
+id = "windows.rdp_nla"
+title = "Remote Desktop requires Network Level Authentication"
+os_family = "windows"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "bool"
+fact = "windows.rdp.nla_required"
+expect = true
+
+# Microsoft Defender's real-time protection must be on.
+[[control]]
+id = "windows.defender"
+title = "Microsoft Defender real-time protection is on"
+os_family = "windows"
+severity = "high"
+reversible = true
+
+[control.check]
+kind = "bool"
+fact = "windows.defender.realtime_enabled"
+expect = true
+
+[control.remedy]
+op = "os.service.start"
+params = { name = { Text = "WinDefend" } }
+
+# User Account Control must be on.
+[[control]]
+id = "windows.uac"
+title = "User Account Control is enabled"
+os_family = "windows"
+severity = "high"
+reversible = false
+
+[control.check]
+kind = "bool"
+fact = "windows.uac.enabled"
+expect = true

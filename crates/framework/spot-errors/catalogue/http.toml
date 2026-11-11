@@ -1,0 +1,37 @@
+# http codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "http.unknown_site"
+class = "none"
+summary = "No site is configured for the requested host name: {host}."
+explanation_key = "error.http.unknown_site"
+params = ["host"]
+remedy = "Add the site to the hosting configuration, or use the right host name."
+since = "0.1.0"
+
+[[entry]]
+code = "http.body_too_large"
+class = "none"
+summary = "The request body is larger than the server allows ({limit} bytes)."
+explanation_key = "error.http.body_too_large"
+params = ["limit"]
+remedy = "Send a smaller body or raise the configured body limit."
+since = "0.1.0"
+
+[[entry]]
+code = "http.timeout"
+class = "none"
+summary = "The request took longer than the server allows and was cut off."
+explanation_key = "error.http.timeout"
+params = []
+remedy = "Retry, or narrow the request so it finishes sooner."
+since = "0.1.0"
+
+[[entry]]
+code = "http.internal"
+class = "Internal"
+summary = "An unexpected server-side failure; the code and details are logged, never shown."
+explanation_key = "error.http.internal"
+params = []
+remedy = "Check the server logs with the request id; nothing is wrong with the request itself."
+since = "0.1.0"

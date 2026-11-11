@@ -1,0 +1,51 @@
+# Session tokens printed by name (spot-auth has no session-token prefix yet; see the rule).
+
+[[case]]
+input = 'session-token: 9f86d081884c7d65'
+expected = 'session-token: [redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = 'session_token=abc123XY456'
+expected = 'session_token=[redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = '"session_id": "8f3a2b1c9d"'
+expected = '"session_id": [redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = 'sess_id=qwertyuiop1'
+expected = 'sess_id=[redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = 'refresh-token: mNq2Lp9Xr4Vb8Kf3Jc'
+expected = 'refresh-token: [redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = 'access_token=1a2b3c4d5e6f7g8h9'
+expected = 'access_token=[redacted:session]'
+class = 'session_token'
+
+[[case]]
+input = 'SID: 12345'
+expected = 'SID: 12345'
+class = 'session_token'
+
+[[case]]
+input = 'session of the committee'
+expected = 'session of the committee'
+class = 'session_token'
+
+[[case]]
+input = 'sessiontoken2 short value'
+expected = 'sessiontoken2 short value'
+class = 'session_token'
+
+[[case]]
+input = 'cookie cutters'
+expected = 'cookie cutters'
+class = 'session_token'

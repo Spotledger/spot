@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-13.T3: the tier A model and renderer, headless. The model tests need no window;
+       the renderer, screenshot and keyboard tests boot Avalonia with Skia (see TestApp.cs)
+       so a captured frame is a real rasterisation. The corpus and the resolved golden are
+       read from the repository, never copied over silently: a test fails if the copy here
+       and the server's golden differ. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.Extensions/Spotledger.Client.Extensions.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Extensions/Renderer/Spotledger.Client.Extensions.Renderer.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Desktop/Spotledger.Client.Desktop.csproj" />
+    <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Data/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="perf-budgets.toml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

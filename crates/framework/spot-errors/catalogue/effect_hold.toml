@@ -1,0 +1,113 @@
+# effect_hold codes: the `effect_hold.*` vocabulary of spot-effect-hold (WP-MIG-08.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The side-effect hold raises its own typed errors (`spot_effect_hold::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy
+# states what an operator does about it.
+
+[[entry]]
+code = "effect_hold.already_held"
+class = "none"
+summary = "Site {site} already has a live hold for migration {migration_id}."
+explanation_key = "error.effect_hold.already_held"
+params = ["migration_id", "site"]
+remedy = "Release or discard the live hold before beginning another, or reuse its migration id."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.not_held"
+class = "none"
+summary = "Site {site} is not held."
+explanation_key = "error.effect_hold.not_held"
+params = ["site"]
+remedy = "Begin a hold for the migration before releasing or discarding it."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.wrong_migration"
+class = "none"
+summary = "Migration {requested} does not match the live hold {held} on site {site}."
+explanation_key = "error.effect_hold.wrong_migration"
+params = ["held", "requested", "site"]
+remedy = "Read the live hold's migration id and call again with it."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.state_unknown"
+class = "none"
+summary = "The hold ledger for site {site} could not be read, so the site is treated as held."
+explanation_key = "error.effect_hold.state_unknown"
+params = ["site"]
+remedy = "Check the ledger store's availability; the site stays held, which is the safe side."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.fiscal_cannot_be_held"
+class = "none"
+summary = "Class {class} tried to make fiscal transmissions holdable, which ADR-43 forbids."
+explanation_key = "error.effect_hold.fiscal_cannot_be_held"
+params = ["class"]
+remedy = "Remove the override: fiscal transmissions of issued documents are never held."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.release_needs_confirmation"
+class = "none"
+summary = "Effect {key} of class {class} is older than max_hold and needs confirmation."
+explanation_key = "error.effect_hold.release_needs_confirmation"
+params = ["class", "key"]
+remedy = "Confirm the key in a release plan, or discard the effect if it is no longer valid."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.ledger_unavailable"
+class = "none"
+summary = "The hold ledger is unavailable: {reason}."
+explanation_key = "error.effect_hold.ledger_unavailable"
+params = ["reason"]
+remedy = "Restore the ledger store; until then every held-class effect is held fail-closed."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.dispatch_failed"
+class = "none"
+summary = "Dispatching effect {key} of class {class} failed: {reason}."
+explanation_key = "error.effect_hold.dispatch_failed"
+params = ["class", "key", "reason"]
+remedy = "Fix the transport and release again; the effect stays held with its original key."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.never_hold_not_allowed"
+class = "none"
+summary = "Class {class} may not be never_hold without a lead-approved allow-list entry."
+explanation_key = "error.effect_hold.never_hold_not_allowed"
+params = ["class"]
+remedy = "Add the class key to never_hold_allow with the lead's approval, or leave it holdable."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.invalid_input"
+class = "none"
+summary = "Invalid {what}: {reason}."
+explanation_key = "error.effect_hold.invalid_input"
+params = ["reason", "what"]
+remedy = "Pass the identifier in its documented form."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.release_in_progress"
+class = "none"
+summary = "Another node is already releasing the hold on site {site}."
+explanation_key = "error.effect_hold.release_in_progress"
+params = ["site"]
+remedy = "Wait for the other release to finish, or let its lease expire, then release again."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.audit_failed"
+class = "none"
+summary = "Recording the hold transition in the audit chain failed: {reason}."
+explanation_key = "error.effect_hold.audit_failed"
+params = ["reason"]
+remedy = "Check the audit store; the hold transition itself is unchanged and stays fail-closed."
+since = "0.1.0"

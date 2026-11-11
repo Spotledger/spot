@@ -1,0 +1,66 @@
+{
+  "note": "Invented PRs for tools/security/tests (WP-PIP-06.T2). Window: since 2026-10-26T00:00:00Z. #98 merged before it; #99 merged after #104 with a lower number (out of order); #99 carries its section only in a verdict comment; #102 only in a review; #104 has none.",
+  "prs": [
+    {
+      "number": 98,
+      "title": "Sample: widen the retry budget (merged before the window)",
+      "base": "dev",
+      "merged_at": "2026-10-25T22:10:00Z",
+      "author": "agent-lumen",
+      "body": "## What changed\nA sample body that must not be harvested: this PR merged before the window.\n\n## Known security issues\n- Sample issue that is out of the window: no entry.\n",
+      "comments": [
+        {"body": "/verdict accept\n\nMerged before the window; do not harvest this one."}
+      ],
+      "reviews": []
+    },
+    {
+      "number": 101,
+      "title": "Sample: the section sits in the PR body",
+      "base": "dev",
+      "merged_at": "2026-10-26T02:00:00Z",
+      "author": "agent-quill",
+      "body": "## What changed\nSample change description.\n\n## Known security issues\n\n- Sample component: a placeholder weakness with a guessed severity of low.\n\n### Detail\nA subsection that belongs to the section above.\n\n## Testing\nSample tests paragraph; this heading ends the security section.\n",
+      "comments": [],
+      "reviews": []
+    },
+    {
+      "number": 104,
+      "title": "Sample: no security section anywhere",
+      "base": "main",
+      "merged_at": "2026-10-26T05:00:00Z",
+      "author": "agent-marlow",
+      "body": "## What changed\nSample prose only.\n\n## Testing\nSample tests.\n",
+      "comments": [
+        {"body": "/verdict accept\n\nSample verdict with nothing to register."}
+      ],
+      "reviews": [
+        {"body": "Sample review body with no heading at all."}
+      ]
+    },
+    {
+      "number": 99,
+      "title": "Sample: lower number, merged later, section only in a verdict comment",
+      "base": "dev",
+      "merged_at": "2026-10-26T09:00:00Z",
+      "author": "agent-quill",
+      "body": "## What changed\nSample body with no security heading of its own.\n",
+      "comments": [
+        {"body": "A plain sample comment that carries neither a verdict nor a heading."},
+        {"body": "/verdict accept\n\n**Known security issues**\n\n- Sample component: an invented weakness found in the review, severity medium.\n\n**Next step**\nA bold line ends the section above.\n"}
+      ],
+      "reviews": []
+    },
+    {
+      "number": 102,
+      "title": "Sample: the section sits in a review body",
+      "base": "dev",
+      "merged_at": "2026-10-26T12:00:00Z",
+      "author": "agent-marlow",
+      "body": "## What changed\nAnother sample body without a security heading.\n",
+      "comments": [],
+      "reviews": [
+        {"body": "/verdict changes\n\n## Known security issues\n- Sample component: a review-only weakness, severity low.\n\n## Notes\nEnds the section above.\n"}
+      ]
+    }
+  ]
+}

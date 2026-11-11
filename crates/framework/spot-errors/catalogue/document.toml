@@ -1,0 +1,271 @@
+# document codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "document.required"
+class = "Validation"
+summary = "A required field or child table has no value: {field}."
+explanation_key = "error.document.required"
+params = ["field"]
+remedy = "Fill the named field, or remove the row requirement in the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_value"
+class = "Validation"
+summary = "A value does not fit its field: {field}."
+explanation_key = "error.document.invalid_value"
+params = ["field"]
+remedy = "Enter a value of the field's type and precision."
+since = "0.1.0"
+
+[[entry]]
+code = "document.unknown_field"
+class = "Validation"
+summary = "The document holds a field the DocType does not declare: {field}."
+explanation_key = "error.document.unknown_field"
+params = ["field"]
+remedy = "Correct the field's spelling, or add it to the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "document.too_long"
+class = "Validation"
+summary = "A text value is longer than the field's max_chars limit: {field}."
+explanation_key = "error.document.too_long"
+params = ["field"]
+remedy = "Shorten the text or raise the field's max_chars limit."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_option"
+class = "Validation"
+summary = "A select value is not one of the field's options: {field}."
+explanation_key = "error.document.invalid_option"
+params = ["field"]
+remedy = "Pick one of the field's listed options."
+since = "0.1.0"
+
+[[entry]]
+code = "document.read_only_field"
+class = "Validation"
+summary = "The caller set a field only the engine may set, such as doc_state: {field}."
+explanation_key = "error.document.read_only_field"
+params = ["field"]
+remedy = "Remove the field from the patch; the engine sets it."
+since = "0.1.0"
+
+[[entry]]
+code = "document.value_not_listed"
+class = "Validation"
+summary = "A select value is not one of the field's currently listed values: {field}."
+explanation_key = "error.document.value_not_listed"
+params = ["field"]
+remedy = "Pick a listed value, or re-add the value to the field's options."
+since = "0.1.0"
+
+[[entry]]
+code = "document.secret_not_writable"
+class = "Validation"
+summary = "A secret field was set in a document instead of through the secrets service: {field}."
+explanation_key = "error.document.secret_not_writable"
+params = ["field"]
+remedy = "Remove the value and store the secret with the secrets service."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_row"
+class = "Validation"
+summary = "The same child row id appears twice in the patch: {field}."
+explanation_key = "error.document.invalid_row"
+params = ["field"]
+remedy = "Give each changed row its own id, or remove the duplicate row."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_state"
+class = "InvalidState"
+summary = "The requested action is not allowed in the document's state {state}."
+explanation_key = "error.document.invalid_state"
+params = ["state"]
+remedy = "Move the document to a state that allows the action, or cancel it."
+since = "0.1.0"
+
+[[entry]]
+code = "document.duplicate"
+class = "Duplicate"
+summary = "Another document already holds this unique value or id."
+explanation_key = "error.document.duplicate"
+params = []
+remedy = "Change the value, or open the existing document instead."
+since = "0.1.0"
+
+[[entry]]
+code = "document.linked"
+class = "Linked"
+summary = "Other documents link to this one, so it cannot be cancelled or deleted."
+explanation_key = "error.document.linked"
+params = []
+remedy = "Remove or repoint the linking documents first."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_link"
+class = "Validation"
+summary = "A link points at a document that does not exist: {field}."
+explanation_key = "error.document.invalid_link"
+params = ["field"]
+remedy = "Correct the link value or create the linked document."
+since = "0.1.0"
+
+[[entry]]
+code = "document.not_found"
+class = "NotFound"
+summary = "No document with this id exists, or the caller may not see it."
+explanation_key = "error.document.not_found"
+params = []
+remedy = "Check the id and the caller's read permission."
+since = "0.1.0"
+
+[[entry]]
+code = "document.stale_version"
+class = "StaleVersion"
+summary = "The document changed since it was read; the submitted version is out of date."
+explanation_key = "error.document.stale_version"
+params = []
+remedy = "Reload the document, reapply the change and submit the new version."
+since = "0.1.0"
+
+[[entry]]
+code = "document.conflict"
+class = "Unavailable"
+summary = "A document this operation changes was changed by someone else while it ran; the operation was rerun and kept meeting a newer version."
+explanation_key = "error.document.conflict"
+params = []
+remedy = "Repeat the same command: nothing was changed. The details name the document that conflicted."
+since = "0.1.0"
+
+[[entry]]
+code = "document.bad_default"
+class = "Internal"
+summary = "A field's default value cannot be read as the field's type: {field}."
+explanation_key = "error.document.bad_default"
+params = ["field"]
+remedy = "Fix the default in the DocType definition so it matches the field type."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_name"
+class = "Internal"
+summary = "The metadata holds a name that the storage layer refuses as an identifier: {name}."
+explanation_key = "error.document.invalid_name"
+params = ["name"]
+remedy = "Correct the metadata definition; this is a metadata bug, not caller input."
+since = "0.1.0"
+
+[[entry]]
+code = "document.unknown_child_doctype"
+class = "Internal"
+summary = "A child table's DocType is not defined in the metadata: {doctype}."
+explanation_key = "error.document.unknown_child_doctype"
+params = ["doctype"]
+remedy = "Define the missing DocType or fix the table's target in the metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "document.invalid_state_value"
+class = "Internal"
+summary = "A stored document state is not one of draft, posted or cancelled: {found}."
+explanation_key = "error.document.invalid_state_value"
+params = ["found"]
+remedy = "Repair the stored state through a data fix; this indicates corrupt storage."
+since = "0.1.0"
+
+[[entry]]
+code = "document.wrong_type"
+class = "Internal"
+summary = "A field does not hold the type the reader expects: {field}."
+explanation_key = "error.document.wrong_type"
+params = ["field"]
+remedy = "Use the typed accessor that matches the field's declared type."
+since = "0.1.0"
+
+[[entry]]
+code = "document.wrong_doctype"
+class = "Internal"
+summary = "A document was passed to a view of another DocType: {doctype}."
+explanation_key = "error.document.wrong_doctype"
+params = ["doctype"]
+remedy = "Fetch the document through the view's DocType; this is a programming error."
+since = "0.1.0"
+
+[[entry]]
+code = "document.validation_failed"
+class = "Validation"
+summary = "One or more fields are invalid; the field errors name each one exactly."
+explanation_key = "error.document.validation_failed"
+params = []
+remedy = "Fix every field error listed in the error's fields."
+since = "0.1.0"
+
+[[entry]]
+code = "document.internal_error"
+class = "Internal"
+summary = "A platform invariant failed while an app method or seam ran; the message names what did not hold."
+explanation_key = "error.document.internal_error"
+params = []
+remedy = "Report this to the app maintainers with the message and request id."
+since = "0.1.0"
+
+[[entry]]
+code = "document.naming_title_field_missing"
+class = "none"
+summary = "A DocType has a naming property but no title field to hold the name."
+explanation_key = "error.document.naming_title_field_missing"
+params = []
+remedy = "Set the DocType's title_field to a text field, or remove its naming property."
+since = "0.1.0"
+
+[[entry]]
+code = "document.naming_pattern_invalid"
+class = "none"
+summary = "A DocType's naming property is not a pattern the namer can run."
+explanation_key = "error.document.naming_pattern_invalid"
+params = []
+remedy = "Use a series pattern with a counter, a lone field:<name>, hash or prompt."
+since = "0.1.0"
+
+[[entry]]
+code = "document.duplicate_name"
+class = "Duplicate"
+summary = "Another document of this type already has this name."
+explanation_key = "error.document.duplicate_name"
+params = []
+remedy = "Choose a different name, or open the existing document instead."
+since = "0.1.0"
+
+[[entry]]
+code = "document.name_not_assignable"
+class = "Validation"
+summary = "The name of this document type is generated, so a caller cannot choose it."
+explanation_key = "error.document.name_not_assignable"
+params = []
+remedy = "Leave the name field empty; the system gives the document its name when it is created."
+since = "0.1.0"
+
+[[entry]]
+code = "document.name_not_renameable"
+class = "Validation"
+summary = "The name of this document type is generated, so it cannot be renamed."
+explanation_key = "error.document.name_not_renameable"
+params = []
+remedy = "Correct the document instead; the system names the amended copy itself."
+since = "0.1.0"
+
+[[entry]]
+code = "document.denial_sink_failed"
+class = "none"
+summary = "The sink told about refused operations panicked or took longer than its time limit; the refusal itself stands."
+explanation_key = "error.document.denial_sink_failed"
+params = []
+remedy = "Fix the denial sink (the audit's sink) so it returns within the engine's denial timeout; the operation's own error was unaffected."
+since = "0.1.0"

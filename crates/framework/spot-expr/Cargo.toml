@@ -1,0 +1,25 @@
+[package]
+name = "spot-expr"
+description = "The shared expression language (WP-UI-11.T1, ADR-28): a small, pure, total language for field rules, with exact decimals, parsed by a hand-written recursive-descent parser and checked against a conformance corpus that the .NET implementation must also pass"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Exact decimals; no floating point anywhere in the language.
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+# The storage value model, for the small mapping module.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Calendar dates of the storage model (the language has its own date arithmetic).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+thiserror = "2"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+proptest = "1"
+
+[lints]
+workspace = true

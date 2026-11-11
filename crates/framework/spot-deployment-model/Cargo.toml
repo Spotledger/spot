@@ -1,0 +1,50 @@
+[package]
+name = "spot-deployment-model"
+description = "Deployment self-awareness (WP-AI-02.T1, WS13, ADR-26): a live, versioned model of how this installation is deployed — edition, platform, topology, backend, coordination, sync, runtime version, installed apps and seam overrides, migration history, connectivity, site policies and the agent's own tier — updated from system events with monotonic epochs, verified against authoritative facts and published to agents through a watch channel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The event vocabulary and evidence pointers WP-AI-01 defined: a deployment event is derived
+# from a `SystemEvent` and never invents a second provenance model.
+spot-self-model = { path = "../spot-self-model" }
+# The tier ladder the model reports as the agent's own tier.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# The audit entry every agent action carries, so the epoch a decision relied on is recorded.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Authoritative source: the installed-app state the installer maintains.
+spot-installer = { path = "../spot-installer" }
+# Authoritative source: resolved runtime settings (the node profile and role set).
+spot-settings = { path = "../spot-settings" }
+# Authoritative source: the runtime profile, node roles and replica status (ADM-06).
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+# Authoritative source: node health, telemetry freshness and the licence signal.
+spot-fleet-health = { path = "../spot-fleet-health" }
+# Authoritative source: the step and seam registry's applied overrides.
+spot-seams = { path = "../spot-seams" }
+# The override-kind vocabulary the seam registry speaks (ADR-08); the adapter maps it.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Derive-based serde on every public data type; callers choose the wire format.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for the model digest.
+serde_json = "1"
+# SHA-256 for the model digest.
+sha2 = "0.10"
+# Typed errors with stable `deployment_model.*` codes.
+thiserror = "2"
+# The watch channel a `ModelHandle` publishes through: agents hold cheap clones and read the
+# current epoch without blocking each other (`sync` is the only feature needed).
+tokio = { version = "1.47", features = ["sync"] }
+
+[dev-dependencies]
+# `#[tokio::test]` for the subscription tests.
+tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
+# Constructing real `InstalledApp` values in the installer adapter's tests.
+semver = "1"
+spot-bundle = { path = "../spot-bundle" }
+
+[lints]
+workspace = true

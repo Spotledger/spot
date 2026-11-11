@@ -1,0 +1,22 @@
+[package]
+name = "spot-image-upcast"
+description = "Image upcasters for the event journal (WP-JRN-06.T1, ADR-061 s3 and s6): a pure library that registers a named, versioned rewrite of a stored document image per entity, chains the registered steps from the schema an image was written under to the schema a rebuild targets, offers the declarative step builders patches are written with, and checks a list of declared shape changes for the upcaster each one needs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Typed errors with stable `image_upcast.*` codes, and the derive of the image's wire form.
+thiserror = "2"
+# The image is a plain JSON object (ADR-055 value encoding): no other representation.
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Upcasting twice equals upcasting once, over generated images.
+proptest = "1"
+
+[lints]
+workspace = true

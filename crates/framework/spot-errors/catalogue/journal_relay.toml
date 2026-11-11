@@ -1,0 +1,73 @@
+# journal_relay codes: the journal relay of spot-journal-relay (WP-JRN-03.T4, ADR-061 s5 and s10): the ordering, split-brain and chain refusals of batch intake, sealing and resume. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_relay.chain_broken"
+class = "none"
+summary = "The stored journal chain (the signed manifest, the sealed segments and the tail chunks) disagrees with itself or with the manifest, so the relay refused to continue instead of repairing it."
+explanation_key = "error.journal_relay.chain_broken"
+params = []
+remedy = "Do not overwrite anything: compare the manifest with the segment listing and the tail chunks, find which object differs and restore it from a replica or backup, then resume the relay. If the manifest is missing while segments of the generation exist, restore the manifest from the replica or run the repair path; never delete the segments and never create a new manifest by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.split_brain"
+class = "none"
+summary = "The manifest, a segment or a tail chunk of this source was written by someone else, so another relay owns the source; this relay stopped and wrote nothing further."
+explanation_key = "error.journal_relay.split_brain"
+params = []
+remedy = "Stop the other relay, or this one: exactly one relay may write a source. Restart the survivor so it resumes from the store."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.entry_out_of_order"
+class = "none"
+summary = "A batch repeats or goes back over positions the relay already holds, or carries a position that is not after the one before it."
+explanation_key = "error.journal_relay.entry_out_of_order"
+params = []
+remedy = "Ask the relay for its next position and continue the outbox from there; a batch the relay already holds needs no replay."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.batch_gap"
+class = "none"
+summary = "A batch skips sequence numbers, inside the batch or between the last position the relay holds and the batch's first."
+explanation_key = "error.journal_relay.batch_gap"
+params = []
+remedy = "Resend from the relay's next position without skipping any entry; a missing entry must be found in the outbox, never invented."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.entry_invalid"
+class = "none"
+summary = "A batch cannot be accepted as such: it is empty, its batch id is not after the last one, a position is in another generation, or a line is not one line of UTF-8 or is too large."
+explanation_key = "error.journal_relay.entry_invalid"
+params = []
+remedy = "Build the batch from consecutive outbox entries of the relay's generation, one JSON line each, with a batch id larger than the last."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.config_invalid"
+class = "none"
+summary = "The relay configuration is unusable: the tenant id is not one safe path component, or the source id is empty."
+explanation_key = "error.journal_relay.config_invalid"
+params = []
+remedy = "Give a tenant id with no slash, no run of two dots and no control character, and a non-empty source id."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.resume_required"
+class = "none"
+summary = "An earlier relay call failed part-way, so the relay does not know what the journal store holds; it refuses new batches until it has been resumed."
+explanation_key = "error.journal_relay.resume_required"
+params = []
+remedy = "Call resume on the relay and continue from its next position once that succeeds."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_relay.store_failed"
+class = "none"
+summary = "The journal store failed or refused a call the relay made (for example a provider outage), so the call is incomplete."
+explanation_key = "error.journal_relay.store_failed"
+params = []
+remedy = "Check the object store; once it answers again, resume the relay, which repairs whatever the call left half done."
+since = "0.1.0"

@@ -1,0 +1,191 @@
+# mail_queue codes (WP-PLT-11.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# These ride job results, bounce records and logs, never an AppError, so the class is `none`.
+
+[[entry]]
+code = "mail_queue.malformed_job"
+class = "none"
+summary = "The queued mail job's arguments could not be read."
+explanation_key = "error.mail_queue.malformed_job"
+params = []
+remedy = "Re-enqueue the message with enqueue_mail; do not edit job arguments by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.unsupported_version"
+class = "none"
+summary = "The queued mail job was written by a newer or unknown job version."
+explanation_key = "error.mail_queue.unsupported_version"
+params = []
+remedy = "Run a worker of the same or a newer release, or re-enqueue the message."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.invalid_message"
+class = "none"
+summary = "The queued message is not a valid outgoing message (recipients, headers, bodies or file keys)."
+explanation_key = "error.mail_queue.invalid_message"
+params = []
+remedy = "Fix the message and enqueue it again."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.limit_exceeded"
+class = "none"
+summary = "The message exceeds a queue limit: too many recipients, headers or attachments, or too large a body."
+explanation_key = "error.mail_queue.limit_exceeded"
+params = []
+remedy = "Send fewer recipients per message, or link large content instead of attaching it."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.unknown_account"
+class = "none"
+summary = "The sender account of the queued message does not exist for this site."
+explanation_key = "error.mail_queue.unknown_account"
+params = []
+remedy = "Create or restore the email account, then enqueue the message again."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.directory_unavailable"
+class = "none"
+summary = "The account directory could not be read, so the attempt will be retried."
+explanation_key = "error.mail_queue.directory_unavailable"
+params = []
+remedy = "Check the account store; the job retries by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.sender_mismatch"
+class = "none"
+summary = "The message's From address is not the address of the sending account."
+explanation_key = "error.mail_queue.sender_mismatch"
+params = []
+remedy = "Send from the account's own address, or configure the account for this sender."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.credential_unavailable"
+class = "none"
+summary = "The credential service could not be reached, so the attempt will be retried."
+explanation_key = "error.mail_queue.credential_unavailable"
+params = []
+remedy = "Check the secrets service; the job retries by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.credential_not_found"
+class = "none"
+summary = "The account's credential reference resolves to no secret."
+explanation_key = "error.mail_queue.credential_not_found"
+params = []
+remedy = "Set the account's password or token again in the secrets service."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.attachment_missing"
+class = "none"
+summary = "An attachment or inline image named by the queued message is not in the file store."
+explanation_key = "error.mail_queue.attachment_missing"
+params = []
+remedy = "Upload the file again and enqueue the message again."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.attachment_unavailable"
+class = "none"
+summary = "The file store could not be read, so the attempt will be retried."
+explanation_key = "error.mail_queue.attachment_unavailable"
+params = []
+remedy = "Check the file store; the job retries by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.attachment_too_large"
+class = "none"
+summary = "The attachments of the queued message exceed the total size limit."
+explanation_key = "error.mail_queue.attachment_too_large"
+params = []
+remedy = "Send fewer or smaller attachments, or share a link instead."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.transport_config"
+class = "none"
+summary = "The sending account's transport settings are invalid (security mode, credentials, certificate)."
+explanation_key = "error.mail_queue.transport_config"
+params = []
+remedy = "Correct the account's SMTP settings."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.smtp_transient"
+class = "none"
+summary = "The mail server answered with a temporary failure or could not be reached, so the attempt will be retried."
+explanation_key = "error.mail_queue.smtp_transient"
+params = []
+remedy = "Wait for the retry; check the server if it keeps failing."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.smtp_permanent"
+class = "none"
+summary = "The mail server permanently refused the message."
+explanation_key = "error.mail_queue.smtp_permanent"
+params = []
+remedy = "Read the SMTP reply code on the bounce record, fix the cause and send again."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.smtp_authentication"
+class = "none"
+summary = "The mail server refused the account's credentials."
+explanation_key = "error.mail_queue.smtp_authentication"
+params = []
+remedy = "Update the account's credentials, then send again."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.recipient_rejected"
+class = "none"
+summary = "The mail server accepted the message but rejected one recipient."
+explanation_key = "error.mail_queue.recipient_rejected"
+params = []
+remedy = "Check the recipient address on the bounce record."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.sent_log_unavailable"
+class = "none"
+summary = "The sent log could not be read, so the attempt will be retried before anything is sent."
+explanation_key = "error.mail_queue.sent_log_unavailable"
+params = []
+remedy = "Check the sent-log store; the job retries by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.bounce_unavailable"
+class = "none"
+summary = "The bounce record could not be written, so the attempt will be retried."
+explanation_key = "error.mail_queue.bounce_unavailable"
+params = []
+remedy = "Check the bounce store; the job retries by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.pinned_required"
+class = "none"
+summary = "The egress guard authorised the mail server but returned no address to connect to, so nothing was sent."
+explanation_key = "error.mail_queue.pinned_required"
+params = []
+remedy = "Check the mail server's host name resolves to a public address; contact the administrator if it does."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_queue.retries_exhausted"
+class = "none"
+summary = "Every attempt the job was allowed failed with an error that might have succeeded later, so the message was given up on and every undelivered recipient has a bounce record."
+explanation_key = "error.mail_queue.retries_exhausted"
+params = []
+remedy = "Read the bounce record's code, reply code and attempt count, fix the cause (server reachability, throttling or the account) and send the message again."
+since = "0.1.0"

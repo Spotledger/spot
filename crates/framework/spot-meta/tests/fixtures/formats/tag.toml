@@ -1,0 +1,9 @@
+name = "tag"
+label = "Tag"
+title_field = "title"
+
+[[fields]]
+name = "title"
+type = "text"
+max_chars = 60
+unique = true

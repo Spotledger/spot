@@ -1,0 +1,47 @@
+# edge_pg codes: the PostgreSQL edge store (WP-DAG-04.T2). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "edge_pg.unavailable"
+class = "Unavailable"
+summary = "The edge store is unavailable: {message}."
+explanation_key = "error.edge_pg.unavailable"
+params = ["message"]
+remedy = "Check that the database is reachable and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_pg.write_failed"
+class = "Internal"
+summary = "The edge store could not apply a change: {message}."
+explanation_key = "error.edge_pg.write_failed"
+params = ["message"]
+remedy = "Check the edge tables and retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_pg.decode_failed"
+class = "Internal"
+summary = "A stored edge could not be decoded: {message}."
+explanation_key = "error.edge_pg.decode_failed"
+params = ["message"]
+remedy = "Check that the edge tables were written by this version of the edge store."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_pg.migration_failed"
+class = "Internal"
+summary = "The edge tables could not be created: {message}."
+explanation_key = "error.edge_pg.migration_failed"
+params = ["message"]
+remedy = "Check that the database user may create tables and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_pg.report_not_found"
+class = "NotFound"
+summary = "The drift report `{report_key}` does not exist."
+explanation_key = "error.edge_pg.report_not_found"
+params = ["report_key"]
+remedy = "Run the edge_verify job to produce a drift report before repairing."
+since = "0.1.0"

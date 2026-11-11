@@ -1,0 +1,113 @@
+{
+  "note": "Golden vectors for WP-UI-09.T2. The C# library and wwwroot/sw/shell-policy.js must give these answers. Files are written 'path:hash' (the hash is any string here); a cache key is 'path#hash'.",
+  "planner": [
+    { "name": "cold start downloads everything",
+      "record": null, "present": [], "next": { "build": "B1", "files": ["a.js:h1", "b.wasm:h2"] }, "contract": "c1",
+      "expect": { "reason": "cold-start", "fetch": ["a.js#h1", "b.wasm#h2"], "keep": [], "delete": [], "clearAll": true } },
+    { "name": "warm start downloads nothing",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1", "b.wasm#h2"], "next": { "build": "B1", "files": ["a.js:h1", "b.wasm:h2"] }, "contract": "c1",
+      "expect": { "reason": "unchanged", "fetch": [], "keep": ["a.js#h1", "b.wasm#h2"], "delete": [], "clearAll": false } },
+    { "name": "one changed file downloads exactly that file and drops its old key",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1", "b.wasm#h2"], "next": { "build": "B2", "files": ["a.js:h1", "b.wasm:h3"] }, "contract": "c1",
+      "expect": { "reason": "update", "fetch": ["b.wasm#h3"], "keep": ["a.js#h1"], "delete": ["b.wasm#h2"], "clearAll": false } },
+    { "name": "a contract change clears and downloads everything again",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1", "b.wasm#h2", "old.js#h9"], "next": { "build": "B1", "files": ["a.js:h1", "b.wasm:h2"] }, "contract": "c2",
+      "expect": { "reason": "contract-changed", "fetch": ["a.js#h1", "b.wasm#h2"], "keep": [], "delete": ["old.js#h9"], "clearAll": true } },
+    { "name": "an evicted file is downloaded again",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1"], "next": { "build": "B1", "files": ["a.js:h1", "b.wasm:h2"] }, "contract": "c1",
+      "expect": { "reason": "repair", "fetch": ["b.wasm#h2"], "keep": ["a.js#h1"], "delete": [], "clearAll": false } },
+    { "name": "a removed file is deleted",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1", "b.wasm#h2"], "next": { "build": "B2", "files": ["a.js:h1"] }, "contract": "c1",
+      "expect": { "reason": "update", "fetch": [], "keep": ["a.js#h1"], "delete": ["b.wasm#h2"], "clearAll": false } },
+    { "name": "compressed siblings are not cached",
+      "record": null, "present": [], "next": { "build": "B1", "files": ["a.wasm:h1", "a.wasm.br:h2", "a.wasm.gz:h3"] }, "contract": "c1",
+      "expect": { "reason": "cold-start", "fetch": ["a.wasm#h1"], "keep": [], "delete": [], "clearAll": true } },
+    { "name": "the same content under a new path is a new key",
+      "record": { "build": "B1", "contract": "c1" }, "present": ["a.js#h1"], "next": { "build": "B2", "files": ["c.js:h1"] }, "contract": "c1",
+      "expect": { "reason": "update", "fetch": ["c.js#h1"], "keep": [], "delete": ["a.js#h1"], "clearAll": false } },
+    { "name": "no record means nothing already present is trusted",
+      "record": null, "present": ["a.js#h1", "z.js#h9"], "next": { "build": "B1", "files": ["a.js:h1"] }, "contract": "c1",
+      "expect": { "reason": "cold-start", "fetch": ["a.js#h1"], "keep": [], "delete": ["z.js#h9"], "clearAll": true } },
+    { "name": "keys are ordered ordinally",
+      "record": null, "present": [], "next": { "build": "B1", "files": ["B.js:h1", "a.js:h2", "_framework/x.dll:h3"] }, "contract": "c1",
+      "expect": { "reason": "cold-start", "fetch": ["B.js#h1", "_framework/x.dll#h3", "a.js#h2"], "keep": [], "delete": [], "clearAll": true } }
+  ],
+  "classify": [
+    { "name": "a shell file is cache first", "method": "GET", "path": "_framework/dotnet.js", "query": false, "navigation": false, "shell": ["_framework/dotnet.js", "index.html"],
+      "expect": { "strategy": "cache-first", "cachePath": "_framework/dotnet.js" } },
+    { "name": "a navigation is answered by index.html", "method": "GET", "path": "orders/42", "query": true, "navigation": true, "shell": ["index.html"],
+      "expect": { "strategy": "cache-first", "cachePath": "index.html" } },
+    { "name": "a data request is network only", "method": "GET", "path": "api/v1/doc/Order/1", "query": false, "navigation": false, "shell": ["index.html"],
+      "expect": { "strategy": "network-only", "cachePath": null } },
+    { "name": "a shell file with a query string is network only", "method": "GET", "path": "main.js", "query": true, "navigation": false, "shell": ["main.js"],
+      "expect": { "strategy": "network-only", "cachePath": null } },
+    { "name": "a write is network only even for a shell path", "method": "POST", "path": "main.js", "query": false, "navigation": false, "shell": ["main.js"],
+      "expect": { "strategy": "network-only", "cachePath": null } },
+    { "name": "a navigation by POST is network only", "method": "POST", "path": "", "query": false, "navigation": true, "shell": ["index.html"],
+      "expect": { "strategy": "network-only", "cachePath": null } },
+    { "name": "a traversal path is network only", "method": "GET", "path": "../secret", "query": false, "navigation": false, "shell": ["../secret"],
+      "expect": { "strategy": "network-only", "cachePath": null } },
+    { "name": "method case does not matter", "method": "get", "path": "main.js", "query": false, "navigation": false, "shell": ["main.js"],
+      "expect": { "strategy": "cache-first", "cachePath": "main.js" } }
+  ],
+  "resolve": [
+    { "strategy": "cache-first", "cached": true, "network": false, "expect": "cache" },
+    { "strategy": "cache-first", "cached": true, "network": true, "expect": "cache" },
+    { "strategy": "cache-first", "cached": false, "network": true, "expect": "network" },
+    { "strategy": "cache-first", "cached": false, "network": false, "expect": "refuse" },
+    { "strategy": "network-only", "cached": true, "network": false, "expect": "refuse" },
+    { "strategy": "network-only", "cached": true, "network": true, "expect": "network" },
+    { "strategy": "network-only", "cached": false, "network": false, "expect": "refuse" }
+  ],
+  "update": [
+    { "name": "found, staged, prompt shown when the app has no edits, applied",
+      "current": "B1",
+      "steps": [
+        { "do": "edits", "value": false, "expect": { "state": "idle", "prompt": false } },
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "staged", "build": "B2", "expect": { "state": "update-ready", "prompt": true } },
+        { "do": "apply", "expect": { "state": "applying", "prompt": false, "result": "started" } },
+        { "do": "activated", "build": "B2", "expect": { "state": "idle", "prompt": false } }
+      ] },
+    { "name": "an update found during an unsaved edit waits and is applied after",
+      "current": "B1",
+      "steps": [
+        { "do": "edits", "value": true, "expect": { "state": "idle", "prompt": false } },
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "staged", "build": "B2", "expect": { "state": "update-ready", "prompt": false } },
+        { "do": "apply", "expect": { "state": "update-ready", "prompt": false, "result": "deferred" } },
+        { "do": "edits", "value": false, "expect": { "state": "applying", "prompt": false } }
+      ] },
+    { "name": "without a report from the app edits are assumed",
+      "current": "B1",
+      "steps": [
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "staged", "build": "B2", "expect": { "state": "update-ready", "prompt": false } },
+        { "do": "apply", "expect": { "state": "update-ready", "prompt": false, "result": "deferred" } }
+      ] },
+    { "name": "the prompt is dismissible and a newer build brings it back",
+      "current": "B1",
+      "steps": [
+        { "do": "edits", "value": false, "expect": { "state": "idle", "prompt": false } },
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "staged", "build": "B2", "expect": { "state": "update-ready", "prompt": true } },
+        { "do": "dismiss", "expect": { "state": "update-ready", "prompt": false } },
+        { "do": "found", "build": "B3", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "staged", "build": "B3", "expect": { "state": "update-ready", "prompt": true } }
+      ] },
+    { "name": "the running build and a stale staged event are ignored",
+      "current": "B1",
+      "steps": [
+        { "do": "found", "build": "B1", "expect": { "state": "idle", "prompt": false } },
+        { "do": "staged", "build": "B2", "expect": { "state": "idle", "prompt": false } },
+        { "do": "apply", "expect": { "state": "idle", "prompt": false, "result": "not-ready" } }
+      ] },
+    { "name": "a failed download goes back to idle",
+      "current": "B1",
+      "steps": [
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } },
+        { "do": "failed", "build": "B2", "expect": { "state": "idle", "prompt": false } },
+        { "do": "found", "build": "B2", "expect": { "state": "update-found", "prompt": false } }
+      ] }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "actor": {
+    "actor": "user:0192f1c0-0000-7000-8000-000000000002",
+    "component": null,
+    "on_behalf_of": null
+  },
+  "at": 1760000000000000,
+  "changed_fields": [
+    "grand_total",
+    "status"
+  ],
+  "command_id": "cmd-7f3a2c",
+  "diff": [
+    {
+      "after": {
+        "text": "1250.00"
+      },
+      "before": {
+        "text": "1000.00"
+      },
+      "path": "grand_total"
+    },
+    {
+      "after": {
+        "text": "Submitted"
+      },
+      "before": {
+        "text": "Draft"
+      },
+      "path": "status"
+    }
+  ],
+  "diff_digest": null,
+  "doctype": "sales_invoice",
+  "hidden_changes": false,
+  "id": "0192f1c0-0000-7000-8000-000000000001",
+  "operation": "update",
+  "site": "acme.spotledger.app",
+  "source": "api",
+  "truncated": false,
+  "version": 4
+}

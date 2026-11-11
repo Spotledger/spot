@@ -1,0 +1,55 @@
+# bulk codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bulk.cursor_invalid"
+class = "none"
+summary = "The export cursor or extraction watermark is malformed, forged, expired, or belongs to another caller or request."
+explanation_key = "error.bulk.cursor_invalid"
+params = []
+remedy = "Start a new export, or restart extraction from a watermark a full export returned."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk.watermark_expired"
+class = "none"
+summary = "The watermark is older than the change feed retains or from before a resync, so a partial result would be wrong."
+explanation_key = "error.bulk.watermark_expired"
+params = []
+remedy = "Run a full export and start extraction again from its watermark."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk.limit"
+class = "none"
+summary = "Too many exports or extractions are in flight, or the rows-per-second budget is used up."
+explanation_key = "error.bulk.limit"
+params = []
+remedy = "Wait for Retry-After and try again, or finish an export already running."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk.export_denied"
+class = "PermissionDenied"
+summary = "The caller does not hold the export right on the DocType."
+explanation_key = "error.bulk.export_denied"
+params = []
+remedy = "Ask an administrator for the export right on this DocType, or use a list view instead."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk.spec_invalid"
+class = "Validation"
+summary = "The export specification is not usable: no columns, a duplicate column, or an order key that is not a plain field."
+explanation_key = "error.bulk.spec_invalid"
+params = []
+remedy = "Name at least one column and order by plain fields of the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk.storage"
+class = "Internal"
+summary = "The storage backend failed while a page of the export was being read."
+explanation_key = "error.bulk.storage"
+params = []
+remedy = "Retry the export; if it keeps failing, check the backend's health."
+since = "0.1.0"

@@ -1,0 +1,37 @@
+name = "permission denied since an assignment expired"
+description = "Clerk still holds the read grant, but alice's assignment expired; why(Permission) must name the expired duty and the granting role."
+epoch = 13
+
+[caller]
+id = "agent:t1"
+tier = "T1"
+
+[[doctypes]]
+name = "sales_invoice"
+app = "selling"
+
+[[doctypes.fields]]
+name = "total"
+type = "decimal"
+
+[[grants]]
+role = "Clerk"
+doctype = "sales_invoice"
+rights = ["read"]
+
+[[assignments]]
+role = "Clerk"
+doctype = "sales_invoice"
+right = "read"
+principal = "alice"
+at = 300
+expires_at = 250
+change = "expired"
+record = "assignment:1"
+
+[[expect]]
+subject = { kind = "Permission", name = "Clerk:sales_invoice:read" }
+paths = [
+  ["Permission:Clerk:sales_invoice:read", "Duty:assignment:alice:Clerk:sales_invoice:read"],
+  ["Permission:Clerk:sales_invoice:read", "Role:Clerk"],
+]

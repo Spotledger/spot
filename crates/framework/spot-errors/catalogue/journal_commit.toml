@@ -1,0 +1,28 @@
+# journal_commit codes: the commit-acknowledgement driver of spot-journal-commit (WP-JRN-04.T2, ADR-061 s4 and s10): the ordering and stopped-relay refusals of the commit path. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_commit.seq_out_of_order"
+class = "none"
+summary = "A commit request or a local commit confirmation did not carry the next sequence number in order, so the driver refused it instead of leaving a gap in the journal."
+explanation_key = "error.journal_commit.seq_out_of_order"
+params = []
+remedy = "Submit requests and confirm local commits in consecutive sequence order; read the expected number from the driver and continue from it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_commit.unknown_seq"
+class = "none"
+summary = "A local commit confirmation named a sequence number that was never submitted or was already confirmed."
+explanation_key = "error.journal_commit.unknown_seq"
+params = []
+remedy = "Confirm each submitted commit exactly once, after its database commit is durable."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_commit.relay_stopped"
+class = "none"
+summary = "The journal relay stopped for a reason a retry cannot cure (another writer owns the source, the stored chain is broken or a batch was refused), so the driver takes no new commit."
+explanation_key = "error.journal_commit.relay_stopped"
+params = []
+remedy = "Do not retry blindly: read the relay's own error code from the driver status, resolve it (for example a second writer or a broken chain) and restart the driver."
+since = "0.1.0"

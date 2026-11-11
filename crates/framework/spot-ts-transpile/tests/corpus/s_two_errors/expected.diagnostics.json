@@ -1,0 +1,11 @@
+{
+  "diagnostics": [
+    {
+      "code": "ts.syntax",
+      "line": 1,
+      "column": 11,
+      "end_line": 1,
+      "end_column": 12
+    }
+  ]
+}

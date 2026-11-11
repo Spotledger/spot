@@ -1,0 +1,12 @@
+name = "customer"
+label = "Customer"
+
+[[fields]]
+name = "customer_name"
+type = "text"
+required = true
+max_chars = 80
+
+[[fields]]
+name = "region"
+type = "text"

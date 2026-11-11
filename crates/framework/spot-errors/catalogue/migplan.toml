@@ -1,0 +1,37 @@
+# migplan codes: the release plan engine (spot-migration-plan, WP-MIG-01). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "migplan.bad_risk_table"
+class = "none"
+summary = "The risk rule table or a site policy is not valid: {message}."
+explanation_key = "error.migplan.bad_risk_table"
+params = ["message"]
+remedy = "Correct the TOML so every rule names additive, needs_review or destructive."
+since = "0.1.0"
+
+[[entry]]
+code = "migplan.bad_cost_model"
+class = "none"
+summary = "The cost model is not valid: {message}."
+explanation_key = "error.migplan.bad_cost_model"
+params = ["message"]
+remedy = "Correct the TOML; every rate and spread must be a whole number, and none may be zero."
+since = "0.1.0"
+
+[[entry]]
+code = "migplan.bad_input"
+class = "none"
+summary = "The inputs cannot produce a plan: {message}."
+explanation_key = "error.migplan.bad_input"
+params = ["message"]
+remedy = "Correct the system description so it names one entry per DocType, app and patch."
+since = "0.1.0"
+
+[[entry]]
+code = "migplan.traversal_name_clash"
+class = "none"
+summary = "The traversal index name {name} of {first} clashes with {second}."
+explanation_key = "error.migplan.traversal_name_clash"
+params = ["first", "name", "second"]
+remedy = "Rename one of the fields, or declare one of them non-traversable, so the two no longer share an index name."
+since = "0.1.0"

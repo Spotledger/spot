@@ -1,0 +1,50 @@
+[package]
+name = "spot-quarantine"
+description = "The quarantine queue for received records the replication apply path refused (WP-EDG-06.T2, ADR-062): items with their reasons and immutable payload, a store trait with an in-memory reference, the intake adapter that keeps one bad record from blocking the stream, automatic retry with backoff and a cap that raises a condition, and the audited admin operations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# `AllowAll` and `DenyAll`, the test doubles for the permission guard. Never enable it in a
+# production build: with it, anything can be told "yes". The crate's own tests turn it on through
+# the dev-dependency on itself below; other crates turn it on in their `[dev-dependencies]` only.
+testing = []
+
+[dependencies]
+# The transaction the apply path runs in and the catalog an upgrade swaps (ADR-053).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The one apply path this crate is an adapter around (WP-EDG-06.T1).
+spot-replica-apply = { path = "../spot-replica-apply" }
+# The sender, the record name and the stream checkpoint a quarantine item records.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The permission engine the admin operations are checked against (WP-PLT-03, ADR-070).
+spot-permissions = { path = "../spot-permissions" }
+# The tamper-evident audit chain a discard, release or retry is written to (WP-AI-11, ADR-061).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The per-site chain map behind an async mutex; `append` is awaited while it is held.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# The admin view structs cross a process boundary as JSON.
+serde = { version = "1", features = ["derive"] }
+# The SHA-256 of a record image too large to store, kept in the marker item.
+sha2 = "0.10"
+# Typed errors with stable `quarantine.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# This crate's own tests use the test guards (`AllowAll`, `DenyAll`), which exist only with the
+# `testing` feature.
+spot-quarantine = { path = ".", features = ["testing"] }
+# The in-memory storage backend the intake acceptance tests run on (WP-CON-01.T2).
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Metadata for the permission-engine fixture the "permissions enforced" test builds.
+spot-meta = { path = "../spot-meta" }
+# `#[tokio::test]` and a multi-thread runtime.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+# The admin view structs serialise to JSON for the console screen.
+serde_json = "1"
+
+[lints]
+workspace = true

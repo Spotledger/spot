@@ -1,0 +1,14 @@
+{
+  "edge_type": "invoice.grn",
+  "from": {
+    "doctype": "purchase_invoice",
+    "id": "0192f1c0-0000-7000-8000-000000000001"
+  },
+  "graph": "procurement",
+  "holder_version": 4,
+  "op": "remove",
+  "to": {
+    "doctype": "goods_receipt",
+    "id": "0192f1c0-0000-7000-8000-000000000002"
+  }
+}

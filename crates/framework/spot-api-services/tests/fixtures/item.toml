@@ -1,0 +1,14 @@
+name = "item"
+label = "Item"
+
+[[fields]]
+name = "item_name"
+type = "text"
+required = true
+max_chars = 80
+
+[[fields]]
+name = "rate"
+type = "decimal"
+scale = 2
+precision = 14

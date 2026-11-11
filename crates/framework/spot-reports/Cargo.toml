@@ -1,0 +1,52 @@
+[package]
+name = "spot-reports"
+description = "The report engine (WP-PLT-14.T1): report definitions in TOML (a DocType report builder and query reports over the storage query IR), typed parameters, compilation under the ADR-069 limits, permission-filtered and field-checked execution returning the contract's ReportResult, and the ReportService the native API calls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The query IR every report compiles to; nothing here builds SQL (ADR-45).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The app API's metadata view (`DocTypeDef`, `FieldKind`) and `Value`.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The effective metadata a report's fields resolve against.
+spot-meta = { path = "../spot-meta" }
+# The permission filter, the no-inference check and the column restriction.
+spot-perm-query = { path = "../spot-perm-query" }
+# The decisions and the mask.
+spot-permissions = { path = "../spot-permissions" }
+# The field guard: report columns and the no-inference query check (WP-SEC-04.T1).
+spot-field-guard = { path = "../spot-field-guard" }
+# The service traits the native API runs on (the ReportService to implement).
+spot-http = { path = "../spot-http" }
+# The shared expression language computed columns are written in.
+spot-expr = { path = "../spot-expr" }
+# TOML report definitions.
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+# The request arguments and the contract's value encoding.
+serde_json = "1"
+# Exact decimals, never floats (ADR-12).
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+# The contract's base64 encoding for a `bytes` column.
+base64 = "0.22"
+# The content digest a compiled report's metadata identity carries (WP-MET-03.T6). Already in the
+# workspace tree through `spot-http` and `spot-graph-model`.
+sha2 = "0.10"
+# A link argument is a binary UUIDv7 record id.
+uuid = { version = "1", default-features = false, features = ["std"] }
+time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory backend the acceptance tests run queries against.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# A manual clock for the field guard's trace records.
+spot-core = { path = "../spot-core" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true

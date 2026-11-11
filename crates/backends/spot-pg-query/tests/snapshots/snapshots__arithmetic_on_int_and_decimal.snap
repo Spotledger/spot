@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT ("p"."visits" + $1) AS "int_sum", ("p"."credit_limit" * CAST("p"."visits" AS numeric)) AS "dec_product", ("p"."credit_limit" - $2) AS "dec_diff" FROM "party" AS "p" ORDER BY "p"."id" ASC OFFSET $3
+$1 = Int8(1)
+$2 = Numeric(0.5)
+$3 = Int8(0)
+columns = ["int_sum", "dec_product", "dec_diff"]
+decode = [Int, Decimal { scale: Some(2) }, Decimal { scale: Some(2) }]
+path = Transactional

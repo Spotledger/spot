@@ -1,0 +1,22 @@
+[package]
+name = "spot-conditions"
+description = "The conditions framework (WP-SYN-09.T2, ADR-067 sections 1 and 6): named conditions with a severity, a definition an app can register, a lifecycle (raised, de-duplicated per subject, debounced against flapping, escalated by elapsed time, cleared), one audit event per transition into a sink, and the calm health summary that says which conditions need a person"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The stable form of a condition definition (a catalogue a deployment can load) and of the
+# transitions it raises (the audit payload). Derive only: the crate owns no format of its own.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `conditions.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The open-set invariant over arbitrary operation sequences.
+proptest = "1"
+
+[lints]
+workspace = true

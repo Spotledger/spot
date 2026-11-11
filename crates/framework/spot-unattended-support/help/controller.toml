@@ -1,0 +1,51 @@
+# Help for the controller error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "controller.host_unavailable"
+what_happened = "The controller host adapter is not installed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Install the controller host adapter for this kind, or ship the controller natively.", "If it keeps happening, tell your administrator and quote the code controller.host_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "controller.invalid_reference"
+what_happened = "A controller reference is not written in one of the three allowed forms."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Write the reference as native:<name>, wasm:<export> or ts:<path>.", "If it keeps happening, tell your administrator and quote the code controller.invalid_reference."]
+audience = "operator"
+
+[[help]]
+code = "controller.method_conflict"
+what_happened = "Two apps declare the same method on the same document type."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare one method an override of the other, or rename one.", "If it keeps happening, tell your administrator and quote the code controller.method_conflict."]
+audience = "operator"
+
+[[help]]
+code = "controller.no_step"
+what_happened = "The default controller declares no steps, so it cannot run one."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Register a controller that declares the step.", "If it keeps happening, tell your administrator and quote the code controller.no_step."]
+audience = "operator"
+
+[[help]]
+code = "controller.unknown_native"
+what_happened = "The controller named in the setup is not built into this server."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Add the controller to the host's NativeControllers table.", "If it keeps happening, tell your administrator and quote the code controller.unknown_native."]
+audience = "user"
+
+[[help]]
+code = "controller.event_doctype_unserved"
+what_happened = "The app's setup declares an event for a record type that none of its controllers handles."
+why = "The setup is inconsistent, so the event would never run."
+what_to_do = ["Name a controller for that record type in the app's setup, or remove the event.", "If it keeps happening, tell your administrator and quote the code controller.event_doctype_unserved."]
+audience = "user"
+
+[[help]]
+code = "controller.doctype_duplicate"
+what_happened = "The app's setup names more than one controller for the same record type."
+why = "An app has exactly one controller for each record type."
+what_to_do = ["Name one controller per record type in the app's setup.", "If it keeps happening, tell your administrator and quote the code controller.doctype_duplicate."]
+audience = "user"

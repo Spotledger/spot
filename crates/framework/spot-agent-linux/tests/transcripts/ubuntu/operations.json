@@ -1,0 +1,52 @@
+{
+  "distro": "ubuntu",
+  "description": "An Ubuntu LTS host: install a package with apt, apply all updates (refresh then upgrade), enable a unit, add an account to a supplementary group and open a source rule on ufw.",
+  "state": {
+    "installed": ["bash", "systemd", "openssh-server", "ufw"],
+    "updates": [{ "name": "curl", "security": false }],
+    "services": { "nginx.service": { "active": false, "enabled": false } },
+    "users": { "alice": 1000 },
+    "firewall_backend": "ufw",
+    "firewall_ports": ["22/tcp"]
+  },
+  "scenarios": [
+    {
+      "name": "install nginx",
+      "op": "os.package.install",
+      "params": { "packages": ["nginx"] },
+      "expect_argv": [["apt-get", "-y", "install", "nginx"]],
+      "idempotent": true
+    },
+    {
+      "name": "apply all updates",
+      "op": "os.update.apply",
+      "params": {},
+      "expect_argv": [
+        ["apt-get", "-y", "update"],
+        ["apt-get", "-y", "upgrade"]
+      ],
+      "idempotent": true
+    },
+    {
+      "name": "enable nginx",
+      "op": "os.service.enable",
+      "params": { "unit": "nginx.service" },
+      "expect_argv": [["systemctl", "--no-pager", "enable", "nginx.service"]],
+      "idempotent": true
+    },
+    {
+      "name": "add alice to sudo",
+      "op": "os.user.add_group",
+      "params": { "name": "alice", "group": "sudo" },
+      "expect_argv": [["usermod", "--append", "--groups", "sudo", "--", "alice"]],
+      "idempotent": true
+    },
+    {
+      "name": "open source 10.0.0.0/8",
+      "op": "os.firewall.open",
+      "params": { "source": "10.0.0.0/8" },
+      "expect_argv": [["ufw", "allow", "from", "10.0.0.0/8"]],
+      "idempotent": true
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+# graph index codes: the in-memory per-tenant graph index (WP-GRA-02.T1).
+# The index is a cache of the database; these codes report a stream hole, a mis-addressed
+# event, an unmeetable memory cap, a failing rebuild source and a malformed event. They ride
+# no AppError, so their class is `none`.
+
+[[entry]]
+code = "graph_index.gap"
+class = "none"
+summary = "The graph index missed events: expected sequence {expected} but got {got}."
+explanation_key = "error.graph_index.gap"
+params = ["expected", "got"]
+remedy = "Rebuild the graph from its source; the index marks itself stale until then."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_index.wrong_graph"
+class = "none"
+summary = "An edge event names graph {got} but the index is {expected}."
+explanation_key = "error.graph_index.wrong_graph"
+params = ["expected", "got"]
+remedy = "Route the event to the index for the graph it names."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_index.budget_exceeded"
+class = "none"
+summary = "The graph index memory cap of {cap} bytes cannot be met: {used} bytes used and every graph is pinned."
+explanation_key = "error.graph_index.budget_exceeded"
+params = ["cap", "used"]
+remedy = "Raise the cap, unpin a graph, or remove one; a pinned graph is never evicted."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_index.source"
+class = "none"
+summary = "The graph source failed: {reason}."
+explanation_key = "error.graph_index.source"
+params = ["reason"]
+remedy = "Fix the source failure and rebuild the graph again."
+since = "0.1.0"
+
+[[entry]]
+code = "graph_index.invalid_edge"
+class = "none"
+summary = "An edge event is invalid: {reason}."
+explanation_key = "error.graph_index.invalid_edge"
+params = ["reason"]
+remedy = "Emit an edge event with a canonical edge-type name and two record endpoints."
+since = "0.1.0"

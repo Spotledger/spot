@@ -1,0 +1,42 @@
+{
+  "name": "browser",
+  "altMenus": false,
+  "bindings": [
+    {
+      "chord": "Ctrl+K",
+      "commandId": "shell.launcher"
+    },
+    {
+      "chord": "Ctrl+S",
+      "commandId": "document.save"
+    },
+    {
+      "chord": "Ctrl+B",
+      "commandId": "view.sidebar"
+    },
+    {
+      "chord": "Ctrl+Tab",
+      "commandId": "tab.next"
+    },
+    {
+      "chord": "Ctrl+Shift+Tab",
+      "commandId": "tab.previous"
+    },
+    {
+      "chord": "Ctrl+Shift+F4",
+      "commandId": "tab.close"
+    },
+    {
+      "chord": "Ctrl+Shift+L",
+      "commandId": "tab.overflow"
+    },
+    {
+      "chord": "F1",
+      "commandId": "help.keymap"
+    },
+    {
+      "chord": "Ctrl+M",
+      "commandId": "shell.launcher"
+    }
+  ]
+}

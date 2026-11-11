@@ -1,0 +1,29 @@
+# installer_pg codes: the PostgreSQL installer registry (WP-STR-04.T3). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "installer_pg.migration_failed"
+class = "Internal"
+summary = "The installer registry tables could not be created in the database."
+explanation_key = "error.installer_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "installer_pg.storage_failed"
+class = "Internal"
+summary = "The installer registry could not read or write the database."
+explanation_key = "error.installer_pg.storage_failed"
+params = []
+remedy = "Check that the database is reachable and has free connections, then resume the install: the journal in the database tells the installer where it stopped."
+since = "0.1.0"
+
+[[entry]]
+code = "installer_pg.corrupt_row"
+class = "Internal"
+summary = "A stored installer registry row cannot be read back."
+explanation_key = "error.installer_pg.corrupt_row"
+params = []
+remedy = "Do not edit the registry tables by hand; restore the site from a backup or ask the platform operator to inspect the row."
+since = "0.1.0"

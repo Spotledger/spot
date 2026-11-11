@@ -1,0 +1,23 @@
+[package]
+name = "spot-sample-app"
+description = "The framework's acceptance app (WP-DX-05.T1): the sample project-and-task tracker — five DocTypes, three roles, a native Time Entry controller with the hours roll-up, and demo seed data, written only against the app API contract"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one crate an app may depend on (gate G4, tools/lints/deps/rules.toml); it
+# re-exports the value model, the controller trait, the stub host and Decimal.
+spot-app-api = { path = "../../../contracts/app-api" }
+
+[dev-dependencies]
+# The controller tests are async (the stub host's DocumentService methods) and
+# use the prelude's value types directly: Decimal for the hours, time for dates.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+time = { version = "0.3.55", default-features = false, features = ["std", "macros", "parsing"] }
+
+[lints]
+workspace = true

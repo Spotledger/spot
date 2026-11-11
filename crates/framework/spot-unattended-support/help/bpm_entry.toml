@@ -1,0 +1,114 @@
+# Help for the bpm_entry error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "bpm_entry.audit"
+what_happened = "The audit entry for a refusal or a mode change could not be written, so the operation failed closed and nothing was changed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the audit sink and retry the operation.", "If it keeps happening, tell your administrator and quote the code bpm_entry.audit."]
+audience = "admin"
+
+[[help]]
+code = "bpm_entry.batch_failed"
+what_happened = "A batch run could not be started, stored or read, or its item source stopped."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the batch store and the request service, then resume the batch.", "If it keeps happening, tell your administrator and quote the code bpm_entry.batch_failed."]
+audience = "operator"
+
+[[help]]
+code = "bpm_entry.batch_limit"
+what_happened = "A batch run reached its configured limit of skipped or failed items and stopped."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the reported items or raise the limit, then resume the batch.", "If it keeps happening, tell your administrator and quote the code bpm_entry.batch_limit."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.batch_state"
+what_happened = "A batch run is in a state that does not allow the call: it already ran to the end, or it has not finished and must be resumed."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Resume the unfinished batch, or start a new batch with a new start key.", "If it keeps happening, tell your administrator and quote the code bpm_entry.batch_state."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.commit_failed"
+what_happened = "The form step's transition and its draft write could not be committed together, so nothing was stored."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Retry the step; the request is exactly where it was.", "If it keeps happening, tell your administrator and quote the code bpm_entry.commit_failed."]
+audience = "operator"
+
+[[help]]
+code = "bpm_entry.config_invalid"
+what_happened = "A form step or an entry setting did not parse or is incomplete."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the form step configuration or the entry setting so it names a valid record type and process.", "If it keeps happening, tell your administrator and quote the code bpm_entry.config_invalid."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.draft_failed"
+what_happened = "A draft record could not be created, updated, released or discarded through its lifecycle."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the record type's lifecycle and the request's permissions, then retry the step.", "If it keeps happening, tell your administrator and quote the code bpm_entry.draft_failed."]
+audience = "operator"
+
+[[help]]
+code = "bpm_entry.form_invalid"
+what_happened = "The values entered in a form step failed the record type's validation; the step stays open and the field errors are returned."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the marked fields and submit the form again.", "If it keeps happening, tell your administrator and quote the code bpm_entry.form_invalid."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.inbox"
+what_happened = "The task inbox could not be reached when opening, checking or completing a form task."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the task service and retry the operation.", "If it keeps happening, tell your administrator and quote the code bpm_entry.inbox."]
+audience = "admin"
+
+[[help]]
+code = "bpm_entry.label_invalid"
+what_happened = "A run label override was blank."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Supply a non-blank label, or remove the override to use the default.", "If it keeps happening, tell your administrator and quote the code bpm_entry.label_invalid."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.no_assignee"
+what_happened = "A form step resolved to nobody to ask, so the request parks instead of guessing a person."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Name a user, a role with members or an approver rule that resolves to someone.", "If it keeps happening, tell your administrator and quote the code bpm_entry.no_assignee."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.owned_by_request"
+what_happened = "A draft record owned by a running request was changed from another channel; it can be changed only through that request's steps."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Open the request named in the error and change the draft there, or cancel the request to release the draft.", "If it keeps happening, tell your administrator and quote the code bpm_entry.owned_by_request."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.scope_invalid"
+what_happened = "A create named a company or unit that is unknown, or one the acting person may not create in. The create was refused because the entry mode could not be decided."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Create the record in a company or unit the acting person is assigned to, or ask an administrator for access.", "If it keeps happening, tell your administrator and quote the code bpm_entry.scope_invalid."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.settings"
+what_happened = "An entry setting or a mode could not be read."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the settings store and that the entry settings are registered, then retry.", "If it keeps happening, tell your administrator and quote the code bpm_entry.settings."]
+audience = "admin"
+
+[[help]]
+code = "bpm_entry.start_process"
+what_happened = "A record type in a process_only scope was created directly; it is created only by starting its entry process, which the error names."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Start the entry process named in the error as the calling principal instead of creating the record.", "If it keeps happening, tell your administrator and quote the code bpm_entry.start_process."]
+audience = "user"
+
+[[help]]
+code = "bpm_entry.step_not_open"
+what_happened = "A form step's task is not open, or the person completing it was not given it."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Open the task from the inbox of the assigned person, or reassign it.", "If it keeps happening, tell your administrator and quote the code bpm_entry.step_not_open."]
+audience = "user"

@@ -1,0 +1,531 @@
+[
+ {
+  "name": "text contains",
+  "field": "title",
+  "op": "Contains",
+  "values": [
+   "ab"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "contains",
+   "value": "ab",
+   "case_insensitive": true
+  }
+ },
+ {
+  "name": "text starts",
+  "field": "title",
+  "op": "StartsWith",
+  "values": [
+   "ab"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "prefix",
+   "value": "ab",
+   "case_insensitive": true
+  }
+ },
+ {
+  "name": "text equals",
+  "field": "title",
+  "op": "Equals",
+  "values": [
+   "ab"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "eq",
+   "value": "ab"
+  }
+ },
+ {
+  "name": "text not equals",
+  "field": "title",
+  "op": "NotEquals",
+  "values": [
+   "ab"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "ne",
+   "value": "ab"
+  }
+ },
+ {
+  "name": "text empty",
+  "field": "title",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "title",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "text not empty",
+  "field": "title",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "title",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "text literal percent stays literal",
+  "field": "title",
+  "op": "Contains",
+  "values": [
+   "100%_x"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "contains",
+   "value": "100%_x",
+   "case_insensitive": true
+  }
+ },
+ {
+  "name": "text injection stays a value",
+  "field": "title",
+  "op": "Equals",
+  "values": [
+   "x' OR 1=1 --"
+  ],
+  "expected": {
+   "field": "title",
+   "op": "eq",
+   "value": "x' OR 1=1 --"
+  }
+ },
+ {
+  "name": "decimal equals",
+  "field": "amount",
+  "op": "Equals",
+  "values": [
+   "12.50"
+  ],
+  "expected": {
+   "field": "amount",
+   "op": "eq",
+   "value": "12.50"
+  }
+ },
+ {
+  "name": "decimal from",
+  "field": "amount",
+  "op": "From",
+  "values": [
+   "-3"
+  ],
+  "expected": {
+   "field": "amount",
+   "op": "ge",
+   "value": "-3"
+  }
+ },
+ {
+  "name": "decimal to",
+  "field": "amount",
+  "op": "To",
+  "values": [
+   "99.99"
+  ],
+  "expected": {
+   "field": "amount",
+   "op": "le",
+   "value": "99.99"
+  }
+ },
+ {
+  "name": "decimal between",
+  "field": "amount",
+  "op": "Between",
+  "values": [
+   "1",
+   "2.5"
+  ],
+  "expected": {
+   "and": [
+    {
+     "field": "amount",
+     "op": "ge",
+     "value": "1"
+    },
+    {
+     "field": "amount",
+     "op": "le",
+     "value": "2.5"
+    }
+   ]
+  }
+ },
+ {
+  "name": "decimal empty",
+  "field": "amount",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "amount",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "integer equals",
+  "field": "qty",
+  "op": "Equals",
+  "values": [
+   "7"
+  ],
+  "expected": {
+   "field": "qty",
+   "op": "eq",
+   "value": 7
+  }
+ },
+ {
+  "name": "integer between",
+  "field": "qty",
+  "op": "Between",
+  "values": [
+   "1",
+   "9"
+  ],
+  "expected": {
+   "and": [
+    {
+     "field": "qty",
+     "op": "ge",
+     "value": 1
+    },
+    {
+     "field": "qty",
+     "op": "le",
+     "value": 9
+    }
+   ]
+  }
+ },
+ {
+  "name": "integer to",
+  "field": "qty",
+  "op": "To",
+  "values": [
+   "9"
+  ],
+  "expected": {
+   "field": "qty",
+   "op": "le",
+   "value": 9
+  }
+ },
+ {
+  "name": "date equals",
+  "field": "due",
+  "op": "Equals",
+  "values": [
+   "2026-10-23"
+  ],
+  "expected": {
+   "field": "due",
+   "op": "eq",
+   "value": "2026-10-23"
+  }
+ },
+ {
+  "name": "date between",
+  "field": "due",
+  "op": "Between",
+  "values": [
+   "2026-10-01",
+   "2026-10-31"
+  ],
+  "expected": {
+   "and": [
+    {
+     "field": "due",
+     "op": "ge",
+     "value": "2026-10-01"
+    },
+    {
+     "field": "due",
+     "op": "le",
+     "value": "2026-10-31"
+    }
+   ]
+  }
+ },
+ {
+  "name": "date from",
+  "field": "due",
+  "op": "From",
+  "values": [
+   "2026-10-01"
+  ],
+  "expected": {
+   "field": "due",
+   "op": "ge",
+   "value": "2026-10-01"
+  }
+ },
+ {
+  "name": "datetime from a day",
+  "field": "stamp",
+  "op": "From",
+  "values": [
+   "2026-10-01"
+  ],
+  "expected": {
+   "field": "stamp",
+   "op": "ge",
+   "value": "2026-10-01T00:00:00Z"
+  }
+ },
+ {
+  "name": "datetime to an instant",
+  "field": "stamp",
+  "op": "To",
+  "values": [
+   "2026-10-01T10:00:00+02:00"
+  ],
+  "expected": {
+   "field": "stamp",
+   "op": "le",
+   "value": "2026-10-01T08:00:00Z"
+  }
+ },
+ {
+  "name": "link one of",
+  "field": "customer",
+  "op": "OneOf",
+  "values": [
+   "p-1",
+   "p-2"
+  ],
+  "expected": {
+   "field": "customer",
+   "op": "in",
+   "value": [
+    "p-1",
+    "p-2"
+   ]
+  }
+ },
+ {
+  "name": "link empty",
+  "field": "customer",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "customer",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "select one of",
+  "field": "status",
+  "op": "OneOf",
+  "values": [
+   "Open",
+   "Paid"
+  ],
+  "expected": {
+   "field": "status",
+   "op": "in",
+   "value": [
+    "Open",
+    "Paid"
+   ]
+  }
+ },
+ {
+  "name": "select not empty",
+  "field": "status",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "status",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "checkbox set",
+  "field": "paid",
+  "op": "Is",
+  "values": [
+   "true"
+  ],
+  "expected": {
+   "field": "paid",
+   "op": "eq",
+   "value": true
+  }
+ },
+ {
+  "name": "checkbox not set",
+  "field": "paid",
+  "op": "Is",
+  "values": [
+   "false"
+  ],
+  "expected": {
+   "field": "paid",
+   "op": "eq",
+   "value": false
+  }
+ },
+ {
+  "name": "amount not empty",
+  "field": "amount",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "amount",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "qty from",
+  "field": "qty",
+  "op": "From",
+  "values": [
+   "4"
+  ],
+  "expected": {
+   "field": "qty",
+   "op": "ge",
+   "value": 4
+  }
+ },
+ {
+  "name": "qty empty",
+  "field": "qty",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "qty",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "qty not empty",
+  "field": "qty",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "qty",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "due to",
+  "field": "due",
+  "op": "To",
+  "values": [
+   "2026-10-23"
+  ],
+  "expected": {
+   "field": "due",
+   "op": "le",
+   "value": "2026-10-23"
+  }
+ },
+ {
+  "name": "due empty",
+  "field": "due",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "due",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "due not empty",
+  "field": "due",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "due",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "stamp equals",
+  "field": "stamp",
+  "op": "Equals",
+  "values": [
+   "2026-10-23T10:00:00Z"
+  ],
+  "expected": {
+   "field": "stamp",
+   "op": "eq",
+   "value": "2026-10-23T10:00:00Z"
+  }
+ },
+ {
+  "name": "stamp between",
+  "field": "stamp",
+  "op": "Between",
+  "values": [
+   "2026-10-23T10:00:00Z",
+   "2026-10-23T10:00:00Z"
+  ],
+  "expected": {
+   "and": [
+    {
+     "field": "stamp",
+     "op": "ge",
+     "value": "2026-10-23T10:00:00Z"
+    },
+    {
+     "field": "stamp",
+     "op": "le",
+     "value": "2026-10-23T10:00:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "name": "stamp empty",
+  "field": "stamp",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "stamp",
+   "op": "is_null"
+  }
+ },
+ {
+  "name": "stamp not empty",
+  "field": "stamp",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "stamp",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "customer IsNotEmpty",
+  "field": "customer",
+  "op": "IsNotEmpty",
+  "values": [],
+  "expected": {
+   "field": "customer",
+   "op": "is_not_null"
+  }
+ },
+ {
+  "name": "status IsEmpty",
+  "field": "status",
+  "op": "IsEmpty",
+  "values": [],
+  "expected": {
+   "field": "status",
+   "op": "is_null"
+  }
+ }
+]

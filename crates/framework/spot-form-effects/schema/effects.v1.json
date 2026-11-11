@@ -1,0 +1,379 @@
+{
+  "$defs": {
+    "add_action": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "$ref": "#/$defs/effect"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,63}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "add_action"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "label",
+        "effect"
+      ],
+      "type": "object"
+    },
+    "batch": {
+      "additionalProperties": false,
+      "properties": {
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "batch"
+        }
+      },
+      "required": [
+        "kind",
+        "effects"
+      ],
+      "type": "object"
+    },
+    "effect": {
+      "description": "One effect. A client that meets a kind it does not know skips it.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/set_value"
+        },
+        {
+          "$ref": "#/$defs/set_read_only"
+        },
+        {
+          "$ref": "#/$defs/set_hidden"
+        },
+        {
+          "$ref": "#/$defs/set_required"
+        },
+        {
+          "$ref": "#/$defs/set_options"
+        },
+        {
+          "$ref": "#/$defs/set_label"
+        },
+        {
+          "$ref": "#/$defs/add_action"
+        },
+        {
+          "$ref": "#/$defs/remove_action"
+        },
+        {
+          "$ref": "#/$defs/show_message"
+        },
+        {
+          "$ref": "#/$defs/open_dialog"
+        },
+        {
+          "$ref": "#/$defs/focus"
+        },
+        {
+          "$ref": "#/$defs/set_filter"
+        },
+        {
+          "$ref": "#/$defs/batch"
+        }
+      ]
+    },
+    "focus": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "focus"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ],
+      "type": "object"
+    },
+    "message_level": {
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ],
+      "type": "string"
+    },
+    "open_dialog": {
+      "additionalProperties": false,
+      "properties": {
+        "dialog_id": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,63}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "open_dialog"
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "dialog_id"
+      ],
+      "type": "object"
+    },
+    "option": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "type": "object"
+    },
+    "path": {
+      "description": "A field path: `field` or `table[idx].field` with idx from 1.",
+      "pattern": "^[^\\[\\].\\s]+(\\[[1-9][0-9]*\\]\\.[^\\[\\].\\s]+)?$",
+      "type": "string"
+    },
+    "remove_action": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,63}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "remove_action"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "set_filter": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "description": "A shared-expression-language expression over `doc`.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "set_filter"
+        },
+        "link_path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "kind",
+        "link_path",
+        "filter"
+      ],
+      "type": "object"
+    },
+    "set_hidden": {
+      "additionalProperties": false,
+      "properties": {
+        "hidden": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "set_hidden"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "hidden"
+      ],
+      "type": "object"
+    },
+    "set_label": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set_label"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "label"
+      ],
+      "type": "object"
+    },
+    "set_options": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set_options"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "type": "array"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "options"
+      ],
+      "type": "object"
+    },
+    "set_read_only": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set_read_only"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "read_only": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "read_only"
+      ],
+      "type": "object"
+    },
+    "set_required": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set_required"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "required"
+      ],
+      "type": "object"
+    },
+    "set_value": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set_value"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "value": {
+          "description": "The field's wire value; a decimal is its exact string."
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "value"
+      ],
+      "type": "object"
+    },
+    "show_message": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "text"
+          ]
+        },
+        {
+          "required": [
+            "text_key"
+          ]
+        }
+      ],
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/path"
+        },
+        "kind": {
+          "const": "show_message"
+        },
+        "level": {
+          "$ref": "#/$defs/message_level"
+        },
+        "text": {
+          "type": "string"
+        },
+        "text_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "level"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://spotledger.example/schema/effects.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The declarative effects a server-side form script may ask a client to apply. Additive within v1: a client ignores an unknown kind or member; a client that does not know `version` applies nothing.",
+  "properties": {
+    "effects": {
+      "description": "The effects, in application order.",
+      "items": {
+        "$ref": "#/$defs/effect"
+      },
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "description": "The protocol version. Only version 1 is defined."
+    }
+  },
+  "required": [
+    "version",
+    "effects"
+  ],
+  "title": "Spotledger UI effects protocol v1",
+  "type": "object"
+}

@@ -1,0 +1,43 @@
+# Spotledger process definition (spot-bpm-model). Canonical: keys sorted, one scalar per line.
+name = "integration_retry"
+app = "connect"
+title = "Integration with retry"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+path = "/hooks/orders"
+trigger = "webhook"
+
+[[nodes]]
+id = "call"
+kind = "integration"
+error = "failed"
+timeout_secs = 30
+retry_attempts = 3
+retry_delay_secs = 5
+action = "post"
+connector = "http"
+endpoint = "https://example.com/orders"
+
+[[nodes]]
+id = "done"
+kind = "logic"
+terminal = true
+logic = "branch"
+
+[[nodes]]
+id = "failed"
+kind = "logic"
+terminal = true
+logic = "branch"
+
+[[edges]]
+from = "start"
+to = "call"
+
+[[edges]]
+from = "call"
+to = "done"

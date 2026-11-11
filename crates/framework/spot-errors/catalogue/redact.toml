@@ -1,0 +1,28 @@
+# redact codes: failures registering secrets or loading a policy in spot-redact. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "redact.secret_too_short"
+class = "none"
+summary = "A secret offered to the redactor is shorter than the 8-byte minimum for a safe match."
+explanation_key = "error.redact.secret_too_short"
+params = []
+remedy = "Register only secrets of at least 8 bytes; shorter values cannot be matched without false hits."
+since = "0.1.0"
+
+[[entry]]
+code = "redact.bad_label"
+class = "none"
+summary = "A redaction label is not 1 to 20 characters of a-z, 0-9 or underscore."
+explanation_key = "error.redact.bad_label"
+params = []
+remedy = "Use a lower-case label of 1 to 20 characters from a-z, 0-9 and underscore."
+since = "0.1.0"
+
+[[entry]]
+code = "redact.policy"
+class = "none"
+summary = "The redaction policy text failed to parse."
+explanation_key = "error.redact.policy"
+params = []
+remedy = "Fix the policy toml at the position the parser names; a policy must not hold secret values."
+since = "0.1.0"

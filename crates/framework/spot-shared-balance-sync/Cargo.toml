@@ -1,0 +1,38 @@
+[package]
+name = "spot-shared-balance-sync"
+description = "The sync-layer wiring of the shared-balance policies (WP-EDG-09.T2): the batch entry point that authenticates the sender against the transport identity and the node registry before anything is applied, and the QuarantineSink adapter that puts every refused entry in the spot-quarantine queue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The policies, ledgers, batches and the QuarantineSink this crate wires to sync.
+spot-shared-balance = { path = "../spot-shared-balance" }
+# The hub's node registry: a batch may only come from a registered, active node.
+spot-offline-identity = { path = "../spot-offline-identity" }
+# The quarantine queue the refused entries are placed in.
+spot-quarantine = { path = "../spot-quarantine" }
+# The audit record a rejected batch is written to.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The received-record image the quarantine queue stores a refused entry as.
+spot-replica-apply = { path = "../spot-replica-apply" }
+# The record name, source id and record image types that payload is built from.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The document fields the immutable entry payload carries.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The JSON body of the entry payload.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `shared_balance_sync.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# `#[tokio::test]` for the async quarantine flush.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

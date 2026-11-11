@@ -1,0 +1,2 @@
+# Pinned tools for check.py (WP-UI-13.T1). Same pins as contracts/native-api.
+jsonschema==4.25.1

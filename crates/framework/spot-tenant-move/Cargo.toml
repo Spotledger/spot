@@ -1,0 +1,40 @@
+[package]
+name = "spot-tenant-move"
+description = "Tenant moves between clusters (WP-CTL-02.T1, ADR-34, ADR-058): a persisted move state machine, chunked export/import with checksums and size accounting, quiesce through the migration admission gate and side-effect hold, an invariant fingerprint comparison before cut-over, an atomic placement flip, and residency refusal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The tenant id, placement and region types, and the control store a cut-over writes to.
+spot-tenancy = { path = "../spot-tenancy" }
+# `AdmissionGate`: the maintenance gate shared with the migration lifecycle (WP-MIG-07).
+spot-migration-apply = { path = "../spot-migration-apply" }
+# `HoldService`: the durable side-effect hold that keeps external calls from leaving.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# The fingerprint engine and its `FingerprintSource`/`FingerprintSpec` (WP-MIG-06).
+spot-rehearsal = { path = "../spot-rehearsal" }
+# The logical dump/restore provider the real `TransferPort` adapter drives (WP-MIG-05).
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Records, progress and the persisted fingerprint/progress derive serde.
+serde = { version = "1", features = ["derive"] }
+# SHA-256 over every exported chunk (ADR-068 rule 22).
+sha2 = "0.10"
+# Typed errors with stable `tenant_move.*` codes.
+thiserror = "2"
+# The snapshot adapter's file streaming and the mutex around its snapshot handle.
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync"] }
+
+[dev-dependencies]
+# `#[tokio::test]` and the single-thread runtime the fake ports are driven on.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync"] }
+# `SiteId`: the site the lifecycle adapter's hold belongs to.
+spot-core = { path = "../spot-core" }
+# The fake snapshot provider writes a real manifest for the snapshot adapter's test.
+toml = "0.9"
+tempfile = "3"
+
+[lints]
+workspace = true

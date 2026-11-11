@@ -1,0 +1,37 @@
+[package]
+name = "spot-tenancy-adapters"
+description = "The real adapters the control plane's ports run over (WP-CTL-01.T3, ADR-34, ADR-058): the tenant schema and seed through the provisioning executor, licences over spot-license, final backups over spot-snapshot, the audit trail over spot-audit-chain, and the approval, IAM and telemetry seams that fail closed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The ports, the tenant record and the step failure type this crate implements.
+spot-tenancy = { path = "../spot-tenancy" }
+# `Issuer` (behind its `issue` feature): the control plane mints the tenant's licence.
+spot-license = { path = "../spot-license", features = ["issue"] }
+# The provider trait, the manifest and the checksummed verification of a final backup.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# The append-only chain and its in-memory store.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The injected `Clock`; the adapters never read the system clock themselves.
+spot-core = { path = "../spot-core" }
+# Blocking the asynchronous adapters from the synchronous port methods.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# Typed errors with stable `tenancy_adapters.*` codes; no message carries free text.
+thiserror = "2"
+
+[dev-dependencies]
+# Throwaway signing keys for the licence and audit-checkpoint tests.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Scratch directories for the final-backup tests.
+tempfile = "3"
+# The runtime the asynchronous adapters block on in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread"] }
+# A clock that moves only when a test tells it to.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

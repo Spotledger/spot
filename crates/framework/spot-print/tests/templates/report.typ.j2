@@ -1,0 +1,19 @@
+{#- Every {{ value }} is escaped by spot-template into a Typst string literal (#"..."). -#}
+#set document(title: [{{ title }}], author: "Spotledger test fixture")
+#set text(font: ("Noto Sans", "Noto Naskh Arabic"), size: 9pt)
+#set page(paper: "a4", margin: (x: 15mm, top: 15mm, bottom: 20mm),
+  footer: context align(center, text(8pt)[Page #counter(page).display() of #counter(page).final().first()]))
+= {{ title }}
+{{ subtitle }}
+#table(columns: (auto, 1fr, auto, auto, auto), inset: 3pt, stroke: 0.3pt + luma(190),
+  align: (x, y) => if x >= 3 { right } else { left },
+  table.header([*Row*], [*Item*], [*Warehouse*], [*Qty*], [*Value PKR*]),
+{%- for g in groups %}
+  table.cell(colspan: 5, fill: luma(235))[*{{ g.name }}*],
+{%- for r in g.rows %}
+  [{{ r.no }}], [{{ r.item }}], [{{ r.warehouse }}], [{{ r.qty }}], [{{ r.value }}],
+{%- endfor %}
+  table.cell(colspan: 3)[*Subtotal {{ g.name }}*], [*{{ g.qty }}*], [*{{ g.value }}*],
+{%- endfor %}
+  table.cell(colspan: 3)[*Grand total*], [*{{ totals.qty }}*], [*{{ totals.value }}*],
+)

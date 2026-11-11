@@ -1,0 +1,74 @@
+# sync_skew codes: version skew decisions of spot-sync-skew (WP-SYN-08.T1, ADR-066 section 5). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto conditions (NODE_TOO_OLD, SCHEMA_RETIRE_BLOCKED, ADR-067), so `class = "none"`.
+
+[[entry]]
+code = "sync_skew.session_migrating_hub"
+class = "none"
+summary = "The hub is running a migration, so the session is refused and the node waits and retries."
+explanation_key = "error.sync_skew.session_migrating_hub"
+params = []
+remedy = "Wait for the hub migration to finish; the node retries the handshake on its own."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.session_migrating_node"
+class = "none"
+summary = "The node is running a migration, so the session is refused and the hub waits for it."
+explanation_key = "error.sync_skew.session_migrating_node"
+params = []
+remedy = "Let the node finish its migration; it then connects again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.session_epoch_unverified_hub"
+class = "none"
+summary = "The hub's migration epoch is not verified, so the session is refused and the node waits and retries."
+explanation_key = "error.sync_skew.session_epoch_unverified_hub"
+params = []
+remedy = "Verify the hub's migration epoch; the node retries the handshake on its own."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.session_epoch_unverified_node"
+class = "none"
+summary = "The node's migration epoch is not verified, so the session is refused and the hub waits for it."
+explanation_key = "error.sync_skew.session_epoch_unverified_node"
+params = []
+remedy = "Verify the node's migration epoch before it syncs again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.node_too_old"
+class = "none"
+summary = "The node is further behind the hub than the allowed release skew, so only the upgrade channel is open."
+explanation_key = "error.sync_skew.node_too_old"
+params = []
+remedy = "Upgrade the node to the version the upgrade channel offers; it keeps working offline meanwhile and resumes by catch-up."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.schema_retire_blocked"
+class = "none"
+summary = "An old event schema major cannot be retired because active nodes cannot yet decode the new major."
+explanation_key = "error.sync_skew.schema_retire_blocked"
+params = []
+remedy = "Upgrade or suspend the named nodes; the producer then stops publishing the old major."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.holds_full"
+class = "none"
+summary = "The hub holds too many records back for this node, so it is reported too old and only the upgrade channel is open."
+explanation_key = "error.sync_skew.holds_full"
+params = []
+remedy = "Upgrade the node; it then catches up from its position and the held records are delivered."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.hold_retired"
+class = "none"
+summary = "A record's event schema major is retired for the whole fleet, so it can never be delivered to this node and the hold is permanent."
+explanation_key = "error.sync_skew.hold_retired"
+params = []
+remedy = "Upgrade the node to a version that can decode the current major; it then resynchronises by catch-up."
+since = "0.1.0"

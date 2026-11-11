@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-09.T2: the decisions of the cached browser shell as pure, headless-testable code. No Avalonia, no
+       browser API, no wall clock, no random: the service worker (wwwroot/sw/ of the browser head) and the app
+       reach it through the small ports in Ports.cs. AOT and trim safe: JSON is read with JsonDocument and
+       written with Utf8JsonWriter, never by reflection. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+</Project>

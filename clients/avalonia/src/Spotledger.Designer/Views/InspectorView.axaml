@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.InspectorView">
+  <!-- The inspector: the selected field's label, name, type, required, default, choice list,
+       condition (with the server's compiled preview), the properties the draft model cannot
+       change yet, the permissions template and the DocType's naming series. -->
+  <Border Background="{DynamicResource Color.Surface.Raised}"
+          BorderBrush="{DynamicResource Color.Border.Default}"
+          BorderThickness="1,0,0,0"
+          Padding="12">
+    <ScrollViewer>
+      <StackPanel Spacing="10">
+        <TextBlock Text="Inspector"
+                   FontSize="{DynamicResource Font.Size.Heading}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+
+        <TextBlock Text="Select a field on the form to edit it."
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding !Inspector.HasField}"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+
+        <StackPanel Spacing="10" IsVisible="{Binding Inspector.HasField}">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Inspector.TypeTitle}" FontWeight="SemiBold" Foreground="{DynamicResource Color.Text.Primary}" />
+            <TextBlock Text="{Binding Inspector.LabelHint}" FontSize="{DynamicResource Font.Size.Caption}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Secondary}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Label" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <TextBox Text="{Binding Inspector.Label, Mode=TwoWay}" IsEnabled="{Binding Inspector.CanEditLabel}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Name" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Text="{Binding Inspector.Name, Mode=TwoWay}" />
+              <Button Grid.Column="1" Content="Rename" Margin="4,0,0,0" Command="{Binding Inspector.ApplyNameCommand}" />
+            </Grid>
+            <TextBlock Text="{Binding Inspector.NameError}"
+                       FontSize="{DynamicResource Font.Size.Caption}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource Color.Semantic.Danger}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Type" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <ComboBox ItemsSource="{Binding Inspector.TypeChoices}"
+                        SelectedItem="{Binding Inspector.SelectedTypeChoice, Mode=TwoWay}" />
+              <Button Grid.Column="1" Content="Change type" Margin="4,0,0,0" Command="{Binding Inspector.PlanSelectedTypeChangeCommand}" />
+            </Grid>
+          </StackPanel>
+
+          <Border IsVisible="{Binding Inspector.HasTypeChange}"
+                  Padding="8"
+                  CornerRadius="4"
+                  Background="{DynamicResource Color.Surface.Sunken}"
+                  BorderBrush="{DynamicResource Color.Semantic.Warning}"
+                  BorderThickness="1">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Type change" FontWeight="SemiBold" Foreground="{DynamicResource Color.Text.Primary}" />
+              <TextBlock Text="{Binding Inspector.TypeChangeText}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Primary}" />
+              <ItemsControl ItemsSource="{Binding Inspector.TypeChange.DetailList}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="{DynamicResource Font.Size.Caption}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Secondary}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button Content="Apply" Command="{Binding Inspector.ApplyTypeChangeCommand}" IsEnabled="{Binding Inspector.TypeChange.CanApply}" />
+                <Button Content="Cancel" Click="OnDismissTypeChange" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <CheckBox Content="Required" IsChecked="{Binding Inspector.Required, Mode=TwoWay}" Click="OnRequiredClick" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Default value" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Text="{Binding Inspector.DefaultValue, Mode=TwoWay}" />
+              <Button Grid.Column="1" Content="Set" Margin="4,0,0,0" Command="{Binding Inspector.ApplyDefaultCommand}" />
+            </Grid>
+          </StackPanel>
+
+          <StackPanel Spacing="4" IsVisible="{Binding Inspector.IsSelect}">
+            <TextBlock Text="Choices" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <ItemsControl ItemsSource="{Binding Inspector.Options}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2">
+                    <TextBox Text="{Binding Text, Mode=TwoWay}" />
+                    <Button Grid.Column="1" Content="↑" Margin="4,0,0,0" Tag="{Binding}" Click="OnOptionUp" ToolTip.Tip="Move up" />
+                    <Button Grid.Column="2" Content="↓" Margin="4,0,0,0" Tag="{Binding}" Click="OnOptionDown" ToolTip.Tip="Move down" />
+                    <Button Grid.Column="3" Content="✕" Margin="4,0,0,0" Tag="{Binding}" Click="OnOptionRemove" ToolTip.Tip="Remove" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Button Content="Add choice" Command="{Binding Inspector.AddOptionCommand}" />
+              <Button Content="Save choices" Command="{Binding Inspector.ApplyOptionsCommand}" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Inspector.ReadOnlyText}" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <TextBlock Text="{Binding Inspector.HiddenText}" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <TextBlock Text="{Binding Inspector.ValidationTextOrNone}" FontSize="{DynamicResource Font.Size.Caption}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <TextBlock Text="{Binding Inspector.UnsupportedPropertiesHint}" FontSize="{DynamicResource Font.Size.Caption}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Disabled}" />
+          </StackPanel>
+
+          <Border BorderBrush="{DynamicResource Color.Border.Default}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Show this field only when…" FontWeight="SemiBold" Foreground="{DynamicResource Color.Text.Primary}" />
+              <CheckBox Content="Match any row (or)" IsChecked="{Binding Inspector.UseOr, Mode=TwoWay}" />
+              <ItemsControl ItemsSource="{Binding Inspector.ConditionRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="*,*,*,Auto" Margin="0,2">
+                      <ComboBox ItemsSource="{Binding Fields}" SelectedItem="{Binding FieldChoice, Mode=TwoWay}" />
+                      <ComboBox Grid.Column="1" Margin="4,0,0,0" ItemsSource="{Binding Operators}" SelectedItem="{Binding OperatorChoice, Mode=TwoWay}" />
+                      <TextBox Grid.Column="2" Margin="4,0,0,0" Text="{Binding Value, Mode=TwoWay}" PlaceholderText="Value" />
+                      <Button Grid.Column="3" Content="✕" Margin="4,0,0,0" Tag="{Binding}" Click="OnConditionRowRemove" ToolTip.Tip="Remove this row" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button Content="Add row" Command="{Binding Inspector.AddConditionRowCommand}" />
+                <Button Content="Preview" Command="{Binding Inspector.PreviewConditionCommand}" />
+                <Button Content="Apply" Command="{Binding Inspector.ApplyConditionCommand}" />
+                <Button Content="Clear" Command="{Binding Inspector.ClearConditionCommand}" />
+              </StackPanel>
+              <TextBlock Text="{Binding Inspector.ConditionPreview}"
+                         FontFamily="monospace"
+                         FontSize="{DynamicResource Font.Size.Caption}"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource Color.Text.Primary}" />
+              <TextBlock Text="{Binding Inspector.ConditionError}"
+                         FontSize="{DynamicResource Font.Size.Caption}"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource Color.Semantic.Danger}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <Border BorderBrush="{DynamicResource Color.Border.Default}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Who may use it" FontWeight="SemiBold" Foreground="{DynamicResource Color.Text.Primary}" />
+            <ComboBox ItemsSource="{Binding Inspector.Templates}"
+                      SelectedItem="{Binding Inspector.SelectedTemplateChoice, Mode=TwoWay}" />
+            <TextBlock Text="{Binding Inspector.TemplateRights}" FontSize="{DynamicResource Font.Size.Caption}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Text.Secondary}" />
+            <Button Content="Apply permissions" HorizontalAlignment="Left" Command="{Binding Inspector.ApplyTemplateCommand}" />
+          </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{DynamicResource Color.Border.Default}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Naming series" FontWeight="SemiBold" Foreground="{DynamicResource Color.Text.Primary}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Text="{Binding Inspector.NamingSeries, Mode=TwoWay}" PlaceholderText="VSR-{seq}" />
+              <Button Grid.Column="1" Content="Set" Margin="4,0,0,0" Command="{Binding Inspector.ApplyNamingCommand}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>

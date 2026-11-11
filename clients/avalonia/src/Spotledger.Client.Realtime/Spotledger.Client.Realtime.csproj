@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-02.T4: the client half of contracts/native-api/realtime.md v0.1. One
+       connection per session, UI-free: the shell, forms and lists subscribe through it.
+       No Avalonia reference, no package reference, no reflection serialisation (the
+       messages are written and parsed by hand so the browser head stays trim and AOT
+       safe). Time comes from an injected TimeProvider and jitter from an injected
+       Random; this library never reads the wall clock. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>Spotledger.Client.Realtime</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The backoff schedule is asserted directly by the tests with a fixed seed. -->
+    <InternalsVisibleTo Include="Spotledger.Client.Realtime.Tests" />
+  </ItemGroup>
+
+</Project>

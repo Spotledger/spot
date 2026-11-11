@@ -1,0 +1,26 @@
+# The connector manifest the host reads when installing the component.
+[connector]
+# The connector's stable id (also the bundle's app id).
+id = "my-connector"
+name = "My Connector"
+version = "0.1.0"
+# The WIT world it implements.
+world = "connector"
+# The auth kinds it supports; at least one. `none` means no credential.
+auth = ["none"]
+# The hosts it intends to talk to. The egress policy is authoritative; this is what it declares.
+endpoints = []
+
+# The sandbox limits. The host may lower them; it never raises them beyond its own cap.
+[limits]
+fuel = 100000000
+wall-clock-ms = 1000
+memory-bytes = 16777216
+host-calls = 1000
+output-bytes = 1048576
+# The key-value store's byte budget.
+kv-bytes = 65536
+
+# Credentials the connector may read with `secrets-get`. A reference used by `auth` is injected
+# by the host instead and must not be listed here.
+secrets = []

@@ -1,0 +1,137 @@
+# bpm_tasks codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Decision nodes and the task inbox (spot-bpm-tasks, blueprint WS8, WP-BPM-05, ADR-49, ADR-080).
+
+[[entry]]
+code = "bpm_tasks.no_assignee"
+class = "none"
+summary = "A decision node's assignee could not be resolved, so the Case parks: node {node}."
+explanation_key = "error.bpm_tasks.no_assignee"
+params = ["node"]
+remedy = "Give the node a resolvable assignee (a user, a role with members, or an approver rule), or give it an error branch."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.task_not_found"
+class = "none"
+summary = "No task has this id: {id}."
+explanation_key = "error.bpm_tasks.task_not_found"
+params = ["id"]
+remedy = "Check the task id, or read the inbox for the tasks you may act on."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.task_not_open"
+class = "none"
+summary = "The task is no longer open, so the action is refused: {id} is {status}."
+explanation_key = "error.bpm_tasks.task_not_open"
+params = ["id", "status"]
+remedy = "Read the task to see its outcome; a finished task is final."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.not_assignee"
+class = "none"
+summary = "The user is not an assignee or active delegate of the task: {user} on {task}."
+explanation_key = "error.bpm_tasks.not_assignee"
+params = ["task", "user"]
+remedy = "Claim the task only as an assignee, or ask a supervisor to reassign it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.not_supervisor"
+class = "none"
+summary = "The user does not supervise the task's assignees, so reassignment is refused: {user} on {task}."
+explanation_key = "error.bpm_tasks.not_supervisor"
+params = ["task", "user"]
+remedy = "Reassign only as the assignee's manager, or ask someone who supervises them."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.invalid_choice"
+class = "none"
+summary = "The chosen outcome is not one of the task's options: {choice} on {task}."
+explanation_key = "error.bpm_tasks.invalid_choice"
+params = ["choice", "task"]
+remedy = "Choose one of the options the node declares."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.distinct_from_creator"
+class = "none"
+summary = "The node requires a decision distinct from the document's creator, and this user is not: {user} on {task}."
+explanation_key = "error.bpm_tasks.distinct_from_creator"
+params = ["task", "user"]
+remedy = "Assign the decision to someone other than the person who created the document."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.sod_conflict"
+class = "none"
+summary = "Completing the task would breach a segregation-of-duties rule: {user} on {task}, {detail}."
+explanation_key = "error.bpm_tasks.sod_conflict"
+params = ["detail", "task", "user"]
+remedy = "Assign the decision to a user who does not already hold the conflicting duty, or record an override with a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.delegation_expired"
+class = "none"
+summary = "The delegation of the task to the delegate has expired: {delegate} on {task}."
+explanation_key = "error.bpm_tasks.delegation_expired"
+params = ["delegate", "task"]
+remedy = "Ask for a fresh delegation, or reassign the task."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.version_conflict"
+class = "none"
+summary = "The task changed since it was read, so nothing was written: {id}, found version {current}, expected {expected}."
+explanation_key = "error.bpm_tasks.version_conflict"
+params = ["current", "expected", "id"]
+remedy = "Reload the task and act on its current version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.store_failed"
+class = "none"
+summary = "The task store failed: {detail}."
+explanation_key = "error.bpm_tasks.store_failed"
+params = ["detail"]
+remedy = "Retry once the store is available; nothing partial was committed."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.engine_failed"
+class = "none"
+summary = "The engine could not resume the Case after a completion: {detail}."
+explanation_key = "error.bpm_tasks.engine_failed"
+params = ["detail"]
+remedy = "Retry the completion; it is idempotent and the Case resumes exactly once."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.config_invalid"
+class = "none"
+summary = "A decision node's config is not the shape its kind needs: node {node}, {detail}."
+explanation_key = "error.bpm_tasks.config_invalid"
+params = ["detail", "node"]
+remedy = "Fix the decision node's config in the process definition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.auto_approve_undeclared"
+class = "none"
+summary = "The SLA would approve automatically, but the node does not declare it: node {node}."
+explanation_key = "error.bpm_tasks.auto_approve_undeclared"
+params = ["node"]
+remedy = "Set `sla_auto_approve = true` on the decision node if a timeout may approve it, or change the SLA's final action."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.auto_approve_with_segregation"
+class = "none"
+summary = "A node that requires a distinct decider or declares a duty cannot approve automatically: node {node}."
+explanation_key = "error.bpm_tasks.auto_approve_with_segregation"
+params = ["node"]
+remedy = "Remove the automatic approval from the SLA, or remove `distinct_from_creator` and the duty from the node."
+since = "0.1.0"

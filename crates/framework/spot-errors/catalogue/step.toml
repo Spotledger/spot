@@ -1,0 +1,19 @@
+# step codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "step.duplicate"
+class = "none"
+summary = "Two installed controllers declare the same pipeline step name."
+explanation_key = "error.step.duplicate"
+params = []
+remedy = "Rename one step or uninstall one controller; this fails at install time."
+since = "0.1.0"
+
+[[entry]]
+code = "step.foreign_app"
+class = "none"
+summary = "An app registered a controller declaring another app's step."
+explanation_key = "error.step.foreign_app"
+params = []
+remedy = "Declare the controller under the step-owning app."
+since = "0.1.0"

@@ -1,0 +1,40 @@
+doctype = "item"
+kind = "form"
+title = "Item"
+
+[[sections]]
+id = "fields"
+
+[[sections.items]]
+type = "field"
+field = "item_code"
+label = "Item Code"
+
+[[sections.items]]
+type = "field"
+field = "item_group"
+
+[[sections.items]]
+type = "field"
+field = "status"
+label = "Status"
+
+[[sections.items]]
+type = "field"
+field = "opening_balance"
+
+[[sections.items]]
+type = "field"
+field = "reorder_level"
+
+[[sections]]
+id = "long_form"
+title = "Details"
+
+[[sections.items]]
+type = "field"
+field = "description"
+
+[[sections.items]]
+type = "field"
+field = "notes"

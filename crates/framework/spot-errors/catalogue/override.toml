@@ -1,0 +1,100 @@
+# override codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "override.unknown_target"
+class = "none"
+summary = "An override targets a step nobody declares, or names an invalid app."
+explanation_key = "error.override.unknown_target"
+params = []
+remedy = "Fix the override to target a declared step with a valid app."
+since = "0.1.0"
+
+[[entry]]
+code = "override.unknown_by"
+class = "none"
+summary = "An override's by field names an app that is not installed."
+explanation_key = "error.override.unknown_by"
+params = []
+remedy = "Name the overriding app exactly as installed."
+since = "0.1.0"
+
+[[entry]]
+code = "override.doctype_mismatch"
+class = "none"
+summary = "The override's DocType does not match the step it targets."
+explanation_key = "error.override.doctype_mismatch"
+params = []
+remedy = "Override the step on the same DocType it declares."
+since = "0.1.0"
+
+[[entry]]
+code = "override.bad_shape"
+class = "none"
+summary = "The override entry does not match any declared override kind."
+explanation_key = "error.override.bad_shape"
+params = []
+remedy = "Use a declared override shape (replace or wrap)."
+since = "0.1.0"
+
+[[entry]]
+code = "override.duplicate"
+class = "none"
+summary = "Two apps override the same step; overrides do not stack."
+explanation_key = "error.override.duplicate"
+params = []
+remedy = "Keep one override; the other app registers a better handler instead."
+since = "0.1.0"
+
+[[entry]]
+code = "override.duplicate_replace"
+class = "none"
+summary = "Two apps replace the same step."
+explanation_key = "error.override.duplicate_replace"
+params = []
+remedy = "Keep one replace; the other app registers its own handler instead."
+since = "0.1.0"
+
+[[entry]]
+code = "override.duplicate_wrap"
+class = "none"
+summary = "Two apps wrap the same step with the same position."
+explanation_key = "error.override.duplicate_wrap"
+params = []
+remedy = "Keep one wrap, or wrap at different positions."
+since = "0.1.0"
+
+[[entry]]
+code = "override.replace_and_wrap"
+class = "none"
+summary = "The same app both replaces and wraps the same step."
+explanation_key = "error.override.replace_and_wrap"
+params = []
+remedy = "Choose one: replace it or wrap it."
+since = "0.1.0"
+
+[[entry]]
+code = "override.disabled_and_changed"
+class = "none"
+summary = "An override disables a step and changes it at the same time."
+explanation_key = "error.override.disabled_and_changed"
+params = []
+remedy = "Either disable the step or change its behaviour, not both."
+since = "0.1.0"
+
+[[entry]]
+code = "override.cycle"
+class = "none"
+summary = "The override chain would call itself in a cycle."
+explanation_key = "error.override.cycle"
+params = []
+remedy = "Break the cycle; an override must not call its own chain."
+since = "0.1.0"
+
+[[entry]]
+code = "override.chained"
+class = "none"
+summary = "An app overrides its own step through the override table."
+explanation_key = "error.override.chained"
+params = []
+remedy = "Register the better handler directly instead of chaining."
+since = "0.1.0"

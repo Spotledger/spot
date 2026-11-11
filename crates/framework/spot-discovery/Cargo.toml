@@ -1,0 +1,34 @@
+# Spotledger LAN discovery (WP-PRD-06.T1): mDNS advertisement and browsing of the
+# application endpoint, server selection, manual-address fallback, and the
+# pairing/fingerprint trust model that makes optional TLS on a LAN safe.
+#
+# Dependencies are exactly the ones the task brief allows. There is no TLS stack, no
+# database access and no UI here: this crate is the discovery and trust library the
+# service host (WP-PRD-02 wiring) and the client (later WP-PRD-06 tasks) call.
+[package]
+name = "spot-discovery"
+description = "Spotledger LAN discovery (WP-PRD-06.T1): mDNS service advertisement and browsing of `_spotledger._tcp.local.`, a deliberately small advertised record that reveals no tenant or company names by default, server selection, a manual-address fallback for networks without multicast, and the pure pairing and fingerprint trust model behind optional LAN TLS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The clock abstraction: pairing codes, lockouts and `last_seen` never read the wall
+# clock directly, so tests drive time.
+spot-core = { path = "../spot-core" }
+# The mDNS daemon (RFC 6762/6763). Pure Rust, dual MIT OR Apache-2.0 (confirmed in
+# Cargo.lock metadata in the report; deny.toml allows both).
+mdns-sd = "0.21"
+# SHA-256 for key fingerprints and HMAC-SHA-256 for the pairing confirmation MAC.
+sha2 = "0.10"
+hmac = "0.12"
+# Typed errors with stable `discovery.*` codes.
+thiserror = "2"
+# The trust store file form.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

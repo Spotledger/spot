@@ -1,0 +1,226 @@
+# auth codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "auth.required"
+class = "none"
+summary = "No credentials were sent for an endpoint that needs them."
+explanation_key = "error.auth.required"
+params = []
+remedy = "Sign in or send an API key with the request."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.invalid_credentials"
+class = "none"
+summary = "The credentials are wrong or no longer valid."
+explanation_key = "error.auth.invalid_credentials"
+params = []
+remedy = "Sign in again or issue a fresh API key."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.session_expired"
+class = "none"
+summary = "The session has ended."
+explanation_key = "error.auth.session_expired"
+params = []
+remedy = "Sign in again."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.totp_required"
+class = "none"
+summary = "This account uses two-factor authentication."
+explanation_key = "error.auth.totp_required"
+params = []
+remedy = "Repeat the login with the one-time code or a recovery code."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.totp_invalid"
+class = "none"
+summary = "The one-time code is wrong or was already used."
+explanation_key = "error.auth.totp_invalid"
+params = []
+remedy = "Wait for the next code and try again, or use a recovery code."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.account_disabled"
+class = "none"
+summary = "The user account is disabled."
+explanation_key = "error.auth.account_disabled"
+params = []
+remedy = "Ask an administrator to re-enable the account."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.totp.invalid"
+class = "none"
+summary = "Library-internal: a TOTP code failed verification."
+explanation_key = "error.auth.totp.invalid"
+params = []
+remedy = "For logs and metrics; sign in again with a fresh code."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.totp.replayed"
+class = "none"
+summary = "Library-internal: a TOTP or recovery code was already used."
+explanation_key = "error.auth.totp.replayed"
+params = []
+remedy = "For logs and metrics; wait for the next code."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.secret.length"
+class = "none"
+summary = "Library-internal: a secret or key material has the wrong length."
+explanation_key = "error.auth.secret.length"
+params = []
+remedy = "For logs and metrics; check the generated key material."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.hash.malformed"
+class = "none"
+summary = "Library-internal: a stored password hash is not in the expected format."
+explanation_key = "error.auth.hash.malformed"
+params = []
+remedy = "For logs and metrics; rehash the credential record."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.hash.params"
+class = "none"
+summary = "Library-internal: stored password-hash parameters are out of range."
+explanation_key = "error.auth.hash.params"
+params = []
+remedy = "For logs and metrics; rehash the credential record."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password.mismatch"
+class = "none"
+summary = "Library-internal: the password did not match its stored hash."
+explanation_key = "error.auth.password.mismatch"
+params = []
+remedy = "For logs and metrics; the caller sees auth.invalid_credentials."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.api_key.malformed"
+class = "none"
+summary = "Library-internal: the API key text does not match the spk_<id>_<secret> shape."
+explanation_key = "error.auth.api_key.malformed"
+params = []
+remedy = "For logs and metrics; the caller sees auth.invalid_credentials."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.token.malformed"
+class = "none"
+summary = "Library-internal: the session token text is not decodeable."
+explanation_key = "error.auth.token.malformed"
+params = []
+remedy = "For logs and metrics; sign in again."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.digest.malformed"
+class = "none"
+summary = "Library-internal: an auth record digest failed to decode."
+explanation_key = "error.auth.digest.malformed"
+params = []
+remedy = "For logs and metrics; rotate the credential record."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.base32.invalid"
+class = "none"
+summary = "Library-internal: TOTP key material is not valid base32."
+explanation_key = "error.auth.base32.invalid"
+params = []
+remedy = "For logs and metrics; re-provision the TOTP secret."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.crypto.internal"
+class = "none"
+summary = "Library-internal: a cryptographic precondition failed; this is a code bug."
+explanation_key = "error.auth.crypto.internal"
+params = []
+remedy = "Report the log to the platform maintainers."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password.too_short"
+class = "none"
+summary = "A password is shorter than the policy's minimum length."
+explanation_key = "error.auth.password.too_short"
+params = []
+remedy = "Choose a longer password."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password.too_long"
+class = "none"
+summary = "A password is longer than the policy's maximum length."
+explanation_key = "error.auth.password.too_long"
+params = []
+remedy = "Choose a shorter password within the hash limits."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password.too_weak"
+class = "none"
+summary = "A password rates too weak against the policy's strength estimator."
+explanation_key = "error.auth.password.too_weak"
+params = []
+remedy = "Choose a password with more length and character variety."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password.contains_context"
+class = "none"
+summary = "A password contains a known context string such as the account name or site name."
+explanation_key = "error.auth.password.contains_context"
+params = []
+remedy = "Choose a password that does not repeat account or site details."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.password_policy"
+class = "Validation"
+summary = "The new password breaks the password policy; the violated rules are listed."
+explanation_key = "error.auth.password_policy"
+params = []
+remedy = "Choose a password that meets every listed rule."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.session_not_found"
+class = "NotFound"
+summary = "No session with this id exists for you; it is unknown, already ended or not yours."
+explanation_key = "error.auth.session_not_found"
+params = []
+remedy = "List your sessions again and pick one from the list."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.not_signed_in"
+class = "none"
+summary = "The client core was asked for an authenticated call before any sign-in."
+explanation_key = "error.auth.not_signed_in"
+params = []
+remedy = "Sign in first, then repeat the request."
+since = "0.1.0"
+
+[[entry]]
+code = "auth.session_changed"
+class = "none"
+summary = "A different user signed in, so a request held for the previous user was dropped unsent."
+explanation_key = "error.auth.session_changed"
+params = []
+remedy = "Repeat the request as the signed-in user if it is still wanted."
+since = "0.1.0"

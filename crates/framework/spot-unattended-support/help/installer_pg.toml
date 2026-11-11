@@ -1,0 +1,23 @@
+# Help for the installer_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "installer_pg.corrupt_row"
+what_happened = "A stored installer registry row cannot be read back."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Do not edit the registry tables by hand; restore the site from a backup or ask the platform operator to inspect the row.", "If it keeps happening, tell your administrator and quote the code installer_pg.corrupt_row."]
+audience = "operator"
+
+[[help]]
+code = "installer_pg.migration_failed"
+what_happened = "The installer registry tables could not be created in the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database user may create tables and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code installer_pg.migration_failed."]
+audience = "operator"
+
+[[help]]
+code = "installer_pg.storage_failed"
+what_happened = "The installer registry could not read or write the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database is reachable and has free connections, then resume the install: the journal in the database tells the installer where it stopped.", "If it keeps happening, tell your administrator and quote the code installer_pg.storage_failed."]
+audience = "operator"

@@ -1,0 +1,37 @@
+# Help for the bpm_governance error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "bpm_governance.audit"
+what_happened = "The governance audit entry could not be written, so the operation failed closed and nothing was changed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the outbox and the database connection, then retry the operation with the same command id.", "If it keeps happening, tell your administrator and quote the code bpm_governance.audit."]
+audience = "admin"
+
+[[help]]
+code = "bpm_governance.outside_process_denied"
+what_happened = "A governed record type was created outside its running request, with neither a valid request context nor the outside-process permission and a reason."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Start the process that creates the record type, or hold the outside-process permission and supply a reason.", "If it keeps happening, tell your administrator and quote the code bpm_governance.outside_process_denied."]
+audience = "user"
+
+[[help]]
+code = "bpm_governance.policy_invalid"
+what_happened = "A stored governance policy names an unknown mode, or an entry that is not `doctype=mode`."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the `bpm.governance.policy` setting so every entry is `doctype=mode`, with mode `free`, `governed` or `process_only`.", "If it keeps happening, tell your administrator and quote the code bpm_governance.policy_invalid."]
+audience = "user"
+
+[[help]]
+code = "bpm_governance.reason_required"
+what_happened = "The outside-process permission was held, but the reason was blank or shorter than the configured floor."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Supply a non-blank reason of at least the configured length, or create the record inside its process.", "If it keeps happening, tell your administrator and quote the code bpm_governance.reason_required."]
+audience = "user"
+
+[[help]]
+code = "bpm_governance.settings"
+what_happened = "A governance setting could not be read, or the governance settings registry could not be built."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the settings store and that the governance settings are registered, then retry the operation.", "If it keeps happening, tell your administrator and quote the code bpm_governance.settings."]
+audience = "operator"

@@ -1,0 +1,49 @@
+{
+  "app": "sample",
+  "app_order": [
+    "platform",
+    "sample"
+  ],
+  "methods": {
+    "task": [
+      "start_work",
+      "close_task"
+    ],
+    "project": [
+      "archive"
+    ],
+    "time_entry": []
+  },
+  "queries": {
+    "sample.open_tasks": {
+      "kind": "aggregate",
+      "doctype": "task"
+    },
+    "sample.task_count": {
+      "kind": "aggregate",
+      "doctype": "task"
+    },
+    "sample.recent_time_entries": {
+      "kind": "rows",
+      "doctype": "time_entry"
+    }
+  },
+  "permissions": [
+    "project:read",
+    "project:write",
+    "task:read",
+    "task:write",
+    "task:create",
+    "time_entry:read",
+    "time_entry:create"
+  ],
+  "destinations": [
+    "sample.projects",
+    "sample.tasks",
+    "sample.time_entries",
+    "sample.reports"
+  ],
+  "routes": [
+    "/sample/reports"
+  ]
+}

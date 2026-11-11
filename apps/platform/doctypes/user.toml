@@ -1,0 +1,149 @@
+name = "user"
+label = "User"
+app = "platform"
+module = "identity"
+title_field = "user_name"
+
+# Credential fields (secret, no column) form the closed `credential` group: no role reads it;
+# only the system principal does (ADR-070 section 12).
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[fields]]
+name = "user_name"
+label = "User Name"
+type = "text"
+required = true
+unique = true
+max_chars = 254
+in_list_view = true
+description = "The sign-in name: an e-mail address or an explicit username."
+
+[[fields]]
+name = "email"
+label = "E-mail"
+type = "text"
+format = "email"
+unique = true
+in_list_view = true
+
+[[fields]]
+name = "full_name"
+label = "Full Name"
+type = "text"
+required = true
+max_chars = 200
+in_list_view = true
+
+[[fields]]
+name = "user_type"
+label = "User Type"
+type = "select"
+options = "internal\nportal\nservice\nagent"
+required = true
+default = "internal"
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "invited\nactive\ndisabled\nanonymised"
+required = true
+default = "invited"
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "language"
+label = "Language"
+type = "text"
+max_chars = 35
+
+[[fields]]
+name = "time_zone"
+label = "Time Zone"
+type = "text"
+max_chars = 64
+
+[[fields]]
+name = "manager"
+label = "Manager"
+type = "link"
+options = "user"
+description = "Who open tasks go to when this user leaves."
+
+[[fields]]
+name = "party_type"
+label = "Party Type"
+type = "text"
+description = "The DocType of the customer or supplier a portal user belongs to."
+
+[[fields]]
+name = "party"
+label = "Party"
+type = "dynamic_link"
+options = "party_type"
+
+[[fields]]
+name = "last_sign_in"
+label = "Last Sign-in"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "deactivated_at"
+label = "Deactivated At"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "failed_attempts"
+label = "Failed Attempts"
+type = "int"
+default = "0"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "last_failed_at"
+label = "Last Failed At"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "locked_until"
+label = "Locked Until"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "password_hash"
+label = "Password Hash"
+type = "secret"
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true
+
+[[fields]]
+name = "totp_secret"
+label = "TOTP Secret"
+type = "secret"
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true
+
+[[fields]]
+name = "recovery_digests"
+label = "Recovery Digests"
+type = "table"
+options = "user_recovery_digest"
+no_copy = true

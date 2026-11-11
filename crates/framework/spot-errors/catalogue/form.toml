@@ -1,0 +1,10 @@
+# form codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "form.field_unknown"
+class = "Validation"
+summary = "No server step answers a change to this field, so the form-event has no diff to give."
+explanation_key = "error.form.field_unknown"
+params = []
+remedy = "Send the form-event for a field the form steps of the DocType depend on, or rely on the client rules."
+since = "0.1.0"

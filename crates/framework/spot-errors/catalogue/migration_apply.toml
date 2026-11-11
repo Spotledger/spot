@@ -1,0 +1,178 @@
+# migration_apply codes: the `migration_apply.*` vocabulary of spot-migration-apply (WP-MIG-07.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The apply engine raises its own typed errors (`spot_migration_apply::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy states
+# what an operator does about it. A failed verification is an outcome (the old version is restored
+# and open), not an error.
+
+[[entry]]
+code = "migration_apply.no_ticket"
+class = "none"
+summary = "The run has no apply ticket."
+explanation_key = "error.migration_apply.no_ticket"
+params = []
+remedy = "Approve the plan and pass the ticket the approval issued."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.no_snapshot"
+class = "none"
+summary = "The run names no taken snapshot."
+explanation_key = "error.migration_apply.no_snapshot"
+params = []
+remedy = "Take a snapshot of the site and pass its id to the run."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.ticket_mismatch"
+class = "none"
+summary = "The ticket's plan digest {ticket} does not match the plan's {plan}."
+explanation_key = "error.migration_apply.ticket_mismatch"
+params = ["plan", "ticket"]
+remedy = "Re-approve the plan that will actually be applied and use that ticket."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.in_progress"
+class = "none"
+summary = "An unfinished run for plan {plan_digest} is still on this site."
+explanation_key = "error.migration_apply.in_progress"
+params = ["plan_digest"]
+remedy = "Recover or roll back the unfinished run before starting another."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.already_applied"
+class = "none"
+summary = "Plan {plan_digest} was already applied and verified on this site."
+explanation_key = "error.migration_apply.already_applied"
+params = ["plan_digest"]
+remedy = "Plan and approve a new release; an approval ticket authorises one application."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.journal_failed"
+class = "none"
+summary = "The apply journal failed: {message}."
+explanation_key = "error.migration_apply.journal_failed"
+params = ["message"]
+remedy = "Check the journal backend; the site stays closed until the journal answers."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.gate_failed"
+class = "none"
+summary = "The maintenance gate failed: {message}."
+explanation_key = "error.migration_apply.gate_failed"
+params = ["message"]
+remedy = "Check the admission gate; never admit users until it can be closed and opened reliably."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.drain_timeout"
+class = "none"
+summary = "In-flight transactions did not drain within {waited_micros} microseconds."
+explanation_key = "error.migration_apply.drain_timeout"
+params = ["waited_micros"]
+remedy = "Find the long-running transaction, end it and start the apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.hold_failed"
+class = "none"
+summary = "The side-effect hold failed: {message}."
+explanation_key = "error.migration_apply.hold_failed"
+params = ["message"]
+remedy = "Check the hold ledger; the site stays closed until external effects are held."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.step_failed"
+class = "none"
+summary = "Step {index} ({id}) failed: {reason}."
+explanation_key = "error.migration_apply.step_failed"
+params = ["id", "index", "reason"]
+remedy = "Read the reason, fix the step and start the apply again; the old version is restored."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.step_timeout"
+class = "none"
+summary = "Step {index} ({id}) exceeded {timeout_micros} microseconds."
+explanation_key = "error.migration_apply.step_timeout"
+params = ["id", "index", "timeout_micros"]
+remedy = "Raise the step's timeout or make the step faster, then start the apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.verify_failed"
+class = "none"
+summary = "Verification failed: {mismatches} residual difference(s) and {invariants} violation(s)."
+explanation_key = "error.migration_apply.verify_failed"
+params = ["invariants", "mismatches"]
+remedy = "Read the residual differences and violations; the old version is restored and open."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.restore_failed"
+class = "none"
+summary = "Compensating or restoring a step failed: {message}."
+explanation_key = "error.migration_apply.restore_failed"
+params = ["message"]
+remedy = "Restore the site by hand; it stays closed until a person clears it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.snapshot_failed"
+class = "none"
+summary = "Restoring from the snapshot failed: {message}."
+explanation_key = "error.migration_apply.snapshot_failed"
+params = ["message"]
+remedy = "Check the snapshot and the restore target; the site stays closed."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.release_failed"
+class = "none"
+summary = "Releasing the held effects failed: {message}."
+explanation_key = "error.migration_apply.release_failed"
+params = ["message"]
+remedy = "Release the held effects by hand; the site stays closed until a person clears it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.halted"
+class = "none"
+summary = "The run halted and needs a person: {reason}."
+explanation_key = "error.migration_apply.halted"
+params = ["reason"]
+remedy = "Read the reason, fix it and recover or roll back by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.invalid_input"
+class = "none"
+summary = "Invalid {what}: {reason}."
+explanation_key = "error.migration_apply.invalid_input"
+params = ["reason", "what"]
+remedy = "Correct the named argument and start the apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.killed"
+class = "none"
+summary = "The run was killed at {at}."
+explanation_key = "error.migration_apply.killed"
+params = ["at"]
+remedy = "Restart and recover the run; this is the sentinel a fault-injection kill returns."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_apply.open_unverified"
+class = "none"
+summary = "The journal for plan {plan_digest} opens an unverified new version."
+explanation_key = "error.migration_apply.open_unverified"
+params = ["plan_digest"]
+remedy = "Treat the journal as corrupt; close the site and restore the snapshot by hand."
+since = "0.1.0"

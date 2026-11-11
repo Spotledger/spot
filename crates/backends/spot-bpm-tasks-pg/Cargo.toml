@@ -1,0 +1,37 @@
+[package]
+name = "spot-bpm-tasks-pg"
+description = "PostgreSQL TaskStore for the BPM task inbox (WP-BPM-05.T6): durable spot_bpm_task and append-only spot_bpm_task_event tables, optimistic versioning in one statement, idempotent create per Case and node, tenant-scoped, reached through the shared blocking bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `TaskStore` trait, `Task`, `TaskEvent`, `TaskFilter` and the `TasksError` the store returns.
+spot-bpm-tasks = { path = "../../framework/spot-bpm-tasks" }
+# `OffsetDateTime`, for the due and event instants the store binds as timestamptz.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The one shared blocking bridge (ADR-082 addendum 1); this crate never writes its own `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool whose size the constructor validates the bridge against.
+deadpool-postgres = "0.14"
+# The driver: transactions, SQLSTATE codes, timestamptz and jsonb bindings.
+tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1"] }
+# The task and event bodies are stored as jsonb.
+serde_json = "1"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases and a raw client for the schema checks.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# Every setup code has a catalogue entry.
+spot-errors = { path = "../../framework/spot-errors" }
+# The setup runtime that prepares and inspects the scratch database from outside the bridge.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

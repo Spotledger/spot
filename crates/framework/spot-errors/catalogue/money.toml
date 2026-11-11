@@ -1,0 +1,208 @@
+# money codes: exact money and quantity types, rounding rules and allocation of spot-money (WP-DOC-02). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "money.currency_mismatch"
+class = "none"
+summary = "Two amounts of different currencies were combined."
+explanation_key = "error.money.currency_mismatch"
+params = []
+remedy = "Convert one amount to the other's currency first."
+since = "0.1.0"
+
+[[entry]]
+code = "money.uom_mismatch"
+class = "none"
+summary = "Two quantities of different units of measure were combined."
+explanation_key = "error.money.uom_mismatch"
+params = []
+remedy = "Convert one quantity to the other's unit first."
+since = "0.1.0"
+
+[[entry]]
+code = "money.overflow"
+class = "none"
+summary = "The result does not fit a decimal."
+explanation_key = "error.money.overflow"
+params = []
+remedy = "Use smaller numbers or split the calculation."
+since = "0.1.0"
+
+[[entry]]
+code = "money.inexact"
+class = "none"
+summary = "The exact result needs more than 28 fractional digits and is never rounded silently."
+explanation_key = "error.money.inexact"
+params = []
+remedy = "Round explicitly with a rounding rule."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_currency"
+class = "none"
+summary = "A currency code is not three uppercase ASCII letters."
+explanation_key = "error.money.bad_currency"
+params = []
+remedy = "Use a three-letter uppercase currency code."
+since = "0.1.0"
+
+[[entry]]
+code = "money.unknown_currency"
+class = "none"
+summary = "A currency is not in the table."
+explanation_key = "error.money.unknown_currency"
+params = []
+remedy = "Add the currency to the rounding table."
+since = "0.1.0"
+
+[[entry]]
+code = "money.duplicate_currency"
+class = "none"
+summary = "A currency appears twice in a table."
+explanation_key = "error.money.duplicate_currency"
+params = []
+remedy = "Keep one entry per currency."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_uom"
+class = "none"
+summary = "A unit of measure is empty, too long or has whitespace or control characters."
+explanation_key = "error.money.bad_uom"
+params = []
+remedy = "Use a short unit name without spaces."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_scale"
+class = "none"
+summary = "A scale is above 28, the most a decimal holds."
+explanation_key = "error.money.bad_scale"
+params = []
+remedy = "Use a scale of 28 or less."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_step"
+class = "none"
+summary = "A rounding step is not positive or has more fractional digits than the rule's scale."
+explanation_key = "error.money.bad_step"
+params = []
+remedy = "Use a positive step that fits the rule's scale."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_decimal"
+class = "none"
+summary = "A decimal could not be read exactly."
+explanation_key = "error.money.bad_decimal"
+params = []
+remedy = "Write the number as plain decimal digits."
+since = "0.1.0"
+
+[[entry]]
+code = "money.off_grid"
+class = "none"
+summary = "An amount is not a multiple of the rule's unit, so it cannot be split exactly."
+explanation_key = "error.money.off_grid"
+params = []
+remedy = "Round the amount to the rule's unit first."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_weights"
+class = "none"
+summary = "The weights cannot apportion the amount."
+explanation_key = "error.money.bad_weights"
+params = []
+remedy = "Give at least one positive weight and no negative ones."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_rate"
+class = "none"
+summary = "A rate is not usable, for example one that makes a tax divisor zero or negative."
+explanation_key = "error.money.bad_rate"
+params = []
+remedy = "Use a rate that keeps the divisor positive."
+since = "0.1.0"
+
+[[entry]]
+code = "money.no_rule"
+class = "none"
+summary = "No rule applies and there is no default."
+explanation_key = "error.money.no_rule"
+params = []
+remedy = "Add a rule for the kind and key, or a default rule."
+since = "0.1.0"
+
+[[entry]]
+code = "money.syntax"
+class = "none"
+summary = "The rounding rules are not valid TOML."
+explanation_key = "error.money.syntax"
+params = []
+remedy = "Fix the TOML syntax."
+since = "0.1.0"
+
+[[entry]]
+code = "money.unknown_key"
+class = "none"
+summary = "The rounding rules contain a key the loader does not know."
+explanation_key = "error.money.unknown_key"
+params = []
+remedy = "Remove the unknown key."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_type"
+class = "none"
+summary = "A rounding-rule value has the wrong type."
+explanation_key = "error.money.bad_type"
+params = []
+remedy = "Use the type the rule format states for the key."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_name"
+class = "none"
+summary = "A rule name is not a valid name."
+explanation_key = "error.money.bad_name"
+params = []
+remedy = "Use lower-case letters, digits and underscores."
+since = "0.1.0"
+
+[[entry]]
+code = "money.unknown_rule"
+class = "none"
+summary = "A rule refers to a rule that is not defined."
+explanation_key = "error.money.unknown_rule"
+params = []
+remedy = "Define the rule or fix the reference."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_key"
+class = "none"
+summary = "A rule key is not valid for its kind."
+explanation_key = "error.money.bad_key"
+params = []
+remedy = "Use a currency code or tax name the kind accepts."
+since = "0.1.0"
+
+[[entry]]
+code = "money.missing_field"
+class = "none"
+summary = "A rounding rule lacks a required field."
+explanation_key = "error.money.missing_field"
+params = []
+remedy = "Add the missing field to the rule."
+since = "0.1.0"
+
+[[entry]]
+code = "money.bad_mode"
+class = "none"
+summary = "A rounding mode is not one the platform knows."
+explanation_key = "error.money.bad_mode"
+params = []
+remedy = "Use one of the documented rounding modes."
+since = "0.1.0"

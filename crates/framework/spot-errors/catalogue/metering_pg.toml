@@ -1,0 +1,11 @@
+# metering_pg codes: the PostgreSQL meter store (WP-CTL-05.T2). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "metering_pg.migration_failed"
+class = "Internal"
+summary = "The metering tables could not be created in the database."
+explanation_key = "error.metering_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and that the server is reachable, then retry prepare."
+since = "0.1.0"

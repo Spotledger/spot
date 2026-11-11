@@ -1,0 +1,87 @@
+# migration_audit codes: the `migration_audit.*` vocabulary of spot-migration-audit (WP-MIG-11.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The migration audit record raises its own typed errors (`spot_migration_audit::MigrationAuditError`),
+# so these are library-internal vocabulary: `class = "none"` describes what each code means, and a
+# remedy states what an operator does about it. A message never carries a payload value, a plan
+# secret or a connection string.
+
+[[entry]]
+code = "migration_audit.bad_id"
+class = "none"
+summary = "The text {id} is not a usable migration run id."
+explanation_key = "error.migration_audit.bad_id"
+params = ["id"]
+remedy = "Pass a non-empty id of at most 256 bytes using only letters, digits, dot, underscore, colon or hyphen."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.bad_actor"
+class = "none"
+summary = "The migration actor is not usable: {message}."
+explanation_key = "error.migration_audit.bad_actor"
+params = ["message"]
+remedy = "Use an actor of the form system, user:<id> or agent:<id>."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.duplicate_run"
+class = "none"
+summary = "Migration run {id} has already begun on this recorder."
+explanation_key = "error.migration_audit.duplicate_run"
+params = ["id"]
+remedy = "Continue the run already begun, or begin a new run with a fresh id."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.not_permitted"
+class = "none"
+summary = "The acting principal does not hold the migration.run permission."
+explanation_key = "error.migration_audit.not_permitted"
+params = []
+remedy = "Grant the principal a role that holds migration.run, or run the migration as the system."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.wrong_site"
+class = "none"
+summary = "The run belongs to site {run_site}, not {site}."
+explanation_key = "error.migration_audit.wrong_site"
+params = ["run_site", "site"]
+remedy = "Present the handle to the recorder and site it was issued for."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.bad_outcome"
+class = "none"
+summary = "The outcome {outcome} is not one a migration run can finish on."
+explanation_key = "error.migration_audit.bad_outcome"
+params = ["outcome"]
+remedy = "Finish with verified, failed, rolled_back or refused."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.record_invalid"
+class = "none"
+summary = "A stored migration lifecycle event is malformed: {message}."
+explanation_key = "error.migration_audit.record_invalid"
+params = ["message"]
+remedy = "Verify the chain; a malformed event means the record was written by an older or a faulty writer."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.chain"
+class = "none"
+summary = "The migration audit chain failed: {message}."
+explanation_key = "error.migration_audit.chain"
+params = ["message"]
+remedy = "Check the audit chain store and its signer; nothing was recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.chain_broken"
+class = "none"
+summary = "The migration audit chain failed verification: {message}."
+explanation_key = "error.migration_audit.chain_broken"
+params = ["message"]
+remedy = "Treat the migration records as tampered; investigate the exact sequence number the verifier named."
+since = "0.1.0"

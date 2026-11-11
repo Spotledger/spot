@@ -1,0 +1,28 @@
+{
+  "committed_at": 1793608157957000,
+  "doctype": "sales_invoice",
+  "effects": [
+    {
+      "class": "balance_movement",
+      "count": 2,
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "internal",
+      "state": "applied",
+      "step": "erp_accounts:post_ledger",
+      "store_refs": ["ledger:11", "ledger:12"]
+    },
+    {
+      "class": "mail",
+      "count": 1,
+      "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "kind": "external",
+      "state": {"failed": {"code": "mail.refused"}},
+      "step": "erp_selling:send_invoice",
+      "store_refs": []
+    }
+  ],
+  "name": "0192f1c0-0000-7000-8000-000000000042",
+  "operation": "post",
+  "undeclared": [1],
+  "version": 3
+}

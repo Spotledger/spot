@@ -1,0 +1,375 @@
+# Spotledger desktop PostgreSQL + PostGIS bundle (WP-PRD-02.T7, ADR-087 sections 4.2, 4.3,
+# 11.2 and 11.3 S2).
+#
+# This file is the pinned bill of materials for the PostgreSQL and PostGIS binaries the
+# Windows desktop installer ships. It pins, per platform: the two upstream archives, their
+# SHA-256 and byte size, and every file the installer must place under the PostgreSQL
+# installation prefix (`<prefix>/bin`, `<prefix>/share`, `<prefix>/lib` — the layout
+# `spot-pg-supervisor`'s `PgLayout::validate` and first-start provisioning expect).
+#
+# Path chosen: (a) the EDB-built PostgreSQL with the matching PostGIS Windows bundle, whose
+# own README says "The installers are designed to work with EnterpriseDb PostgreSQL
+# distributions" (https://postgis.net/windows_downloads/, read 29 Oct 2026). The reasoning,
+# the size delta and the timing record are in `docs/packaging/desktop-postgis.md` and
+# `packaging/postgis/timing.md`.
+#
+# No binary is committed to git. Check this file, and any unpacked prefix, with:
+#
+#   python3 packaging/postgis/verify.py --manifest packaging/postgis/MANIFEST.toml
+#   python3 packaging/postgis/verify.py --manifest packaging/postgis/MANIFEST.toml \
+#       --files <unpacked prefix> --platform windows-x86_64
+#
+# The unit test of the verifier is `python3 -m unittest discover -s packaging/postgis -p 'test_*.py'`.
+#
+# Evidence rule: every version, URL, size and SHA-256 below was obtained by an actual
+# download or from an official upstream listing, on 29 Oct 2026; nothing is estimated. A
+# value that could not be verified is written as the literal marker
+# `todo = "pin before release"` instead of a guess, and `verify.py` reports the manifest as
+# not shippable (exit 2) until it is replaced.
+
+schema = 1
+
+# The lowest PostGIS version the catalog accepts, as the contract and `spot-pg-migrate`
+# define it: `default_min_version("postgis")` in
+# `crates/backends/spot-pg-migrate/src/plan.rs` returns "3.0", and that is what the
+# supervisor's first-start `ExtensionRequest::new("postgis")` carries. The bundled version
+# must satisfy it; the pinned 3.6.2 does.
+min_version = "3.0"
+
+[bundle]
+# Platforms the desktop edition must cover. `verify.py` refuses a manifest that lacks one:
+# a missing platform is a silently missing install, not a smaller one.
+required_platforms = ["windows-x86_64"]
+# How the installer treats the extensions the vendor bundle carries but the platform does
+# not use. Pruning keeps the installed size (and the notice surface) to what ships.
+prune = [
+    # Shipped by the vendor archive, not needed for `geometry(Point,4326)`, GiST or
+    # ST_DWithin, and each would add its own notice file.
+    "share/extension/postgis_raster*",
+    "share/extension/postgis_topology*",
+    "share/extension/postgis_sfcgal*",
+    "share/extension/postgis_tiger_geocoder*",
+    "share/extension/address_standardizer*",
+    "share/extension/h3*",
+    "share/extension/pgrouting*",
+    "share/extension/pointcloud*",
+    "share/extension/mobilitydb*",
+    "share/extension/ogr_fdw*",
+    "bin/postgisgui/**",
+    "gdal-data/**",
+    "lib/h3*.dll",
+    "lib/pgrouting*.dll",
+    "lib/pointcloud*.dll",
+    "lib/MobilityDB*.dll",
+    "lib/ogr_fdw.dll",
+    "lib/postgis_raster*.dll",
+    "lib/postgis_topology*.dll",
+    "lib/postgis_sfcgal*.dll",
+    "lib/address_standardizer*.dll",
+    "lib/pg_sphere.dll",
+]
+
+# ---------------------------------------------------------------------------------------
+# windows-x86_64: the desktop installer's only target (WP-PRD-02, WP-PRD-03).
+# ---------------------------------------------------------------------------------------
+[[platform]]
+id = "windows-x86_64"
+os = "windows"
+arch = "x86_64"
+# The prefix the archives are merged into, as the installer lays it out.
+install_prefix = "pgsql"
+
+[[platform.component]]
+name = "postgresql"
+version = "18.6"
+upstream = "https://www.postgresql.org/"
+# Minor version confirmed against https://www.postgresql.org/support/versioning/ on
+# 29 Oct 2026 ("18 | 18.6 | Yes").
+version_evidence = "https://www.postgresql.org/support/versioning/ (read 29 Oct 2026: 18.6 is the current 18 minor)"
+url = "https://get.enterprisedb.com/postgresql/postgresql-18.6-1-windows-x64-binaries.zip"
+archive = "postgresql-18.6-1-windows-x64-binaries.zip"
+# The archive's own top directory; everything below is stripped when merging.
+extract_prefix = "pgsql"
+size_bytes = 343808005
+sha256 = "fbe23da234ee31547bf8a36d29dfd81e82b849df2d2b78d2eecb43d360252f8c"
+# EDB publishes no checksum file for this archive; the hash above was computed by
+# downloading the exact URL (HTTP 200, content-length 343808005 bytes) on 29 Oct 2026 and
+# running sha256sum. Re-verify with:
+#   curl -fLSO <url> && sha256sum postgresql-18.6-1-windows-x64-binaries.zip
+sha256_evidence = "computed from a real download on 29 Oct 2026 (content-length matched)"
+
+[[platform.component]]
+name = "postgis"
+version = "3.6.2"
+upstream = "https://postgis.net/"
+version_evidence = "https://download.osgeo.org/postgis/windows/pg18/ (listed postgis-bundle-pg18-3.6.2x64.zip on 29 Oct 2026); the bundle's version.txt records POSTGIS: 3.6.2"
+url = "https://download.osgeo.org/postgis/windows/pg18/postgis-bundle-pg18-3.6.2x64.zip"
+archive = "postgis-bundle-pg18-3.6.2x64.zip"
+extract_prefix = "postgis-bundle-pg18-3.6.2x64"
+size_bytes = 124037332
+sha256 = "0f41241cc536f7404dda43fd2a3f20ffe1fa1d71a8d4f6341428cd25931bf419"
+# Cross-checked against the upstream MD5 sidecar
+# (https://download.osgeo.org/postgis/windows/pg18/postgis-bundle-pg18-3.6.2x64.zip.md5,
+# read 29 Oct 2026); the downloaded file's md5sum matched it exactly, so the SHA-256 above
+# is of the genuine artifact.
+sha256_evidence = "sha256 of a real download on 29 Oct 2026; the same file's md5sum matched the upstream .md5 sidecar"
+upstream_md5 = "9e28723541938d1b1a8efb59a5922741"
+upstream_md5_url = "https://download.osgeo.org/postgis/windows/pg18/postgis-bundle-pg18-3.6.2x64.zip.md5"
+
+# The libraries the PostGIS Windows bundle brings and the module links against, with the
+# versions the bundle's own version.txt records (read 29 Oct 2026):
+#   GEOS VERSION: 3.14          https://github.com/libgeos/geos
+#   GDAL VERSION: 3.9.2         https://gdal.org/download.html#current-releases
+#   PROJ VERSION: 8.2.1         https://proj.org/download.html#current-release
+# No GDAL file is shipped: the bundle's GDAL is only needed by raster I/O, which the
+# platform does not use yet, and it is 36 MB (see the `prune` list).
+
+# Every file the installer places under the prefix, with the SHA-256 of the file itself so a
+# staged bundle is checked too, not only the archives.
+#
+# The DLL list is not a guess: it is the transitive import closure of `lib/postgis-3.dll`,
+# read with `objdump -p` from the real archives on 29 Oct 2026 (`postgis-3.dll` imports
+# libgeos_c, libproj_8_2, libprotobuf-c-1, libstdc++-6, libwinpthread-1 and libxml2-2
+# directly, and those in turn pull the rest). Shipping the control file and the module
+# without the closure would pass `PgLayout::validate` and then fail `CREATE EXTENSION` with
+# "The specified module could not be found".
+#
+# Two notes the installer must honour:
+#   * `libwinpthread-1.dll` comes from the PostgreSQL archive, not from the PostGIS bundle.
+#   * `zlib1.dll` exists in BOTH archives; the manifest pins the PostGIS bundle's copy,
+#     because the bundle's own README says to copy its files over the PostgreSQL tree.
+#   * GDAL is deliberately absent: `postgis-3.dll` does not import it, so nothing that the
+#     platform's `geometry(Point,4326)` / GiST / ST_DWithin needs would load it. Raster and
+#     GDAL-backed functions are therefore unavailable in the desktop bundle.
+#
+# `share/contrib/postgis-3.6/proj/proj.db` is PROJ's resource database. PROJ 8.2 looks for
+# its resources under `share/proj` relative to its installation root and honours `PROJ_LIB`
+# (PROJ 8.2 docs, `environmentvars`); the file lives under `share/contrib/postgis-3.6/proj`
+# here, so the service must pass `PROJ_LIB=<prefix>/share/contrib/postgis-3.6/proj` to the
+# postgres child (`SupervisorConfig::child_env` carries it), or coordinate transforms fail.
+
+[[platform.file]]
+component = "postgresql"
+path = "bin/postgres.exe"
+role = "program"
+size_bytes = 10266624
+sha256 = "af5b897cb69c9ce692a4a15ecd022b540db85db1add0f66d2b9f0697be2451a0"
+
+[[platform.file]]
+component = "postgresql"
+path = "bin/initdb.exe"
+role = "program"
+size_bytes = 246784
+sha256 = "68195f0c6f22694660ba86d914ae8c74bcd38e71eb342f98e065b1962311142e"
+
+[[platform.file]]
+component = "postgresql"
+path = "bin/pg_ctl.exe"
+role = "program"
+size_bytes = 133120
+sha256 = "552049183df455921657c8e498e9745e8508bf77d2c2e5cb9c21b2cbdc798822"
+
+[[platform.file]]
+component = "postgis"
+path = "share/extension/postgis.control"
+role = "control"
+size_bytes = 175
+sha256 = "2802c2bb571cf648daafb834a452a7dc884ef359116a1b17ab4c4acd6155e699"
+
+[[platform.file]]
+component = "postgis"
+path = "share/extension/postgis--3.6.2.sql"
+role = "sql"
+size_bytes = 7478083
+sha256 = "cf7a3540a8c2d92bb5ffe0c2fe2599daf9e99d79546f63ce66771729d061cf9b"
+
+[[platform.file]]
+component = "postgis"
+path = "share/extension/postgis--ANY--3.6.2.sql"
+role = "sql"
+size_bytes = 7853869
+sha256 = "81425cfe4d7b98cfca2139b3a662fbf019b498707f481467f74d4c4cdc1cbd24"
+
+[[platform.file]]
+component = "postgis"
+path = "lib/postgis-3.dll"
+role = "library"
+size_bytes = 1778176
+sha256 = "4e2f2747bd68643890cf9d8915977f582ef9a60566284186432af45899f51be6"
+
+[[platform.file]]
+component = "postgis"
+path = "share/contrib/postgis-3.6/proj/proj.db"
+role = "data"
+size_bytes = 7921664
+sha256 = "db22de2bddf7f5473c606c20cdd94e543dcaea005eb4e1595bddbc90a9fb453d"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libcrypto-3-x64.dll"
+role = "library"
+size_bytes = 5350618
+sha256 = "8e34000ee3efb74d648cb89a5ba64cb9c05a540bf9e4a77ef42a88a9487bdbc5"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libcurl.dll"
+role = "library"
+size_bytes = 773632
+sha256 = "2bdcce8a1d122bd86c8b0a94f52cb15f229e89bdb00490bb2327235a2f80e7e0"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libgcc_s_seh-1.dll"
+role = "library"
+size_bytes = 117427
+sha256 = "ebce1962be9787e36b8b15112e79c4d41c31b6b9932ff40e232ce78dfb179bc8"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libgeos.dll"
+role = "library"
+size_bytes = 5197753
+sha256 = "e48d8aa98ba9d3de879bd796d56b0682bf68c4fe12b945fbfe955608c657ba74"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libgeos_c.dll"
+role = "library"
+size_bytes = 725465
+sha256 = "2ffc245b2c0488e2b4509114ce6bb4516ab83390b7f52b2bbac90d809642a1fb"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libiconv-2.dll"
+role = "library"
+size_bytes = 1576052
+sha256 = "9031b3d8e48a09f50cd4d267e6e217027ca4e3cda08a6a5beccf7626b013e481"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libidn2-0.dll"
+role = "library"
+size_bytes = 242965
+sha256 = "621f5bfc24cdae8479a69b56de530ab6cee633352ae0bce01885cc6b1eca0371"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libintl-8.dll"
+role = "library"
+size_bytes = 188681
+sha256 = "42a63cb4c3c28a683d9f6c3510de5ec17849eb18c097fa02cd78aeb800bff202"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/liblzma-5.dll"
+role = "library"
+size_bytes = 184667
+sha256 = "e5b17c53a932497f0994881b87a55381a282d0bab2e3bd41933b308fc7127f78"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libproj_8_2.dll"
+role = "library"
+size_bytes = 3795456
+sha256 = "96cb1070bddb180a6ff87d2b5655b5fb1e9dac491a6671923dce02f597846335"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libprotobuf-c-1.dll"
+role = "library"
+size_bytes = 238419
+sha256 = "f745dc985f89537141ddf6a33fee4e3db770b8a91788fc5ab2914e43de6a3808"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libpsl-5.dll"
+role = "library"
+size_bytes = 103768
+sha256 = "d516bbc47418475bbbddfdba4da9d38abf6201329f5f7037750c31d5b4bcdc73"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libsqlite3-0.dll"
+role = "library"
+size_bytes = 1636921
+sha256 = "15c2196c0b15e6c16de612af59cd678232a6f527fa38fb0f17e6f2568eb2b279"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libssh2-1.dll"
+role = "library"
+size_bytes = 295582
+sha256 = "c56acf7fb2a8ae926ee12c7c3985d3a2d53d6e55f0a9ff59dcbed4a8cd19eeb9"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libssl-3-x64.dll"
+role = "library"
+size_bytes = 977712
+sha256 = "f04cbf3fd4bc2aaefc67bc05e1385ee4c04aa9168373bf59fa91e5df71b2ae96"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libstdc++-6.dll"
+role = "library"
+size_bytes = 2345455
+sha256 = "913fcf6efa8b2f6b4c301b59005e81cccc2a02ab693cd995355a27b3b33df458"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libtiff-6.dll"
+role = "library"
+size_bytes = 1949565
+sha256 = "9bb9cfbdea96d46cdc4d834172f486fddca24e92118c634174d7fd5d64c9e65f"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libunistring-5.dll"
+role = "library"
+size_bytes = 1999287
+sha256 = "9267f38109fb1a290c5c0fe28fcf0531909b3135407b57fe398cb6cfa2aa8767"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libxml2-2.dll"
+role = "library"
+size_bytes = 1773366
+sha256 = "a14cd8d08c6a95ccdcc7d38e5491cf10c69800ea584568e0c20492638cee2975"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/libzstd.dll"
+role = "library"
+size_bytes = 1179848
+sha256 = "f216ea8efb5b3bb9ad3d938fb9ac07e3b8f78c2c92faab03d2c468d0b6798a5a"
+
+[[platform.file]]
+component = "postgis"
+path = "bin/zlib1.dll"
+role = "library"
+size_bytes = 137728
+sha256 = "4d52d3360cac59297996f585b562e2477df66541cfa459c3234f78656566d5b3"
+
+[[platform.file]]
+component = "postgresql"
+path = "bin/libwinpthread-1.dll"
+role = "library"
+size_bytes = 52736
+sha256 = "ffe2d56375bb4e8bdee9037df6befc5016ddd8871d0d85027314dd5792f8fdc9"
+
+[[platform.file]]
+component = "postgis"
+path = "share/doc/postgis/COPYING"
+role = "licence"
+source = "bin/COPYING"
+size_bytes = 18092
+sha256 = "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+
+[[platform.file]]
+component = "postgis"
+path = "share/doc/postgis/LICENSE"
+role = "licence"
+source = "LICENSE"
+size_bytes = 10173
+sha256 = "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"

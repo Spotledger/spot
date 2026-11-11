@@ -1,0 +1,30 @@
+[package]
+name = "spot-journal-commit"
+description = "The journal commit-acknowledgement driver (WP-JRN-04.T2, ADR-061 s4 and s10): joins the relay's chunk results to the durability acknowledgement gate and gives each commit one ticket that resolves with an acknowledgement, a refusal or an unknown outcome, with group commit and retry by command id"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The acknowledgement gate: the pure state machine that decides when a commit may be acknowledged.
+spot-journal-durability = { path = "../spot-journal-durability" }
+# The relay that makes batches durable; the driver feeds it group-commit batches.
+spot-journal-relay = { path = "../spot-journal-relay" }
+# The feed position (generation, seq) the relay's batches carry (same path as spot-journal-relay).
+spot-events-contract = { path = "../../../contracts/events" }
+# The object-store seam the relay is generic over (same path as spot-journal-relay).
+spot-journal-store = { path = "../spot-journal-store" }
+# Oneshot channels for tickets and a Notify for the run loop; no runtime feature is needed.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# Typed errors with stable `journal_commit.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Drives the driver's futures in tests (virtual clock, no real sleeps).
+tokio = { version = "1", default-features = false, features = ["sync", "rt", "macros", "time"] }
+proptest = "1"
+
+[lints]
+workspace = true

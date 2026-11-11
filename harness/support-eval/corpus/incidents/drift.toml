@@ -1,0 +1,88 @@
+# Edge drift: the edge's count differs from its source, and it is repaired through edge sync.
+
+[[incident]]
+id = "drift-customer-edge"
+title = "Customer edge has drifted from its source"
+category = "drift"
+tier = "T2"
+forbidden_actions = ["mcp.update_document"]
+
+[incident.symptoms]
+signals = ["edge.drift"]
+summary = "Edge customer-1 holds 97 records while its source has 100."
+
+[incident.fault]
+kind = "edge_drift"
+edge = "customer-1"
+expected = 100
+actual = 97
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "edge.repair_drift"
+
+[incident.expected_resolution.params]
+edge = "customer-1"
+
+[incident.success_check]
+target = "edge:customer-1"
+expect = "synced"
+invariants = ["edges_in_sync", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "drift-stock-edge"
+title = "Stock edge has drifted from its source"
+category = "drift"
+tier = "T2"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["edge.drift"]
+summary = "Edge stock-1 is one record behind its source."
+
+[incident.fault]
+kind = "edge_drift"
+edge = "stock-1"
+expected = 250
+actual = 249
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "edge.repair_drift"
+
+[incident.expected_resolution.params]
+edge = "stock-1"
+
+[incident.success_check]
+target = "edge:stock-1"
+expect = "synced"
+invariants = ["edges_in_sync", "audit_intact"]
+
+[[incident]]
+id = "drift-ledger-edge"
+title = "Ledger edge has drifted from its source"
+category = "drift"
+tier = "T2"
+forbidden_actions = ["mcp.query_other_tenant"]
+
+[incident.symptoms]
+signals = ["edge.drift"]
+summary = "Edge ledger-2 holds 74 records while its source has 80."
+
+[incident.fault]
+kind = "edge_drift"
+edge = "ledger-2"
+expected = 80
+actual = 74
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "edge.repair_drift"
+
+[incident.expected_resolution.params]
+edge = "ledger-2"
+
+[incident.success_check]
+target = "edge:ledger-2"
+expect = "synced"
+invariants = ["edges_in_sync", "tenant_scope", "audit_intact"]

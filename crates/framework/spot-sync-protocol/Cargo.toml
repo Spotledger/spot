@@ -1,0 +1,24 @@
+[package]
+name = "spot-sync-protocol"
+description = "Sync wire model and state machines (WP-EDG-02.T1, ADR-062): node identity, outbox batches with monotonic sequences and SHA-256 checksums, per-source checkpoints, resumable edge-initiated pull and push sessions, version negotiation, and a deterministic fault-injecting simulator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SourceId` (`<site>#<partition>`, ADR-056) names the stream a batch travels in, so sync and the
+# outbox agree on identity by construction.
+spot-events-contract = { path = "../../../contracts/events" }
+# SHA-256 batch checksums over the canonical encoding (ADR-062 G3).
+sha2 = "0.10"
+# Stable serde names on the wire; consumers ignore fields they do not know (ADR-056).
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Round-trip the wire types through JSON in the stable-name tests.
+serde_json = "1"
+
+[lints]
+workspace = true

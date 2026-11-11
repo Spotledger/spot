@@ -1,0 +1,48 @@
+[package]
+name = "spot-link-exchange"
+description = "Exchange over a tenant link (WP-CTL-10.T1, ADR-058 rules 4, 8, 9, 13 and 14, ADR-080): signed record and message topics over a sender outbox with delivery states, a receiver inbox with idempotent, ordered apply and parking, the delivery notice feed, topic version ranges, configurable retention and stuck-message conditions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The link, its grants (`Link::allows`, schema range, field list), the signing identity and the
+# audit sink: this crate adds no second notion of any of them.
+spot-tenant-link = { path = "../spot-tenant-link" }
+# `RecordPayload`, `ReceivedRecord`: a record topic carries the replica-apply wire image, it does
+# not re-model records.
+spot-replica-apply = { path = "../spot-replica-apply" }
+# `RecordName` and `SourceId` of the record envelope.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# `Name`: the topic name a received record carries.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `Condition` and `Severity`: the plain-language shape the health surface consumes.
+spot-quarantine = { path = "../spot-quarantine" }
+# Wire types are serde; the payload is canonical JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SHA-256 payload digests.
+sha2 = "0.10"
+# Message ids are UUIDv7 built from caller-supplied time and entropy.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7", "serde"] }
+# Typed errors with stable `link_exchange.*` codes.
+thiserror = "2"
+
+[features]
+# Exposes the `TransportParty` test double to a conformance harness; the crates' own tests see it
+# through `cfg(test)`.
+testing = []
+
+[dev-dependencies]
+# Tenant ids and the consent step-up for the handshake fixture.
+spot-tenancy = { path = "../spot-tenancy" }
+spot-iam-access = { path = "../spot-iam-access" }
+# `Region`, for the peer-region case.
+spot-data-policy = { path = "../spot-data-policy" }
+# `AuditRecord`, for the failing audit double.
+spot-audit-chain = { path = "../spot-audit-chain" }
+
+[lints]
+workspace = true

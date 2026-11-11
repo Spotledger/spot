@@ -1,0 +1,9 @@
+# Help for the form error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "form.field_unknown"
+what_happened = "No server step answers a change to this field, so the form-event has no diff to give."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send the form-event for a field the form steps of the document type depend on, or rely on the client rules.", "If it keeps happening, tell your administrator and quote the code form.field_unknown."]
+audience = "user"

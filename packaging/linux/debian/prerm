@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+# Nothing is stopped and nothing is restarted here. The one restart on an
+# upgrade is in postinst, so an upgrade restarts a running service exactly once
+# and a service the administrator stopped stays stopped.
+#
+# Removing the package leaves a running daemon alone as well: the administrator
+# stops it before purging. (The RPM is not identical here: its pre-uninstall
+# helper stops a unit that was running when the package is erased.)
+#
+# #DEBHELPER# marks where debhelper's own snippets are inserted when this
+# directory is built through debian/rules. tools/packaging/build.py copies the
+# file as it is, so the token stays a comment and no snippet runs.
+#DEBHELPER#
+
+exit 0

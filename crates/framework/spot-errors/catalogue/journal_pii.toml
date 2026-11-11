@@ -1,0 +1,107 @@
+# journal_pii codes: the personal-field encryption and erasure refusals of spot-journal-pii
+# (WP-JRN-08.T1, ADR-061 s3 and s6). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. These are a library-internal vocabulary (the relay maps
+# them onto its own errors), so no entry names an AppError class. No message carries a value:
+# never the plaintext, never a ciphertext, never a nonce and never a key.
+
+[[entry]]
+code = "journal_pii.spec_invalid"
+class = "none"
+summary = "The personal-field description is unusable: an empty entity, a path that does not parse, a subject path that walks an array, a missing purpose or retention class, or two fields at one path."
+explanation_key = "error.journal_pii.spec_invalid"
+params = []
+remedy = "Declare each field once with a dot-separated path, a record-level subject path, a purpose and a retention class."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.image_invalid"
+class = "none"
+summary = "The value is not a record image this crate can bind an envelope to: not a JSON object, or missing a string id or an integer version."
+explanation_key = "error.journal_pii.image_invalid"
+params = []
+remedy = "Pass the event's whole image, which carries the record's own id and version beside its fields."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.subject_invalid"
+class = "none"
+summary = "The data-subject id a field's subject path names is missing, empty or not a string."
+explanation_key = "error.journal_pii.subject_invalid"
+params = []
+remedy = "Write the subject column into the image as a non-empty string before protecting it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.subject_mismatch"
+class = "none"
+summary = "A personal-field envelope names a data subject other than the one the record itself names at the field's subject path, or the record names none."
+explanation_key = "error.journal_pii.subject_mismatch"
+params = []
+remedy = "Treat the image as damaged or tampered with and restore it from another copy of the journal or snapshot; never repair it by editing the subject column."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.envelope_invalid"
+class = "none"
+summary = "A personal-field envelope is malformed, was altered, or sits where its associated data does not belong."
+explanation_key = "error.journal_pii.envelope_invalid"
+params = []
+remedy = "Treat the image as damaged and restore it from another copy of the journal or snapshot instead of reading the field."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.envelope_version"
+class = "none"
+summary = "The personal-field envelope at {path} has version {version}, which this build does not read."
+explanation_key = "error.journal_pii.envelope_version"
+params = ["path", "version"]
+remedy = "Read the image with the build that wrote it, or upcast the envelope before revealing it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.already_protected"
+class = "none"
+summary = "The personal field at {path} already holds an envelope, so protecting it again would encrypt it twice."
+explanation_key = "error.journal_pii.already_protected"
+params = ["path"]
+remedy = "Protect an image once: reveal it first, or skip fields that already hold an envelope."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.key_missing"
+class = "none"
+summary = "No key exists for the data subject of a field being protected."
+explanation_key = "error.journal_pii.key_missing"
+params = []
+remedy = "Create the subject's key in the key store before protecting a record that belongs to them."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.key_store"
+class = "none"
+summary = "The subject key store could not answer, or answered with something this crate cannot use."
+explanation_key = "error.journal_pii.key_store"
+params = []
+remedy = "Check that the key provider is reachable and holds a 32-byte key for the route asked for, including the tenant journal key that legal-retention fields use."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_pii.nonce_unavailable"
+class = "none"
+summary = "The nonce source could not produce the nonce an envelope needs."
+explanation_key = "error.journal_pii.nonce_unavailable"
+params = []
+remedy = "Supply a nonce source backed by the operating system's CSPRNG; a source that cannot answer must not reuse a nonce."
+since = "0.1.0"
+
+# An audit event, not an error: the name spot-journal-pii-secrets records when a data subject's
+# key is destroyed (WP-JRN-08.T5, ADR-061 s6). It is registered so the name is a catalogued
+# vocabulary item; no failure carries it.
+[[entry]]
+code = "journal_pii.subject_key_destroyed"
+class = "none"
+summary = "Audit event, not an error: the key of the data subject with salted hash {subject_hash} was destroyed, so their personal fields can no longer be revealed."
+explanation_key = "error.journal_pii.subject_key_destroyed"
+params = ["subject_hash"]
+remedy = "None needed. Other nodes pass the event's subject_hash to forget_destroyed so they stop serving the key before their cache expires."
+since = "0.1.0"

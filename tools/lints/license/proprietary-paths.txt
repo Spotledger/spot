@@ -1,0 +1,2 @@
+# Cargo.toml paths (relative to the repo root) allowed to keep LicenseRef-Proprietary.
+# One path per line, each with a "# reason" comment.

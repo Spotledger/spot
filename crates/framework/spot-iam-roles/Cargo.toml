@@ -1,0 +1,28 @@
+[package]
+name = "spot-iam-roles"
+description = "The role, duty and assignment model (WP-IAM-03.T1, ADR-070 sections 2 and 3): acyclic inheritance, reference and custom roles, copy and upgrade diff, and the snapshot input for the permission engine, with scope bound to the assignment"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `RoleGrant`, `FieldGrant`, `UserPermission`, `AssignmentContext`, `Principal`, `Model`: the
+# types this crate compiles into. Not redefined here.
+spot-permissions = { path = "../spot-permissions" }
+# Stable, derive-based serde on every public type; registries load from TOML.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+# Instants are passed in; the crate never reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+
+[dev-dependencies]
+# The evaluator the snapshot input is proved against: effective metadata and DocType values.
+spot-meta = { path = "../spot-meta" }
+spot-app-api = { path = "../../../contracts/app-api" }
+proptest = "1"
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

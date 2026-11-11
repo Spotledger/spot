@@ -1,0 +1,55 @@
+[package]
+name = "spot-iam-scim"
+description = "The SCIM 2.0 server core (WP-IAM-06.T1, ADR-070 section 7.2 and 7.3): RFC 7643 resources, RFC 7644 filter, PATCH and pagination, the group-to-role mapping table, deactivation as active=false, as a sans-I/O core with an optional HTTP adapter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `User`, `UserType`, `Transition`, `LeaverAction`, `LifecycleChange`: the directory user the
+# SCIM resource maps to and the deactivation path it calls.
+spot-iam-directory = { path = "../spot-iam-directory" }
+# `GroupRole`, `GroupRoleMap`, `StaticRestriction`, `plan_idp`, `Plan`: the group edit produces
+# idp-sourced assignments through the reconciler, never a role edit.
+spot-iam-assign = { path = "../spot-iam-assign" }
+# `RoleName`, `Assignment`, `Scope`, `Source`, `Role`, `RoleDirectory`: the role records SCIM
+# reads (never writes) and the assignments it plans.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# `KeyScope`, `KeyAction`: the bearer credential is an API key owned by a service user.
+spot-iam-access = { path = "../spot-iam-access" }
+# `UserPermission`: the scope a mapping row carries.
+spot-permissions = { path = "../spot-permissions" }
+# `Actor` and the `identity_*` schemas every mutation emits and validates against (WP-IAM-01).
+spot-events-contract = { path = "../../../contracts/events" }
+# `RecordId`, the stable id of every user, group and credential.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Stable, derive-based serde on every public type, so a resource round-trips as RFC 7643 says.
+serde = { version = "1", features = ["derive"] }
+# The SCIM wire is JSON; PATCH values and error bodies are free-form JSON.
+serde_json = "1"
+# Instants are passed in; the crate never reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing"] }
+# The one error type, with stable `iam_scim.*` codes.
+thiserror = "2"
+
+[dependencies.axum]
+version = "0.8.9"
+optional = true
+
+[dependencies.spot-http]
+path = "../spot-http"
+optional = true
+
+[features]
+# The HTTP adapter (`http.rs`): mounts the handlers under `/scim/v2` on a `spot-http` router.
+http = ["dep:axum", "dep:spot-http"]
+
+[dev-dependencies]
+# The scripted client transcripts and the conformance fixtures are JSON.
+serde_json = "1"
+proptest = "1"
+
+[lints]
+workspace = true

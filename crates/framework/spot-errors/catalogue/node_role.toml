@@ -1,0 +1,84 @@
+# node_role codes: the node role model of `spot serve` (standalone, hub, edge; WP-RTB-03.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md. `partition.scope_uncovered`
+# stays `participants.rs`'s own code and is not duplicated here.
+
+[[entry]]
+code = "node_role.unknown_role"
+class = "none"
+summary = "services.node_role.role names something other than standalone, hub or edge."
+explanation_key = "error.node_role.unknown_role"
+params = []
+remedy = "Set services.node_role.role to standalone, hub or edge."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.edge_without_partition"
+class = "none"
+summary = "A node configured as an edge names no [partition] profile."
+explanation_key = "error.node_role.edge_without_partition"
+params = []
+remedy = "Add a [partition] profile naming this node before setting services.node_role.role to edge."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.edge_without_hub"
+class = "none"
+summary = "A node configured as an edge names no hub_url."
+explanation_key = "error.node_role.edge_without_hub"
+params = []
+remedy = "Set services.node_role.hub_url to the hub this edge syncs through."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.edge_not_enrolled_and_no_code"
+class = "none"
+summary = "An edge that has never enrolled names no readable, non-empty enrol_code_file."
+explanation_key = "error.node_role.edge_not_enrolled_and_no_code"
+params = []
+remedy = "Set services.node_role.enrol_code_file to a one-time enrolment code the hub issued."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.hub_without_listener"
+class = "none"
+summary = "A node configured as a hub names no listen address."
+explanation_key = "error.node_role.hub_without_listener"
+params = []
+remedy = "Set services.node_role.listen to the address the hub's sync listener binds."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.role_conflict"
+class = "none"
+summary = "The configured role disagrees with the host's own role set, or carries a setting another role owns."
+explanation_key = "error.node_role.role_conflict"
+params = []
+remedy = "Match services.node_role.role to the host role set (services.node_role.host_roles or SPOT_HOST_ROLES; an edge needs one that says branch-edge), and keep hub-only and edge-only settings with their own role."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.node_id_mismatch"
+class = "none"
+summary = "services.node_role.node is absent or does not equal [partition] node."
+explanation_key = "error.node_role.node_id_mismatch"
+params = []
+remedy = "Set services.node_role.node to the same id [partition] node names."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.role_changed_unsafely"
+class = "none"
+summary = "This site's recorded role differs from the configured one, and no role-change operation ran."
+explanation_key = "error.node_role.role_changed_unsafely"
+params = []
+remedy = "Run the role-change operation, or stop the site and clear its spot_node_role_state row, before changing services.node_role.role."
+since = "0.1.0"
+
+[[entry]]
+code = "node_role.table_missing"
+class = "none"
+summary = "spot_node_role_state does not exist yet."
+explanation_key = "error.node_role.table_missing"
+params = []
+remedy = "Run spot migrate before serving."
+since = "0.1.0"

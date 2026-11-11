@@ -1,0 +1,14 @@
+# sso_pg codes: the PostgreSQL replay store for single sign-on (WP-IAM-05.T6). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+#
+# A claim that cannot be answered raises no code of its own: it is the `sso.replay_store_unavailable`
+# of `spot-sso` (fail closed), so the caller sees one code whichever store is behind the port.
+
+[[entry]]
+code = "sso_pg.migration_failed"
+class = "Internal"
+summary = "The replay store's table could not be created in the database."
+explanation_key = "error.sso_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"

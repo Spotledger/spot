@@ -1,0 +1,30 @@
+[package]
+name = "spot-app-permissions"
+description = "The adapter between the permission decision core and the document engine's named-permission seam (WP-PLT-03.T3): `SnapshotAppPermissions` implements `AppPermissionCheck` over a site's `PermissionAuthorizer`, deciding every call from the snapshot in force, and keeps a bounded denial log with the reason"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `AppPermissionCheck` (the seam), `PermissionAuthorizer` (the site's engine holder).
+spot-document = { path = "../spot-document" }
+# `PermissionEngine::app_permission`, `Principal`, `AppReason`.
+spot-permissions = { path = "../spot-permissions" }
+# `BoxFuture`, the seam's return type.
+spot-app-api = { path = "../../../contracts/app-api" }
+
+[dev-dependencies]
+# The real engine on the fake backend, as the document engine's own method-right tests run it.
+spot-core = { path = "../spot-core" }
+spot-meta = { path = "../spot-meta" }
+spot-seams = { path = "../spot-seams" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+serde_json = "1"
+# `#[tokio::test]`.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

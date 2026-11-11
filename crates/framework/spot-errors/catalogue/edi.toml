@@ -1,0 +1,209 @@
+# EDI adapter codes (WP-INT-06.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "edi.not_edi"
+class = "none"
+summary = "The input does not start with an ISA, UNB or UNA segment."
+explanation_key = "error.edi.not_edi"
+params = []
+remedy = "Send an X12 or EDIFACT interchange."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.bad_encoding"
+class = "none"
+summary = "The input is not ASCII at byte {offset}."
+explanation_key = "error.edi.bad_encoding"
+params = ["offset"]
+remedy = "Re-encode the document as ASCII."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.bad_delimiters"
+class = "none"
+summary = "The delimiters could not be discovered: {reason}."
+explanation_key = "error.edi.bad_delimiters"
+params = ["reason"]
+remedy = "Check the ISA fixed width, the UNA service string advice or the UNB header."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.too_large"
+class = "none"
+summary = "The input is {found} bytes, over the {limit} byte limit."
+explanation_key = "error.edi.too_large"
+params = ["found", "limit"]
+remedy = "Raise the byte limit or send a smaller interchange."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.too_many_segments"
+class = "none"
+summary = "The input has more than {limit} segments."
+explanation_key = "error.edi.too_many_segments"
+params = ["limit"]
+remedy = "Raise the segment limit or send a smaller interchange."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.too_many_elements"
+class = "none"
+summary = "Segment {tag} has more than {limit} elements."
+explanation_key = "error.edi.too_many_elements"
+params = ["limit", "tag"]
+remedy = "Raise the element limit or fix the segment."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.bad_segment"
+class = "none"
+summary = "A segment is malformed: {reason}."
+explanation_key = "error.edi.bad_segment"
+params = ["reason"]
+remedy = "Fix the segment and send the document again."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.missing_envelope"
+class = "none"
+summary = "The {syntax} interchange has no {what} segment."
+explanation_key = "error.edi.missing_envelope"
+params = ["syntax", "what"]
+remedy = "Add the missing envelope segment."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.unbalanced_envelope"
+class = "none"
+summary = "The {open} at segment {index} has no {close}."
+explanation_key = "error.edi.unbalanced_envelope"
+params = ["close", "index", "open"]
+remedy = "Add the closing segment or remove the opening one."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.envelope_count"
+class = "none"
+summary = "{what} declares {declared} but the content has {found}."
+explanation_key = "error.edi.envelope_count"
+params = ["declared", "found", "what"]
+remedy = "Correct the declared count to match the content."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.envelope_control"
+class = "none"
+summary = "{what} control {found} does not match {expected}."
+explanation_key = "error.edi.envelope_control"
+params = ["expected", "found", "what"]
+remedy = "Make the two control numbers agree."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.envelope_order"
+class = "none"
+summary = "Envelope segments are out of order: {reason}."
+explanation_key = "error.edi.envelope_order"
+params = ["reason"]
+remedy = "Put the header before the trailer."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_unknown"
+class = "none"
+summary = "No schema has the id {id}."
+explanation_key = "error.edi.schema_unknown"
+params = ["id"]
+remedy = "Use an id that ships with the adapter."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_bad"
+class = "none"
+summary = "Schema {id} is not valid: {reason}."
+explanation_key = "error.edi.schema_bad"
+params = ["id", "reason"]
+remedy = "Fix the schema document."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_missing_segment"
+class = "none"
+summary = "A segment required by the schema is absent."
+explanation_key = "error.edi.schema_missing_segment"
+params = []
+remedy = "Add the missing segment."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_unexpected_segment"
+class = "none"
+summary = "A segment is not allowed at this point by the schema."
+explanation_key = "error.edi.schema_unexpected_segment"
+params = []
+remedy = "Remove the segment or use a schema that allows it."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_too_many"
+class = "none"
+summary = "A segment occurs more often than the schema allows."
+explanation_key = "error.edi.schema_too_many"
+params = []
+remedy = "Reduce the number of occurrences."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.schema_bad_element"
+class = "none"
+summary = "An element fails its required or type check."
+explanation_key = "error.edi.schema_bad_element"
+params = []
+remedy = "Correct the element's value."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.mapping"
+class = "none"
+summary = "Mapping rule {rule} failed: {reason}."
+explanation_key = "error.edi.mapping"
+params = ["reason", "rule"]
+remedy = "Fix the rule's source or target path."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.no_message"
+class = "none"
+summary = "The interchange holds no transaction set or message."
+explanation_key = "error.edi.no_message"
+params = []
+remedy = "Send an interchange that carries at least one message."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.ack_failed"
+class = "none"
+summary = "An acknowledgement cannot be built: {reason}."
+explanation_key = "error.edi.ack_failed"
+params = ["reason"]
+remedy = "Fix the original interchange or the acknowledgement request."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.bad_input"
+class = "none"
+summary = "The connector operation's input is not valid: {reason}."
+explanation_key = "error.edi.bad_input"
+params = ["reason"]
+remedy = "Send input that matches the operation's schema."
+since = "0.1.0"
+
+[[entry]]
+code = "edi.unknown_operation"
+class = "none"
+summary = "The connector has no operation named {operation}."
+explanation_key = "error.edi.unknown_operation"
+params = ["operation"]
+remedy = "Use parse, build, validate or acknowledge."
+since = "0.1.0"

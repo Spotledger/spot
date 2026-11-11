@@ -1,0 +1,951 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Spotledger.Client.Controls">
+  <!--
+    WP-UI-15.T2 — ControlThemes for the first data-entry controls.
+    Token rule: every colour, size, font, thickness and corner radius below is a
+    DynamicResource into Spotledger.Client.Theme tokens — never a literal (a test enforces
+    this). Field outlines are drawn as focus/error rings so no resting border-width literal
+    is needed; resting inputs use a filled (sunken) surface.
+    Density is the `compact` style class mirrored by the Density.Mode attached property onto
+    every inheriting element; Comfortable is the default branch of every density setter.
+    Avalonia mirrors layout automatically under FlowDirection=RightToLeft, so no
+    direction-specific rules live here; the numeric field pins its digits LTR in code.
+  -->
+
+  <!-- Catalogue-local tokens until the shared token catalogue grows these roles. -->
+  <FontFamily x:Key="Font.Family.Code">monospace</FontFamily>
+  <x:Double x:Key="Size.TextArea.MaximumHeight">240</x:Double>
+
+  <!-- ==================== Primitives we compose (library-owned) ==================== -->
+
+  <ControlTheme x:Key="{x:Type ContentControl}" TargetType="ContentControl">
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ContentPresenter Background="{TemplateBinding Background}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type Button}" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Density.Comfortable.Form.ControlPaddingY}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            Margin="{TemplateBinding Padding}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^:disabled /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- Small borderless inline button (clear, calendar toggle, calendar nav). -->
+  <ControlTheme x:Key="SpotInlineButton" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Canvas}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Secondary}" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Space.1}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type TextBox}" TargetType="TextBox">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Canvas}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Density.Comfortable.Form.ControlPaddingY}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Color.Text.Disabled}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Color.Brand.300}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <Panel Margin="{TemplateBinding BorderThickness}">
+            <DockPanel Margin="{TemplateBinding Padding}">
+              <TextBlock Name="PART_Placeholder"
+                         Foreground="{TemplateBinding PlaceholderForeground}"
+                         IsVisible="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                         Text="{TemplateBinding PlaceholderText}"
+                         TextAlignment="{TemplateBinding TextAlignment}"
+                         VerticalAlignment="Center" />
+              <TextPresenter Name="PART_TextPresenter"
+                             CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                             CaretBrush="{TemplateBinding CaretBrush}"
+                             CaretIndex="{TemplateBinding CaretIndex}"
+                             PasswordChar="{TemplateBinding PasswordChar}"
+                             RevealPassword="{TemplateBinding RevealPassword}"
+                             SelectionBrush="{TemplateBinding SelectionBrush}"
+                             SelectionEnd="{TemplateBinding SelectionEnd}"
+                             SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                             SelectionStart="{TemplateBinding SelectionStart}"
+                             Text="{TemplateBinding Text, Mode=TwoWay}"
+                             TextAlignment="{TemplateBinding TextAlignment}"
+                             TextWrapping="{TemplateBinding TextWrapping}" />
+            </DockPanel>
+          </Panel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^ /template/ TextBlock#PART_Placeholder">
+      <Setter Property="Cursor" Value="IBeam" />
+    </Style>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type ScrollViewer}" TargetType="ScrollViewer">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ScrollContentPresenter Name="PART_ContentPresenter"
+                                Background="{TemplateBinding Background}"
+                                ScrollViewer.IsScrollInertiaEnabled="{TemplateBinding IsScrollInertiaEnabled}"
+                                Offset="{TemplateBinding Offset, Mode=TwoWay}" />
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type PopupRoot}" TargetType="PopupRoot">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="PART_TransparencyFallback" IsHitTestVisible="False" />
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}">
+            <ContentPresenter Content="{TemplateBinding Content}" />
+          </Border>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- Busy progress indicator for the button: a deterministic track (no animation needed;
+       IsBusy is an application state, and the ring shape comes from the pill radius). -->
+  <ControlTheme x:Key="SpotButtonBusyIndicator" TargetType="ProgressBar">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Neutral.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Pill}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+          <Border Name="PART_Indicator"
+                  Background="{TemplateBinding Foreground}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  HorizontalAlignment="Left"
+                  Width="{DynamicResource Space.1}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- ============================ SpotButton ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotButton}" TargetType="controls:SpotButton">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="FontWeight" Value="{DynamicResource Font.Weight.Medium}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Density.Comfortable.Form.ControlPaddingY}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <Grid ColumnDefinitions="Auto,*">
+            <ContentPresenter Name="PART_IconHost"
+                              Grid.Column="0"
+                              Content="{TemplateBinding Icon}"
+                              IsVisible="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}"
+                              Margin="{controls:ThicknessToken Space.1}"
+                              VerticalAlignment="Center" />
+            <Panel Grid.Column="1">
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                Margin="{TemplateBinding Padding}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+              <ProgressBar Name="PART_Progress"
+                           Height="{DynamicResource Space.1}"
+                           IsIndeterminate="True"
+                           Theme="{StaticResource SpotButtonBusyIndicator}"
+                           IsVisible="False"
+                           VerticalAlignment="Center"
+                           Width="{DynamicResource Space.4}" />
+            </Panel>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <!-- Variants -->
+    <Style Selector="^:primary">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.600}" />
+      <Setter Property="Foreground" Value="{DynamicResource Color.Neutral.0}" />
+    </Style>
+    <Style Selector="^:secondary">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    </Style>
+    <Style Selector="^:danger">
+      <Setter Property="Background" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="Foreground" Value="{DynamicResource Color.Neutral.0}" />
+    </Style>
+    <Style Selector="^:subtle">
+      <Setter Property="Background" Value="{DynamicResource Color.Surface.Canvas}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Secondary}" />
+    </Style>
+
+    <!-- Pointer-over and pressed, per variant -->
+    <Style Selector="^:primary:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.700}" />
+    </Style>
+    <Style Selector="^:secondary:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:danger:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.900}" />
+    </Style>
+    <Style Selector="^:subtle:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:primary:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.800}" />
+    </Style>
+    <Style Selector="^:secondary:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+    <Style Selector="^:danger:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Semantic.Danger}" />
+    </Style>
+    <Style Selector="^:subtle:pressed /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+
+    <!-- Focus ring -->
+    <Style Selector="^:focus-visible /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+
+    <!-- Disabled -->
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^:disabled /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Neutral.200}" />
+    </Style>
+
+    <!-- Busy: fade the label, show the indicator; command execution is blocked in code. -->
+    <Style Selector="^:busy /template/ ProgressBar#PART_Progress">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:busy /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="{DynamicResource Space.0}" />
+    </Style>
+
+    <!-- Density -->
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotTextInput ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotTextInput}" TargetType="controls:SpotTextInput">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel>
+          <Border Name="PART_Border"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Name="PART_TextBox"
+                       Grid.Column="0"
+                       Background="{DynamicResource Color.Surface.Canvas}"
+                       BorderThickness="{controls:ThicknessToken Space.0}"
+                       FontFamily="{TemplateBinding FontFamily}"
+                       FontSize="{TemplateBinding FontSize}"
+                       Foreground="{TemplateBinding Foreground}"
+                       IsReadOnly="{TemplateBinding IsReadOnly}"
+                       MaxLength="{TemplateBinding MaxLength}"
+                       PlaceholderForeground="{DynamicResource Color.Text.Disabled}"
+                       PlaceholderText="{TemplateBinding Placeholder}"
+                       Text="{TemplateBinding Text}" />
+              <Button Name="PART_ClearButton"
+                      Grid.Column="1"
+                      Content="&#x2715;"
+                      Theme="{StaticResource SpotInlineButton}"
+                      VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <TextBlock Name="PART_ErrorText"
+                     FontSize="{DynamicResource Font.Size.Caption}"
+                     Foreground="{DynamicResource Color.Semantic.Danger}"
+                     Margin="{controls:ThicknessToken Space.1}"
+                     Text="{TemplateBinding ErrorText}"
+                     IsVisible="{Binding ErrorText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:focus-within /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:error /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:error /template/ TextBlock#PART_ErrorText">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <!-- Density: the inner editor's vertical padding follows the mode. -->
+    <Style Selector="^.compact /template/ TextBox#PART_TextBox">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotDecimalInput ============================ -->
+  <!-- A TextBox subclass: it inherits the TextBox theme above; these setters override the
+       token-sensitive parts. The :error pseudo-class is set by the control on bad input. -->
+  <ControlTheme x:Key="{x:Type controls:SpotDecimalInput}" TargetType="controls:SpotDecimalInput"
+                BasedOn="{StaticResource {x:Type TextBox}}">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+    <Style Selector="^:error /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotDateInput ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotDateInput}" TargetType="controls:SpotDateInput">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel>
+          <Border Name="PART_Border"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Name="PART_TextBox"
+                       Grid.Column="0"
+                       Background="{DynamicResource Color.Surface.Canvas}"
+                       BorderThickness="{controls:ThicknessToken Space.0}"
+                       FontFamily="{TemplateBinding FontFamily}"
+                       FontSize="{TemplateBinding FontSize}"
+                       Foreground="{TemplateBinding Foreground}"
+                       PlaceholderForeground="{DynamicResource Color.Text.Disabled}"
+                       PlaceholderText="{TemplateBinding Placeholder}" />
+              <Button Name="PART_CalendarButton"
+                      Grid.Column="1"
+                      AutomationProperties.Name="Open calendar"
+                      Theme="{StaticResource SpotInlineButton}"
+                      VerticalAlignment="Center">
+                <!-- Vector calendar (no emoji glyph: pixels must not depend on the host emoji font). -->
+                <Path Name="PART_CalendarIcon"
+                      Data="M 3,1 H 4 V 2 H 8 V 1 H 9 V 2 H 11 V 11 H 1 V 2 H 3 Z M 2,4 V 10 H 10 V 4 Z M 3,5 H 5 V 7 H 3 Z M 6,5 H 8 V 7 H 6 Z"
+                      Fill="{DynamicResource Color.Text.Secondary}"
+                      Stretch="Uniform"
+                      Width="{DynamicResource Space.4}"
+                      Height="{DynamicResource Space.4}" />
+              </Button>
+              <Popup Name="PART_Popup"
+                     IsLightDismissEnabled="True"
+                     Placement="Bottom"
+                     PlacementTarget="{TemplateBinding}">
+                <Border Background="{DynamicResource Color.Surface.Raised}"
+                        BorderBrush="{DynamicResource Color.Border.Default}"
+                        BorderThickness="{controls:ThicknessToken Space.0}"
+                        CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+                        Padding="{controls:ThicknessToken Space.2}">
+                  <Calendar Name="PART_Calendar" />
+                </Border>
+              </Popup>
+            </Grid>
+          </Border>
+          <TextBlock Name="PART_ErrorText"
+                     FontSize="{DynamicResource Font.Size.Caption}"
+                     Foreground="{DynamicResource Color.Semantic.Danger}"
+                     Margin="{controls:ThicknessToken Space.1}"
+                     Text="{TemplateBinding ErrorText}"
+                     IsVisible="{Binding ErrorText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:focus-within /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:error /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^.compact /template/ TextBox#PART_TextBox">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotCheckBox ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotCheckBox}" TargetType="controls:SpotCheckBox">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Canvas}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Small}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Space.1}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Name="PART_CheckBox"
+                  Grid.Column="0"
+                  Width="{DynamicResource Space.4}"
+                  Height="{DynamicResource Space.4}"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{controls:ThicknessToken Space.1}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  VerticalAlignment="Center">
+            <Panel>
+              <Path Data="M 2,6 L 5,9 L 11,2"
+                    Name="PART_CheckMark"
+                    Stroke="{DynamicResource Color.Neutral.0}"
+                    StrokeThickness="{DynamicResource Space.1}"
+                    Stretch="Uniform"
+                    Width="{DynamicResource Space.2}"
+                    Height="{DynamicResource Space.2}"
+                    IsVisible="False" />
+              <Border Name="PART_IndeterminateMark"
+                      Background="{DynamicResource Color.Neutral.0}"
+                      Width="{DynamicResource Space.2}"
+                      Height="{DynamicResource Space.1}"
+                      IsVisible="False" />
+            </Panel>
+          </Border>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Grid.Column="1"
+                            Content="{TemplateBinding Content}"
+                            Margin="{TemplateBinding Padding}"
+                            VerticalAlignment="Center" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.600}" />
+    </Style>
+    <Style Selector="^:checked /template/ Path#PART_CheckMark">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:indeterminate /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.600}" />
+    </Style>
+    <Style Selector="^:indeterminate /template/ Border#PART_IndeterminateMark">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:pointerover /template/ Border#PART_CheckBox">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#PART_CheckBox">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^:disabled /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Neutral.300}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- Switch: native checkbox semantics, no unthemed Avalonia ToggleSwitch template parts. -->
+  <ControlTheme x:Key="{x:Type controls:SpotSwitch}" TargetType="controls:SpotSwitch">
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel Orientation="Horizontal">
+          <Border Name="PART_Track"
+                  Width="{DynamicResource Space.8}" Height="{DynamicResource Space.4}"
+                  CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+                  Background="{DynamicResource Color.Neutral.300}"
+                  BorderBrush="{DynamicResource Color.Border.Strong}"
+                  BorderThickness="{controls:ThicknessToken Space.1}">
+            <Border Name="PART_Knob" HorizontalAlignment="Left"
+                    Width="{DynamicResource Space.3}" Height="{DynamicResource Space.3}"
+                    CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+                    Background="{DynamicResource Color.Surface.Canvas}" />
+          </Border>
+          <ContentPresenter Content="{TemplateBinding Content}" Margin="{controls:ThicknessToken Space.1}" />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#PART_Track">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#PART_Knob">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#PART_Track">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ ComboBoxItem (dropdown rows) ============================ -->
+  <ControlTheme x:Key="{x:Type ComboBoxItem}" TargetType="ComboBoxItem">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Space.1}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:selected /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.100}" />
+    </Style>
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Space.0}" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Caption}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotSelect ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotSelect}" TargetType="controls:SpotSelect">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Sunken}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.0}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Padding" Value="{controls:ThicknessToken Density.Comfortable.Form.ControlPaddingY}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Color.Text.Disabled}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="ItemContainerTheme" Value="{StaticResource {x:Type ComboBoxItem}}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="PART_Border"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}">
+            <Grid ColumnDefinitions="*,Auto">
+              <ContentControl Name="PART_SelectionBox"
+                              Grid.Column="0"
+                              Content="{TemplateBinding SelectionBoxItem}"
+                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                              Foreground="{TemplateBinding Foreground}"
+                              Margin="{TemplateBinding Padding}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                              IsVisible="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Name="PART_Placeholder"
+                         Grid.Column="0"
+                         Foreground="{TemplateBinding PlaceholderForeground}"
+                         Margin="{TemplateBinding Padding}"
+                         Text="{TemplateBinding PlaceholderText}"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNull}}" />
+              <Path Name="PART_Glyph"
+                    Grid.Column="1"
+                    Data="M 0,0 L 5,5 L 10,0 Z"
+                    Fill="{DynamicResource Color.Text.Secondary}"
+                    Margin="{controls:ThicknessToken Space.1}"
+                    Stretch="Uniform"
+                    Width="{DynamicResource Space.2}"
+                    Height="{DynamicResource Space.1}"
+                    VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <Popup Name="PART_Popup"
+                 IsLightDismissEnabled="True"
+                 Placement="Bottom"
+                 PlacementTarget="{TemplateBinding}"
+                 IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}">
+            <Border Background="{DynamicResource Color.Surface.Raised}"
+                    BorderBrush="{DynamicResource Color.Border.Default}"
+                    BorderThickness="{controls:ThicknessToken Space.0}"
+                    CornerRadius="{controls:CornerRadiusToken Radius.Large}"
+                    MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}">
+              <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Auto">
+                <ItemsPresenter Name="PART_ItemsPresenter"
+                                ItemsPanel="{TemplateBinding ItemsPanel}" />
+              </ScrollViewer>
+            </Border>
+          </Popup>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:error /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Semantic.Danger}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^.compact">
+      <Setter Property="Padding" Value="{controls:ThicknessToken Density.Compact.Form.ControlPaddingY}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ SpotField ============================ -->
+  <ControlTheme x:Key="{x:Type controls:SpotField}" TargetType="controls:SpotField">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <StackPanel Name="PART_Stacked" Spacing="{DynamicResource Density.Comfortable.Form.FieldGap}">
+            <StackPanel Name="PART_StackedLabelRow" Orientation="Horizontal" Spacing="{DynamicResource Space.0}">
+              <TextBlock Name="PART_StackedLabel"
+                         FontWeight="{DynamicResource Font.Weight.Medium}"
+                         Foreground="{DynamicResource Color.Text.Primary}"
+                         Text="{TemplateBinding Label}" />
+              <TextBlock Name="PART_StackedRequired"
+                         FontWeight="{DynamicResource Font.Weight.Medium}"
+                         Foreground="{DynamicResource Color.Semantic.Danger}"
+                         Text="*"
+                         IsVisible="{Binding IsRequired, RelativeSource={RelativeSource TemplatedParent}}" />
+            </StackPanel>
+            <ContentPresenter Name="PART_StackedContent">
+              <ContentPresenter.Content>
+                <MultiBinding Converter="{controls:FieldSlot ForNarrowSlot=True}">
+                  <Binding Path="IsWide" RelativeSource="{RelativeSource TemplatedParent}" />
+                  <Binding Path="Content" RelativeSource="{RelativeSource TemplatedParent}" />
+                </MultiBinding>
+              </ContentPresenter.Content>
+            </ContentPresenter>
+            <TextBlock Name="PART_StackedHelp"
+                       FontSize="{DynamicResource Font.Size.Caption}"
+                       Foreground="{DynamicResource Color.Text.Secondary}"
+                       Text="{TemplateBinding HelpText}"
+                       IsVisible="{Binding HelpText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Name="PART_StackedError"
+                       FontSize="{DynamicResource Font.Size.Caption}"
+                       Foreground="{DynamicResource Color.Semantic.Danger}"
+                       Text="{TemplateBinding ErrorText}"
+                       IsVisible="{Binding ErrorText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+          <Grid Name="PART_Inline"
+                ColumnDefinitions="Auto,*"
+                IsVisible="False">
+            <StackPanel Name="PART_InlineSide"
+                        Grid.Column="0"
+                        Spacing="{DynamicResource Density.Comfortable.Form.FieldGap}"
+                        Margin="{controls:ThicknessToken Space.2}"
+                        VerticalAlignment="Top">
+              <StackPanel Name="PART_InlineLabelRow" Orientation="Horizontal" Spacing="{DynamicResource Space.0}">
+                <TextBlock Name="PART_InlineLabel"
+                           FontWeight="{DynamicResource Font.Weight.Medium}"
+                           Foreground="{DynamicResource Color.Text.Primary}"
+                           Text="{TemplateBinding Label}" />
+                <TextBlock Name="PART_InlineRequired"
+                           FontWeight="{DynamicResource Font.Weight.Medium}"
+                           Foreground="{DynamicResource Color.Semantic.Danger}"
+                           Text="*"
+                           IsVisible="{Binding IsRequired, RelativeSource={RelativeSource TemplatedParent}}" />
+              </StackPanel>
+              <TextBlock Name="PART_InlineHelp"
+                         FontSize="{DynamicResource Font.Size.Caption}"
+                         Foreground="{DynamicResource Color.Text.Secondary}"
+                         Text="{TemplateBinding HelpText}"
+                         IsVisible="{Binding HelpText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Name="PART_InlineError"
+                         FontSize="{DynamicResource Font.Size.Caption}"
+                         Foreground="{DynamicResource Color.Semantic.Danger}"
+                         Text="{TemplateBinding ErrorText}"
+                         IsVisible="{Binding ErrorText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+            <ContentPresenter Name="PART_InlineContent"
+                              Grid.Column="1"
+                              VerticalAlignment="Top">
+              <ContentPresenter.Content>
+                <MultiBinding Converter="{controls:FieldSlot ForNarrowSlot=False}">
+                  <Binding Path="IsWide" RelativeSource="{RelativeSource TemplatedParent}" />
+                  <Binding Path="Content" RelativeSource="{RelativeSource TemplatedParent}" />
+                </MultiBinding>
+              </ContentPresenter.Content>
+            </ContentPresenter>
+          </Grid>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <!-- :wide switches the template from label-above to label-beside. Column 0 of the
+         inline grid is laid out first, which Avalonia mirrors to the right under
+         FlowDirection=RightToLeft — the RTL test compares screen bounds of the label. -->
+    <Style Selector="^:wide /template/ StackPanel#PART_Stacked">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="^:wide /template/ Grid#PART_Inline">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^.compact /template/ StackPanel#PART_Stacked">
+      <Setter Property="Spacing" Value="{DynamicResource Density.Compact.Form.FieldGap}" />
+    </Style>
+    <Style Selector="^.compact /template/ StackPanel#PART_InlineSide">
+      <Setter Property="Spacing" Value="{DynamicResource Density.Compact.Form.FieldGap}" />
+    </Style>
+  </ControlTheme>
+
+  <!-- ============================ Calendar ============================ -->
+  <ControlTheme x:Key="{x:Type Calendar}" TargetType="Calendar">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{DynamicResource Color.Surface.Raised}">
+          <CalendarItem Name="PART_CalendarItem" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type CalendarItem}" TargetType="CalendarItem">
+    <Setter Property="DayTitleTemplate">
+      <Template>
+        <TextBlock FontFamily="{DynamicResource Font.Family.Latin}"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Text.Secondary}"
+                   HorizontalAlignment="Center"
+                   Text="{ReflectionBinding}" />
+      </Template>
+    </Setter>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+            <Button Name="PART_PreviousButton"
+                    Grid.Column="0"
+                    Content="&#x2039;"
+                    Theme="{StaticResource SpotInlineButton}" />
+            <Button Name="PART_HeaderButton"
+                    Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    Theme="{StaticResource SpotInlineButton}" />
+            <Button Name="PART_NextButton"
+                    Grid.Column="2"
+                    Content="&#x203A;"
+                    Theme="{StaticResource SpotInlineButton}" />
+          </Grid>
+          <Grid Name="PART_MonthView"
+                Grid.Row="1"
+                ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                IsVisible="False" />
+          <Grid Name="PART_YearView"
+                Grid.Row="1"
+                ColumnDefinitions="Auto,Auto,Auto,Auto"
+                RowDefinitions="Auto,Auto,Auto"
+                IsVisible="False" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type CalendarDayButton}" TargetType="CalendarDayButton">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{controls:ThicknessToken Space.1}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:selected /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+    </Style>
+    <Style Selector="^:selected">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Neutral.0}" />
+    </Style>
+    <Style Selector="^:inactive">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+    <Style Selector="^:today /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+      <Setter Property="BorderThickness" Value="{controls:ThicknessToken Space.1}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type CalendarButton}" TargetType="CalendarButton">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="CornerRadius" Value="{controls:CornerRadiusToken Radius.Medium}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{controls:ThicknessToken Space.2}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Neutral.100}" />
+    </Style>
+    <Style Selector="^:selected /template/ Border#PART_Border">
+      <Setter Property="Background" Value="{DynamicResource Color.Brand.600}" />
+    </Style>
+    <Style Selector="^:selected">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Neutral.0}" />
+    </Style>
+    <Style Selector="^:inactive">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+  </ControlTheme>
+</ResourceDictionary>

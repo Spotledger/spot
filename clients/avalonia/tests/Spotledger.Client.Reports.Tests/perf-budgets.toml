@@ -1,0 +1,36 @@
+# Perf budgets for WP-UI-04.T1 (read by BudgetTests through the TestSupport Budget; WP-UI-16 reads this
+# file too). The frame budget is the grid's own (WP-UI-08.T2). Measured on the reference runner
+# (Fedora 44, 6 slow cores, .NET 10); a CI runner applies the TestSupport multiplier.
+# The workload (50,000 rows, 300 scroll steps, a 12-parameter report) is in BudgetTests.
+
+# The first screenful of a 50,000-row result, from the response being handed to the view model
+# until the grid holds its first row (median of 5 runs).
+[[budget]]
+id = "reports.first-screen"
+metric = "p50"
+max = 200.0
+unit = "ms"
+runner = "reference"
+
+# Slowest frame while scrolling a 50,000-row result in 300 steps.
+[[budget]]
+id = "reports.scroll-frame"
+metric = "max"
+max = 8.0
+unit = "ms"
+runner = "reference"
+
+# Opening the parameter form of a 12-parameter report: view model loaded and the view built (median of 5 runs).
+[[budget]]
+id = "reports.form-open"
+metric = "p50"
+max = 100.0
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 3.0
+[runner.ci-windows]
+multiplier = 3.0
+[runner.reference]
+multiplier = 1.0

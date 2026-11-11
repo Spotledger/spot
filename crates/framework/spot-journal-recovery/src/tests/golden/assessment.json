@@ -1,0 +1,126 @@
+{
+  "report": {
+    "tenant": "acme",
+    "generated_at_millis": 8640000000,
+    "journal": {
+      "state": "known",
+      "value": {
+        "target": "journal-bucket/acme",
+        "region": "eu-central"
+      }
+    },
+    "durability_policy": {
+      "state": "known",
+      "value": "remote-sync"
+    },
+    "offsite_history": {
+      "state": "known",
+      "value": true
+    },
+    "tail_lag_millis": {
+      "state": "known",
+      "value": 500
+    },
+    "audit_cadence": {
+      "state": "known",
+      "value": "weekly"
+    },
+    "last_verified": {
+      "state": "known",
+      "value": {
+        "position": {
+          "generation": 1,
+          "seq": 4200
+        },
+        "at_millis": 8553600000
+      }
+    },
+    "last_failure": {
+      "state": "known",
+      "value": null
+    },
+    "snapshots_readable": true,
+    "snapshot_count": 3,
+    "snapshots_verified": 2,
+    "oldest_snapshot": {
+      "position": {
+        "generation": 1,
+        "seq": 100
+      },
+      "taken_at_millis": 6912000000
+    },
+    "journal_key_present": {
+      "state": "known",
+      "value": true
+    },
+    "key_backup": {
+      "state": "known",
+      "value": {
+        "status": "confirmed",
+        "verified_at_millis": 0
+      }
+    },
+    "excluded_entities": {
+      "state": "known",
+      "value": [
+        {
+          "entity": "device_pairing",
+          "owner": "edge",
+          "reason": "local_only"
+        },
+        {
+          "entity": "report_cache",
+          "owner": "platform",
+          "reason": "derived"
+        }
+      ]
+    },
+    "chain": {
+      "tenant": "acme",
+      "state": "complete",
+      "findings": [
+        {
+          "code": "journal_verify.hash_mismatch",
+          "generation": 1,
+          "first_seq": 10,
+          "last_seq": 20,
+          "tampering": true
+        }
+      ]
+    },
+    "blob_cross_check": {
+      "checked": 12,
+      "missing": 2
+    }
+  },
+  "verdict": {
+    "verdict": "not_recoverable",
+    "blockers": [
+      {
+        "key": "recovery.blocker.key_backup_stale",
+        "kind": "definite",
+        "params": {
+          "age_days": "100",
+          "limit_days": "90"
+        }
+      },
+      {
+        "key": "recovery.blocker.blobs_missing",
+        "kind": "definite",
+        "params": {
+          "count": "2"
+        }
+      },
+      {
+        "key": "recovery.blocker.chain_tampering",
+        "kind": "definite",
+        "params": {
+          "code": "journal_verify.hash_mismatch",
+          "first_seq": "10",
+          "generation": "1",
+          "last_seq": "20"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+[package]
+name = "l9-scale"
+description = "L9 scale harness (WP-TST-15.T1): an open-loop workload model against the native API of a real `spot serve` with PostgreSQL, coordinated-omission-corrected latency histograms, budgets and a JSON and Markdown report. Test code only."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "l9_scale"
+path = "src/lib.rs"
+
+[[bin]]
+name = "l9-scale"
+path = "src/main.rs"
+
+[dependencies]
+# The scratch-database helper: the PostgreSQL admin connection the launcher samples
+# `pg_stat_activity` and drops the run's database with, and the `SPOT_TEST_PG_URL` convention.
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "process", "fs"] }
+# The profile, the budgets file and the report.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
+[lints]
+workspace = true

@@ -1,0 +1,109 @@
+# journal_snapshot codes: the refusals of the journal snapshot writer and reader (WP-JRN-05.T2, ADR-061 s6). A snapshot refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_snapshot.params_invalid"
+class = "none"
+summary = "The snapshot parameters are not usable: a tenant id, manifest hash or part size is invalid."
+explanation_key = "error.journal_snapshot.params_invalid"
+params = []
+remedy = "Pass a valid tenant id, a 64-digit lower-case hex manifest hash and a non-zero part size."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.image_invalid"
+class = "none"
+summary = "The image at ordinal {ordinal} of the batch has an empty entity or id, or cannot be encoded."
+explanation_key = "error.journal_snapshot.image_invalid"
+params = ["ordinal"]
+remedy = "Give every image a non-empty entity and id and a JSON-encodable body."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.input_not_sorted"
+class = "none"
+summary = "The image at ordinal {ordinal} of the batch is out of order or repeats an earlier image; snapshot input must be strictly ascending by entity and id."
+explanation_key = "error.journal_snapshot.input_not_sorted"
+params = ["ordinal"]
+remedy = "Read the database in (entity, id) order and offer each record once."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.count_mismatch"
+class = "none"
+summary = "The snapshot holds {actual} images but {expected} were expected, so no index was written."
+explanation_key = "error.journal_snapshot.count_mismatch"
+params = ["actual", "expected"]
+remedy = "Re-run the snapshot read; a count that differs means the read was not consistent or lost records."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.index_missing"
+class = "none"
+summary = "The snapshot has no index object, so it is incomplete or does not exist."
+explanation_key = "error.journal_snapshot.index_missing"
+params = []
+remedy = "Ignore the snapshot, or write it again from the same input; an incomplete snapshot is never used."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.index_invalid"
+class = "none"
+summary = "The snapshot index cannot be parsed, has an unknown format, or contradicts itself."
+explanation_key = "error.journal_snapshot.index_invalid"
+params = []
+remedy = "Treat the snapshot as unusable and take a new one; do not edit the index."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.index_misplaced"
+class = "none"
+summary = "The snapshot index names another tenant, generation or position than the prefix it was found in."
+explanation_key = "error.journal_snapshot.index_misplaced"
+params = []
+remedy = "The index was copied or moved; delete nothing, restore the original object and investigate who wrote it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.signature_invalid"
+class = "none"
+summary = "The snapshot signature does not verify under the supplied keys."
+explanation_key = "error.journal_snapshot.signature_invalid"
+params = []
+remedy = "Check the key set covers the snapshot's generation; if it does, the index was altered and the snapshot must not be trusted."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.part_invalid"
+class = "none"
+summary = "The snapshot part {part} is missing, altered, undecodable or disagrees with the index."
+explanation_key = "error.journal_snapshot.part_invalid"
+params = ["part"]
+remedy = "Restore the part from a replica, or take a new snapshot; a snapshot with a bad part is not a base for a rebuild."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.exists"
+class = "none"
+summary = "A snapshot object already exists under the same key with different content."
+explanation_key = "error.journal_snapshot.exists"
+params = []
+remedy = "Snapshots are immutable: take the new snapshot at a different position or generation."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.transform_failed"
+class = "none"
+summary = "The part transform (for example encryption) failed to run or to undo itself."
+explanation_key = "error.journal_snapshot.transform_failed"
+params = []
+remedy = "Check the transform's key material and configuration, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot.store_failed"
+class = "none"
+summary = "The object store refused or failed an operation the snapshot needed."
+explanation_key = "error.journal_snapshot.store_failed"
+params = []
+remedy = "See the store error code carried with this one and retry once the store is healthy."
+since = "0.1.0"

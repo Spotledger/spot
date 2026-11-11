@@ -1,0 +1,7 @@
+name = "note"
+label = "Note"
+fields = [
+  { name = "subject", type = "text" },
+  { name = "about_type", type = "text" },
+  { name = "about", type = "dynamic_link", options = "about_type" },
+]

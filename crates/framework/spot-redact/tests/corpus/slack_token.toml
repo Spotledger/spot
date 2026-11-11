@@ -1,0 +1,44 @@
+# Slack tokens: `xox` plus one of the a/b/p/r/s kinds, a dash, then the token body.
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOp'
+expected = '[redacted:slack_token]'
+class = 'slack_token'
+
+[[case]]
+input = 'xoxp-123456789012-123456789012-1234567890123-abcdef0123456789abcdef0123456789'
+expected = '[redacted:slack_token]'
+class = 'slack_token'
+
+[[case]]
+input = '''xoxa-1234567890-abcdef
+xoxr-1234567890-abcdef
+xoxs-1234567890-abcdef'''
+expected = '''[redacted:slack_token]
+[redacted:slack_token]
+[redacted:slack_token]'''
+class = 'slack_token'
+
+[[case]]
+input = 'slack call failed: xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOp retry'
+expected = 'slack call failed: [redacted:slack_token] retry'
+class = 'slack_token'
+
+# Too short to be a token: the prefix alone is a word.
+[[case]]
+input = 'the xoxb-1234 shortcode'
+expected = 'the xoxb-1234 shortcode'
+class = 'slack_token'
+
+# Upper-case lookalike.
+[[case]]
+input = 'XOXB-123456789012-1234567890123-AbCdEfGhIjKlMnOp'
+expected = 'XOXB-123456789012-1234567890123-AbCdEfGhIjKlMnOp'
+class = 'slack_token'
+
+# A different third letter is a different product, not this rule.
+[[case]]
+input = 'xoxq-123456789012-1234567890123-AbCdEfGhIjKlMnOp'
+expected = 'xoxq-123456789012-1234567890123-AbCdEfGhIjKlMnOp'
+class = 'slack_token'

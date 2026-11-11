@@ -1,0 +1,42 @@
+[package]
+name = "spot-form-effects"
+description = "The UI effects protocol v1 and server-run TypeScript form scripts (WP-UI-12.T1, ADR-28): declarative effects validated against form metadata and the triggering user's rights, with a conformance corpus both clients pass"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The contract types: `DocTypeDef`, `FieldKind`, `Document`, `Principal`-free values.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The permission decision core: field visibility and writability as the API decides them.
+spot-permissions = { path = "../spot-permissions" }
+# The document view, the exact JSON conversions and the per-script limits the lifecycle tier
+# already fixed. Form scripts reuse them instead of growing a second dialect (WP-EXT-06).
+spot-server-scripts = { path = "../spot-server-scripts" }
+# The embedded engine every script runs on (ADR-054).
+spot-ts = { path = "../spot-ts" }
+# Save-time type stripping (ADR-054 step 2).
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# `SetFilter` carries a shared-expression-language filter; the server validates it with the
+# same parser the client evaluates it with (WP-UI-11).
+spot-expr = { path = "../spot-expr" }
+# Exact decimal values: an effect never carries a float (ADR-12).
+spot-money = { path = "../spot-money" }
+# A script's log lines are redacted, with the event's hidden values registered, before they
+# reach the server log sink. `spot-secrets` is the `SecretString` it registers from.
+spot-redact = { path = "../spot-redact" }
+spot-secrets = { path = "../spot-secrets" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The engine runs a script on a thread of its own while the caller awaits its result.
+tokio = { version = "1", default-features = false, features = ["rt", "sync"] }
+
+[dev-dependencies]
+# The conformance corpus is TOML (the C# client reads the same files in WP-UI-12.T2).
+toml = "0.9"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

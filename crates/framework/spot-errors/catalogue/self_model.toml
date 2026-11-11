@@ -1,0 +1,84 @@
+# self_model codes: the system self-model's introspection and source errors. One [[entry]]
+# per code; see crates/framework/spot-errors/README.md. These are a library-internal
+# vocabulary, so no entry names an AppError class.
+
+[[entry]]
+code = "self_model.node_not_found"
+class = "none"
+summary = "The self-model has no node {node} in this snapshot."
+explanation_key = "error.self_model.node_not_found"
+params = ["node"]
+remedy = "Ask for a node the current snapshot contains, or rebuild the snapshot from its sources."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.unknown_node_kind"
+class = "none"
+summary = "The text {kind} is not a self-model node kind."
+explanation_key = "error.self_model.unknown_node_kind"
+params = ["kind"]
+remedy = "Use one of the node kinds the self-model documents."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.unknown_edge_kind"
+class = "none"
+summary = "The text {kind} is not a self-model edge kind."
+explanation_key = "error.self_model.unknown_edge_kind"
+params = ["kind"]
+remedy = "Use one of the edge kinds the self-model documents."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.evidence_missing"
+class = "none"
+summary = "The self-model item {what} has no evidence record and cannot explain a change."
+explanation_key = "error.self_model.evidence_missing"
+params = ["what"]
+remedy = "Give the source adapter the record id that proves the item exists or changed."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.no_cause"
+class = "none"
+summary = "No evidence-backed cause reaches the symptom {subject}."
+explanation_key = "error.self_model.no_cause"
+params = ["subject"]
+remedy = "Add the migration, customisation, setting or health record that proves the cause."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.source_invalid"
+class = "none"
+summary = "The source {source} produced data the self-model cannot accept: {reason}."
+explanation_key = "error.self_model.source_invalid"
+params = ["reason", "source"]
+remedy = "Fix the source adapter's output, or the input it was given."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.limit_exceeded"
+class = "none"
+summary = "A self-model traversal hit the {kind} limit {limit}, got {actual}."
+explanation_key = "error.self_model.limit_exceeded"
+params = ["actual", "kind", "limit"]
+remedy = "Raise the bound deliberately or narrow the query."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.query_denied"
+class = "none"
+summary = "The self-model could not answer a query about {node}."
+explanation_key = "error.self_model.query_denied"
+params = ["node"]
+remedy = "Ask for a node the current snapshot shows you, or ask the owner of the system if you think this is wrong."
+since = "0.1.0"
+
+[[entry]]
+code = "self_model.event_invalid"
+class = "none"
+summary = "The system event is invalid: {reason}."
+explanation_key = "error.self_model.event_invalid"
+params = ["reason"]
+remedy = "Give the event a non-empty evidence record and a supported subject."
+since = "0.1.0"

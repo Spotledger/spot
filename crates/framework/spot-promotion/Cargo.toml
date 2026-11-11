@@ -1,0 +1,48 @@
+[package]
+name = "spot-promotion"
+description = "The promotion pipeline (WP-ALM-04, WS19, ADR-22): a customisation bundle travels request -> planned -> approved -> rehearsed -> applied -> verified, with approvals through spot-migration-approval, a recorded rehearsal that blocks apply when it fails, a bundle apply/verify/restore port, and every transition recorded in the migration audit store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The customisation bundle, its apply plan and the site reader/writer traits.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# The `ReleasePlan`-shaped plan a bundle promotion is approved and rehearsed as.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# `PlanDigest`, the approval store and `authorise_apply`: the one way to a ticket.
+spot-migration-approval = { path = "../spot-migration-approval" }
+# `AuditRecord`, named by the approval service's audit sink (`AuditSink::record`), which the
+# promotion's approval service writes its `migration.approved` / `migration.rejected` records to.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The migration audit record: the `RunRecorder` lifecycle every transition is written through.
+spot-migration-audit = { path = "../spot-migration-audit" }
+# Unresolved merge conflicts become blocking plan items.
+spot-bundle-merge = { path = "../spot-bundle-merge" }
+# Customisation-versus-release conflicts become blocking or warning plan items.
+spot-migration-conflicts = { path = "../spot-migration-conflicts" }
+# The rehearsal report and verdict the rehearsal step returns.
+spot-rehearsal = { path = "../spot-rehearsal" }
+# The environment roles (`dev`, `test`, `prod`) the approval and rehearsal policy is keyed by.
+spot-environments = { path = "../spot-environments" }
+# The promotion record and its journal derive serde for a durable store and a report.
+serde = { version = "1", features = ["derive"] }
+# The plan document and the evidence artefacts are JSON text.
+serde_json = "1"
+# SHA-256 for the plan digest over the assembled release plan document.
+sha2 = "0.10"
+# `BoxFuture`: what the object-safe async audit port returns.
+futures = "0.3"
+# Typed errors with stable `promotion.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# `FakeSite` takes installed app versions, and script apps are compared as semver.
+semver = "1"
+# An environment address carries its tenant id; the tests build `EnvRef`s directly.
+spot-tenancy = { path = "../spot-tenancy" }
+
+[lints]
+workspace = true

@@ -1,0 +1,528 @@
+# Text: equality, case folding, accents, collation, literal patterns, normalisation, limits.
+
+[[case]]
+id = "txt-01-equals-is-case-sensitive"
+rule = "SEM-TXT-01"
+title = "= finds only the exact spelling"
+setup = ['a code="t:Ali"', 'b code="t:ali"', 'c code="t:ALI"']
+op = "query"
+query = { select = ["code"], filter = '(= code "t:ali")' }
+expect = { rows = [["t:ali"]] }
+
+[[case]]
+id = "txt-01-not-equals"
+rule = "SEM-TXT-01"
+title = "<> is the exact complement, case differences included"
+setup = ['a code="t:Ali"', 'b code="t:ali"', 'c code="t:ALI"']
+op = "query"
+query = { select = ["code"], filter = '(<> code "t:ali")' }
+expect = { rows = [["t:Ali"], ["t:ALI"]] }
+
+[[case]]
+id = "txt-01-in-is-exact"
+rule = "SEM-TXT-01"
+title = "In matches the listed spellings only"
+setup = ['a code="t:Ali"', 'b code="t:ali"', 'c code="t:ALI"']
+op = "query"
+query = { select = ["code"], filter = '(in code "t:Ali" "t:ALI")' }
+expect = { rows = [["t:Ali"], ["t:ALI"]] }
+
+[[case]]
+id = "txt-01-equals-mode-is-exact"
+rule = "SEM-TXT-01"
+title = "the Equals text mode without case folding is exact"
+setup = ['a code="t:Ali"', 'b code="t:ali"', 'c code="t:ali "']
+op = "query"
+query = { select = ["code"], filter = '(equals code "ali")' }
+expect = { rows = [["t:ali"]] }
+
+[[case]]
+id = "txt-01-trailing-space-differs"
+rule = "SEM-TXT-01"
+title = "a trailing space makes a different value (no padding semantics)"
+setup = ['a code="t:ali"', 'b code="t:ali "']
+op = "query"
+query = { select = ["code"], filter = '(= code "t:ali ")' }
+expect = { rows = [["t:ali "]] }
+
+[[case]]
+id = "txt-02-ci-equals"
+rule = "SEM-TXT-02"
+title = "case-insensitive Equals folds case but not sharp s"
+setup = ['a code="t:strasse"', 'b code="t:STRASSE"', 'c code="t:Straße"', 'd code="t:Strasse"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "STRASSE")' }
+expect = { rows = [["t:strasse"], ["t:STRASSE"], ["t:Strasse"]] }
+
+[[case]]
+id = "txt-02-ci-sharp-s-matches-itself"
+rule = "SEM-TXT-02"
+title = "a case-insensitive match for the capital-sharp-s-free spelling finds only that spelling"
+setup = ['a code="t:Straße"', 'b code="t:STRASSE"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "STRAßE")' }
+expect = { rows = [["t:Straße"]] }
+
+[[case]]
+id = "txt-02-ci-prefix"
+rule = "SEM-TXT-02"
+title = "case-insensitive Prefix"
+setup = ['a code="t:Alpha"', 'b code="t:alps"', 'c code="t:BALPHA"', 'd code="t:al"']
+op = "query"
+query = { select = ["code"], filter = '(prefix-ci code "AL")' }
+expect = { rows = [["t:Alpha"], ["t:alps"], ["t:al"]] }
+
+[[case]]
+id = "txt-02-ci-contains"
+rule = "SEM-TXT-02"
+title = "case-insensitive Contains"
+setup = ['a code="t:xxALPHAxx"', 'b code="t:alphabet"', 'c code="t:beta"']
+op = "query"
+query = { select = ["code"], filter = '(contains-ci code "AlPh")' }
+expect = { rows = [["t:xxALPHAxx"], ["t:alphabet"]] }
+
+[[case]]
+id = "txt-02-ci-suffix"
+rule = "SEM-TXT-02"
+title = "case-insensitive Suffix"
+setup = ['a code="t:fooBAR"', 'b code="t:foobar"', 'c code="t:barfoo"']
+op = "query"
+query = { select = ["code"], filter = '(suffix-ci code "bAr")' }
+expect = { rows = [["t:fooBAR"], ["t:foobar"]] }
+
+[[case]]
+id = "txt-02-ci-dotted-capital-i"
+rule = "SEM-TXT-02"
+title = "simple folding leaves the dotted capital I alone: it is not i"
+setup = ['a code="t:İstanbul"', 'b code="t:istanbul"', 'c code="t:ISTANBUL"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "istanbul")' }
+expect = { rows = [["t:istanbul"], ["t:ISTANBUL"]] }
+
+[[case]]
+id = "txt-02-ci-greek-final-sigma"
+rule = "SEM-TXT-02"
+title = "simple folding maps both Greek sigmas to the same letter"
+setup = ['a code="t:ΟΔΟΣ"', 'b code="t:οδοσ"', 'c code="t:οδος"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "οδοσ")' }
+expect = { rows = [["t:ΟΔΟΣ"], ["t:οδοσ"], ["t:οδος"]] }
+
+[[case]]
+id = "txt-03-accent-exact"
+rule = "SEM-TXT-03"
+title = "= does not ignore accents"
+setup = ['a code="t:école"', 'b code="t:ecole"', 'c code="t:Ecole"']
+op = "query"
+query = { select = ["code"], filter = '(= code "t:ecole")' }
+expect = { rows = [["t:ecole"]] }
+
+[[case]]
+id = "txt-03-accent-ci"
+rule = "SEM-TXT-03"
+title = "a case-insensitive match still tells é from e"
+setup = ['a code="t:école"', 'b code="t:ecole"', 'c code="t:Ecole"', 'd code="t:ÉCOLE"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "ECOLE")' }
+expect = { rows = [["t:ecole"], ["t:Ecole"]] }
+
+[[case]]
+id = "txt-03-accent-ci-folds-accented-capitals"
+rule = "SEM-TXT-03"
+title = "case folding applies to accented letters too (É matches é)"
+setup = ['a code="t:école"', 'b code="t:ecole"', 'c code="t:ÉCOLE"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "École")' }
+expect = { rows = [["t:école"], ["t:ÉCOLE"]] }
+
+[[case]]
+id = "txt-04-collation-order"
+rule = "SEM-TXT-04"
+title = "sorting by the en collation: a A ä b B e é z Z"
+setup = ['a code="t:b"', 'b code="t:A"', 'c code="t:a"', 'd code="t:B"', 'e code="t:é"', 'f code="t:e"', 'g code="t:z"', 'h code="t:Z"', 'i code="t:ä"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"], ["t:A"], ["t:ä"], ["t:b"], ["t:B"], ["t:e"], ["t:é"], ["t:z"], ["t:Z"]] }
+
+[[case]]
+id = "txt-04-collation-order-descending"
+rule = "SEM-TXT-04"
+title = "descending is the exact reverse of the collation order"
+setup = ['a code="t:b"', 'b code="t:A"', 'c code="t:a"', 'd code="t:B"', 'e code="t:ä"']
+op = "query"
+query = { select = ["code"], order = ["code desc"] }
+expect = { rows = [["t:B"], ["t:b"], ["t:ä"], ["t:A"], ["t:a"]] }
+
+[[case]]
+id = "txt-04-ties-break-by-code-point"
+rule = "SEM-TXT-04"
+title = "canonically equivalent spellings tie in the collation and then order by code point"
+setup = ['a code="t:\u{e9}x"', 'b code="t:e\u{301}x"', 'c code="t:ey"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:e\u0301x"], ["t:\u00e9x"], ["t:ey"]] }
+
+[[case]]
+id = "txt-04-collation-und"
+rule = "SEM-TXT-04"
+title = "the root collation (und) orders like en for these letters"
+collation = "und"
+setup = ['a code="t:b"', 'b code="t:A"', 'c code="t:a"', 'd code="t:ä"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"], ["t:A"], ["t:ä"], ["t:b"]] }
+
+[[case]]
+id = "txt-04-digits-and-punctuation"
+rule = "SEM-TXT-04"
+title = "digits sort before letters and punctuation before digits in the root order"
+setup = ['a code="t:a1"', 'b code="t:a-1"', 'c code="t:1a"', 'd code="t:_a"', 'e code="t:a"', 'f code="t:A"', 'g code="t:10"', 'h code="t:2"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "txt-05-range-follows-collation"
+rule = "SEM-TXT-05"
+title = "< compares by collation: ä is below b although its code point is above"
+setup = ['a code="t:a"', 'b code="t:A"', 'c code="t:ä"', 'd code="t:b"', 'e code="t:z"']
+op = "query"
+query = { select = ["code"], filter = '(< code "t:b")', order = ["code"] }
+expect = { rows = [["t:a"], ["t:A"], ["t:ä"]] }
+
+[[case]]
+id = "txt-05-range-ge"
+rule = "SEM-TXT-05"
+title = ">= includes the bound and everything the collation puts after it"
+setup = ['a code="t:a"', 'b code="t:ä"', 'c code="t:b"', 'd code="t:B"', 'e code="t:z"']
+op = "query"
+query = { select = ["code"], filter = '(>= code "t:b")', order = ["code"] }
+expect = { rows = [["t:b"], ["t:B"], ["t:z"]] }
+
+[[case]]
+id = "txt-05-range-le-gt"
+rule = "SEM-TXT-05"
+title = "<= and > partition the rows"
+setup = ['a code="t:a"', 'b code="t:ä"', 'c code="t:b"', 'd code="t:z"']
+op = "query"
+query = { select = ["code", "(<= code \"t:ä\")"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "txt-05-range-uppercase-above-lowercase"
+rule = "SEM-TXT-05"
+title = "Z is not below a in a collation (byte order would say so)"
+setup = ['a code="t:Z"', 'b code="t:a"', 'c code="t:B"']
+op = "query"
+query = { select = ["code"], filter = '(< code "t:b")', order = ["code"] }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "txt-06-min-max-follow-collation"
+rule = "SEM-TXT-06"
+title = "Min and Max of text use the collation: a and Z, not A and ä"
+setup = ['a code="t:b"', 'b code="t:A"', 'c code="t:ä"', 'd code="t:Z"', 'e code="t:a"']
+op = "query"
+query = { select = ["(min code)", "(max code)"] }
+expect = { rows = [["t:a", "t:Z"]] }
+
+[[case]]
+id = "txt-06-min-max-per-group"
+rule = "SEM-TXT-06"
+title = "Min and Max per group follow the collation"
+setup = ['a code="t:b" note="t:g1"', 'b code="t:A" note="t:g1"', 'c code="t:ä" note="t:g2"', 'd code="t:z" note="t:g2"']
+op = "query"
+query = { select = ["note", "(min code)", "(max code)"], group = ["note"], order = ["note"] }
+expect = { rows = [["t:g1", "t:A", "t:b"], ["t:g2", "t:ä", "t:z"]] }
+
+[[case]]
+id = "txt-07-percent-is-literal"
+rule = "SEM-TXT-07"
+title = "% in a Contains pattern matches only a percent sign"
+setup = ['a code="t:100%"', 'b code="t:1000"', 'c code="t:50%off"', 'd code="t:%"', 'e code="t:abc"']
+op = "query"
+query = { select = ["code"], filter = '(contains code "%")' }
+expect = { rows = [["t:100%"], ["t:50%off"], ["t:%"]] }
+
+[[case]]
+id = "txt-07-underscore-is-literal"
+rule = "SEM-TXT-07"
+title = "_ in an Equals or Contains pattern is not a one-character wildcard"
+setup = ['a code="t:a_c"', 'b code="t:abc"', 'c code="t:a_cd"']
+op = "query"
+query = { select = ["code"], filter = '(or (equals code "a_c") (contains code "_cd"))' }
+expect = { rows = [["t:a_c"], ["t:a_cd"]] }
+
+[[case]]
+id = "txt-07-backslash-is-literal"
+rule = "SEM-TXT-07"
+title = "a backslash in a pattern is an ordinary character, not an escape"
+setup = ['a code="t:a\\c"', 'b code="t:ac"', 'c code="t:a\\%"']
+op = "query"
+query = { select = ["code"], filter = '(contains code "\\")', order = ["code"] }
+expect = { rows = [["t:a\\%"], ["t:a\\c"]] }
+
+[[case]]
+id = "txt-07-prefix-and-suffix-literal"
+rule = "SEM-TXT-07"
+title = "Prefix and Suffix with % and _ in the pattern"
+setup = ['a code="t:%x"', 'b code="t:ax"', 'c code="t:x_"', 'd code="t:xy"']
+op = "query"
+query = { select = ["code"], filter = '(or (prefix code "%") (suffix code "_"))' }
+expect = { rows = [["t:%x"], ["t:x_"]] }
+
+[[case]]
+id = "txt-07-ci-pattern-is-literal"
+rule = "SEM-TXT-07"
+title = "a case-insensitive pattern with _ and % is still literal"
+setup = ['a code="t:A_C"', 'b code="t:abc"', 'c code="t:50%"', 'd code="t:500"']
+op = "query"
+query = { select = ["code"], filter = '(or (contains-ci code "a_c") (contains-ci code "0%"))' }
+expect = { rows = [["t:A_C"], ["t:50%"]] }
+
+[[case]]
+id = "txt-07-empty-pattern"
+rule = "SEM-TXT-07"
+title = "an empty Contains pattern matches every non-null text, an empty Equals only the empty text"
+setup = ['a code="t:x" note="t:"', 'b code="t:y" note="t:z"', 'c code="t:w"']
+op = "query"
+query = { select = ["code", "(contains note \"\")", "(equals note \"\")"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "txt-08-no-normalisation"
+rule = "SEM-TXT-08"
+title = "precomposed é and e plus combining accent are different values"
+setup = ['a code="t:\u{e9}"', 'b code="t:e\u{301}"']
+op = "query"
+query = { select = ["code"], filter = '(= code "t:\u{e9}")' }
+expect = { rows = [["t:\u00e9"]] }
+
+[[case]]
+id = "txt-08-both-forms-coexist-as-unique-keys"
+rule = "SEM-TXT-08"
+title = "both forms can be inserted under a unique index, and both come back as written"
+setup = ['a code="t:\u{e9}"']
+op = "write"
+write = ['insert b code="t:e\u{301}"']
+expect = { ok = true }
+
+[[case]]
+id = "txt-08-stored-as-given"
+rule = "SEM-TXT-08"
+title = "the decomposed form is read back decomposed (no silent NFC)"
+setup = ['a code="t:e\u{301}"']
+op = "load"
+doc = "a"
+fields = ["code"]
+expect = { rows = [["t:e\u0301"]] }
+
+[[case]]
+id = "txt-08-ci-does-not-normalise"
+rule = "SEM-TXT-08"
+title = "a case-insensitive match does not normalise either"
+setup = ['a code="t:E\u{301}"', 'b code="t:\u{e9}"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "\u{e9}")' }
+expect = { rows = [["t:\u00e9"]] }
+
+[[case]]
+id = "txt-09-empty-text"
+rule = "SEM-TXT-09"
+title = "empty text round-trips as empty"
+setup = ['a code="t:x" note="t:"']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["t:"]] }
+
+[[case]]
+id = "txt-09-combining-marks-only"
+rule = "SEM-TXT-09"
+title = "a text of only combining marks round-trips"
+setup = ['a code="t:x" note="t:\u{301}\u{301}\u{300}"']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["t:\u0301\u0301\u0300"]] }
+
+[[case]]
+id = "txt-09-whitespace-kept"
+rule = "SEM-TXT-09"
+title = "leading, trailing and inner whitespace, tabs and line breaks are kept"
+setup = ['a code="t:x" note="t:  a\tb\r\nc  "']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["t:  a\tb\r\nc  "]] }
+
+[[case]]
+id = "txt-09-outside-the-bmp"
+rule = "SEM-TXT-09"
+title = "characters outside the basic multilingual plane round-trip"
+setup = ['a code="t:x" note="t:\u{1F600}\u{10FFFF}\u{10000}"']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["t:\U0001F600\U0010FFFF\U00010000"]] }
+
+[[case]]
+id = "txt-09-long-text"
+rule = "SEM-TXT-09"
+title = "100,000 characters of unlimited text round-trip"
+setup = ['a code="t:x" note="trep:50000:ab"']
+op = "query"
+query = { select = ["(= note \"trep:50000:ab\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "txt-09-forty-character-code"
+rule = "SEM-TXT-09"
+title = "a 40-character text round-trips"
+setup = ['a code="trep:40:é"']
+op = "load"
+doc = "a"
+fields = ["code"]
+expect = { rows = [["t:éééééééééééééééééééééééééééééééééééééééé"]] }
+
+[[case]]
+id = "txt-10-group-by-is-exact"
+rule = "SEM-TXT-10"
+title = "group by keeps Ali, ali and ALI apart"
+setup = ['a code="t:1" note="t:Ali"', 'b code="t:2" note="t:ali"', 'c code="t:3" note="t:ALI"', 'd code="t:4" note="t:Ali"']
+op = "query"
+query = { select = ["note", "(count)"], group = ["note"] }
+expect = { rows = [["t:Ali", "i:2"], ["t:ali", "i:1"], ["t:ALI", "i:1"]], unordered = true }
+
+[[case]]
+id = "txt-10-count-distinct-is-exact"
+rule = "SEM-TXT-10"
+title = "count distinct counts Ali, ali and ALI as three"
+setup = ['a code="t:1" note="t:Ali"', 'b code="t:2" note="t:ali"', 'c code="t:3" note="t:ALI"', 'd code="t:4" note="t:Ali"']
+op = "query"
+query = { select = ["(count-distinct note)"] }
+expect = { rows = [["i:3"]] }
+
+[[case]]
+id = "txt-10-unique-key-is-exact"
+rule = "SEM-TXT-10"
+title = "a unique index accepts a key that differs only by case"
+setup = ['a code="t:Ali"']
+op = "write"
+write = ['insert b code="t:ali"']
+expect = { ok = true }
+
+[[case]]
+id = "txt-10-unique-key-refuses-the-same-spelling"
+rule = "SEM-TXT-10"
+title = "a unique index refuses the same spelling"
+setup = ['a code="t:Ali"']
+op = "write"
+write = ['insert b code="t:Ali"']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "txt-11-nul-character"
+rule = "SEM-TXT-11"
+title = "a text with U+0000 (open: refuse everywhere or not)"
+setup = ['a code="t:x"']
+op = "write"
+write = ['update a note="t:a\u{0}b"']
+expect = { same_as_reference = true }
+
+[[case]]
+id = "txt-12-limit-counts-characters"
+rule = "SEM-TXT-12"
+title = "ten two-byte characters fit a 10-character field"
+op = "write"
+write = ['insert a code="t:x" short="trep:10:é"']
+expect = { ok = true }
+
+[[case]]
+id = "txt-12-one-over-the-limit"
+rule = "SEM-TXT-12"
+title = "eleven characters are refused"
+op = "write"
+write = ['insert a code="t:x" short="trep:11:a"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "txt-12-outside-the-bmp-counts-once"
+rule = "SEM-TXT-12"
+title = "ten characters outside the BMP (four bytes each) fit"
+op = "write"
+write = ['insert a code="t:x" short="trep:10:\u{1F600}"']
+expect = { ok = true }
+
+[[case]]
+id = "txt-12-combining-marks-count"
+rule = "SEM-TXT-12"
+title = "a base letter and its combining accent are two characters: five pairs fit, six do not"
+op = "write"
+write = ['insert a code="t:x" short="trep:6:e\u{301}"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "txt-12-five-combining-pairs-fit"
+rule = "SEM-TXT-12"
+title = "five base-plus-accent pairs are ten characters and fit"
+op = "write"
+write = ['insert a code="t:x" short="trep:5:e\u{301}"']
+expect = { ok = true }
+
+[[case]]
+id = "txt-12-update-over-limit"
+rule = "SEM-TXT-12"
+title = "an update over the limit is refused as an insert is"
+setup = ['a code="t:x" short="t:ok"']
+op = "write"
+write = ['update a short="trep:11:a"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "txt-12-code-forty-one"
+rule = "SEM-TXT-12"
+title = "the 40-character code limit refuses 41"
+op = "write"
+write = ['insert a code="trep:41:a"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "txt-13-swedish-order"
+rule = "SEM-TXT-13"
+title = "in sv, ä sorts after z"
+collation = "sv"
+setup = ['a code="t:ä"', 'b code="t:z"', 'c code="t:a"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"], ["t:z"], ["t:ä"]] }
+
+[[case]]
+id = "txt-13-english-order"
+rule = "SEM-TXT-13"
+title = "in en, ä sorts next to a"
+collation = "en"
+setup = ['a code="t:ä"', 'b code="t:z"', 'c code="t:a"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"], ["t:ä"], ["t:z"]] }
+
+[[case]]
+id = "txt-13-german-order"
+rule = "SEM-TXT-13"
+title = "in de, ä sorts with a (default phonebook-free order)"
+collation = "de"
+setup = ['a code="t:ä"', 'b code="t:z"', 'c code="t:a"', 'd code="t:b"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"], ["t:ä"], ["t:b"], ["t:z"]] }
+
+[[case]]
+id = "txt-02-ci-turkish-collation"
+rule = "SEM-TXT-02"
+title = "under the tr collation a case-insensitive match still folds I to i (no Turkish dotless i)"
+collation = "tr"
+setup = ['a code="t:I"', 'b code="t:i"', 'c code="t:ı"']
+op = "query"
+query = { select = ["code"], filter = '(equals-ci code "i")' }
+expect = { rows = [["t:I"], ["t:i"]] }

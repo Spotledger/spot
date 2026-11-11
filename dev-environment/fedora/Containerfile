@@ -1,0 +1,87 @@
+# Fedora 44 dev image for Spotledger (WP-PRD-10.T1).
+#
+# Reproducibility:
+#   - the base is pinned by digest (the multi-arch manifest), not by tag;
+#   - Rust comes from the rustup-init binary build.sh downloads and verifies
+#     against RUSTUP_INIT_SHA256, at the version in rust-toolchain.toml;
+#   - the .NET SDK tarball build.sh downloads is verified against
+#     DOTNET_SDK_SHA512, at the version in clients/avalonia/global.json;
+#   - RPMs are verified by dnf against the Fedora and PGDG GPG keys.
+# build.sh fills the ARG defaults with the hashes it downloaded; do not pass a
+# hash you did not get from the artefact publisher.
+#
+# Build it with dev-environment/build.sh (it downloads the two artefacts into
+# the build context first), never with a bare `podman build`.
+
+ARG FEDORA_IMAGE=registry.fedoraproject.org/fedora@sha256:e9a013b99bbbe0b21c42e029ec7811ef5c8ea5fbdaf78575f7cd482cf4d21b90
+FROM ${FEDORA_IMAGE}
+
+# Keep in sync with rust-toolchain.toml and clients/avalonia/global.json.
+ARG RUST_TOOLCHAIN=1.98.1
+ARG DOTNET_SDK=10.0.401
+# SHA-256 of rustup-init (x86_64-unknown-linux-gnu) and SHA-512 of the
+# dotnet-sdk-<version>-linux-x64.tar.gz, as published by rust-lang and
+# Microsoft. build.sh supplies these.
+ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
+ARG DOTNET_SDK_SHA512=51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b
+
+# start-postgres.sh looks for initdb in the Debian PGDG layout; Fedora's PGDG
+# puts the PostgreSQL 18 binaries in /usr/pgsql-18/bin, so point it there.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    DOTNET_ROOT=/usr/local/dotnet \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    SPOT_PG_BIN=/usr/pgsql-18/bin
+ENV PATH=/usr/local/cargo/bin:/usr/local/dotnet:${PATH}
+
+# Build dependencies the workspace actually needs. Determined from
+# Cargo.lock (cc, cmake, pkg-config, ring) plus the Python, .NET and
+# PostgreSQL work the CI jobs do; protobuf is not used by this repository
+# (no prost/tonic/prost-build anywhere), so protoc is deliberately absent.
+# PostgreSQL 18 (matching tools/ci/start-postgres.sh) comes from the PGDG
+# Fedora repo, whose packages dnf verifies against the PGDG key.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc gcc-c++ make cmake pkgconf-pkg-config \
+        perl perl-IPC-Cmd \
+        git curl tar gzip xz unzip findutils which diffutils procps-ng \
+        ca-certificates gnupg2 \
+        python3.12 python3.12-devel python3.12-pip \
+    && dnf install -y \
+        https://download.postgresql.org/pub/repos/yum/reporpms/F-44-x86_64/pgdg-fedora-repo-latest.noarch.rpm \
+    && dnf install -y --setopt=install_weak_deps=False \
+        postgresql18 postgresql18-server postgresql18-contrib \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# CI runs its Python jobs on 3.12 (actions/setup-python "3.12"); make
+# `python3`/`python` mean 3.12 here too, without touching dnf (its shebang is
+# the absolute /usr/bin/python3).
+RUN ln -sf /usr/bin/python3.12 /usr/local/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python \
+    && ln -sf /usr/bin/pip3.12 /usr/local/bin/pip3
+
+# Rust: the rustup-init binary build.sh downloaded and verified, installed
+# non-interactively, then the pinned toolchain from rust-toolchain.toml.
+COPY .cache/rustup-init /tmp/rustup-init
+RUN echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain none \
+    && rm /tmp/rustup-init \
+    && rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy \
+    && rustup default "${RUST_TOOLCHAIN}" \
+    && rustc --version && cargo --version && rustup show active-toolchain
+
+# .NET SDK: the tarball build.sh downloaded and verified against Microsoft's
+# published SHA-512, extracted to DOTNET_ROOT, with `dotnet` on PATH.
+COPY .cache/dotnet-sdk.tar.gz /tmp/dotnet-sdk.tar.gz
+RUN echo "${DOTNET_SDK_SHA512}  /tmp/dotnet-sdk.tar.gz" | sha512sum -c - \
+    && mkdir -p "${DOTNET_ROOT}" \
+    && tar -xzf /tmp/dotnet-sdk.tar.gz -C "${DOTNET_ROOT}" \
+    && rm /tmp/dotnet-sdk.tar.gz \
+    && "${DOTNET_ROOT}/dotnet" --version
+
+# A throwaway workspace for the bind-mounted repository at runtime.
+WORKDIR /work
+CMD ["bash"]

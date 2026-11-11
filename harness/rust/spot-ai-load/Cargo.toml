@@ -1,0 +1,28 @@
+[package]
+name = "spot-ai-load"
+description = "AI workload isolation harness (WP-AI-05.T2): 20 parallel agents against a human-traffic load on the `ai` role and its own pool, on real PostgreSQL; measures human p95 and p99 against the budget, statement cancellation and the circuit breakers under overload. Test code only."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The code under test: admission, AIMD, breakers, the role and grant SQL, the canceller seam.
+spot-ai-isolation = { path = "../../../crates/framework/spot-ai-isolation" }
+# `RateLimit`, the shape of the lifted rate limits.
+spot-coordinator = { path = "../../../crates/framework/spot-coordinator" }
+# The pool, `PgConfig` and the scratch-database helper (`TestDb`, feature `testing`).
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+# `Pool`, `Object` and the pool status the harness reads.
+deadpool-postgres = "0.14"
+# The driver: raw clients, the cancel token and the SQLSTATE codes.
+tokio-postgres = "0.7"
+tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
+# The report and the budgets file.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
+[lints]
+workspace = true

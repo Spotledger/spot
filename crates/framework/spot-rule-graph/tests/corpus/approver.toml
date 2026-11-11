@@ -1,0 +1,73 @@
+# Approver resolution up an organisation tree: climb the manager chain to the first employee
+# who can approve; a delegate overrides the chain entirely.
+name = "approver"
+meta = "org"
+query = "approver"
+rules = """
+has_delegate(E) :- employee.delegate(E, _).
+above(E, M) :- employee.manager(E, M).
+above(E, M2) :- employee.manager(E, M), above(M, M2).
+approver(E, A) :- employee.delegate(E, A).
+approver(E, A) :- above(E, A), employee.can_approve(A, true), not has_delegate(E).
+"""
+
+# E0 (top) <- E1 <- E2 <- E3; E3 delegates to E4.
+[[edge]]
+type = "employee.manager"
+from = { entity = "employee", id = 1 }
+to = { entity = "employee", id = 0 }
+
+[[edge]]
+type = "employee.manager"
+from = { entity = "employee", id = 2 }
+to = { entity = "employee", id = 1 }
+
+[[edge]]
+type = "employee.manager"
+from = { entity = "employee", id = 3 }
+to = { entity = "employee", id = 2 }
+
+[[edge]]
+type = "employee.delegate"
+from = { entity = "employee", id = 3 }
+to = { entity = "employee", id = 4 }
+
+[[field]]
+doctype = "employee"
+field = "can_approve"
+record = { entity = "employee", id = 0 }
+value = { bool = true }
+
+[[field]]
+doctype = "employee"
+field = "can_approve"
+record = { entity = "employee", id = 1 }
+value = { bool = false }
+
+[[field]]
+doctype = "employee"
+field = "can_approve"
+record = { entity = "employee", id = 2 }
+value = { bool = true }
+
+[[field]]
+doctype = "employee"
+field = "can_approve"
+record = { entity = "employee", id = 3 }
+value = { bool = false }
+
+[[field]]
+doctype = "employee"
+field = "can_approve"
+record = { entity = "employee", id = 4 }
+value = { bool = true }
+
+# E1 and E2 climb to E0; E3 delegates to E4.
+[[expect]]
+row = [ { record = { entity = "employee", id = 1 } }, { record = { entity = "employee", id = 0 } } ]
+
+[[expect]]
+row = [ { record = { entity = "employee", id = 2 } }, { record = { entity = "employee", id = 0 } } ]
+
+[[expect]]
+row = [ { record = { entity = "employee", id = 3 } }, { record = { entity = "employee", id = 4 } } ]

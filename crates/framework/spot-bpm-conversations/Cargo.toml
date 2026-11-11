@@ -1,0 +1,52 @@
+[package]
+name = "spot-bpm-conversations"
+description = "Conversations across organisations for the Business Process engine (WP-BPM-12.T2, ADR-080 section 5): the send-message and wait-for-message node handlers, the message-arrived trigger over the link exchange's delivery notice feed, conformance of every incoming and outgoing message against the process contract with rejection and quarantine, the request-visible conversation view, and cancellation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The process contract: messages, fields, order rules, outcomes and wait limits. This crate
+# checks every message against it and never invents a second notion of any of them.
+spot-bpm-contract = { path = "../spot-bpm-contract" }
+# The send_message and wait_message node configs the handlers read.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The node-handler contract the handlers implement, the Case store and the timer port.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The open trigger registry the message-arrived kind registers with, and the start key.
+spot-bpm-triggers = { path = "../spot-bpm-triggers" }
+# The outbox, inbox and delivery notice feed a conversation travels over.
+spot-link-exchange = { path = "../spot-link-exchange" }
+# The link, its grants, topics, party identities and the exchange payload.
+spot-tenant-link = { path = "../spot-tenant-link" }
+# `Condition` and `Severity`: the shape of a stuck conversation on the health surface.
+spot-quarantine = { path = "../spot-quarantine" }
+# `NodeId` and `Published`, for starting a Case atomically with its variables.
+spot-dag = { path = "../spot-dag" }
+# The DAG transition that completes a waiting node with a chosen branch.
+spot-dag-exec = { path = "../spot-dag-exec" }
+# `OffsetDateTime`: instants are arguments, never read from a clock.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Payloads and Case variables are canonical JSON.
+serde_json = "1"
+# The Case id of a start key is a truncated SHA-256: a peer chooses the message id, so the id
+# must not be findable by a practical collision search.
+sha2 = "0.10"
+# Typed errors with stable `bpm_conversations.*` codes.
+thiserror = "2"
+# The async `CaseStarter` seam of the trigger crate.
+async-trait = "0.1"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# Tenant ids and the consent step-up for the two-tenant handshake fixture.
+spot-tenancy = { path = "../spot-tenancy" }
+spot-iam-access = { path = "../spot-iam-access" }
+# `Region`, for the peer-region cases.
+spot-data-policy = { path = "../spot-data-policy" }
+
+[lints]
+workspace = true

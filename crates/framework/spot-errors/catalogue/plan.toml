@@ -1,0 +1,127 @@
+# plan codes: execution plans compiled from effective metadata, and value checks against them (spot-plan, WP-MET-02). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "plan.compile.bad_default"
+class = "none"
+summary = "A field's default does not parse for the field's type."
+explanation_key = "error.plan.compile.bad_default"
+params = []
+remedy = "Correct the default in the field's metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.compile.view_mismatch"
+class = "none"
+summary = "A DocType's definition and its compiled app view disagree."
+explanation_key = "error.plan.compile.view_mismatch"
+params = []
+remedy = "Recompile the metadata so the definition and its view come from the same version."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.field.unknown"
+class = "none"
+summary = "A value was checked against a field the DocType does not have."
+explanation_key = "error.plan.field.unknown"
+params = []
+remedy = "Check the field name against the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.value.kind"
+class = "none"
+summary = "The value's shape does not fit the field's kind."
+explanation_key = "error.plan.value.kind"
+params = []
+remedy = "Send a value of the field's type; table and secret fields take no direct value."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.value.too_long"
+class = "none"
+summary = "The text is longer than the field allows."
+explanation_key = "error.plan.value.too_long"
+params = []
+remedy = "Shorten the text to the field's maximum length."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.value.scale"
+class = "none"
+summary = "The decimal has more fractional digits than the field's scale."
+explanation_key = "error.plan.value.scale"
+params = []
+remedy = "Shorten the decimal to the field's scale; it is never rounded."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.value.precision"
+class = "none"
+summary = "The decimal does not fit the field's precision at its scale."
+explanation_key = "error.plan.value.precision"
+params = []
+remedy = "Use a smaller number or raise the field's precision."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.value.not_an_option"
+class = "none"
+summary = "The value is not one of the select field's options."
+explanation_key = "error.plan.value.not_an_option"
+params = []
+remedy = "Choose one of the listed options."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.expr.invalid"
+class = "none"
+summary = "A field's rule expression (or its fetch_from path) does not parse."
+explanation_key = "error.plan.expr.invalid"
+params = []
+remedy = "Correct the rule expression in the field's metadata; the message names the position."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.expr.eval"
+class = "none"
+summary = "A field's rule expression did not evaluate to a boolean against the document."
+explanation_key = "error.plan.expr.eval"
+params = []
+remedy = "Make the rule return true or false (or null); check the field types it reads."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.expr.unknown_field"
+class = "none"
+summary = "A rule expression reads a field the DocType does not have."
+explanation_key = "error.plan.expr.unknown_field"
+params = []
+remedy = "Correct the field name in the expression, or add the field to the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.expr.cycle"
+class = "none"
+summary = "The fetch_from and default expressions of a DocType depend on each other in a cycle."
+explanation_key = "error.plan.expr.cycle"
+params = []
+remedy = "Break the cycle: make one of the fields in it read a value that does not depend on the others."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.fetch_from.unknown_target"
+class = "none"
+summary = "A fetch_from path ends at a field the linked DocType does not have."
+explanation_key = "error.plan.fetch_from.unknown_target"
+params = []
+remedy = "Correct the fetch_from path, or add the field to the linked DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "plan.naming.invalid"
+class = "none"
+summary = "The DocType's naming pattern is malformed."
+explanation_key = "error.plan.naming.invalid"
+params = []
+remedy = "Fix the naming pattern in the DocType's metadata; the message says what is wrong."
+since = "0.1.0"

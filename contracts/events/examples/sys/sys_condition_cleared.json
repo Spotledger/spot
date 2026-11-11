@@ -1,0 +1,8 @@
+{
+  "at_millis": 180000000,
+  "id": "LAG_HIGH",
+  "params": {"lag_seconds": "2", "stream": "orders"},
+  "severity": "red",
+  "subject": "node:branch7",
+  "transition": "cleared"
+}
