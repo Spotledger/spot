@@ -149,6 +149,9 @@ pub struct Settings {
     /// The host's role set (`web`, `jobs`, `realtime`, `database`, `branch-edge`), the host
     /// config key that mirrors `runtime.node.roles`. Takes precedence over [`HOST_ROLES_ENV`].
     pub host_roles: Option<Vec<String>>,
+    /// Whether the audit job's scratch rebuild runs on an edge. Absent or `false`: it does not
+    /// (an edge is a small machine; the rebuild is a hub job). A hub or standalone always runs it.
+    pub audit_scratch_rebuild: Option<bool>,
 }
 
 /// One Spotledger node role, as `[services.node_role] role` names it.
@@ -457,6 +460,144 @@ pub fn decide(settings: &Settings, ctx: &Context) -> std::result::Result<Plan, N
     })
 }
 
+// ---------------------------------------------------------------------------------------------
+// The role-conditioned service sets (WP-RTB-03.T6).
+// ---------------------------------------------------------------------------------------------
+
+/// One module of the table of roles: its registered name and the roles it runs in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ModuleRoles {
+    /// The module name (its file stem under `src/services`).
+    pub module: &'static str,
+    /// The roles it runs in; the same strings its `pub const ROLES` carries.
+    pub roles: &'static [&'static str],
+}
+
+/// The table of roles, stated once. Every module with a role condition is a row; every module
+/// that is not a row runs in every role (the local trading stack: API, jobs, realtime, print,
+/// files, journal capture, partition owner check).
+///
+/// Rows for modules that do not exist in the tree yet (the services of WP-RTB-02) are data: the
+/// registry test asserts that an **existing** module's `ROLES` equals its row, and that a row
+/// whose module appears without a matching `ROLES` fails the build's tests. Hub-only rows are
+/// `sync_hub` (the sync listener), `enrolment_admin` and `journal_access`; edge-only rows are
+/// `sync_node` and `sync_loops`. The audit job's scratch rebuild is not a module: see
+/// [`audit_scratch_rebuild_enabled`].
+pub const SERVICE_SETS: &[ModuleRoles] = &[
+    ModuleRoles { module: "sync_hub", roles: &["hub"] },
+    ModuleRoles { module: "enrolment_admin", roles: &["hub"] },
+    ModuleRoles { module: "journal_access", roles: &["hub"] },
+    ModuleRoles { module: "sync_node", roles: &["edge"] },
+    ModuleRoles { module: "sync_loops", roles: &["edge"] },
+];
+
+/// The conditioned modules that run in `role`, in table order. Every other module runs too.
+#[must_use]
+pub fn service_set(role: Role) -> Vec<&'static str> {
+    SERVICE_SETS
+        .iter()
+        .filter(|row| row.roles.contains(&role.name()))
+        .map(|row| row.module)
+        .collect()
+}
+
+/// The modules that run in `hub` and in no other role: what an edge must never carry.
+#[must_use]
+pub fn hub_only_modules() -> Vec<&'static str> {
+    SERVICE_SETS
+        .iter()
+        .filter(|row| row.roles == ["hub"])
+        .map(|row| row.module)
+        .collect()
+}
+
+/// The route prefixes of the hub-only services. On any other role they answer `501
+/// service.not_configured` (the convention for a service that is not hosted).
+pub const HUB_ONLY_PATHS: &[&str] = &["/api/v1/sync/hub", "/api/v1/journal", "/api/v1/enrolment"];
+
+/// Whether `path` belongs to a hub-only service: a prefix match on whole segments, so
+/// `/api/v1/journals` is not caught.
+#[must_use]
+pub fn is_hub_only_path(path: &str) -> bool {
+    HUB_ONLY_PATHS.iter().any(|prefix| {
+        path == *prefix
+            || path
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with('/'))
+    })
+}
+
+/// Whether the audit job's scratch rebuild runs: always on a standalone or hub; on an edge only
+/// when `[services.node_role] audit_scratch_rebuild = true`.
+#[must_use]
+pub fn audit_scratch_rebuild_enabled(role: Role, settings: &Settings) -> bool {
+    match role {
+        Role::Standalone | Role::Hub => true,
+        Role::Edge => settings.audit_scratch_rebuild == Some(true),
+    }
+}
+
+/// The site's validated role, provided as a port at this module's `ORDER` so the registry can
+/// read which modules run. It is built from [`decide`]'s output only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActiveRole(Role);
+
+impl ActiveRole {
+    /// The port for `role`.
+    #[must_use]
+    pub fn new(role: Role) -> Self {
+        Self(role)
+    }
+
+    /// The role.
+    #[must_use]
+    pub fn role(self) -> Role {
+        self.0
+    }
+}
+
+/// The readiness detail of an unreachable hub link: `sync_node: offline 3h`. Built from two
+/// instants the caller reads from the site clock (never the wall clock here); it carries no
+/// hub URL, no fingerprint and no code. A negative span reads as `0m`.
+#[must_use]
+pub fn offline_detail(since: OffsetDateTime, now: OffsetDateTime) -> String {
+    let minutes = (now - since).whole_minutes().max(0);
+    let span = if minutes >= 48 * 60 {
+        format!("{}d", minutes / (24 * 60))
+    } else if minutes >= 60 {
+        format!("{}h", minutes / 60)
+    } else {
+        format!("{minutes}m")
+    };
+    format!("sync_node: offline {span}")
+}
+
+/// The `501 service.not_configured` an edge or standalone answers on a hub-only route.
+fn not_configured() -> axum::response::Response {
+    use axum::response::IntoResponse;
+    (
+        axum::http::StatusCode::NOT_IMPLEMENTED,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        r#"{"error":{"code":"service.not_configured"}}"#,
+    )
+        .into_response()
+}
+
+/// Adds an explicit `501` route for every hub-only prefix (and everything below it). A layer
+/// would not do: it does not wrap the router's default 404.
+fn with_hub_only_routes(mut router: axum::Router) -> axum::Router {
+    use axum::routing::any;
+    for prefix in HUB_ONLY_PATHS {
+        router = router
+            .route(prefix, any(|| async { not_configured() }))
+            .route(
+                &format!("{prefix}/{{*rest}}"),
+                any(|| async { not_configured() }),
+            );
+    }
+    router
+}
+
 /// Whether `path` names a readable file with at least one byte (an enrolment code is a secret;
 /// this never reads or returns its content).
 fn code_file_present(path: &str) -> bool {
@@ -605,6 +746,13 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         detail = %plan.detail,
         "node_role: site role validated"
     );
+    ctx.provide(std::sync::Arc::new(ActiveRole::new(plan.role)))?;
+    if plan.role != Role::Hub {
+        // A hub-only route is not hosted here: the hub module is skipped by its role condition,
+        // so nothing answers it, and these routes make the answer the convention's 501 rather
+        // than a 404 that hides the reason.
+        ctx.router_layer(with_hub_only_routes);
+    }
     ctx.add(std::sync::Arc::new(NodeRoleService));
     Ok(())
 }
@@ -923,6 +1071,65 @@ mod tests {
         assert!(!desktop_host.agrees(Role::Edge));
         assert!(desktop_host.agrees(Role::Hub));
         assert!(desktop_host.agrees(Role::Standalone));
+    }
+
+    #[test]
+    fn the_table_names_each_role_its_set() {
+        assert!(service_set(Role::Standalone).is_empty());
+        assert_eq!(
+            service_set(Role::Hub),
+            ["sync_hub", "enrolment_admin", "journal_access"]
+        );
+        assert_eq!(service_set(Role::Edge), ["sync_node", "sync_loops"]);
+        assert_eq!(
+            hub_only_modules(),
+            ["sync_hub", "enrolment_admin", "journal_access"]
+        );
+        for row in SERVICE_SETS {
+            for role in row.roles {
+                assert!(Role::parse(role).is_ok(), "{} names `{role}`", row.module);
+            }
+        }
+    }
+
+    #[test]
+    fn hub_only_paths_match_whole_segments() {
+        assert!(is_hub_only_path("/api/v1/sync/hub"));
+        assert!(is_hub_only_path("/api/v1/journal/segments/1"));
+        assert!(is_hub_only_path("/api/v1/enrolment/codes"));
+        assert!(!is_hub_only_path("/api/v1/journals"));
+        assert!(!is_hub_only_path("/api/v1/doc/Task"));
+    }
+
+    #[test]
+    fn the_audit_scratch_rebuild_is_off_on_an_edge_unless_enabled() {
+        let off = Settings::default();
+        let on = Settings {
+            audit_scratch_rebuild: Some(true),
+            ..Settings::default()
+        };
+        assert!(audit_scratch_rebuild_enabled(Role::Hub, &off));
+        assert!(audit_scratch_rebuild_enabled(Role::Standalone, &off));
+        assert!(!audit_scratch_rebuild_enabled(Role::Edge, &off));
+        assert!(audit_scratch_rebuild_enabled(Role::Edge, &on));
+    }
+
+    #[test]
+    fn the_offline_detail_is_built_from_the_given_instants_only() {
+        let now = OffsetDateTime::UNIX_EPOCH + time::Duration::hours(100);
+        assert_eq!(
+            offline_detail(now - time::Duration::hours(3), now),
+            "sync_node: offline 3h"
+        );
+        assert_eq!(
+            offline_detail(now - time::Duration::minutes(12), now),
+            "sync_node: offline 12m"
+        );
+        assert_eq!(
+            offline_detail(now - time::Duration::hours(72), now),
+            "sync_node: offline 3d"
+        );
+        assert_eq!(offline_detail(now + time::Duration::hours(1), now), "sync_node: offline 0m");
     }
 
     #[test]

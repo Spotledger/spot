@@ -18,8 +18,9 @@
 //! coordinator whether its fencing token is still the current one. A renewal that fails or a
 //! stale token means another node may be consuming: the worker is stopped (running jobs get the
 //! grace period, then are abandoned to the store's own claim fencing), and the node goes back
-//! to standby. Stopping releases the lease at once, so a restart does not wait for the time to
-//! live.
+//! to standby. The worker also asks the same lease before every claim, through a claim gate that
+//! caches its answer for a tenth of the time to live. Stopping releases the lease at
+//! once, so a restart does not wait for the time to live.
 //!
 //! # The store
 //!
@@ -38,7 +39,8 @@ use std::time::Duration;
 use spot_coordinator::{Coordinator, Lease};
 use spot_core::{Clock, SiteId};
 use spot_jobs::model::InsertResult;
-use spot_jobs::worker::JobHandlerRegistry;
+use spot_jobs::model::Job;
+use spot_jobs::worker::{BoxFuture, ClaimGate, FinalAttemptHook, JobHandlerRegistry};
 use spot_jobs::{InMemoryJobStore, JobStore, NewJob, QueuePolicy, Worker};
 use spot_postgres::PgBackend;
 use spot_scheduler::{
@@ -62,6 +64,84 @@ pub fn scheduler_lease(site: &str) -> String {
 
 /// How often the reaper looks for claims whose lease lapsed.
 const REAP_INTERVAL: Duration = Duration::from_secs(2);
+
+/// The hooks the worker calls once when a last attempt ends in a timeout, a cancellation or a
+/// panic: one [`FinalAttemptHook`] that fans out to every subsystem that registered one.
+///
+/// The worker holds a single hook, so a second subsystem could not register without replacing
+/// the first. This set is that one hook. It calls the registered hooks in registration order,
+/// each on its own task, so a hook that panics or hangs up does not stop the ones after it (the
+/// worker applies the same rule to the hook as a whole). Nothing is logged but a count: a hook
+/// gets a job's arguments, and those hold tenant data.
+#[derive(Default)]
+pub struct FinalAttemptHooks {
+    hooks: std::sync::Mutex<Vec<Arc<dyn FinalAttemptHook>>>,
+}
+
+impl FinalAttemptHooks {
+    /// An empty set.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Adds `hook` after the ones already registered.
+    pub fn register(&self, hook: Arc<dyn FinalAttemptHook>) {
+        self.hooks
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(hook);
+    }
+
+    /// How many hooks are registered.
+    pub fn len(&self) -> usize {
+        self.hooks.lock().unwrap_or_else(|p| p.into_inner()).len()
+    }
+
+    /// Whether no hook is registered.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl FinalAttemptHook for FinalAttemptHooks {
+    fn on_dead<'a>(&'a self, job: &'a Job, reason: &'a str) -> BoxFuture<'a, ()> {
+        // Copy the list out: the guard must not be held across an await.
+        let hooks: Vec<Arc<dyn FinalAttemptHook>> =
+            self.hooks.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        Box::pin(async move {
+            for (index, hook) in hooks.into_iter().enumerate() {
+                let (job, reason) = (job.clone(), reason.to_owned());
+                // A task per hook: a panic (while building the future or while running it)
+                // comes back as a join error instead of unwinding through the worker.
+                let outcome =
+                    tokio::spawn(async move { hook.on_dead(&job, &reason).await }).await;
+                if outcome.is_err() {
+                    tracing::error!(
+                        code = "jobs.final_attempt_hook_failed",
+                        hook = index,
+                        "a final-attempt hook panicked; the next hooks still run"
+                    );
+                }
+            }
+        })
+    }
+}
+
+/// Builds the worker the queue consumer runs: the handlers, the queue policies, the clock and
+/// the final-attempt hooks of the site. A separate function so a test runs the worker the host
+/// runs, without a database.
+pub fn build_worker(
+    store: Arc<dyn JobStore>,
+    registry: Arc<JobHandlerRegistry>,
+    policies: HashMap<String, QueuePolicy>,
+    clock: Arc<dyn Clock>,
+    hooks: Arc<FinalAttemptHooks>,
+) -> Worker {
+    Worker::new(store, registry, policies, {
+        Arc::new(move || clock.now_utc())
+    })
+    .with_final_attempt_hook(hooks)
+}
 
 /// Settings the job services are built from.
 pub struct Settings {
@@ -105,7 +185,7 @@ impl Settings {
 ///
 /// The keeper never holds its guard across an await: the handle is cloned out, used, and put
 /// back.
-struct Keeper {
+pub struct Keeper {
     coordinator: Arc<dyn Coordinator>,
     name: String,
     holder: String,
@@ -114,7 +194,8 @@ struct Keeper {
 }
 
 impl Keeper {
-    fn new(coordinator: Arc<dyn Coordinator>, name: String, holder: String, ttl: Duration) -> Self {
+    /// A keeper for the lease `name` that `holder` takes for `ttl` in `coordinator`.
+    pub fn new(coordinator: Arc<dyn Coordinator>, name: String, holder: String, ttl: Duration) -> Self {
         Self {
             coordinator,
             name,
@@ -134,7 +215,7 @@ impl Keeper {
 
     /// Takes the lease if nobody holds it. `false` means another node does, or the
     /// coordinator cannot be reached: either way this node must not consume.
-    async fn acquire(&self) -> bool {
+    pub async fn acquire(&self) -> bool {
         match self
             .coordinator
             .acquire(&self.name, &self.holder, self.ttl)
@@ -153,7 +234,7 @@ impl Keeper {
 
     /// Confirms the fencing token is still the current one. `false` means the lease is lost:
     /// stop consuming.
-    async fn still_held(&self) -> bool {
+    pub async fn still_held(&self) -> bool {
         let Some(lease) = self.handle() else {
             return false;
         };
@@ -168,7 +249,7 @@ impl Keeper {
     }
 
     /// Renews the lease. `false` means it is lost.
-    async fn renew(&self) -> bool {
+    pub async fn renew(&self) -> bool {
         let Some(lease) = self.handle() else {
             return false;
         };
@@ -185,13 +266,99 @@ impl Keeper {
         }
     }
 
-    async fn release(&self) {
+    /// Gives the lease up, so another node takes over at once.
+    pub async fn release(&self) {
         let lease = self.held.lock().unwrap_or_else(|p| p.into_inner()).take();
         if let Some(lease) = lease {
             // Releasing lets another node take over at once instead of after the time to
             // live; a failure only means the lease lapses instead.
             let _ = self.coordinator.release(&lease).await;
         }
+    }
+}
+
+/// The claim gate over a [`Keeper`]: the worker claims a job only while this node's
+/// fencing token is still the current one in the coordinator.
+///
+/// The worker asks once per claim tick (10 a second) and `check_fence` is a coordinator call, a
+/// database round trip in the PostgreSQL profile. The answer is therefore cached, both `true` and
+/// `false`, for [`claim_gate_period`]: a tenth of the lease's time to live, at least 50 ms and at
+/// most 500 ms. A lease lost between two checks is noticed within that period, so the window in
+/// which a deposed node can still claim is at most 500 ms and at most a tenth of the lease, far
+/// below the third of the time to live the renew loop alone leaves open. The cache is read from
+/// the injected clock's monotonic time, so a test moves it without sleeping. A refused check
+/// also drops the keeper's handle, so the gate stays closed (without more coordinator calls)
+/// until the node takes the lease again; a failed check call is a refusal (fail closed).
+pub struct LeaseClaimGate {
+    keeper: Arc<Keeper>,
+    clock: Arc<dyn Clock>,
+    period: Duration,
+    /// The monotonic time of the last answer and the answer.
+    cache: std::sync::Mutex<Option<(Duration, bool)>>,
+}
+
+/// How long [`LeaseClaimGate`] keeps an answer for a lease with time to live `ttl`.
+pub fn claim_gate_period(ttl: Duration) -> Duration {
+    (ttl / 10).clamp(Duration::from_millis(50), Duration::from_millis(500))
+}
+
+impl LeaseClaimGate {
+    /// A gate over `keeper`, timed by `clock`.
+    pub fn new(keeper: Arc<Keeper>, clock: Arc<dyn Clock>) -> Self {
+        let period = claim_gate_period(keeper.ttl);
+        Self {
+            keeper,
+            clock,
+            period,
+            cache: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// How long an answer is kept.
+    pub fn period(&self) -> Duration {
+        self.period
+    }
+
+    fn cached(&self) -> Option<(Duration, bool)> {
+        *self.cache.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    fn store(&self, answer: Option<bool>) {
+        *self.cache.lock().unwrap_or_else(|p| p.into_inner()) =
+            answer.map(|a| (self.clock.monotonic(), a));
+    }
+
+    /// A renewal just succeeded: the lease is current as of now.
+    pub fn renewed(&self) {
+        self.store(Some(true));
+    }
+
+    /// The lease was lost or given up: forget the answer, the next ask sees no handle.
+    pub fn cleared(&self) {
+        self.store(None);
+    }
+}
+
+impl ClaimGate for LeaseClaimGate {
+    fn permit<'a>(&'a self) -> BoxFuture<'a, bool> {
+        Box::pin(async move {
+            // No handle (never acquired, released, lost): closed, whatever the cache says.
+            if self.keeper.handle().is_none() {
+                self.cleared();
+                return false;
+            }
+            // A clock reading before the cached one is not trusted: ask again (fail closed).
+            let now = self.clock.monotonic();
+            if let Some((at, answer)) = self.cached()
+                && now >= at
+                && now - at < self.period
+            {
+                return answer;
+            }
+            let answer = self.keeper.still_held().await;
+            self.store(Some(answer));
+            answer
+        })
     }
 }
 
@@ -206,7 +373,8 @@ pub struct Jobs {
     grace: Duration,
     node: String,
     clock: Arc<dyn Clock>,
-    keeper: Keeper,
+    keeper: Arc<Keeper>,
+    hooks: Arc<FinalAttemptHooks>,
 }
 
 impl Jobs {
@@ -222,13 +390,22 @@ impl Jobs {
             grace: settings.grace,
             node: settings.node.clone(),
             clock: Arc::clone(&settings.clock),
-            keeper: Keeper::new(
+            keeper: Arc::new(Keeper::new(
                 Arc::clone(&settings.coordinator),
                 consumer_lease(settings.site.as_str()),
                 settings.node.clone(),
                 settings.consumer_ttl,
-            ),
+            )),
+            hooks: FinalAttemptHooks::new(),
         })
+    }
+
+    /// Registers a hook the worker calls once when a job's last attempt ends in a timeout, a
+    /// cancellation or a panic (mail writes its bounces this way). Hooks run in registration
+    /// order and a failing one does not stop the others. Call it before the service starts: the
+    /// worker is built when the node takes the consumer lease.
+    pub fn register_final_attempt_hook(&self, hook: Arc<dyn FinalAttemptHook>) {
+        self.hooks.register(hook);
     }
 
     /// The store the worker and the scheduler share.
@@ -310,15 +487,18 @@ impl Jobs {
             .iter()
             .map(|queue| (queue.clone(), QueuePolicy::default()))
             .collect();
-        let worker = Worker::new(
+        let worker = build_worker(
             Arc::clone(&self.store),
             Arc::clone(&self.registry),
             policies,
-            {
-                let clock = Arc::clone(&self.clock);
-                Arc::new(move || clock.now_utc())
-            },
+            Arc::clone(&self.clock),
+            Arc::clone(&self.hooks),
         );
+        let gate = Arc::new(LeaseClaimGate::new(
+            Arc::clone(&self.keeper),
+            Arc::clone(&self.clock),
+        ));
+        let worker = worker.with_claim_gate(gate.clone());
         let (work_stop, work_rx) = watch::channel(false);
         let worker_id = format!("{}:{}", self.node, self.site);
         let queues = self.queues.clone();
@@ -345,8 +525,10 @@ impl Jobs {
                 }
                 _ = renew.tick() => {
                     if !self.keeper.renew().await {
+                        gate.cleared();
                         break false;
                     }
+                    gate.renewed();
                 }
                 _ = reap.tick() => {
                     let now = self.clock.now_utc();
@@ -362,6 +544,7 @@ impl Jobs {
                     // A stale token means another node may be taking this site's events in:
                     // do not take one more batch.
                     if !self.keeper.still_held().await {
+                        gate.cleared();
                         break false;
                     }
                     match self.take_in().await {
@@ -383,6 +566,7 @@ impl Jobs {
             Ok(Err(join)) => tracing::warn!(site = %self.site, %join, "job worker task failed"),
             Err(_) => tracing::warn!(site = %self.site, "job worker did not drain in time"),
         }
+        gate.cleared();
         self.keeper.release().await;
         stopped
     }

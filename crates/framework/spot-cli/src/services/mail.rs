@@ -34,8 +34,7 @@ use spot_egress::{
     AllowEntry, EgressPolicy, Guard, InMemorySink, Purpose, Resolver, SystemResolver, TenantPolicy,
 };
 use spot_files::store::FileStore;
-use spot_jobs::QueuePolicy;
-use spot_jobs::worker::JobHandlerRegistry;
+use spot_jobs::worker::{FinalAttemptHook, JobHandlerRegistry};
 use spot_mail::{
     CaptureTransport, MailError, MailTransport, Secret, SmtpConfig, TransportSecurity,
 };
@@ -169,9 +168,6 @@ pub struct Mail {
 
 impl Mail {
     /// Builds the sender over the site's settings.
-    ///
-    /// The queue policy is the engine's default for the `default` queue: the sender needs its
-    /// maximum attempts to recognise the last one.
     pub fn new(settings: Settings) -> Arc<Self> {
         let Settings {
             site,
@@ -233,9 +229,13 @@ impl Mail {
             sent_log: sent_log.unwrap_or_else(|| Arc::new(InMemorySentLog::new())),
             bounces: Arc::clone(&bounces) as Arc<dyn spot_mail_queue::BounceSink>,
         };
-        // The memory sink dials nothing, so there are no pinned addresses to require.
-        let sender =
-            Arc::new(MailSender::new(ports, &QueuePolicy::default()).with_require_pinned(!memory));
+        // The memory sink dials nothing, so there are no pinned addresses to require. The clock
+        // stamps the bounces the final-attempt hook writes.
+        let sender = Arc::new(
+            MailSender::from_ports(ports)
+                .with_clock(clock)
+                .with_require_pinned(!memory),
+        );
         Arc::new(Self {
             sender,
             guard,
@@ -252,6 +252,13 @@ impl Mail {
         if self.enabled {
             self.sender.register(registry);
         }
+    }
+
+    /// The hook the job worker calls once when a mail job's last attempt ends in a timeout, a
+    /// cancellation or a panic, so the job's recipients get their bounce. Register it with the
+    /// jobs service (`Jobs::register_final_attempt_hook`) wherever mail is wired.
+    pub fn final_attempt_hook(&self) -> Arc<dyn FinalAttemptHook> {
+        Arc::clone(&self.sender) as Arc<dyn FinalAttemptHook>
     }
 
     /// The messages the memory sink recorded (the MIME bytes of each), for tests and local

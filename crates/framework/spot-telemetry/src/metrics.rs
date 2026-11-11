@@ -20,6 +20,12 @@ pub const DB_STATEMENTS_TOTAL: &str = "spot_db_statements_total";
 /// Histogram: database statement time in seconds.
 pub const DB_TIME_SECONDS: &str = "spot_db_time_seconds";
 
+/// Counter: coordinator lease events, labelled `lease` (the kind, see [`lease_kind`]) and
+/// `event` (`acquired`, `renewed`, `released`, `lost`, `fence_refused`, `error`).
+pub const LEASE_EVENTS_TOTAL: &str = "spot_lease_events_total";
+/// Gauge: 1 while this process holds a lease of the kind, else 0, labelled `lease`.
+pub const LEASE_HELD: &str = "spot_lease_held";
+
 /// Bucket upper bounds, in seconds, of [`HTTP_REQUEST_DURATION_SECONDS`]: 1 ms to 10 s, roughly
 /// 2.5x apart, so a p99 of an interactive request and of a slow report both land inside.
 pub const HTTP_DURATION_BUCKETS_SECONDS: [f64; 12] = [
@@ -61,6 +67,14 @@ fn build() -> Result<PrometheusHandle, String> {
         DB_TIME_SECONDS,
         metrics::Unit::Seconds,
         "Database statement time"
+    );
+    metrics::describe_counter!(
+        LEASE_EVENTS_TOTAL,
+        "Lease events by lease kind (consumer, scheduler, other) and event"
+    );
+    metrics::describe_gauge!(
+        LEASE_HELD,
+        "1 while this process holds a lease of the kind, else 0"
     );
     Ok(handle)
 }
@@ -120,4 +134,44 @@ pub(crate) fn record_http_request(
 pub(crate) fn record_db_statement(duration: Duration) {
     metrics::counter!(DB_STATEMENTS_TOTAL).increment(1);
     metrics::histogram!(DB_TIME_SECONDS).record(duration.as_secs_f64());
+}
+
+/// The bounded `lease` label for a lease name: `consumer` for the job consumer lease
+/// (`serve:<site>:jobs`), `scheduler` for the schedule leader lease (`scheduler:<site>`) and
+/// `other` for anything else. The name carries the site id, so it is never the label itself.
+pub fn lease_kind(name: &str) -> &'static str {
+    if name.starts_with("serve:") && name.ends_with(":jobs") {
+        "consumer"
+    } else if name.starts_with("scheduler:") {
+        "scheduler"
+    } else {
+        "other"
+    }
+}
+
+/// The events [`record_lease_event`] accepts; anything else is folded to `error`.
+const LEASE_EVENTS: [&str; 6] = [
+    "acquired",
+    "renewed",
+    "released",
+    "lost",
+    "fence_refused",
+    "error",
+];
+
+/// Counts one lease event. `kind` is a [`lease_kind`] result; `event` one of `acquired`,
+/// `renewed`, `released`, `lost`, `fence_refused`, `error` (other values count as `error`, so
+/// the label set stays bounded). A no-op if no recorder is installed.
+pub fn record_lease_event(kind: &'static str, event: &'static str) {
+    let event = if LEASE_EVENTS.contains(&event) {
+        event
+    } else {
+        "error"
+    };
+    metrics::counter!(LEASE_EVENTS_TOTAL, "lease" => kind, "event" => event).increment(1);
+}
+
+/// Sets the held gauge of a lease kind. A no-op if no recorder is installed.
+pub fn set_lease_held(kind: &'static str, held: bool) {
+    metrics::gauge!(LEASE_HELD, "lease" => kind).set(if held { 1.0 } else { 0.0 });
 }

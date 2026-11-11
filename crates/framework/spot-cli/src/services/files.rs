@@ -23,23 +23,27 @@
 
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 
 use axum::body::Bytes;
-use spot_app_api::Operation;
+use spot_app_api::meta::FieldKind;
+use spot_app_api::{HookPoint, Operation, Phase, Target};
 use spot_app_api::context::{Actor, DocumentService, Invocation};
 use spot_app_api::prelude::{Name, RecordId, Value, Version};
 use spot_app_api::{Document, DocumentPatch};
 use spot_core::{Clock, SiteId};
-use spot_document::engine::Authorizer;
+use spot_document::engine::{
+    Authorizer, CommittedBatch, CommittedDelivery, CommittedSteps, CommittedStep, OutboxSink,
+};
 use spot_files::local::LocalFileStore;
 use spot_files::memory::MemoryFileStore;
 use spot_files::store::{Body, FileStore};
 use spot_files_service::{
     AttachAccess, AttachTarget, Caller, CallerSource, Download, DownloadRequest, DownloadStatus,
     FileCtx, FilePolicy, FileRecord, FileRecordStore, FileServiceError, FileState, FilesApi,
-    FilesService, UploadRequest, storage_key,
+    FilesService, FileAttachHook, UploadRequest, storage_key,
 };
 use spot_http::api::files::{
     BoxByteStream, ByteStream, FileDownload, FileGetRequest, FileGetStatus, FilePortError,
@@ -292,6 +296,81 @@ impl DocRecords {
 
     fn field(&self, field: &str) -> ServiceResult<Expr> {
         Ok(Expr::field(&name("f")?, &name(field)?))
+    }
+
+    /// One page of the documents of `doctype` that name a file in any of `fields`, in id order
+    /// after `after`: each with its `(field, file id)` pairs.
+    async fn named_files(
+        &self,
+        doctype: &str,
+        fields: &[String],
+        after: Option<RecordId>,
+        limit: u32,
+    ) -> ServiceResult<Vec<(RecordId, Vec<(String, RecordId)>)>> {
+        let meta = self
+            .live
+            .served()
+            .ok_or_else(|| internal("the site serves no metadata"))?
+            .meta
+            .clone();
+        let catalog = Arc::new(crate::schema::catalog(&meta).map_err(|e| internal(e.0))?);
+        let entity = name(doctype)?;
+        let alias = name("d")?;
+        let mut query = Query::from(&entity, &alias, QueryPath::Report);
+        let id_field = Expr::field(&alias, &name("id")?);
+        let mut selection = vec![Selection {
+            expr: id_field.clone(),
+            alias: name("v0")?,
+        }];
+        let mut named = Vec::new();
+        for (i, field) in fields.iter().enumerate() {
+            let expr = Expr::field(&alias, &name(field)?);
+            selection.push(Selection {
+                expr: expr.clone(),
+                alias: name(&format!("v{}", i + 1))?,
+            });
+            named.push(Expr::Not(Box::new(Expr::IsNull(Box::new(expr)))));
+        }
+        query.select = selection;
+        let mut parts = vec![Expr::Or(named)];
+        if let Some(after) = after {
+            parts.push(id_field.clone().cmp(CmpOp::Gt, Expr::value(Value::Id(after))));
+        }
+        query.filter = Some(Expr::And(parts));
+        query.order_by = vec![Order {
+            expr: id_field,
+            dir: OrderDir::Asc,
+            nulls: Nulls::Last,
+        }];
+        query.limit = Some(limit);
+        let mut tx = self
+            .backend
+            .begin(
+                catalog,
+                TxOptions::new(name("spot_cli_files")?, Isolation::ReadCommitted),
+            )
+            .await
+            .map_err(|e| FileServiceError::store(e.to_string()))?;
+        let rows = tx.query(&query).await;
+        let _ = tx.rollback().await;
+        let rows = rows.map_err(|e| FileServiceError::store(e.to_string()))?;
+        let mut found = Vec::new();
+        for row in rows.rows {
+            let mut cells = row.into_iter();
+            let Some(Value::Id(id)) = cells.next() else {
+                continue;
+            };
+            let pairs = fields
+                .iter()
+                .zip(cells)
+                .filter_map(|(field, value)| match value {
+                    Value::Id(file) => Some((field.clone(), file)),
+                    _ => None,
+                })
+                .collect();
+            found.push((id, pairs));
+        }
+        Ok(found)
     }
 }
 
@@ -648,8 +727,11 @@ fn port_error(error: &FileServiceError) -> FilePortError {
 /// The file service as `spot-http`'s [`FilesPort`].
 pub struct Files {
     service: FilesService,
+    records: Arc<DocRecords>,
+    access: Arc<Access>,
     store: Arc<dyn FileStore>,
     max_bytes: u64,
+    reconciled: AtomicBool,
 }
 
 impl Files {
@@ -665,28 +747,32 @@ impl Files {
             clock: Arc::clone(&settings.clock),
             site: settings.site.clone(),
         });
+        let access = Arc::new(Access {
+            live: Arc::clone(&settings.live),
+            clock: Arc::clone(&settings.clock),
+            site: settings.site.clone(),
+        });
         let policy = FilePolicy {
             max_upload_bytes: settings.max_bytes,
             ..FilePolicy::default()
         };
         let service = FilesService::new(
             Arc::clone(&store),
-            records,
+            records.clone(),
             Arc::new(Callers {
                 live: Arc::clone(&settings.live),
             }),
-            Arc::new(Access {
-                live: Arc::clone(&settings.live),
-                clock: Arc::clone(&settings.clock),
-                site: settings.site.clone(),
-            }),
+            access.clone(),
             policy,
             Arc::clone(&settings.clock),
         );
         Arc::new(Self {
             service,
+            records,
+            access,
             store,
             max_bytes: settings.max_bytes,
+            reconciled: AtomicBool::new(false),
         })
     }
 
@@ -718,6 +804,342 @@ impl Files {
             site: ctx.site.clone(),
             credential: ctx.credential.as_ref().map(|c| c.token.clone()),
         }
+    }
+}
+
+impl FileAttachHook for Files {
+    fn on_document_saved<'a>(
+        &'a self,
+        site: &'a SiteId,
+        doctype: &'a str,
+        id: RecordId,
+        attachments: &'a [(String, RecordId)],
+    ) -> spot_files_service::BoxFuture<'a, ServiceResult<()>> {
+        self.service
+            .on_document_saved(site, doctype, id, attachments)
+    }
+
+    fn on_document_deleted<'a>(
+        &'a self,
+        site: &'a SiteId,
+        doctype: &'a str,
+        id: RecordId,
+    ) -> spot_files_service::BoxFuture<'a, ServiceResult<()>> {
+        self.service.on_document_deleted(site, doctype, id)
+    }
+}
+
+impl Files {
+    /// Re-applies the attach step for every document whose `attach` field names a file that is
+    /// still `pending`: the repair for a crash between a commit and its in-process committed
+    /// step (the host's delivery is not durable, see [`AttachDelivery`]). Runs once per
+    /// process; the step is idempotent, so a node that starts while another already repaired
+    /// the same documents changes nothing. Returns how many documents were repaired.
+    ///
+    /// # Errors
+    /// The record store's failures; the host logs them and starts anyway, because the repair is
+    /// best effort and the next start runs it again.
+    pub async fn reconcile_attachments(&self) -> Result<usize, FileServiceError> {
+        if self.reconciled.swap(true, Ordering::AcqRel) {
+            return Ok(0);
+        }
+        let outcome = self.reconcile_pending().await;
+        if outcome.is_err() {
+            self.reconciled.store(false, Ordering::Release);
+        }
+        outcome
+    }
+
+    async fn reconcile_pending(&self) -> Result<usize, FileServiceError> {
+        const PAGE: u32 = 500;
+        let site = self.records.site.clone();
+        let Some(served) = self.records.live.served() else {
+            return Ok(0);
+        };
+        let mut repaired = 0;
+        for def in served.meta.doctypes() {
+            if def.is_child {
+                continue;
+            }
+            let fields = attach_fields(def);
+            if fields.is_empty() {
+                continue;
+            }
+            let doctype = def.name.as_str().to_owned();
+            let mut after = None;
+            loop {
+                let page = self
+                    .records
+                    .named_files(&doctype, &fields, after, PAGE)
+                    .await?;
+                let Some((last, _)) = page.last() else {
+                    break;
+                };
+                after = Some(*last);
+                let full = page.len() >= PAGE as usize;
+                for (id, pairs) in page {
+                    // The writer of the lost step is not known any more, so a pending file is
+                    // re-attached only when its uploader can read the document (the same bar a
+                    // save by the uploader passes); a file somebody else uploaded stays pending.
+                    let mut pending = false;
+                    let mut kept = Vec::new();
+                    for (field, file) in pairs {
+                        let Some(record) = self.records.get(&site, file).await? else {
+                            continue;
+                        };
+                        if record.state != FileState::Pending {
+                            // Already this document's through this field: keep it named, so
+                            // the step does not orphan it. Any other file (attached to another
+                            // document, or orphaned) is never taken over here.
+                            let own = record.state == FileState::Attached
+                                && record.attached_to.as_ref().is_some_and(|t| {
+                                    t.doctype == doctype
+                                        && t.id == id
+                                        && t.field.as_deref() == Some(field.as_str())
+                                });
+                            if own {
+                                kept.push((field, file));
+                            }
+                            continue;
+                        }
+                        let target = AttachTarget::field(&doctype, id, field.clone());
+                        let uploader = Caller::User(record.uploaded_by);
+                        if !record.quarantined
+                            && self.access.may_read(&uploader, &target).await?
+                        {
+                            pending = true;
+                            kept.push((field, file));
+                        }
+                    }
+                    if pending {
+                        self.service
+                            .on_document_saved(&site, &doctype, id, &kept)
+                            .await?;
+                        repaired += 1;
+                    }
+                }
+                if !full {
+                    break;
+                }
+            }
+        }
+        if repaired > 0 {
+            tracing::warn!(repaired, "re-applied lost file attach steps at start");
+        }
+        Ok(repaired)
+    }
+}
+
+/// The names of a DocType's `attach` fields.
+fn attach_fields(def: &spot_app_api::DocTypeDef) -> Vec<String> {
+    def.fields
+        .iter()
+        .filter(|f| matches!(f.kind, FieldKind::Attach { .. }))
+        .map(|f| f.name.as_str().to_owned())
+        .collect()
+}
+
+/// Whether a file may be attached by a save: the decision the files service does not make for
+/// itself, because its attach step is not told who saved.
+pub trait AttachGuard: Send + Sync + 'static {
+    /// `actor` saved document `id` of `doctype` naming `file` in `field`. `true` only when that
+    /// file is the actor's to attach: unknown, quarantined and other documents' files never are.
+    fn may_attach<'a>(
+        &'a self,
+        actor: &'a Actor,
+        doctype: &'a str,
+        id: RecordId,
+        file: RecordId,
+    ) -> spot_files_service::BoxFuture<'a, bool>;
+}
+
+impl AttachGuard for Files {
+    fn may_attach<'a>(
+        &'a self,
+        actor: &'a Actor,
+        doctype: &'a str,
+        id: RecordId,
+        file: RecordId,
+    ) -> spot_files_service::BoxFuture<'a, bool> {
+        Box::pin(async move {
+            let site = &self.records.site;
+            let Ok(Some(record)) = self.records.get(site, file).await else {
+                return false; // unknown, or the record store failed: fail closed
+            };
+            if record.quarantined {
+                return false;
+            }
+            if let Some(target) = &record.attached_to {
+                // Already this document's (the value did not change), or somebody else's.
+                return target.doctype == doctype && target.id == id;
+            }
+            match actor {
+                Actor::User { id: user, .. } => record.uploaded_by == *user,
+                Actor::System { .. } => true,
+                _ => false,
+            }
+        })
+    }
+}
+
+/// The hook and the guard a filled slot holds.
+type Bound<'a> = (&'a Arc<dyn FileAttachHook>, &'a Arc<dyn AttachGuard>);
+
+/// The late-bound place the host keeps the attach hook in.
+///
+/// The host builds the engine, and with it the delivery, before the files service exists, and
+/// the engine cannot change its delivery afterwards; so the delivery holds this slot and the
+/// service fills it once it is built. An empty slot (a host without the files service) means
+/// the wrapper only delegates.
+#[derive(Default)]
+pub struct AttachSlot {
+    hook: OnceLock<Arc<dyn FileAttachHook>>,
+    guard: OnceLock<Arc<dyn AttachGuard>>,
+}
+
+impl AttachSlot {
+    /// An empty slot.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Fills the slot with the files service; the first one stays (`false` when it was already
+    /// filled).
+    pub fn fill(&self, files: Arc<Files>) -> bool {
+        let guard: Arc<dyn AttachGuard> = files.clone();
+        let hook: Arc<dyn FileAttachHook> = files;
+        let _ = self.guard.set(guard);
+        self.hook.set(hook).is_ok()
+    }
+
+    fn get(&self) -> Option<Bound<'_>> {
+        Some((self.hook.get()?, self.guard.get()?))
+    }
+}
+
+/// The delivery that drives the attach lifecycle in the committed phase of a save or a delete.
+///
+/// It wraps the delivery the host already chose and delegates to it first, then, for every
+/// `save_committed` step of a DocType with `attach` fields, hands the files the saved document
+/// names to the hook (which attaches them and orphans whatever the document no longer names),
+/// and for every `delete_committed` step orphans the document's files. A failure is logged and
+/// never fails the save.
+///
+/// The host's delivery is the in-process one, so a crash between commit and step loses the
+/// attach; the hook is idempotent and [`Files::reconcile_attachments`] repairs the loss at
+/// start.
+pub struct AttachDelivery {
+    inner: Arc<dyn CommittedDelivery>,
+    slot: Arc<AttachSlot>,
+    live: Arc<SiteLive>,
+}
+
+impl AttachDelivery {
+    /// Wraps `inner`; `live` supplies the metadata the `attach` fields are read from.
+    pub fn new(
+        inner: Arc<dyn CommittedDelivery>,
+        slot: Arc<AttachSlot>,
+        live: Arc<SiteLive>,
+    ) -> Arc<Self> {
+        Arc::new(Self { inner, slot, live })
+    }
+
+    async fn attach(&self, batch: &CommittedBatch) {
+        let Some((hook, guard)) = self.slot.get() else {
+            return;
+        };
+        for step in &batch.steps {
+            self.step(hook.as_ref(), guard.as_ref(), batch, step).await;
+        }
+    }
+
+    async fn step(
+        &self,
+        hook: &dyn FileAttachHook,
+        guard: &dyn AttachGuard,
+        batch: &CommittedBatch,
+        step: &CommittedStep,
+    ) {
+        let saved = match &step.point {
+            HookPoint::Lifecycle {
+                phase: Phase::Committed,
+                target: Target::Save,
+            } => true,
+            HookPoint::Lifecycle {
+                phase: Phase::Committed,
+                target: Target::Op(Operation::Delete),
+            } => false,
+            _ => return,
+        };
+        let doctype = step.doc.doctype().as_str();
+        let Some(def) = self
+            .live
+            .served()
+            .and_then(|served| served.meta.doctype(doctype))
+        else {
+            return;
+        };
+        let fields = attach_fields(&def);
+        if fields.is_empty() {
+            return;
+        }
+        let id = step.doc.id();
+        let site = &batch.invocation.site;
+        let outcome = if saved {
+            let mut pairs: Vec<(String, RecordId)> = Vec::new();
+            for field in fields {
+                let Value::Id(file) = step.doc.get(&field) else {
+                    continue;
+                };
+                if guard
+                    .may_attach(&batch.invocation.actor, doctype, id, *file)
+                    .await
+                {
+                    pairs.push((field, *file));
+                } else {
+                    tracing::warn!(
+                        doctype,
+                        document = %id,
+                        field = %field,
+                        "a saved document names a file its writer may not attach; not attached"
+                    );
+                }
+            }
+            hook.on_document_saved(site, doctype, id, &pairs).await
+        } else {
+            hook.on_document_deleted(site, doctype, id).await
+        };
+        if let Err(error) = outcome {
+            tracing::warn!(
+                doctype,
+                document = %id,
+                step = %step.point.name(),
+                error = %error,
+                "file attach step failed; the document was saved"
+            );
+        }
+    }
+}
+
+impl CommittedDelivery for AttachDelivery {
+    fn prepare<'a>(
+        &'a self,
+        outbox: &'a mut dyn OutboxSink,
+        batch: &'a CommittedBatch,
+    ) -> spot_app_api::BoxFuture<'a, spot_app_api::AppResult<()>> {
+        self.inner.prepare(outbox, batch)
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        steps: &'a dyn CommittedSteps,
+        batch: CommittedBatch,
+    ) -> spot_app_api::BoxFuture<'a, Vec<spot_app_api::Message>> {
+        Box::pin(async move {
+            let messages = self.inner.deliver(steps, batch.clone()).await;
+            self.attach(&batch).await;
+            messages
+        })
     }
 }
 

@@ -6,7 +6,7 @@ use windows::Win32::System::Services::{
     OpenServiceW, QUERY_SERVICE_CONFIGW, QueryServiceConfig2W, QueryServiceStatusEx, SC_ACTION,
     SC_ACTION_NONE, SC_ACTION_REBOOT, SC_ACTION_RESTART, SC_ENUM_PROCESS_INFO, SC_MANAGER_CONNECT,
     SC_MANAGER_ENUMERATE_SERVICE, SC_STATUS_PROCESS_INFO, SERVICE_ALL_ACCESS, SERVICE_AUTO_START,
-    SERVICE_BOOT_START, SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONTROL,
+    SERVICE_BOOT_START, SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_FAILURE_ACTIONS,
     SERVICE_CONTROL_STOP, SERVICE_DEMAND_START, SERVICE_DISABLED, SERVICE_ERROR,
     SERVICE_FAILURE_ACTIONSW, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
     SERVICE_START_TYPE, SERVICE_STATE_ALL, SERVICE_STATUS, SERVICE_STATUS_CURRENT_STATE,
@@ -15,11 +15,11 @@ use windows::Win32::System::Services::{
 use windows::core::PCWSTR;
 
 use super::{RealWin, api, name_to_string, pcwstr, pwstr_to_string, wide};
-use crate::api::{RecoveryAction, RecoveryConfig, ServiceInfo, ServiceState, StartType, WinApi};
+use crate::api::{RecoveryAction, RecoveryConfig, ServiceInfo, ServiceState, StartType};
 use crate::error::WindowsError;
 
-impl WinApi for RealWin {
-    fn list_services(&self) -> Result<Vec<ServiceInfo>, WindowsError> {
+impl RealWin {
+    pub(super) fn list_services(&self) -> Result<Vec<ServiceInfo>, WindowsError> {
         // SAFETY: the SCM handle is closed before returning on every path; the enumeration
         // buffer is a plain byte slice the API fills.
         unsafe {
@@ -73,7 +73,7 @@ impl WinApi for RealWin {
         }
     }
 
-    fn service_status(&self, name: &str) -> Result<ServiceInfo, WindowsError> {
+    pub(super) fn service_status(&self, name: &str) -> Result<ServiceInfo, WindowsError> {
         let name = wide(name);
         // SAFETY: both handles are closed before returning.
         unsafe {
@@ -114,15 +114,23 @@ impl WinApi for RealWin {
         }
     }
 
-    fn start_service(&self, name: &str, timeout_seconds: u64) -> Result<(), WindowsError> {
+    pub(super) fn start_service(
+        &self,
+        name: &str,
+        timeout_seconds: u64,
+    ) -> Result<(), WindowsError> {
         self.control_service(name, SERVICE_START, SERVICE_RUNNING, timeout_seconds)
     }
 
-    fn stop_service(&self, name: &str, timeout_seconds: u64) -> Result<(), WindowsError> {
+    pub(super) fn stop_service(
+        &self,
+        name: &str,
+        timeout_seconds: u64,
+    ) -> Result<(), WindowsError> {
         self.control_service(name, SERVICE_CONTROL_STOP, SERVICE_STOPPED, timeout_seconds)
     }
 
-    fn set_service_start_type(
+    pub(super) fn set_service_start_type(
         &self,
         name: &str,
         start_type: StartType,
@@ -162,7 +170,7 @@ impl WinApi for RealWin {
         }
     }
 
-    fn service_recovery(&self, name: &str) -> Result<RecoveryConfig, WindowsError> {
+    pub(super) fn service_recovery(&self, name: &str) -> Result<RecoveryConfig, WindowsError> {
         let name = wide(name);
         // SAFETY: both handles are closed before returning; the query buffer is owned here.
         unsafe {
@@ -209,7 +217,7 @@ impl WinApi for RealWin {
         }
     }
 
-    fn set_service_recovery(
+    pub(super) fn set_service_recovery(
         &self,
         name: &str,
         recovery: &RecoveryConfig,
@@ -262,7 +270,7 @@ impl RealWin {
     fn control_service(
         &self,
         name: &str,
-        control: SERVICE_CONTROL,
+        control: u32,
         wanted: SERVICE_STATUS_CURRENT_STATE,
         timeout_seconds: u64,
     ) -> Result<(), WindowsError> {

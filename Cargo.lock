@@ -7038,6 +7038,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-capture-invariant-pg"
+version = "0.1.0"
+dependencies = [
+ "deadpool-postgres",
+ "spot-capture-invariant",
+ "spot-postgres",
+ "spot-storage-contract",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "spot-channel-leakcheck"
 version = "0.1.0"
 dependencies = [
@@ -7066,9 +7079,11 @@ dependencies = [
  "axum",
  "clap",
  "deadpool-postgres",
+ "futures-core",
  "http",
  "jiff",
  "metrics",
+ "redis",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -7088,6 +7103,10 @@ dependencies = [
  "spot-bpm-pg",
  "spot-bulk-data",
  "spot-bundle-signing",
+ "spot-cache",
+ "spot-capture-invariant",
+ "spot-capture-invariant-pg",
+ "spot-cluster-redis",
  "spot-conditions",
  "spot-conditions-pg",
  "spot-controllers",
@@ -7121,6 +7140,8 @@ dependencies = [
  "spot-manifest",
  "spot-meta",
  "spot-meta-live",
+ "spot-migration-apply",
+ "spot-migration-apply-pg",
  "spot-node-role-pg",
  "spot-pack",
  "spot-partition",

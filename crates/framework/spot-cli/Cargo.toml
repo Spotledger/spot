@@ -98,6 +98,11 @@ time = { version = "0.3", features = ["parsing", "macros", "formatting"] }
 spot-conditions = { path = "../spot-conditions" }
 spot-conditions-pg = { path = "../../backends/spot-conditions-pg" }
 spot-sync-conditions = { path = "../spot-sync-conditions" }
+# The journal capture invariant (WP-JRN-02.T3): the checker's types and the PostgreSQL readers
+# `services/capture_invariant.rs` runs on a loop; the site's own pool is a deadpool pool.
+spot-capture-invariant = { path = "../spot-capture-invariant" }
+spot-capture-invariant-pg = { path = "../../backends/spot-capture-invariant-pg" }
+deadpool-postgres = "0.14"
 
 # Node role record (WP-RTB-03.T1): stored by the storage crate of WP-RTB-03.T5, so this crate holds no SQL.
 spot-node-role-pg = { path = "../../backends/spot-node-role-pg" }
@@ -133,6 +138,21 @@ spot-bpm-documents = { path = "../spot-bpm-documents", features = ["pg"] }
 spot-dag = { path = "../spot-dag" }
 # `EdgeTypeId`: the stable id of the service-principal audit edge type this module writes.
 spot-graph-model = { path = "../spot-graph-model" }
+# `spot console` (WP-PRD-01.T30): the maintenance gate it reads before any write. The gate type and
+# its PostgreSQL wiring; no other part of the migration apply engine is used here.
+spot-migration-apply = { path = "../spot-migration-apply" }
+spot-migration-apply-pg = { path = "../../backends/spot-migration-apply-pg" }
+
+# The optional Redis/Valkey plugin (WP-PLT-19.T2): the cluster-redis profile hosting in
+# `services/cluster_redis.rs`. Nothing here is used unless `[services.cluster_redis]` is enabled.
+spot-cluster-redis = { path = "../../backends/spot-cluster-redis", features = ["redis"] }
+# The `CacheStore` port the plugin provides.
+spot-cache = { path = "../spot-cache" }
+# The start-up check runs raw commands the plugin's own API does not offer (`INFO`, `TIME` and
+# `ACL DRYRUN`); same version and features as `spot-cluster-redis`.
+redis = { version = "1", default-features = false, features = ["aio", "tokio-comp", "connection-manager"] }
+# The merged bus subscription (`FallbackBus`) is a `Stream`; the same crate `spot-meta-live` uses.
+futures-core = "0.3"
 
 [dev-dependencies]
 spot-node-role-pg = { path = "../../backends/spot-node-role-pg", features = ["testing"] }

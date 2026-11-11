@@ -130,6 +130,43 @@ async fn is_serving(node: &Node) -> bool {
     matches!(client.session().await, Ok(reply) if reply.status == 200)
 }
 
+const HUB_ONLY_ROUTES: &[&str] = &[
+    "/api/v1/sync/hub/status",
+    "/api/v1/journal/segments",
+    "/api/v1/enrolment/codes",
+];
+
+/// Whether `node` answers every hub-only route with `501 service.not_configured` (WP-RTB-03.T6),
+/// and its readiness is up.
+async fn hub_routes_are_not_configured(node: &Node) -> bool {
+    let client = node.client().expect("a running node has a client");
+    let ready = client.health("ready").await.expect("readiness answers");
+    assert_eq!(ready.status, 200, "readiness: {}", ready.text());
+    for path in HUB_ONLY_ROUTES {
+        let reply = client.get(path).await.expect("the route answers");
+        let code = reply.json()["error"]["code"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        if reply.status != 501 || code != "service.not_configured" {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether `node` leaves the hub-only routes to the hub services (nothing answers `501` for them).
+async fn hub_routes_are_left_to_the_hub(node: &Node) -> bool {
+    let client = node.client().expect("a running node has a client");
+    for path in HUB_ONLY_ROUTES {
+        let reply = client.get(path).await.expect("the route answers");
+        if reply.status == 501 {
+            return false;
+        }
+    }
+    true
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn standalone_hub_and_edge_start_the_role_s_own_service_set() {
     let mut cluster = Cluster::new();
@@ -149,6 +186,10 @@ async fn standalone_hub_and_edge_start_the_role_s_own_service_set() {
         is_serving(cluster.node("standalone-a")).await,
         "a standalone site serves with no sync service at all"
     );
+    assert!(
+        hub_routes_are_not_configured(cluster.node("standalone-a")).await,
+        "a standalone carries no hub service"
+    );
 
     // --- hub: role_fragment documents the intent; the real wiring is [services.node_role]
     // with the `listen` address its (not-yet-built, WP-RTB-02) sync_hub service would bind.
@@ -166,6 +207,10 @@ async fn standalone_hub_and_edge_start_the_role_s_own_service_set() {
     assert!(
         is_serving(cluster.node("hub-a")).await,
         "a hub with a listen address serves the full stack plus the hub role"
+    );
+    assert!(
+        hub_routes_are_left_to_the_hub(cluster.node("hub-a")).await,
+        "a hub does not answer its own routes with 501"
     );
 
     // --- edge: role_fragment documents the intent (`hub = "hub-a"`); the real wiring is a
@@ -201,5 +246,9 @@ async fn standalone_hub_and_edge_start_the_role_s_own_service_set() {
     assert!(
         is_serving(cluster.node("edge-a")).await,
         "a fully configured edge serves though no hub is reachable"
+    );
+    assert!(
+        hub_routes_are_not_configured(cluster.node("edge-a")).await,
+        "an edge carries no hub power: every hub-only route is 501 service.not_configured"
     );
 }

@@ -10,69 +10,76 @@ use windows::Win32::System::Com::{
     EXCEPINFO, IDispatch,
 };
 use windows::Win32::System::Variant::{VARIANT, VariantClear};
-use windows::core::{BSTR, GUID, Interface, PCWSTR, w};
+use windows::core::{GUID, PCWSTR, w};
+
+use super::variant::{self, Value};
 
 use super::{RealWin, api, prog_id, wide, with_com};
-use crate::api::{Severity, UpdateInfo, WinApi};
+use crate::api::{Severity, UpdateInfo};
 use crate::error::WindowsError;
 
-impl WinApi for RealWin {
-    fn search_updates(&self, include_hidden: bool) -> Result<Vec<UpdateInfo>, WindowsError> {
+impl RealWin {
+    pub(super) fn search_updates(
+        &self,
+        include_hidden: bool,
+    ) -> Result<Vec<UpdateInfo>, WindowsError> {
         with_com(|| {
             let session = update_session()?;
-            let searcher = dispatch_get(&session, "CreateUpdateSearcher")?;
+            let searcher = dispatch_object(&session, "CreateUpdateSearcher")?;
             let criteria = if include_hidden {
                 "IsInstalled=0 or IsInstalled=1"
             } else {
                 "IsInstalled=0"
             };
-            let result = dispatch_call(&searcher, "Search", &[criteria.to_owned().into()])?;
-            let updates = dispatch_get(&result, "Updates")?;
+            let result = dispatch_call_object(&searcher, "Search", &[criteria.to_owned().into()])?;
+            let updates = dispatch_object(&result, "Updates")?;
             let count = dispatch_get(&updates, "Count")?.as_i32();
             let mut out = Vec::new();
             for index in 0..count {
-                let update = dispatch_call(&updates, "Item", &[index.into()])?;
+                let update = dispatch_call_object(&updates, "Item", &[index.into()])?;
                 out.push(update_info(&update)?);
             }
             Ok(out)
         })
     }
 
-    fn download_update(&self, id: &str) -> Result<(), WindowsError> {
+    pub(super) fn download_update(&self, id: &str) -> Result<(), WindowsError> {
         with_com(|| {
             let session = update_session()?;
-            let searcher = dispatch_get(&session, "CreateUpdateSearcher")?;
-            let result = dispatch_call(&searcher, "Search", &[format!("UpdateID='{id}'")])?;
-            let updates = dispatch_get(&result, "Updates")?;
-            let downloader = dispatch_get(&session, "CreateUpdateDownloader")?;
-            dispatch_put(&downloader, "Updates", &updates)?;
+            let searcher = dispatch_object(&session, "CreateUpdateSearcher")?;
+            let result =
+                dispatch_call_object(&searcher, "Search", &[format!("UpdateID='{id}'").into()])?;
+            let updates = dispatch_object(&result, "Updates")?;
+            let downloader = dispatch_object(&session, "CreateUpdateDownloader")?;
+            dispatch_put(&downloader, "Updates", Dispatch::Object(updates))?;
             dispatch_call(&downloader, "Download", &[])?;
             Ok(())
         })
     }
 
-    fn install_update(&self, id: &str) -> Result<(), WindowsError> {
+    pub(super) fn install_update(&self, id: &str) -> Result<(), WindowsError> {
         with_com(|| {
             let session = update_session()?;
-            let searcher = dispatch_get(&session, "CreateUpdateSearcher")?;
-            let result = dispatch_call(&searcher, "Search", &[format!("UpdateID='{id}'")])?;
-            let updates = dispatch_get(&result, "Updates")?;
-            let installer = dispatch_get(&session, "CreateUpdateInstaller")?;
-            dispatch_put(&installer, "Updates", &updates)?;
+            let searcher = dispatch_object(&session, "CreateUpdateSearcher")?;
+            let result =
+                dispatch_call_object(&searcher, "Search", &[format!("UpdateID='{id}'").into()])?;
+            let updates = dispatch_object(&result, "Updates")?;
+            let installer = dispatch_object(&session, "CreateUpdateInstaller")?;
+            dispatch_put(&installer, "Updates", Dispatch::Object(updates))?;
             dispatch_call(&installer, "Install", &[])?;
             Ok(())
         })
     }
 
-    fn reboot_required(&self) -> Result<bool, WindowsError> {
+    pub(super) fn reboot_required(&self) -> Result<bool, WindowsError> {
         with_com(|| {
             let session = update_session()?;
-            let system = dispatch_get(&session, "CreateUpdateSystemInfo")?;
+            let system = dispatch_object(&session, "CreateUpdateSystemInfo")?;
             Ok(dispatch_get(&system, "RebootRequired")?.as_bool())
         })
     }
 
-    fn schedule_reboot(&self, at_unix_seconds: i64) -> Result<(), WindowsError> {
+    pub(super) fn schedule_reboot(&self, at_unix_seconds: i64) -> Result<(), WindowsError> {
         if at_unix_seconds < 1 {
             return Err(WindowsError::RebootTimeInvalid {
                 at: at_unix_seconds,
@@ -81,7 +88,7 @@ impl WinApi for RealWin {
         Ok(())
     }
 
-    fn scheduled_reboot(&self) -> Result<Option<i64>, WindowsError> {
+    pub(super) fn scheduled_reboot(&self) -> Result<Option<i64>, WindowsError> {
         Ok(None)
     }
 }
@@ -154,9 +161,33 @@ fn dispatch_get(object: &IDispatch, name: &str) -> Result<Dispatch, WindowsError
     dispatch_invoke(object, name, DISPATCH_PROPERTYGET, &[])
 }
 
+/// Reads a property that must be a COM object.
+fn dispatch_object(object: &IDispatch, name: &str) -> Result<IDispatch, WindowsError> {
+    expect_object(dispatch_get(object, name)?, name)
+}
+
+/// Calls a method whose result must be a COM object.
+fn dispatch_call_object(
+    object: &IDispatch,
+    name: &str,
+    args: &[Dispatch],
+) -> Result<IDispatch, WindowsError> {
+    expect_object(dispatch_call(object, name, args)?, name)
+}
+
+/// The COM object in `value`, or a typed error naming what was asked for.
+fn expect_object(value: Dispatch, name: &str) -> Result<IDispatch, WindowsError> {
+    match value {
+        Dispatch::Object(object) => Ok(object),
+        _ => Err(WindowsError::Api {
+            detail: format!("{name} did not return an object"),
+        }),
+    }
+}
+
 /// Writes a property on a late-bound object.
-fn dispatch_put(object: &IDispatch, name: &str, value: &Dispatch) -> Result<(), WindowsError> {
-    let _ = dispatch_invoke(object, name, DISPATCH_PROPERTYPUT, &[value.clone()])?;
+fn dispatch_put(object: &IDispatch, name: &str, value: Dispatch) -> Result<(), WindowsError> {
+    let _ = dispatch_invoke(object, name, DISPATCH_PROPERTYPUT, &[value])?;
     Ok(())
 }
 
@@ -193,18 +224,26 @@ fn dispatch_invoke(
     let mut variants: Vec<VARIANT> = args
         .iter()
         .map(|argument| match argument {
-            Dispatch::Object(object) => VARIANT::from(object.clone()),
-            Dispatch::Int(value) => VARIANT::from(*value),
-            Dispatch::Bool(value) => VARIANT::from(*value),
-            Dispatch::Text(value) => VARIANT::from(BSTR::from(value.as_str())),
+            Dispatch::Object(object) => variant::from_object(object.clone()),
+            Dispatch::Int(value) => variant::from_i32(*value),
+            Dispatch::Bool(value) => variant::from_bool(*value),
+            Dispatch::Text(value) => variant::from_text(value),
         })
         .collect();
     variants.reverse();
-    let mut params = DISPPARAMS {
+    // A property put names its one argument `DISPID_PROPERTYPUT` (-3); a plain call has
+    // no named arguments.
+    let mut put_dispid = -3i32;
+    let named = flags == DISPATCH_PROPERTYPUT;
+    let params = DISPPARAMS {
         rgvarg: variants.as_mut_ptr(),
-        rgdispidNamedArgs: std::ptr::null_mut(),
-        cArgs: variants.len() as u32,
-        cNamedArgs: 0,
+        rgdispidNamedArgs: if named {
+            &raw mut put_dispid
+        } else {
+            std::ptr::null_mut()
+        },
+        cArgs: u32::try_from(variants.len()).unwrap_or(u32::MAX),
+        cNamedArgs: u32::from(named),
     };
     let mut result = VARIANT::default();
     let mut exception = EXCEPINFO::default();
@@ -216,10 +255,10 @@ fn dispatch_invoke(
             &GUID::zeroed(),
             0,
             flags,
-            &mut params,
-            Some(&mut result),
-            Some(&mut exception),
-            Some(&mut argument_error),
+            &raw const params,
+            Some(&raw mut result),
+            Some(&raw mut exception),
+            Some(&raw mut argument_error),
         )
     };
     // SAFETY: every variant in the argument array was created above and is owned here.
@@ -228,36 +267,31 @@ fn dispatch_invoke(
             let _ = VariantClear(variant);
         }
     }
+    let value = dispatch_value(&result);
+    // SAFETY: `result` was filled by Invoke (or is still empty); the value above holds its
+    // own copy of any string or object reference.
+    unsafe {
+        let _ = VariantClear(&mut result);
+    }
     api(invoked)?;
-    Ok(dispatch_value(&result))
+    Ok(value)
 }
 
 /// Converts a COM result `VARIANT` into a [`Dispatch`].
 fn dispatch_value(value: &VARIANT) -> Dispatch {
-    if let Ok(object) = Interface::cast::<IDispatch>(value) {
-        return Dispatch::Object(object);
+    match variant::read(value) {
+        Value::Object(object) => Dispatch::Object(object),
+        Value::Text(text) => Dispatch::Text(text),
+        Value::Bool(flag) => Dispatch::Bool(flag),
+        Value::Int(number) => Dispatch::Int(number),
+        Value::Other => Dispatch::Int(0),
     }
-    if let Ok(text) = BSTR::try_from(value) {
-        return Dispatch::Text(text.to_string());
-    }
-    Dispatch::Int(0)
 }
 
 /// Reads one offered update into an [`UpdateInfo`].
-fn update_info(update: &Dispatch) -> Result<UpdateInfo, WindowsError> {
-    let Dispatch::Object(object) = update else {
-        return Err(WindowsError::Api {
-            detail: "the update is not an object".to_owned(),
-        });
-    };
-    let update_id = match dispatch_get(object, "Identity")? {
-        Dispatch::Object(identity) => dispatch_get(&identity, "UpdateID")?,
-        _ => {
-            return Err(WindowsError::Api {
-                detail: "the update identity is missing".to_owned(),
-            });
-        }
-    };
+fn update_info(object: &IDispatch) -> Result<UpdateInfo, WindowsError> {
+    let identity = dispatch_object(object, "Identity")?;
+    let update_id = dispatch_get(&identity, "UpdateID")?;
     let title = dispatch_get(object, "Title")?;
     let severity = dispatch_get(object, "MsrcSeverity")?;
     Ok(UpdateInfo {

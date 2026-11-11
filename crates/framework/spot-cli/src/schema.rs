@@ -119,6 +119,22 @@ pub fn extra_tables() -> Result<Vec<ExtraTable>> {
                 .map_err(|e| Error(e.reason.clone()))?,
         );
     }
+    // The capture invariant's watermark table (WP-JRN-02.T3): the host starts that service
+    // degraded with it missing and says to run `spot migrate`; it never creates one itself.
+    for statement in statements(spot_capture_invariant_pg::schema::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-capture-invariant-pg: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
     Ok(tables)
 }
 

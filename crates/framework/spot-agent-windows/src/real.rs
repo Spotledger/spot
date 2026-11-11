@@ -10,30 +10,38 @@
 //!
 //! # What each submodule binds to
 //!
-//! - [`services`]: the Service Control Manager;
-//! - [`updates`]: the Windows Update Agent, through its `Microsoft.Update.Session` COM
+//! - `services`: the Service Control Manager;
+//! - `updates`: the Windows Update Agent, through its `Microsoft.Update.Session` COM
 //!   object by late-bound `IDispatch` (no invented type library);
-//! - [`firewall`]: the `HNetCfg.FwPolicy2` COM object's `INetFwPolicy2` interface;
-//! - [`users`]: NetAPI.
+//! - `firewall`: the `HNetCfg.FwPolicy2` COM object's `INetFwPolicy2` interface;
+//! - `users`: NetAPI.
 //!
-//! # Not compile-checked on the Linux host
+//! # Verification
 //!
-//! The acceptance for this task runs on Linux, where this module is not compiled; see the
-//! PR for the exact list of calls that were written but not compiled here. The trait it
-//! implements is fully exercised against [`crate::fake::FakeWin`] on Linux.
+//! This module does not compile on Linux. It is type-checked and linted for
+//! `x86_64-pc-windows-gnu` from Linux (see the pipeline notes), which proves the
+//! bindings match the `windows` crate but not that the calls behave as intended; that
+//! needs a Windows runner. The trait it implements is fully exercised against
+//! [`crate::fake::FakeWin`] on Linux.
 
 #![allow(unsafe_code)]
 
+use windows::Win32::NetworkManagement::NetManagement::NetApiBufferFree;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::core::{PCWSTR, PWSTR};
 
-use crate::api::WinApi;
+use crate::api::{
+    FirewallRule, LocalGroup, LocalUser, Profile, RecoveryConfig, ServiceInfo, StartType,
+    UpdateInfo, WinApi,
+};
 use crate::error::WindowsError;
+use crate::secrets::Secret;
 
 mod firewall;
 mod services;
 mod updates;
 mod users;
+mod variant;
 
 /// The real [`WinApi`] over the `windows` crate.
 #[derive(Clone, Copy, Debug, Default)]
@@ -44,6 +52,27 @@ impl RealWin {
     #[must_use]
     pub fn new() -> Self {
         Self
+    }
+}
+
+/// A buffer the NetAPI allocated for the caller, freed with `NetApiBufferFree` on drop.
+struct NetBuffer(*mut u8);
+
+impl NetBuffer {
+    fn new() -> Self {
+        Self(std::ptr::null_mut())
+    }
+}
+
+impl Drop for NetBuffer {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: the pointer was returned by a NetAPI call that allocates for the
+            // caller and is freed exactly once, here.
+            unsafe {
+                let _ = NetApiBufferFree(Some(self.0.cast_const().cast()));
+            }
+        }
     }
 }
 
@@ -104,14 +133,132 @@ fn name_to_string(buffer: &[u16]) -> String {
 
 /// Resolves a ProgID to a CLSID, so no COM identity is hard-coded in this crate.
 fn prog_id(prog: windows::core::PCWSTR) -> Result<windows::core::GUID, WindowsError> {
-    let mut clsid = windows::core::GUID::zeroed();
-    // SAFETY: the ProgID is a static wide string and `clsid` is a valid out-pointer.
-    unsafe {
-        api(windows::Win32::System::Com::CLSIDFromProgID(
-            prog, &mut clsid,
-        ))?
-    };
-    Ok(clsid)
+    // SAFETY: the ProgID is a static, NUL-terminated wide string.
+    unsafe { api(windows::Win32::System::Com::CLSIDFromProgID(prog)) }
+}
+
+impl WinApi for RealWin {
+    fn list_services(&self) -> Result<Vec<ServiceInfo>, WindowsError> {
+        RealWin::list_services(self)
+    }
+
+    fn service_status(&self, name: &str) -> Result<ServiceInfo, WindowsError> {
+        RealWin::service_status(self, name)
+    }
+
+    fn start_service(&self, name: &str, timeout_seconds: u64) -> Result<(), WindowsError> {
+        RealWin::start_service(self, name, timeout_seconds)
+    }
+
+    fn stop_service(&self, name: &str, timeout_seconds: u64) -> Result<(), WindowsError> {
+        RealWin::stop_service(self, name, timeout_seconds)
+    }
+
+    fn set_service_start_type(
+        &self,
+        name: &str,
+        start_type: StartType,
+    ) -> Result<(), WindowsError> {
+        RealWin::set_service_start_type(self, name, start_type)
+    }
+
+    fn service_recovery(&self, name: &str) -> Result<RecoveryConfig, WindowsError> {
+        RealWin::service_recovery(self, name)
+    }
+
+    fn set_service_recovery(
+        &self,
+        name: &str,
+        recovery: &RecoveryConfig,
+    ) -> Result<(), WindowsError> {
+        RealWin::set_service_recovery(self, name, recovery)
+    }
+
+    fn search_updates(&self, include_hidden: bool) -> Result<Vec<UpdateInfo>, WindowsError> {
+        RealWin::search_updates(self, include_hidden)
+    }
+
+    fn download_update(&self, id: &str) -> Result<(), WindowsError> {
+        RealWin::download_update(self, id)
+    }
+
+    fn install_update(&self, id: &str) -> Result<(), WindowsError> {
+        RealWin::install_update(self, id)
+    }
+
+    fn reboot_required(&self) -> Result<bool, WindowsError> {
+        RealWin::reboot_required(self)
+    }
+
+    fn schedule_reboot(&self, at_unix_seconds: i64) -> Result<(), WindowsError> {
+        RealWin::schedule_reboot(self, at_unix_seconds)
+    }
+
+    fn scheduled_reboot(&self) -> Result<Option<i64>, WindowsError> {
+        RealWin::scheduled_reboot(self)
+    }
+
+    fn list_firewall_rules(&self) -> Result<Vec<FirewallRule>, WindowsError> {
+        RealWin::list_firewall_rules(self)
+    }
+
+    fn add_firewall_rule(&self, rule: &FirewallRule) -> Result<(), WindowsError> {
+        RealWin::add_firewall_rule(self, rule)
+    }
+
+    fn remove_firewall_rule(&self, name: &str) -> Result<(), WindowsError> {
+        RealWin::remove_firewall_rule(self, name)
+    }
+
+    fn set_profile_enabled(&self, profile: Profile, enabled: bool) -> Result<(), WindowsError> {
+        RealWin::set_profile_enabled(self, profile, enabled)
+    }
+
+    fn profile_enabled(&self, profile: Profile) -> Result<bool, WindowsError> {
+        RealWin::profile_enabled(self, profile)
+    }
+
+    fn list_local_users(&self) -> Result<Vec<LocalUser>, WindowsError> {
+        RealWin::list_local_users(self)
+    }
+
+    fn local_user(&self, name: &str) -> Result<LocalUser, WindowsError> {
+        RealWin::local_user(self, name)
+    }
+
+    fn create_local_user(
+        &self,
+        name: &str,
+        password: &Secret,
+        full_name: &str,
+        comment: &str,
+    ) -> Result<(), WindowsError> {
+        RealWin::create_local_user(self, name, password, full_name, comment)
+    }
+
+    fn set_user_enabled(&self, name: &str, enabled: bool) -> Result<(), WindowsError> {
+        RealWin::set_user_enabled(self, name, enabled)
+    }
+
+    fn set_user_password(&self, name: &str, password: &Secret) -> Result<(), WindowsError> {
+        RealWin::set_user_password(self, name, password)
+    }
+
+    fn set_user_groups(&self, name: &str, groups: &[String]) -> Result<(), WindowsError> {
+        RealWin::set_user_groups(self, name, groups)
+    }
+
+    fn list_local_groups(&self) -> Result<Vec<LocalGroup>, WindowsError> {
+        RealWin::list_local_groups(self)
+    }
+
+    fn add_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
+        RealWin::add_group_member(self, group, user)
+    }
+
+    fn remove_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
+        RealWin::remove_group_member(self, group, user)
+    }
 }
 
 /// Keeps the `WinApi` import meaningful on every path of the crate.

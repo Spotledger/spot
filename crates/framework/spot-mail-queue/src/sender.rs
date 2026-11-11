@@ -75,7 +75,6 @@ use spot_egress::{Authorized, EgressError, Guard, Purpose};
 use spot_files::error::FileError;
 use spot_files::key::FileKey;
 use spot_files::store::FileStore;
-use spot_jobs::QueuePolicy;
 use spot_jobs::model::{Job, JobId};
 use spot_jobs::worker::{
     BoxFuture, FinalAttemptHook, HandlerResult, JobContext, JobHandlerRegistry,
@@ -194,14 +193,6 @@ impl MailSender {
             require_pinned: true,
             clock: Arc::new(spot_core::SystemClock::new()),
         }
-    }
-
-    /// The constructor from before the final-attempt signal existed. `queue` is **ignored**; it
-    /// stays only so a caller outside this crate (the CLI's mail service) keeps compiling until
-    /// it drops the argument. Use [`from_ports`](Self::from_ports).
-    pub fn new(ports: MailPorts, queue: &QueuePolicy) -> Self {
-        let _ = queue;
-        Self::from_ports(ports)
     }
 
     /// Sets the clock that stamps the records the dead-job hook writes. The default is the
@@ -737,15 +728,26 @@ impl MailSender {
                 failed += 1;
             }
         }
-        tracing::error!(
-            code = codes::RETRIES_EXHAUSTED,
-            message_id = %mail.message_id,
-            job_id = job.id.0,
-            reason,
-            written,
-            failed,
-            "a mail job died on its last attempt; its recipients have bounce records"
-        );
+        if failed == 0 {
+            tracing::error!(
+                code = codes::RETRIES_EXHAUSTED,
+                message_id = %mail.message_id,
+                job_id = job.id.0,
+                reason,
+                written,
+                "a mail job died on its last attempt; every recipient it had not already answered has a bounce record"
+            );
+        } else {
+            tracing::error!(
+                code = codes::BOUNCE_UNAVAILABLE,
+                message_id = %mail.message_id,
+                job_id = job.id.0,
+                reason,
+                written,
+                failed,
+                "a mail job died on its last attempt; some recipients have no bounce record because the bounce sink refused the write"
+            );
+        }
     }
 }
 

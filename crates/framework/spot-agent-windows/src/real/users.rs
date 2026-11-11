@@ -4,17 +4,18 @@ use windows::Win32::NetworkManagement::NetManagement::{
     LOCALGROUP_MEMBERS_INFO_3, LOCALGROUP_USERS_INFO_0, NERR_GroupNotFound, NERR_UserNotFound,
     NetLocalGroupAddMembers, NetLocalGroupDelMembers, NetLocalGroupEnum, NetLocalGroupGetMembers,
     NetUserAdd, NetUserEnum, NetUserGetInfo, NetUserGetLocalGroups, NetUserSetInfo,
-    UF_ACCOUNTDISABLE, UF_SCRIPT, USER_INFO_0, USER_INFO_1, USER_INFO_1003, USER_PRIV_USER,
+    UF_ACCOUNTDISABLE, UF_SCRIPT, USER_ACCOUNT_FLAGS, USER_INFO_0, USER_INFO_1, USER_INFO_1003,
+    USER_INFO_1008, USER_PRIV_USER,
 };
 use windows::core::{PCWSTR, PWSTR};
 
-use super::{RealWin, net, pcwstr, pwstr_to_string, wide};
-use crate::api::{LocalGroup, LocalUser, WinApi};
+use super::{NetBuffer, RealWin, net, pcwstr, pwstr_to_string, wide};
+use crate::api::{LocalGroup, LocalUser};
 use crate::error::WindowsError;
 use crate::secrets::Secret;
 
-impl WinApi for RealWin {
-    fn list_local_users(&self) -> Result<Vec<LocalUser>, WindowsError> {
+impl RealWin {
+    pub(super) fn list_local_users(&self) -> Result<Vec<LocalUser>, WindowsError> {
         let names = enumerate_users()?;
         let mut users = Vec::with_capacity(names.len());
         for name in names {
@@ -23,7 +24,7 @@ impl WinApi for RealWin {
         Ok(users)
     }
 
-    fn local_user(&self, name: &str) -> Result<LocalUser, WindowsError> {
+    pub(super) fn local_user(&self, name: &str) -> Result<LocalUser, WindowsError> {
         let info = user_info(name)?;
         let groups = user_groups(name)?;
         Ok(LocalUser {
@@ -35,7 +36,7 @@ impl WinApi for RealWin {
         })
     }
 
-    fn create_local_user(
+    pub(super) fn create_local_user(
         &self,
         name: &str,
         password: &Secret,
@@ -62,30 +63,25 @@ impl WinApi for RealWin {
         net(status, "NetUserAdd")
     }
 
-    fn set_user_enabled(&self, name: &str, enabled: bool) -> Result<(), WindowsError> {
+    pub(super) fn set_user_enabled(&self, name: &str, enabled: bool) -> Result<(), WindowsError> {
         let (_, _, flags) = user_flags(name)?;
         let flags = if enabled {
-            flags & !UF_ACCOUNTDISABLE
+            flags & !UF_ACCOUNTDISABLE.0
         } else {
-            flags | UF_ACCOUNTDISABLE
+            flags | UF_ACCOUNTDISABLE.0
         };
-        let mut name_w = wide(name);
-        let info = USER_INFO_1 {
-            usri1_name: PWSTR(name_w.as_mut_ptr()),
-            usri1_password: PWSTR::null(),
-            usri1_password_age: 0,
-            usri1_priv: USER_PRIV_USER,
-            usri1_home_dir: PWSTR::null(),
-            usri1_comment: PWSTR::null(),
-            usri1_flags: flags,
-            usri1_script_path: PWSTR::null(),
+        let name_w = wide(name);
+        // Level 1008 sets the account flags and nothing else, so no other field (password,
+        // comment, home directory) is touched.
+        let info = USER_INFO_1008 {
+            usri1008_flags: USER_ACCOUNT_FLAGS(flags),
         };
-        // SAFETY: the info struct borrows the wide buffer for the call only.
+        // SAFETY: the info struct lives for the call; the name buffer is NUL-terminated.
         let status = unsafe {
             NetUserSetInfo(
                 PCWSTR::null(),
                 pcwstr(&name_w),
-                1,
+                1008,
                 (&raw const info).cast(),
                 None,
             )
@@ -93,7 +89,11 @@ impl WinApi for RealWin {
         net(status, "NetUserSetInfo")
     }
 
-    fn set_user_password(&self, name: &str, password: &Secret) -> Result<(), WindowsError> {
+    pub(super) fn set_user_password(
+        &self,
+        name: &str,
+        password: &Secret,
+    ) -> Result<(), WindowsError> {
         let name_w = wide(name);
         let mut password_w = wide(password.expose());
         let info = USER_INFO_1003 {
@@ -112,7 +112,11 @@ impl WinApi for RealWin {
         net(status, "NetUserSetInfo")
     }
 
-    fn set_user_groups(&self, name: &str, groups: &[String]) -> Result<(), WindowsError> {
+    pub(super) fn set_user_groups(
+        &self,
+        name: &str,
+        groups: &[String],
+    ) -> Result<(), WindowsError> {
         let current = user_groups(name)?;
         for group in &current {
             if !groups.iter().any(|wanted| wanted == group) {
@@ -127,7 +131,7 @@ impl WinApi for RealWin {
         Ok(())
     }
 
-    fn list_local_groups(&self) -> Result<Vec<LocalGroup>, WindowsError> {
+    pub(super) fn list_local_groups(&self) -> Result<Vec<LocalGroup>, WindowsError> {
         let mut out = Vec::new();
         for name in enumerate_groups()? {
             out.push(LocalGroup {
@@ -139,7 +143,7 @@ impl WinApi for RealWin {
         Ok(out)
     }
 
-    fn add_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
+    pub(super) fn add_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
         let mut group_w = wide(group);
         let mut member_w = wide(user);
         let info = [LOCALGROUP_MEMBERS_INFO_3 {
@@ -153,7 +157,7 @@ impl WinApi for RealWin {
         net(status, "NetLocalGroupAddMembers")
     }
 
-    fn remove_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
+    pub(super) fn remove_group_member(&self, group: &str, user: &str) -> Result<(), WindowsError> {
         let mut group_w = wide(group);
         let mut member_w = wide(user);
         let info = [LOCALGROUP_MEMBERS_INFO_3 {
@@ -171,10 +175,16 @@ impl WinApi for RealWin {
 /// The account name, enabled flag and comment of a local user.
 fn user_info(name: &str) -> Result<(String, bool, String), WindowsError> {
     let name_w = wide(name);
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     // SAFETY: NetUserGetInfo fills `buffer` with a USER_INFO_1.
-    let status =
-        unsafe { NetUserGetInfo(PCWSTR::null(), pcwstr(&name_w), 1, (&raw mut buffer).cast()) };
+    let status = unsafe {
+        NetUserGetInfo(
+            PCWSTR::null(),
+            pcwstr(&name_w),
+            1,
+            (&raw mut buffer.0).cast(),
+        )
+    };
     if status == NERR_UserNotFound {
         return Err(WindowsError::UnknownUser {
             name: name.to_owned(),
@@ -182,10 +192,10 @@ fn user_info(name: &str) -> Result<(String, bool, String), WindowsError> {
     }
     net(status, "NetUserGetInfo")?;
     // SAFETY: the API returned a USER_INFO_1 at `buffer`.
-    let info: USER_INFO_1 = unsafe { std::ptr::read_unaligned(buffer.cast()) };
+    let info: USER_INFO_1 = unsafe { std::ptr::read_unaligned(buffer.0.cast()) };
     Ok((
         pwstr_to_string(info.usri1_name),
-        info.usri1_flags & UF_ACCOUNTDISABLE == 0,
+        info.usri1_flags.0 & UF_ACCOUNTDISABLE.0 == 0,
         pwstr_to_string(info.usri1_comment),
     ))
 }
@@ -193,10 +203,16 @@ fn user_info(name: &str) -> Result<(String, bool, String), WindowsError> {
 /// The raw flags of a local user.
 fn user_flags(name: &str) -> Result<(String, bool, u32), WindowsError> {
     let name_w = wide(name);
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     // SAFETY: NetUserGetInfo fills `buffer` with a USER_INFO_1.
-    let status =
-        unsafe { NetUserGetInfo(PCWSTR::null(), pcwstr(&name_w), 1, (&raw mut buffer).cast()) };
+    let status = unsafe {
+        NetUserGetInfo(
+            PCWSTR::null(),
+            pcwstr(&name_w),
+            1,
+            (&raw mut buffer.0).cast(),
+        )
+    };
     if status == NERR_UserNotFound {
         return Err(WindowsError::UnknownUser {
             name: name.to_owned(),
@@ -204,17 +220,17 @@ fn user_flags(name: &str) -> Result<(String, bool, u32), WindowsError> {
     }
     net(status, "NetUserGetInfo")?;
     // SAFETY: the API returned a USER_INFO_1 at `buffer`.
-    let info: USER_INFO_1 = unsafe { std::ptr::read_unaligned(buffer.cast()) };
+    let info: USER_INFO_1 = unsafe { std::ptr::read_unaligned(buffer.0.cast()) };
     Ok((
         pwstr_to_string(info.usri1_name),
-        info.usri1_flags & UF_ACCOUNTDISABLE == 0,
-        info.usri1_flags,
+        info.usri1_flags.0 & UF_ACCOUNTDISABLE.0 == 0,
+        info.usri1_flags.0,
     ))
 }
 
 /// The names of every local user.
 fn enumerate_users() -> Result<Vec<String>, WindowsError> {
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     let mut read = 0u32;
     let mut total = 0u32;
     // SAFETY: NetUserEnum fills `buffer` with USER_INFO_0 entries.
@@ -223,7 +239,7 @@ fn enumerate_users() -> Result<Vec<String>, WindowsError> {
             PCWSTR::null(),
             0,
             windows::Win32::NetworkManagement::NetManagement::NET_USER_ENUM_FILTER_FLAGS(0),
-            &mut buffer,
+            &mut buffer.0,
             u32::MAX,
             &mut read,
             &mut total,
@@ -235,7 +251,7 @@ fn enumerate_users() -> Result<Vec<String>, WindowsError> {
     for index in 0..read as usize {
         // SAFETY: `buffer` holds `read` USER_INFO_0 entries.
         let info: USER_INFO_0 =
-            unsafe { std::ptr::read_unaligned(buffer.cast::<USER_INFO_0>().add(index)) };
+            unsafe { std::ptr::read_unaligned(buffer.0.cast::<USER_INFO_0>().add(index)) };
         out.push(pwstr_to_string(info.usri0_name));
     }
     Ok(out)
@@ -243,7 +259,7 @@ fn enumerate_users() -> Result<Vec<String>, WindowsError> {
 
 /// The names of every local group.
 fn enumerate_groups() -> Result<Vec<String>, WindowsError> {
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     let mut read = 0u32;
     let mut total = 0u32;
     // SAFETY: NetLocalGroupEnum fills `buffer` with LOCALGROUP_INFO_0 entries.
@@ -251,7 +267,7 @@ fn enumerate_groups() -> Result<Vec<String>, WindowsError> {
         NetLocalGroupEnum(
             PCWSTR::null(),
             0,
-            &mut buffer,
+            &mut buffer.0,
             u32::MAX,
             &mut read,
             &mut total,
@@ -265,6 +281,7 @@ fn enumerate_groups() -> Result<Vec<String>, WindowsError> {
         let info: windows::Win32::NetworkManagement::NetManagement::LOCALGROUP_INFO_0 = unsafe {
             std::ptr::read_unaligned(
                 buffer
+                    .0
                     .cast::<windows::Win32::NetworkManagement::NetManagement::LOCALGROUP_INFO_0>()
                     .add(index),
             )
@@ -277,7 +294,7 @@ fn enumerate_groups() -> Result<Vec<String>, WindowsError> {
 /// The local groups a user belongs to.
 fn user_groups(name: &str) -> Result<Vec<String>, WindowsError> {
     let name_w = wide(name);
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     let mut read = 0u32;
     let mut total = 0u32;
     // SAFETY: NetUserGetLocalGroups fills `buffer` with LOCALGROUP_USERS_INFO_0 entries.
@@ -287,7 +304,7 @@ fn user_groups(name: &str) -> Result<Vec<String>, WindowsError> {
             pcwstr(&name_w),
             0,
             0,
-            &mut buffer,
+            &mut buffer.0,
             u32::MAX,
             &mut read,
             &mut total,
@@ -303,7 +320,7 @@ fn user_groups(name: &str) -> Result<Vec<String>, WindowsError> {
     for index in 0..read as usize {
         // SAFETY: `buffer` holds `read` LOCALGROUP_USERS_INFO_0 entries.
         let info: LOCALGROUP_USERS_INFO_0 = unsafe {
-            std::ptr::read_unaligned(buffer.cast::<LOCALGROUP_USERS_INFO_0>().add(index))
+            std::ptr::read_unaligned(buffer.0.cast::<LOCALGROUP_USERS_INFO_0>().add(index))
         };
         out.push(pwstr_to_string(info.lgrui0_name));
     }
@@ -313,7 +330,7 @@ fn user_groups(name: &str) -> Result<Vec<String>, WindowsError> {
 /// The members of a local group.
 fn group_members(group: &str) -> Result<Vec<String>, WindowsError> {
     let group_w = wide(group);
-    let mut buffer: *mut u8 = std::ptr::null_mut();
+    let mut buffer = NetBuffer::new();
     let mut read = 0u32;
     let mut total = 0u32;
     // SAFETY: NetLocalGroupGetMembers fills `buffer` with LOCALGROUP_MEMBERS_INFO_3 entries.
@@ -322,7 +339,7 @@ fn group_members(group: &str) -> Result<Vec<String>, WindowsError> {
             PCWSTR::null(),
             pcwstr(&group_w),
             3,
-            &mut buffer,
+            &mut buffer.0,
             u32::MAX,
             &mut read,
             &mut total,
@@ -339,7 +356,7 @@ fn group_members(group: &str) -> Result<Vec<String>, WindowsError> {
     for index in 0..read as usize {
         // SAFETY: `buffer` holds `read` LOCALGROUP_MEMBERS_INFO_3 entries.
         let info: LOCALGROUP_MEMBERS_INFO_3 = unsafe {
-            std::ptr::read_unaligned(buffer.cast::<LOCALGROUP_MEMBERS_INFO_3>().add(index))
+            std::ptr::read_unaligned(buffer.0.cast::<LOCALGROUP_MEMBERS_INFO_3>().add(index))
         };
         out.push(pwstr_to_string(info.lgrmi3_domainandname));
     }

@@ -9,6 +9,49 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.4] - 2026-11-12
+
+Runtime changes since 0.1.3: an administrator console, lease metrics, role-conditioned services and
+several host wiring steps. Still pre-release; see [ROADMAP.md](ROADMAP.md) for what is not ready.
+
+### Added
+
+- `spot console`: an administrator's interactive and scripted session over the document engine,
+  run as a named user. Commands get, list, create, update and delete documents, call a function
+  and run a report. Every command goes through the real permission path and is audited; there
+  is no raw SQL.
+- Lease metrics on `/metrics`: `spot_lease_events_total` and `spot_lease_held`, recorded by a
+  decorator around the coordinator that the host builds.
+- Role-conditioned services: the services registry can enable or disable a service module by node
+  role (standalone, hub, edge). Each role starts, and lists in readiness, exactly its own set;
+  hub-only routes answer 501 on a node that is not a hub.
+- The cluster profile can provide the cache, the coordinator and the invalidation bus from
+  Redis or Valkey when configured. It fails closed when the coordinator is lost.
+- The files service is installed as a step of the document engine: saving a document with an
+  `attach` field marks the file attached, replacing the value orphans the old file, and deleting
+  the document releases it.
+- The mail sender is registered as the job worker's final-attempt hook, so a mail that fails its
+  last attempt produces one bounce per recipient.
+- A capture-invariant check that runs against the real change feed and the real document-state
+  events. It runs continuously in bounded memory on the scheduler, raises and clears a mismatch
+  alarm, and is also a CI gate.
+- The Windows-specific code of the agent crates compiles and lints on Windows runners, and a
+  weekly Windows build catches regressions.
+- A host-level test against PostgreSQL of the open-path allow-list: a normal route answers 401
+  without a session, a declared open path is reachable, and undeclared or reserved paths cannot
+  be opened.
+
+### Changed
+
+- The job worker claims a job only while the node's coordinator lease is current. The lease check
+  is cached for at most 500 ms, so a worker that has lost its lease stops claiming within that
+  bound instead of waiting for the next renewal.
+
+### Known limitations
+
+- The request log may still include concrete paths on open routes; a change to stop this is
+  planned.
+
 ## [0.1.3] - 2026-11-11
 
 Continuous integration on GitHub-hosted runners, and nothing else.

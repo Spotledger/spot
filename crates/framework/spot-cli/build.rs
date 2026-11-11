@@ -149,6 +149,70 @@ pub fn generate(manifest_dir: &str, modules: &[Module]) -> String {
     out
 }
 
+// --- roles ------------------------------------------------------------------------------------
+
+/// The roles a module file's `pub const ROLES: &[&str] = &["hub", "edge"];` declares, if any. The
+/// declaration is one statement at column 0 (it may span lines); the names are string literals.
+#[allow(dead_code)]
+pub fn roles_of(source: &str) -> Option<Vec<String>> {
+    let start = source
+        .find("\npub const ROLES: &[&str]")
+        .map(|i| i + 1)
+        .or_else(|| source.starts_with("pub const ROLES: &[&str]").then_some(0))?;
+    let statement = &source[start..];
+    let end = statement.find(';')?;
+    let body = &statement[..end];
+    let eq = body.find('=')?;
+    let open = eq + body[eq..].find('[')?;
+    let list = &body[open + 1..body.rfind(']')?];
+    let mut roles = Vec::new();
+    let mut rest = list;
+    while let Some(a) = rest.find('"') {
+        let tail = &rest[a + 1..];
+        let b = tail.find('"')?;
+        roles.push(tail[..b].to_owned());
+        rest = &tail[b + 1..];
+    }
+    Some(roles)
+}
+
+/// The modules (file stems) of `modules` whose files declare `ROLES`. A file that declares
+/// `ROLES` without `register` is an error: the condition would gate nothing.
+#[allow(dead_code)]
+pub fn role_modules(dir: &Path, modules: &[Module]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for m in modules {
+        let path = dir.join(format!("{}.rs", m.name));
+        let source = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", m.path))?;
+        if roles_of(&source).is_some() {
+            if !m.registers {
+                return Err(format!(
+                    "{}: declares `ROLES` but no `register`, so there is nothing to gate",
+                    m.path
+                ));
+            }
+            out.push(m.name.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// The generated `ROLE_CONDITIONS` table for the modules that declare `ROLES`.
+#[allow(dead_code)]
+pub fn generate_roles(names: &[String]) -> String {
+    let mut out = String::from(
+        "/// The role condition of every module that declares `ROLES`, in file-name order.\n\
+         pub const ROLE_CONDITIONS: &[RoleCondition] = &[\n",
+    );
+    for name in names {
+        out.push_str(&format!(
+            "    RoleCondition {{ name: \"{name}\", roles: {name}::ROLES }},\n"
+        ));
+    }
+    out.push_str("];\n");
+    out
+}
+
 // --- commands ---------------------------------------------------------------------------------
 
 /// What the scanner found in one `src/commands` file.
@@ -379,7 +443,14 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let source = generate(&manifest, &modules);
+    let mut source = generate(&manifest, &modules);
+    match role_modules(&dir, &modules) {
+        Ok(names) => source.push_str(&generate_roles(&names)),
+        Err(message) => {
+            eprintln!("error: {message}");
+            std::process::exit(1);
+        }
+    }
     if let Err(e) = std::fs::write(Path::new(&out_dir).join("services_registry.rs"), source) {
         eprintln!("error: cannot write the services registry: {e}");
         std::process::exit(1);

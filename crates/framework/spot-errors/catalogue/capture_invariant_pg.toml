@@ -1,0 +1,55 @@
+# capture_invariant_pg codes: the PostgreSQL readers and the watermark of the journal capture invariant (WP-JRN-02.T3, ADR-061 s3 and s8). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "capture_invariant_pg.options_invalid"
+class = "none"
+summary = "The capture invariant was given a page size, a window or a lag it cannot use."
+explanation_key = "error.capture_invariant_pg.options_invalid"
+params = []
+remedy = "Use a page size and a window of at least 1 and a lag that fits in a signed 64-bit number of seconds."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant_pg.not_read_only"
+class = "none"
+summary = "The capture invariant refused a connection that is not read-only."
+explanation_key = "error.capture_invariant_pg.not_read_only"
+params = []
+remedy = "Check the site's database: the scan begins a READ ONLY transaction and must see it reported as on. Do not route it through a pooler that rewrites transaction modes."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant_pg.read_failed"
+class = "none"
+summary = "The capture invariant could not read the change feed or the journal: no connection, or a failed statement."
+explanation_key = "error.capture_invariant_pg.read_failed"
+params = []
+remedy = "Check the site's database and pool; the next pass tries again, and three failed passes report the service degraded. The site keeps serving."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant_pg.corrupt"
+class = "none"
+summary = "A change feed or journal row could not be decoded: a negative version, an unknown operation, or an event without one."
+explanation_key = "error.capture_invariant_pg.corrupt"
+params = []
+remedy = "This is a defect or a damaged row; report it with the capture invariant's pass number from the log. Nothing is changed."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant_pg.watermark_failed"
+class = "none"
+summary = "The capture invariant's watermark (spot_capture_watermark) could not be read or written."
+explanation_key = "error.capture_invariant_pg.watermark_failed"
+params = []
+remedy = "Run `spot migrate` so the table exists, and check that the site's database user may write it. The scan starts again from the beginning until it can."
+since = "0.1.0"
+
+[[entry]]
+code = "capture_invariant_pg.checker_refused"
+class = "none"
+summary = "The capture invariant's checker refused a stream: positions that did not increase, or two feed entries for one document version."
+explanation_key = "error.capture_invariant_pg.checker_refused"
+params = []
+remedy = "Report this as a defect; the feed's positions are strictly increasing by construction."
+since = "0.1.0"

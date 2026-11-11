@@ -207,6 +207,18 @@ impl Running {
         self.lives.get(site).cloned()
     }
 
+    /// The routes open without a session on every site that started, as
+    /// `"METHOD pattern (module)"` (the operator's view of the allow-list; for tests).
+    pub fn open_paths(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .services
+            .iter()
+            .flat_map(|assembly| assembly.health().open_paths())
+            .collect();
+        out.sort();
+        out
+    }
+
     /// The bound addresses.
     pub fn local_addrs(&self) -> &[std::net::SocketAddr] {
         self.handle.local_addrs()
@@ -324,6 +336,20 @@ pub async fn start_with_audit(
     audit: Option<Arc<dyn crate::audit::IdentityAudit>>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<Running> {
+    start_with_modules(root, dev, options, audit, &[], shutdown).await
+}
+
+/// Like [`start_with_audit`], with extra module registrations the host registers next to the
+/// built-in table and [`services::REGISTRY`]. It is for embedding hosts and tests (a test module
+/// cannot be part of `build.rs`'s table); production calls [`start`].
+pub async fn start_with_modules(
+    root: &Path,
+    dev: bool,
+    options: Options,
+    audit: Option<Arc<dyn crate::audit::IdentityAudit>>,
+    modules: &'static [services::Registration],
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<Running> {
     let loaded = config::load(root, dev)?;
     if loaded.sites.is_empty() {
         return Err(Error("no sites configured".into()));
@@ -388,6 +414,7 @@ pub async fn start_with_audit(
             &partitions,
             ops.clone(),
             true,
+            modules,
         )
         .await
         {
@@ -513,6 +540,7 @@ pub async fn start_with_audit(
         partitions,
         runtimes,
         ops.clone(),
+        modules,
     );
     Ok(Running {
         handle,
@@ -534,6 +562,7 @@ async fn build_site(
     partitions: &Arc<services::partition::Host>,
     ops: Arc<AtomicUsize>,
     with_services: bool,
+    modules: &'static [services::Registration],
 ) -> Result<(SiteRuntime, Option<Services>, Vec<&'static str>)> {
     // A rebuild (a reload) starts from the metadata the site serves now, not from the files
     // alone, or it would drop the DocTypes made at runtime.
@@ -598,6 +627,16 @@ async fn build_site(
         services::secrets::verify_values(host, &backend, &permission.catalog, &permission.meta)
             .await?;
     }
+    // The committed phase also drives the files service's attach lifecycle: the wrapper delegates
+    // to the delivery the engine already has and then marks the files a saved document names as
+    // attached (and orphans the ones it no longer names, or a deleted document's). The service
+    // does not exist yet, so it fills the slot below once it is built.
+    let attach_slot = services::files::AttachSlot::new();
+    let delivery = services::files::AttachDelivery::new(
+        Arc::new(spot_document::engine::InProcessDelivery),
+        attach_slot.clone(),
+        live.clone(),
+    );
     let engine = Engine::new(
         backend.clone(),
         permission.meta.clone(),
@@ -606,6 +645,7 @@ async fn build_site(
         Arc::new(V7Ids),
     )
     .map_err(error)?
+    .with_delivery(delivery)
     .with_authorizer(permission.authorizer.clone())
     .with_app_permissions(Arc::new(spot_app_permissions::SnapshotAppPermissions::new(
         permission.authorizer.clone(),
@@ -714,6 +754,7 @@ async fn build_site(
         let settings = files_settings(root, loaded, site, live, &backend, &clock)?;
         live.files_with(|| services::files::Files::new(&settings))
     };
+    attach_slot.fill(files.clone());
     // Print: the template folder, the fonts and the renderer, built once per site.
     let printing = print_settings(root, loaded, site, live, &clock)
         .map(|settings| live.print_with(|| services::print::Printing::new(&settings)));
@@ -762,7 +803,7 @@ async fn build_site(
         ctx.provide(host.clone())?;
     }
     let extra = crate::live::extra_modules();
-    services::register_all(&mut ctx, &[builtin(), services::REGISTRY, &extra]).await?;
+    services::register_all(&mut ctx, &[builtin(), services::REGISTRY, &extra, modules]).await?;
     // The function and report delegates a hosting module provided (WP-PRD-01.T48). They are read
     // here, after every module registered and before the router is built, because the resource
     // adapter takes them at construction; absent stays absent, and the adapter then answers
@@ -1038,6 +1079,14 @@ async fn jobs(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
             .await
             .map_err(error)?
         };
+    // Lease events and the held gauge on `/metrics`, only when that service is on.
+    let coordinator: Arc<dyn spot_coordinator::Coordinator> = if services_config.metrics.enabled {
+        Arc::new(services::metered_coordinator::MeteredCoordinator::new(
+            coordinator,
+        ))
+    } else {
+        coordinator
+    };
     let store: Arc<dyn spot_jobs::JobStore> = if services_config.jobs.store == "postgres" {
         let store = spot_jobs_pg::PgJobStore::new(backend.pool());
         store.prepare().await.map_err(error)?;
@@ -1164,6 +1213,13 @@ async fn files(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
         ctx.clock(),
     )?;
     ctx.add(services::files::FilesCheck::new(&settings));
+    // The in-process committed step can be lost to a crash between commit and step: re-apply it
+    // for documents that name a file still pending. Best effort; the next start tries again.
+    if let Some(files) = env.live.files()
+        && let Err(error) = files.reconcile_attachments().await
+    {
+        tracing::warn!(error = %error, "the attach reconcile at start failed");
+    }
     Ok(())
 }
 
@@ -1650,6 +1706,7 @@ fn spawn_reload(
     partitions: Arc<services::partition::Host>,
     runtimes: RuntimeMap,
     ops: Arc<AtomicUsize>,
+    modules: &'static [services::Registration],
 ) {
     let seen = Arc::new(Mutex::new(reload_stamps(&root)));
     #[cfg(unix)]
@@ -1679,6 +1736,7 @@ fn spawn_reload(
                     &runtimes,
                     &ops,
                     &seen,
+                    modules,
                 )
                 .await;
             }
@@ -1707,6 +1765,7 @@ fn spawn_reload(
                     &runtimes,
                     &ops,
                     &seen,
+                    modules,
                 )
                 .await;
             }
@@ -1742,6 +1801,7 @@ async fn reload(
     runtimes: &RuntimeMap,
     ops: &Arc<AtomicUsize>,
     seen: &Arc<Mutex<BTreeMap<String, std::time::SystemTime>>>,
+    modules: &'static [services::Registration],
 ) {
     let Ok(loaded) = config::load(root, dev) else {
         eprintln!("reload skipped: configuration did not validate");
@@ -1767,6 +1827,7 @@ async fn reload(
             partitions,
             ops.clone(),
             false,
+            modules,
         )
         .await
         {

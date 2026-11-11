@@ -8,30 +8,60 @@ use windows::Win32::NetworkManagement::WindowsFirewall::{
     NET_FW_PROFILE2_PRIVATE, NET_FW_PROFILE2_PUBLIC, NET_FW_RULE_DIR_IN, NET_FW_RULE_DIR_OUT,
 };
 use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
-use windows::core::{BSTR, GUID, w};
+use windows::Win32::System::Ole::IEnumVARIANT;
+use windows::Win32::System::Variant::{VARIANT, VariantClear};
+use windows::core::{BSTR, GUID, Interface, w};
 
+use super::variant::{self, Value};
 use super::{RealWin, api, prog_id, with_com};
-use crate::api::{Direction, FirewallRule, Profile, Protocol, RuleAction, WinApi};
+use crate::api::{Direction, FirewallRule, Profile, Protocol, RuleAction};
 use crate::error::WindowsError;
 
-impl WinApi for RealWin {
-    fn list_firewall_rules(&self) -> Result<Vec<FirewallRule>, WindowsError> {
+impl RealWin {
+    pub(super) fn list_firewall_rules(&self) -> Result<Vec<FirewallRule>, WindowsError> {
         with_com(|| {
             let policy = firewall_policy()?;
-            // SAFETY: the policy COM object owns the rules collection for the call.
+            // SAFETY: the policy COM object owns the rules collection for the call, and the
+            // enumerator returned by `_NewEnum` is a live `IEnumVARIANT` over it.
             let rules = unsafe { api(policy.Rules())? };
-            let count = unsafe { api(rules.Count())? };
+            let enumerator: IEnumVARIANT =
+                unsafe { api(rules._NewEnum())? }
+                    .cast()
+                    .map_err(|error| WindowsError::Api {
+                        detail: format!("HRESULT {:#010x}", error.code().0 as u32),
+                    })?;
             let mut out = Vec::new();
-            for index in 1..=count {
-                // SAFETY: the item is a live COM object borrowed from the collection.
-                let rule = unsafe { api(rules.Item(&variant_i32(index)))? };
-                out.push(read_rule(&rule)?);
+            loop {
+                let mut slot = [VARIANT::default()];
+                let mut fetched = 0u32;
+                // SAFETY: `slot` holds one initialised (empty) variant and `fetched` is a
+                // valid out-pointer; a filled slot owns one object reference, cleared below.
+                let status = unsafe { enumerator.Next(&mut slot, &raw mut fetched) };
+                if status.is_err() {
+                    return Err(WindowsError::Api {
+                        detail: format!("HRESULT {:#010x}", status.0 as u32),
+                    });
+                }
+                if fetched == 0 {
+                    break;
+                }
+                let value = variant::read(&slot[0]);
+                // SAFETY: the variant was filled by `Next` and is cleared exactly once.
+                unsafe {
+                    let _ = VariantClear(&mut slot[0]);
+                }
+                if let Value::Object(object) = value {
+                    let rule: INetFwRule = object.cast().map_err(|error| WindowsError::Api {
+                        detail: format!("HRESULT {:#010x}", error.code().0 as u32),
+                    })?;
+                    out.push(read_rule(&rule)?);
+                }
             }
             Ok(out)
         })
     }
 
-    fn add_firewall_rule(&self, rule: &FirewallRule) -> Result<(), WindowsError> {
+    pub(super) fn add_firewall_rule(&self, rule: &FirewallRule) -> Result<(), WindowsError> {
         with_com(|| {
             let policy = firewall_policy()?;
             // SAFETY: the rule is created, filled and added on this thread.
@@ -46,7 +76,7 @@ impl WinApi for RealWin {
         })
     }
 
-    fn remove_firewall_rule(&self, name: &str) -> Result<(), WindowsError> {
+    pub(super) fn remove_firewall_rule(&self, name: &str) -> Result<(), WindowsError> {
         with_com(|| {
             let policy = firewall_policy()?;
             // SAFETY: the policy COM object owns the rules collection for the call.
@@ -60,7 +90,11 @@ impl WinApi for RealWin {
         })
     }
 
-    fn set_profile_enabled(&self, profile: Profile, enabled: bool) -> Result<(), WindowsError> {
+    pub(super) fn set_profile_enabled(
+        &self,
+        profile: Profile,
+        enabled: bool,
+    ) -> Result<(), WindowsError> {
         with_com(|| {
             let policy = firewall_policy()?;
             // SAFETY: the policy COM object is used on this thread only.
@@ -70,7 +104,7 @@ impl WinApi for RealWin {
         })
     }
 
-    fn profile_enabled(&self, profile: Profile) -> Result<bool, WindowsError> {
+    pub(super) fn profile_enabled(&self, profile: Profile) -> Result<bool, WindowsError> {
         with_com(|| {
             let policy = firewall_policy()?;
             // SAFETY: the policy COM object is used on this thread only.
@@ -92,11 +126,6 @@ fn firewall_rule_clsid() -> Result<GUID, WindowsError> {
     prog_id(w!("HNetCfg.FwRule"))
 }
 
-/// A `VARIANT` holding an `i32`, for a COM collection index.
-fn variant_i32(value: i32) -> windows::Win32::System::Variant::VARIANT {
-    windows::Win32::System::Variant::VARIANT::from(value)
-}
-
 /// Reads one `INetFwRule` into a [`FirewallRule`].
 fn read_rule(rule: &INetFwRule) -> Result<FirewallRule, WindowsError> {
     // SAFETY: every getter is a COM call on a live rule object.
@@ -111,8 +140,8 @@ fn read_rule(rule: &INetFwRule) -> Result<FirewallRule, WindowsError> {
             _ => RuleAction::Allow,
         };
         let protocol = match api(rule.Protocol())? {
-            NET_FW_IP_PROTOCOL_TCP => Protocol::Tcp,
-            NET_FW_IP_PROTOCOL_UDP => Protocol::Udp,
+            code if code == NET_FW_IP_PROTOCOL_TCP.0 => Protocol::Tcp,
+            code if code == NET_FW_IP_PROTOCOL_UDP.0 => Protocol::Udp,
             _ => Protocol::Any,
         };
         let ports = match api(rule.LocalPorts())?.to_string() {
@@ -150,9 +179,9 @@ fn write_rule(rule: &INetFwRule, source: &FirewallRule) -> Result<(), WindowsErr
             RuleAction::Block => NET_FW_ACTION_BLOCK,
         }))?;
         api(rule.SetProtocol(match source.protocol {
-            Protocol::Tcp => NET_FW_IP_PROTOCOL_TCP,
-            Protocol::Udp => NET_FW_IP_PROTOCOL_UDP,
-            Protocol::Any => NET_FW_IP_PROTOCOL_ANY,
+            Protocol::Tcp => NET_FW_IP_PROTOCOL_TCP.0,
+            Protocol::Udp => NET_FW_IP_PROTOCOL_UDP.0,
+            Protocol::Any => NET_FW_IP_PROTOCOL_ANY.0,
         }))?;
         let ports = source
             .local_ports
@@ -160,7 +189,11 @@ fn write_rule(rule: &INetFwRule, source: &FirewallRule) -> Result<(), WindowsErr
             .map(u16::to_string)
             .collect::<Vec<_>>()
             .join(",");
-        api(rule.SetLocalPorts(&BSTR::from(ports.as_str())))?;
+        // Windows refuses a port list on a rule whose protocol is not TCP or UDP, so an
+        // empty list (every port) is simply not set.
+        if !ports.is_empty() {
+            api(rule.SetLocalPorts(&BSTR::from(ports.as_str())))?;
+        }
         api(rule.SetProfiles(profile_mask(&source.profiles)))?;
         api(rule.SetEnabled(VARIANT_BOOL::from(source.enabled)))?;
         Ok(())

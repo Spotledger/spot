@@ -84,6 +84,7 @@ async fn a_fresh_database_gets_the_platform_tables_and_a_second_run_plans_nothin
             "extra_table:spot_condition_history",
             "extra_table:spot_condition_history_subject_idx",
             "extra_table:spot_node_role_state",
+            "extra_table:spot_capture_watermark",
         ],
         "the owning crates' DDL, one statement per entry, a table before its index"
     );
@@ -91,7 +92,7 @@ async fn a_fresh_database_gets_the_platform_tables_and_a_second_run_plans_nothin
     let pending = schema::pending_platform_tables(&backend, &catalog)
         .await
         .unwrap();
-    assert_eq!(pending.len(), 13);
+    assert_eq!(pending.len(), 14);
 
     schema::refusals(&plan).unwrap();
     schema::apply(&backend, &plan, None).await.unwrap();
@@ -157,7 +158,7 @@ async fn a_populated_database_gets_its_document_table_and_the_platform_tables_to
         keys.iter().any(|key| key.starts_with("create_table:party")),
         "the document table is planned: {keys:?}"
     );
-    assert_eq!(extra_steps(&plan).len(), 13);
+    assert_eq!(extra_steps(&plan).len(), 14);
     schema::apply(&backend, &plan, None).await.unwrap();
     let live = spot_pg_migrate::LiveSchema::read(&backend).await.unwrap();
     for name in REQUIRED.iter().chain(["party"].iter()) {

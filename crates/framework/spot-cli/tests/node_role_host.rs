@@ -315,3 +315,91 @@ async fn a_missing_role_state_table_is_refused() {
     assert_eq!(status, 503);
     started.finish().await;
 }
+
+// --- the service sets (WP-RTB-03.T6) ---------------------------------------------------------
+
+/// Signs the administrator in and asks `path`; returns `(status, code)`.
+async fn hub_route(env: &Env, token: &str, started: &Started, path: &str) -> (u16, String) {
+    let reply = common::http(started.addr, &env.site, Some(token), "GET", path, &[], None).await;
+    let code = reply.body["error"]["code"]
+        .as_str()
+        .unwrap_or("")
+        .to_owned();
+    (reply.status, code)
+}
+
+const HUB_ONLY_ROUTES: &[&str] = &[
+    "/api/v1/sync/hub/status",
+    "/api/v1/journal/segments",
+    "/api/v1/enrolment/codes",
+];
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_edge_answers_501_on_every_hub_only_route_and_needs_no_hub_key() {
+    let Some(env) = Env::new("").await else {
+        eprintln!("skipped: no SPOT_TEST_PG_URL");
+        return;
+    };
+    let secret = env.site();
+    switch_on_partition(&env, NODE);
+    let code = enrol_code_file(&env);
+    // No `listen`, no key material of any kind: an edge starts without a hub listener.
+    set_role(
+        &env,
+        &format!(
+            "[services.node_role]\nrole = \"edge\"\nhost_roles = [\"branch-edge\"]\nnode = {NODE:?}\n\
+             hub_url = \"https://hub.invalid.example:1\"\nenrol_code_file = {:?}\n",
+            code.display()
+        ),
+    );
+    let started = common::start(&env).await;
+    let secret = common::admin(started.addr, &env.site, &secret).await;
+    for path in HUB_ONLY_ROUTES {
+        let (status, code) = hub_route(&env, &secret, &started, path).await;
+        assert_eq!(
+            (status, code.as_str()),
+            (501, "service.not_configured"),
+            "{path}"
+        );
+    }
+    // A route that is not hub-only is untouched by the layer.
+    let (status, code) = hub_route(&env, &secret, &started, "/api/v1/journals").await;
+    assert_ne!(code, "service.not_configured", "status {status}");
+    started.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_standalone_answers_501_on_hub_only_routes_and_a_hub_does_not() {
+    let Some(env) = Env::new("").await else {
+        eprintln!("skipped: no SPOT_TEST_PG_URL");
+        return;
+    };
+    let secret = env.site();
+    let started = common::start(&env).await;
+    let secret = common::admin(started.addr, &env.site, &secret).await;
+    for path in HUB_ONLY_ROUTES {
+        let (status, code) = hub_route(&env, &secret, &started, path).await;
+        assert_eq!(
+            (status, code.as_str()),
+            (501, "service.not_configured"),
+            "{path}"
+        );
+    }
+    started.finish().await;
+
+    // A hub leaves the routes to the hub services (WP-RTB-02): the layer is not installed, so
+    // nothing here answers 501 on its behalf.
+    let Some(env) =
+        Env::new("[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:17446\"\n").await
+    else {
+        return;
+    };
+    let secret = env.site();
+    let started = common::start(&env).await;
+    let secret = common::admin(started.addr, &env.site, &secret).await;
+    for path in HUB_ONLY_ROUTES {
+        let (_, code) = hub_route(&env, &secret, &started, path).await;
+        assert_ne!(code, "service.not_configured", "{path}");
+    }
+    started.finish().await;
+}

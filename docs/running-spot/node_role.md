@@ -21,6 +21,7 @@ hub_fingerprint = "sha256:ab12..."             # edge only; set after enrolment
 enrol_code_file = "/etc/spot/enrol.code"       # edge only, first start only
 listen = "0.0.0.0:7443"           # hub only
 host_roles = ["branch-edge"]      # the host role set; an edge needs it (or SPOT_HOST_ROLES)
+audit_scratch_rebuild = false     # edge only: true runs the audit job's scratch rebuild on an edge
 ```
 
 Unknown keys are refused (the table is `deny_unknown_fields`, as every registry table is).
@@ -50,6 +51,30 @@ comma-separated list of the same role names, read once at start-up.
   without `database`.
 
 A mismatch is `node_role.role_conflict`.
+
+## What each role runs
+
+The registry runs a module only in the roles its `pub const ROLES: &[&str]` names; a module
+without one runs in every role. The table (`SERVICE_SETS` in `services/node_role.rs`):
+
+| Module | standalone | hub | edge |
+| --- | --- | --- | --- |
+| every module without `ROLES` (the local trading stack) | yes | yes | yes |
+| `sync_hub`, `enrolment_admin`, `journal_access` | no | yes | no |
+| `sync_node`, `sync_loops` | no | no | yes |
+
+- A skipped module's `register` never runs: no connection, listener, setting read or readiness
+  entry.
+- A module with `ROLES` must start after `node_role` (an `ORDER` above 1005); otherwise the site
+  start is refused. A `ROLES` entry that is not `standalone`, `hub` or `edge` is refused too, so a
+  typo never enables a service.
+- The audit job's scratch rebuild runs on a standalone and a hub; on an edge it runs only when
+  `audit_scratch_rebuild = true`.
+- On an edge or a standalone the hub-only routes (`/api/v1/sync/hub`, `/api/v1/journal`,
+  `/api/v1/enrolment`) answer `501 service.not_configured`. No hub listener binds and no hub key
+  material is read.
+- The role is read once from the validated configuration at assembly; nothing on the request
+  path can change it.
 
 ## The refusals
 

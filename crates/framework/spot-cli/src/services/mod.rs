@@ -462,12 +462,78 @@ pub fn ordered(tables: &[&[Registration]]) -> crate::Result<Vec<Registration>> {
     Ok(all)
 }
 
+/// The roles one module runs in. A module that declares `pub const ROLES: &[&str]` gets an entry
+/// in the generated `ROLE_CONDITIONS`; a module without one runs in every role.
+#[derive(Clone, Copy, Debug)]
+pub struct RoleCondition {
+    /// The module name (the file stem).
+    pub name: &'static str,
+    /// The role names the module runs in (`standalone`, `hub`, `edge`). An empty list runs
+    /// nowhere; a name that is not a role is a refusal, never a wildcard.
+    pub roles: &'static [&'static str],
+}
+
 /// Runs every registration in start order against `ctx`, then the finalisers they queued.
+///
+/// A module that declares `ROLES` runs only when the site's role (the one `node_role` decided
+/// and provided) is in its list; see [`register_all_with_roles`].
 ///
 /// A failing `register` stops the site start: the error names the module, and no later module
 /// runs. Nothing is skipped silently.
 pub async fn register_all(ctx: &mut SiteCtx<'_>, tables: &[&[Registration]]) -> crate::Result<()> {
-    for registration in ordered(tables)? {
+    register_all_with_roles(ctx, tables, ROLE_CONDITIONS).await
+}
+
+/// [`register_all`] with an explicit role table (the tests give it their own).
+///
+/// The role is read once, from the port `node_role` provides at its own `ORDER`; nothing in a
+/// request, a header or the environment of the request path can change it. A module with a role
+/// condition is skipped **before** its `register` runs: it opens no connection, binds no
+/// listener, reads no setting and registers no readiness entry. A module with a role condition
+/// that starts before the role is known, a condition naming something that is not a role, or a
+/// condition for a module no table holds is an error, never a silent no-op, and an unknown role
+/// never enables a service (the role is an enum; an entry that names no role matches none).
+pub async fn register_all_with_roles(
+    ctx: &mut SiteCtx<'_>,
+    tables: &[&[Registration]],
+    conditions: &[RoleCondition],
+) -> crate::Result<()> {
+    let ordered = ordered(tables)?;
+    for condition in conditions {
+        if !ordered.iter().any(|r| r.name == condition.name) {
+            return Err(Error(format!(
+                "services registry: `{}` has a role condition but no registration",
+                condition.name
+            )));
+        }
+        for role in condition.roles {
+            if node_role::Role::parse(role).is_err() {
+                return Err(Error(format!(
+                    "services registry: the module `{}` declares the role `{role}`, which is not \
+                     standalone, hub or edge",
+                    condition.name
+                )));
+            }
+        }
+    }
+    for registration in ordered {
+        if let Some(condition) = conditions.iter().find(|c| c.name == registration.name) {
+            let Some(active) = ctx.port::<node_role::ActiveRole>() else {
+                return Err(Error(format!(
+                    "services registry: the module `{}` declares `ROLES` but starts before the \
+                     site's role is known (it needs an ORDER above `node_role`'s)",
+                    registration.name
+                )));
+            };
+            if !condition.roles.contains(&active.role().name()) {
+                tracing::debug!(
+                    module = registration.name,
+                    role = active.role().name(),
+                    "module skipped: not in this role's service set"
+                );
+                continue;
+            }
+        }
         ctx.enter(registration.name, registration.order);
         (registration.register)(ctx).await.map_err(|e| {
             Error(format!(
@@ -1201,6 +1267,58 @@ mod registry_tests {
                 r.order >= 1000,
                 "{} must use an ORDER of 1000 or more",
                 r.name
+            );
+        }
+    }
+
+    #[test]
+    fn a_module_with_a_role_condition_starts_after_node_role() {
+        for condition in ROLE_CONDITIONS {
+            let order = REGISTRY
+                .iter()
+                .find(|r| r.name == condition.name)
+                .map(|r| r.order)
+                .expect("a condition names a registered module");
+            assert!(
+                order > node_role::ORDER,
+                "{} declares ROLES but its ORDER {order} is not above node_role's {}",
+                condition.name,
+                node_role::ORDER
+            );
+            for role in condition.roles {
+                assert!(
+                    node_role::Role::parse(role).is_ok(),
+                    "{} names the role `{role}`, which is not a role",
+                    condition.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_table_of_roles_matches_the_modules_that_exist() {
+        let existing: Vec<&str> = REGISTRY.iter().map(|r| r.name).collect();
+        for row in node_role::SERVICE_SETS {
+            if !existing.contains(&row.module) {
+                continue; // a service of WP-RTB-02 not in the tree yet: data only
+            }
+            let condition = ROLE_CONDITIONS.iter().find(|c| c.name == row.module);
+            let condition = condition.unwrap_or_else(|| {
+                panic!("{} is in SERVICE_SETS but declares no ROLES", row.module)
+            });
+            assert_eq!(
+                condition.roles, row.roles,
+                "{} ROLES differ from its row",
+                row.module
+            );
+        }
+        for condition in ROLE_CONDITIONS {
+            assert!(
+                node_role::SERVICE_SETS
+                    .iter()
+                    .any(|r| r.module == condition.name),
+                "{} declares ROLES but has no row in SERVICE_SETS",
+                condition.name
             );
         }
     }

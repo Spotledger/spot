@@ -58,7 +58,9 @@ pub fn platform_registry() -> Result<spot_seams::Registry> {
         .map_err(|e| Error(format!("invalid registry: {e:?}")))
 }
 
-pub use host::{Options, Running, request_reload, start, start_with, start_with_audit};
+pub use host::{
+    Options, Running, request_reload, start, start_with, start_with_audit, start_with_modules,
+};
 /// Host failure. Secret configuration values are never included.
 #[derive(Debug)]
 pub struct Error(pub String);
