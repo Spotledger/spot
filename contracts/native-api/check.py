@@ -43,6 +43,14 @@ and the JSON pointer it failed at.
     ``notification_list`` is a ``GET`` whose only parameters are ``after`` and ``limit`` (at most
     100); ``auth_consumer_renew`` is a body-less ``POST`` that needs no bearer and whose description
     fixes the ``__Host-`` cookie and its ``HttpOnly``, ``Secure`` and ``SameSite=Strict`` attributes.
+18. Processes, runs and the task inbox (contract 0.12.0, WP-CON-03.T20): the fourteen operations
+    exist on their method and path; only ``process_webhook`` is public (``security: []``) and it
+    names its signature header and the single ``process.webhook_rejected`` answer; every other one
+    needs the bearer; every new object schema is closed, every string, array and open map in them is
+    bounded, no run or event schema carries variables, outputs or a payload, and the completion body
+    cannot name an actor; every write names its audit, ``run_start`` and ``task_complete`` require an
+    ``Idempotency-Key``, the task writes require ``If-Match``, lists are capped at 100 (events 200);
+    every read names its no-oracle ``404``; the thirteen error codes are registered with their status.
 """
 
 from __future__ import annotations
@@ -264,7 +272,9 @@ def check_event_envelope(spec: dict[str, Any], errors: list[str], src_dir: Path 
 SECRET_PARAM_RE = re.compile(r"token|cursor|watermark|secret|password|api_?key|credential", re.I)
 # The document list's keyset paging cursor (0.1.0) is a page position of a read the caller is
 # already allowed to make; it grants nothing. It is the one cursor that stays in a query string.
-PAGING_CURSOR_IN_QUERY = {("resource_list", "cursor")}
+# The process, run and task lists page the same way (0.12.0): the caller's own filtered view.
+PAGING_CURSOR_IN_QUERY = {("resource_list", "cursor"), ("process_list", "cursor"), ("run_list", "cursor"),
+                          ("task_list", "cursor")}
 STORAGE_KEY_RE = re.compile(r"^(storage|database|db)_(key|path|id|name)$|^(storage|db)_", re.I)
 
 
@@ -489,6 +499,138 @@ def check_notification(text: str, errors: list[str]) -> None:
         errors.append("rule 15: realtime.md defines a `left` message; none is in the contract")
 
 
+PROCESS_OPS = {
+    "process_list": ("get", "/api/v1/process"),
+    "run_start": ("post", "/api/v1/process/{process}/runs"),
+    "run_list": ("get", "/api/v1/process/runs"),
+    "run_get": ("get", "/api/v1/process/runs/{id}"),
+    "run_events": ("get", "/api/v1/process/runs/{id}/events"),
+    "run_cancel": ("post", "/api/v1/process/runs/{id}/cancel"),
+    "process_webhook": ("post", "/api/v1/process/hook/{trigger}"),
+    "task_list": ("get", "/api/v1/task"),
+    "task_get": ("get", "/api/v1/task/{id}"),
+    "task_claim": ("post", "/api/v1/task/{id}/claim"),
+    "task_release": ("post", "/api/v1/task/{id}/release"),
+    "task_complete": ("post", "/api/v1/task/{id}/complete"),
+    "task_delegate": ("post", "/api/v1/task/{id}/delegate"),
+    "task_reassign": ("post", "/api/v1/task/{id}/reassign"),
+}
+PROCESS_CODES = {
+    "process.not_found": 404, "process.input_invalid": 422, "process.run_not_found": 404,
+    "process.run_not_active": 409, "process.webhook_rejected": 401, "task.not_found": 404,
+    "task.already_claimed": 409, "task.not_claimed_by_caller": 409, "task.outcome_invalid": 422,
+    "task.segregation": 403, "task.delegation_invalid": 422, "task.target_invalid": 422,
+    "task.not_active": 409,
+}
+PROCESS_SCHEMAS = (
+    "ProcessSummary", "ProcessPage", "RunStart", "RunCancel", "RunStep", "Run", "RunResponse", "RunPage",
+    "RunEvent", "RunEventPage", "WebhookAccepted", "TaskItem", "TaskPage", "TaskOutcome", "TaskField",
+    "TaskEvent", "TaskDetail", "TaskDetailResponse", "TaskResponse", "TaskComplete", "TaskDelegate",
+    "TaskReassign", "DocumentRef",
+)
+# Open by nature (a schema, or values of a form the process defines); bounded by maxProperties.
+PROCESS_OPEN_OBJECTS = {"InputSchema", "RunStart.input", "TaskComplete.values"}
+NO_ORACLE = {
+    "process_list": None, "process_webhook": None, "run_start": "404 process.not_found", "run_list": None,
+    "run_get": "404 process.run_not_found", "run_events": "404 process.run_not_found",
+    "run_cancel": "404 process.run_not_found", "task_list": None, "task_get": "404 task.not_found",
+    "task_claim": "404 task.not_found", "task_release": "404 task.not_found",
+    "task_complete": "404 task.not_found", "task_delegate": "404 task.not_found",
+    "task_reassign": "404 task.not_found",
+}
+LEAKY_NAMES = re.compile(r"^(variables?|outputs?|payload|error_text|error_message|stack|trace)$", re.I)
+ACTOR_NAMES = re.compile(r"actor|^by$|^user$|^principal$|on_behalf|^system$", re.I)
+
+
+def _bounded(node: Any, where: str, errors: list[str]) -> None:
+    """Rule 18: closed objects; strings, arrays and open maps carry a bound."""
+    if not isinstance(node, dict) or "$ref" in node:
+        return
+    types = node.get("type")
+    types = types if isinstance(types, list) else [types]
+    if "object" in types:
+        if "properties" in node:
+            if node.get("additionalProperties") is not False:
+                errors.append(f"rule 18: {where}: an object schema here is closed (additionalProperties: false)")
+            for name, sub in node["properties"].items():
+                _bounded(sub, f"{where}.{name}", errors)
+        elif "maxProperties" not in node:
+            errors.append(f"rule 18: {where}: an open object needs maxProperties")
+    if "string" in types and not any(k in node for k in ("maxLength", "enum", "const")):
+        errors.append(f"rule 18: {where}: a string needs maxLength (or an enum)")
+    if "array" in types:
+        if "maxItems" not in node:
+            errors.append(f"rule 18: {where}: an array needs maxItems")
+        _bounded(node.get("items"), f"{where}[]", errors)
+
+
+def check_processes_and_tasks(spec: dict[str, Any], errors: list[str]) -> None:
+    """Rule 18 (contract 0.12.0, WP-CON-03.T20)."""
+    paths = spec.get("paths", {})
+    components = spec.get("components", {})
+    schemas = components.get("schemas", {})
+    registry = spec.get("x-spot-error-codes", {})
+    ops: dict[str, dict[str, Any]] = {}
+    for op_id, (method, route) in PROCESS_OPS.items():
+        op = paths.get(route, {}).get(method)
+        if not op or op.get("operationId") != op_id:
+            errors.append(f"rule 18: {method.upper()} {route} ({op_id}) is missing")
+            continue
+        ops[op_id] = op
+        text = " ".join(str(op.get("description", "")).split())
+        params = list(paths[route].get("parameters", [])) + list(op.get("parameters", []))
+        refs = {p.get("$ref", "").rsplit("/", 1)[-1] for p in params if "$ref" in p}
+        if op_id == "process_webhook":
+            if op.get("security") != []:
+                errors.append("rule 18: process_webhook is the one public operation (security: [])")
+            for word in ("X-Spot-Signature", "process.webhook_rejected", "raw body", "never says whether a run started"):
+                if word not in text:
+                    errors.append(f"rule 18: process_webhook does not state {word!r}")
+            if "200" in (op.get("responses") or {}) or "202" not in (op.get("responses") or {}):
+                errors.append("rule 18: process_webhook answers 202 only")
+        elif "security" in op:
+            errors.append(f"rule 18: {op_id} needs the bearer (no `security` override)")
+        if method == "post" and op_id != "process_webhook" and "audited" not in text:
+            errors.append(f"rule 18: {op_id} is a write and its description must say it is audited")
+        if op_id in ("run_start", "task_complete") and "IdempotencyKeyRequired" not in refs:
+            errors.append(f"rule 18: {op_id} requires an Idempotency-Key")
+        if op_id.startswith("task_") and method == "post" and "IfMatch" not in refs:
+            errors.append(f"rule 18: {op_id} requires If-Match")
+        wanted = NO_ORACLE[op_id]
+        if wanted and f"`{wanted}`" not in text:
+            errors.append(f"rule 18: {op_id} must name {wanted} (the same answer as unknown)")
+        if op_id in ("process_list", "run_list", "task_list", "run_events"):
+            cap = 200 if op_id == "run_events" else 100
+            limit = [p for p in params if p.get("name") == "limit"]
+            if len(limit) != 1 or limit[0].get("schema", {}).get("maximum") != cap:
+                errors.append(f"rule 18: {op_id} needs a limit parameter of at most {cap}")
+        for p in params:
+            if p.get("in") == "query" and re.search(r"actor|user|tenant|site", p.get("name", ""), re.I):
+                errors.append(f"rule 18: {op_id}: query parameter {p['name']!r} would let a caller name someone else")
+    for code, status in PROCESS_CODES.items():
+        entry = registry.get(code)
+        if not entry or entry[0] != status or entry[1] is not False:
+            errors.append(f"rule 18: error code {code} must be registered with status {status}, not retryable")
+    for name in PROCESS_SCHEMAS:
+        schema = schemas.get(name)
+        if schema is None:
+            errors.append(f"rule 18: schema {name} is missing")
+            continue
+        _bounded(schema, name, errors)
+        for prop in schema.get("properties", {}):
+            if name in ("Run", "RunStep", "RunEvent", "TaskEvent", "TaskDetail") and LEAKY_NAMES.search(prop):
+                errors.append(f"rule 18: {name}.{prop}: a run or event answer carries no variables, outputs or payload")
+    for name in ("RunStart", "TaskComplete"):
+        for prop in schemas.get(name, {}).get("properties", {}):
+            if ACTOR_NAMES.search(prop):
+                errors.append(f"rule 18: {name}.{prop}: a request cannot name an actor")
+    for name, prop in (("RunStart", "input"), ("TaskComplete", "values")):
+        if "maxProperties" not in schemas.get(name, {}).get("properties", {}).get(prop, {}):
+            errors.append(f"rule 18: {name}.{prop} needs maxProperties")
+    if "maxProperties" not in schemas.get("InputSchema", {}):
+        errors.append("rule 18: InputSchema needs maxProperties")
+
+
 def run_rules(spec: dict[str, Any], realtime_text: str | None = None) -> tuple[list[str], int, int]:
     errors: list[str] = []
     check_openapi(spec, errors)
@@ -508,6 +650,7 @@ def run_rules(spec: dict[str, Any], realtime_text: str | None = None) -> tuple[l
     if realtime_text is None and REALTIME_PATH.is_file():
         realtime_text = REALTIME_PATH.read_text(encoding="utf-8")
     check_notices_and_renewal(spec, realtime_text, errors)
+    check_processes_and_tasks(spec, errors)
     if realtime_text is not None:
         check_notification(realtime_text, errors)
     return errors, len(codes), n
@@ -595,6 +738,37 @@ def self_test() -> int:
         if not any(e.startswith("rule 17") for e in errors):
             print(f"self-test: {label} (rule 17) was not detected; got {errors[:3]}")
             failures += 1
+    pt = "/api/v1/process"
+    rule18 = {
+        "a missing operation": lambda s: s["paths"].pop("/api/v1/task/{id}/reassign"),
+        "a bearer-less task read": lambda s: s["paths"]["/api/v1/task"]["get"].update(security=[]),
+        "a bearer-ful webhook": lambda s: s["paths"][pt + "/hook/{trigger}"]["post"].pop("security"),
+        "a webhook that answers 200": lambda s: s["paths"][pt + "/hook/{trigger}"]["post"]["responses"].update(
+            {"200": {"description": "x"}}),
+        "an unaudited write": lambda s: s["paths"]["/api/v1/task/{id}/claim"]["post"].update(
+            description=s["paths"]["/api/v1/task/{id}/claim"]["post"]["description"].replace("audited", "logged")),
+        "a run start without an idempotency key": lambda s: s["paths"][pt + "/{process}/runs"]["post"].pop("parameters"),
+        "a completion without If-Match": lambda s: s["paths"]["/api/v1/task/{id}/complete"]["post"][
+            "parameters"].pop(0),
+        "a missing no-oracle 404": lambda s: s["paths"][pt + "/runs/{id}"]["get"].update(description="The run."),
+        "an unbounded list": lambda s: s["paths"]["/api/v1/task"]["get"]["parameters"][3]["schema"].update(maximum=500),
+        "a user query parameter": lambda s: s["paths"]["/api/v1/task"]["get"]["parameters"].append(
+            {"name": "user", "in": "query", "schema": {"type": "string"}}),
+        "an unregistered code": lambda s: s["x-spot-error-codes"].pop("task.segregation"),
+        "a wrong status": lambda s: s["x-spot-error-codes"].update({"task.not_found": [403, False, "x"]}),
+        "an open request body": lambda s: schemas(s)["TaskComplete"].pop("additionalProperties"),
+        "an unbounded string": lambda s: schemas(s)["RunCancel"]["properties"]["reason"].pop("maxLength"),
+        "an unbounded array": lambda s: schemas(s)["Run"]["properties"]["steps"].pop("maxItems"),
+        "an unbounded values map": lambda s: schemas(s)["TaskComplete"]["properties"]["values"].pop("maxProperties"),
+        "run variables in a run": lambda s: schemas(s)["Run"]["properties"].update(variables={"type": "object", "maxProperties": 1}),
+        "an actor in the completion body": lambda s: schemas(s)["TaskComplete"]["properties"].update(
+            actor={"type": "string", "maxLength": 10}),
+    }
+    for label, mutate in rule18.items():
+        errors, _, _ = run_rules(broken(mutate))
+        if not any(e.startswith("rule 18") for e in errors):
+            print(f"self-test: {label} (rule 18) was not detected; got {errors[:3]}")
+            failures += 1
     good = REALTIME_PATH.read_text(encoding="utf-8")
     key_breaks = {
         "an unnamed notice key": good.replace("`severity` (", "`level` ("),
@@ -618,7 +792,7 @@ def self_test() -> int:
             print(f"self-test: {label} (rule 15) was not detected; got {errors[:3]}")
             failures += 1
     total = (len(cases) + len(print_breaks) + len(principal_breaks) + len(notice_breaks) + len(feed17)
-             + len(key_breaks) + 2)
+             + len(key_breaks) + len(rule18) + 2)
     errors, _, _ = run_rules(base, realtime_text="nothing documented")
     if not any(e.startswith("rule 7") for e in errors):
         print("self-test: an undocumented realtime message type was not detected")

@@ -1,0 +1,42 @@
+# The sync node, condition, quarantine and policy operations as typed management operations
+# (WP-RTB-04.T2, ADR-067, ADR-062, ADR-44). The operation catalogue is data (ids, parameters,
+# risk levels); the executors live in the site host (WP-RTB-04.T3) behind the `SyncOps` trait
+# defined here.
+#
+# Pure: no storage, no clock, no randomness, no network. Every service access is the executor's.
+[package]
+name = "spot-mgmt-sync"
+description = "The sync operations as typed management operations (WP-RTB-04.T2, ADR-067, ADR-062, ADR-44): health, nodes, enrolment, suspend, resume, revoke, certificate rotation, resend, conditions, quarantine, policy and role, with risk levels, parameters, CLI renderings and a typed executor trait"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: ids, parameters, risk levels, validation, rendering.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The health result is the `HealthView` of this crate, unchanged (it is not re-modelled here).
+spot-sync-health = { path = "../spot-sync-health" }
+# Results serialise to stable JSON (the management API's result envelope).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `dyn SyncOps` needs boxed futures; the executor is an async trait object.
+async-trait = "0.1"
+# Typed errors.
+thiserror = "2"
+
+[dev-dependencies]
+# The conditions catalogue, so the drift test walks every operator action it names.
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+# The health builder, so the fake executor returns a real `HealthView`.
+spot-conditions = { path = "../spot-conditions" }
+# The Linux, database and journal modules, so the collision test assembles the real catalogue.
+spot-agent-linux = { path = "../spot-agent-linux" }
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+spot-mgmt-journal = { path = "../spot-mgmt-journal" }
+# A minimal executor to drive the async `dispatch` in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

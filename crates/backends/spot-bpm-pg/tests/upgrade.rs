@@ -191,6 +191,7 @@ async fn seed(store: &PgCaseStore) -> Vec<CaseRecord> {
                 record.run.version,
                 CaseUpdate::new()
                     .with_attempt(done)
+                    .with_at(Instant::from_offset(now()))
                     .with_variables(json!({ "order": { "total": 12, "id": id } })),
             )
             .await

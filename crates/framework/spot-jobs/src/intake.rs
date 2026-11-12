@@ -6,26 +6,38 @@ use crate::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use spot_core::SiteId;
+use spot_events_contract::PayloadDocument;
 use spot_scheduler::slot::RunSlot;
 use spot_storage_contract::feed::{ChangeFeed, FeedPosition};
 use time::OffsetDateTime;
 
-/// The payload of a `sys_job_enqueued` outbox event (schema version 1).
+/// The data of a `sys_job_enqueued` outbox event (schema version 1): the `data` of the payload
+/// document, in the shape the events contract fixes (`contracts/events`, 0.7.7).
+///
+/// An absent field and an explicit `null` mean the same thing for every optional field.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JobEnqueued {
-    /// The site ID that owns the job.
-    pub site: String,
+    /// The site ID that owns the job. **Legacy:** no producer writes it (an intake runs for one
+    /// site and the caller supplies it). Events already in the outbox may carry it; it is
+    /// accepted only when it equals the caller's site.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
     /// The job name, app-qualified: `app:job`.
     pub job: String,
-    /// Job arguments.
+    /// Job arguments (absent or `null` is `null`; no floating-point number at any depth).
+    #[serde(default)]
     pub args: Json,
-    /// Idempotency key (optional).
+    /// Idempotency key (optional, not empty).
+    #[serde(default)]
     pub idempotency_key: Option<String>,
-    /// Earliest start time (optional, ISO 8601 string).
+    /// Earliest start time (optional, RFC 3339).
+    #[serde(default)]
     pub not_before: Option<String>,
     /// Queue name (optional; defaults to `default`).
+    #[serde(default)]
     pub queue: Option<String>,
-    /// Opaque context for extensions (optional).
+    /// Opaque context for extensions (optional, an object).
+    #[serde(default)]
     pub context: Option<Json>,
 }
 
@@ -45,6 +57,75 @@ impl NewJob {
     pub fn validate_job_name(name: &str) -> bool {
         spot_app_api::context::valid_job_name(name)
     }
+}
+
+/// Whether `value` holds a JSON number that is not an integer, at any depth.
+fn has_float(value: &Json) -> bool {
+    match value {
+        Json::Number(n) => n.is_f64(),
+        Json::Array(items) => items.iter().any(has_float),
+        Json::Object(map) => map.values().any(has_float),
+        _ => false,
+    }
+}
+
+/// A queue name as the contract spells it: 1 to 64 bytes of `a-z`, `0-9`, `_` and `-`.
+fn is_queue_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// Why a decoded payload is not a job, or the job to insert.
+fn job_from_payload(
+    payload: JobEnqueued,
+    site: &SiteId,
+    now: OffsetDateTime,
+    event_id: String,
+) -> std::result::Result<NewJob, &'static str> {
+    if payload.validate().is_err() {
+        return Err("job.invalid_name");
+    }
+    // A legacy `site` is accepted only when it is the caller's: an event for another site is
+    // never run here.
+    if let Some(named) = &payload.site {
+        match SiteId::new(named) {
+            Ok(named) if named == *site => {}
+            _ => return Err("invalid_site"),
+        }
+    }
+    // The contract's own rules (a decimal is a string, never a float; ADR-055). An event that
+    // breaks them is refused, not repaired.
+    if has_float(&payload.args)
+        || payload
+            .context
+            .as_ref()
+            .is_some_and(|c| (!c.is_object() && !c.is_null()) || has_float(c))
+        || payload.idempotency_key.as_deref() == Some("")
+        || payload.queue.as_deref().is_some_and(|q| !is_queue_name(q))
+    {
+        return Err("undecodable_payload");
+    }
+    let not_before = match &payload.not_before {
+        Some(text) => OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+            .map_err(|_| "undecodable_payload")?,
+        None => now,
+    };
+    let mut job = NewJob::new(
+        payload.job,
+        payload.args,
+        payload.queue.unwrap_or_else(|| "default".to_string()),
+        site.clone(),
+        not_before,
+    );
+    if let Some(key) = payload.idempotency_key {
+        job = job.with_idempotency_key(key);
+    }
+    if let Some(context) = payload.context.filter(|c| !c.is_null()) {
+        job = job.with_context(context);
+    }
+    Ok(job.with_outbox_event_id(event_id))
 }
 
 /// What one intake batch did.
@@ -70,16 +151,28 @@ pub struct RejectedEvent {
 
 /// Process a batch of outbox events, reading sys_job_enqueued events and inserting them as jobs.
 ///
+/// The intake runs for one site: `site` is the caller's context (the consumer lease is per
+/// site), not part of the payload. Every job is created for `site`. A payload that still names
+/// a `site` (an event written before the field was dropped) is accepted only when it equals
+/// `site`, otherwise it is rejected `invalid_site`.
+///
 /// This function:
 /// - Reads up to `batch_size` events from the feed starting at the stored position
 /// - Filters for `sys_job_enqueued` events
-/// - Decodes the payload as `JobEnqueued` v1
+/// - Reads the outbox payload as the events contract's [`PayloadDocument`] (`meta` and `data`)
+///   and decodes `data` as [`JobEnqueued`] v1
 /// - Inserts jobs using the outbox event ID as an additional dedupe key
 /// - Advances the position only after all jobs are successfully inserted
 /// - Returns `job.intake_resync` if `ResyncRequired` is encountered
+///
+/// An event that cannot become a job is reported in [`IntakeReport::rejected`] and never
+/// dropped silently. The reasons are `unsupported_schema_version`, `undecodable_payload` (not a
+/// payload document, not the job shape, a floating-point number in `args` or `context`, an
+/// empty key, a bad queue name or a bad `not_before`), `job.invalid_name` and `invalid_site`.
 pub async fn process_batch<F: ChangeFeed + ?Sized>(
     store: &dyn JobStore,
     feed: &F,
+    site: &SiteId,
     batch_size: u32,
     now: OffsetDateTime,
 ) -> Result<IntakeReport> {
@@ -125,61 +218,21 @@ pub async fn process_batch<F: ChangeFeed + ?Sized>(
             reject(record, "unsupported_schema_version");
             continue;
         }
-        let payload: JobEnqueued = match serde_json::from_str(&record.event.payload) {
-            Ok(p) => p,
-            Err(_) => {
+        // The outbox holds the payload document; the job is its `data`.
+        let payload: JobEnqueued = match PayloadDocument::from_outbox_event(&record.event)
+            .ok()
+            .and_then(|doc| serde_json::from_value(doc.data).ok())
+        {
+            Some(p) => p,
+            None => {
                 reject(record, "undecodable_payload");
                 continue;
             }
         };
-        if payload.validate().is_err() {
-            reject(record, "job.invalid_name");
-            continue;
+        match job_from_payload(payload, site, now, record.event.id.to_string()) {
+            Ok(job) => jobs_to_insert.push(job),
+            Err(reason) => reject(record, reason),
         }
-        let site = match SiteId::new(&payload.site) {
-            Ok(s) => s,
-            Err(_) => {
-                reject(record, "invalid_site");
-                continue;
-            }
-        };
-
-        // Parse the not_before timestamp
-        let not_before = if let Some(nb_str) = &payload.not_before {
-            match time::OffsetDateTime::parse(
-                nb_str,
-                &time::format_description::well_known::Rfc3339,
-            ) {
-                Ok(dt) => dt,
-                Err(_) => now,
-            }
-        } else {
-            now
-        };
-
-        // Build the NewJob
-        let mut new_job = NewJob::new(
-            payload.job,
-            payload.args,
-            payload.queue.unwrap_or_else(|| "default".to_string()),
-            site,
-            not_before,
-        );
-
-        // Set idempotency key if provided
-        if let Some(key) = payload.idempotency_key {
-            new_job = new_job.with_idempotency_key(key);
-        }
-
-        // Set context if provided
-        if let Some(ctx) = payload.context {
-            new_job = new_job.with_context(ctx);
-        }
-
-        // Set the outbox event ID for deduplication
-        new_job = new_job.with_outbox_event_id(record.event.id.to_string());
-
-        jobs_to_insert.push(new_job);
     }
 
     let mut inserted = 0u32;
@@ -260,7 +313,7 @@ mod tests {
     #[test]
     fn test_job_enqueued_validation() {
         let payload = JobEnqueued {
-            site: "test".to_string(),
+            site: None,
             job: "app:test".to_string(),
             args: Json::Null,
             idempotency_key: None,
@@ -275,7 +328,7 @@ mod tests {
     #[test]
     fn test_job_enqueued_invalid_name() {
         let payload = JobEnqueued {
-            site: "test".to_string(),
+            site: None,
             job: "invalid".to_string(), // Missing colon
             args: Json::Null,
             idempotency_key: None,
@@ -387,18 +440,29 @@ mod tests {
         (b, cat)
     }
 
+    /// The outbox event the document engine writes: the payload document, data nested.
     fn enqueued_event(key: &str) -> OutboxEvent {
-        let payload = JobEnqueued {
-            site: "test-site".into(),
-            job: "app:send".into(),
-            args: serde_json::json!({"k": key}),
-            idempotency_key: Some(key.into()),
-            not_before: None,
-            queue: None,
-            context: None,
+        let id = RecordId::new_v7();
+        let doc = spot_events_contract::PayloadDocument {
+            meta: spot_events_contract::EventMeta {
+                occurred_at: fixed_now(),
+                actor: spot_events_contract::Actor::System {
+                    component: name("intake_test"),
+                },
+                command_id: None,
+                causation_id: None,
+                correlation_id: id,
+                trace_id: None,
+            },
+            data: serde_json::json!({
+                "job": "app:send",
+                "args": {"k": key},
+                "idempotency_key": key,
+                "not_before": null,
+            }),
         };
         OutboxEvent {
-            id: RecordId::new_v7(),
+            id,
             topic: name(crate::SYS_JOB_ENQUEUED_TOPIC),
             subject: NodeRef {
                 entity: name("party"),
@@ -406,8 +470,12 @@ mod tests {
             },
             subject_version: None,
             schema_version: 1,
-            payload: serde_json::to_string(&payload).unwrap(),
+            payload: serde_json::to_string(&doc).unwrap(),
         }
+    }
+
+    fn test_site() -> SiteId {
+        SiteId::new("test-site").unwrap()
     }
 
     async fn begin(b: &FakeBackend, cat: &Arc<Catalog>) -> <FakeBackend as StorageBackend>::Tx {
@@ -446,7 +514,9 @@ mod tests {
         let mut tx = begin(&b, &cat).await;
         tx.enqueue(&enqueued_event("rolled-back")).await.unwrap();
         tx.rollback().await.unwrap();
-        process_batch(&store, &b, 100, fixed_now()).await.unwrap();
+        process_batch(&store, &b, &test_site(), 100, fixed_now())
+            .await
+            .unwrap();
         assert_eq!(
             job_count(&store).await,
             0,
@@ -456,7 +526,9 @@ mod tests {
         let mut tx = begin(&b, &cat).await;
         tx.enqueue(&enqueued_event("committed")).await.unwrap();
         tx.commit().await.unwrap();
-        process_batch(&store, &b, 100, fixed_now()).await.unwrap();
+        process_batch(&store, &b, &test_site(), 100, fixed_now())
+            .await
+            .unwrap();
         assert_eq!(
             job_count(&store).await,
             1,
@@ -475,7 +547,7 @@ mod tests {
         tx.enqueue(&enqueued_event("b")).await.unwrap();
         tx.commit().await.unwrap();
 
-        let end = process_batch(&store, &b, 100, fixed_now())
+        let end = process_batch(&store, &b, &test_site(), 100, fixed_now())
             .await
             .unwrap()
             .position;
@@ -491,7 +563,9 @@ mod tests {
             .set_intake_position(FeedPosition::START)
             .await
             .unwrap();
-        process_batch(&store, &b, 100, fixed_now()).await.unwrap();
+        process_batch(&store, &b, &test_site(), 100, fixed_now())
+            .await
+            .unwrap();
         assert_eq!(
             job_count(&store).await,
             2,
@@ -507,7 +581,7 @@ mod tests {
         // A position from another stream generation can never be served: resync.
         let bogus = FeedPosition::new(9_999, 42);
         store.set_intake_position(bogus).await.unwrap();
-        let err = process_batch(&store, &b, 10, fixed_now())
+        let err = process_batch(&store, &b, &test_site(), 10, fixed_now())
             .await
             .unwrap_err();
         assert!(matches!(err, crate::error::Error::IntakeResync), "{err:?}");
@@ -528,7 +602,9 @@ mod tests {
         tx.enqueue(&enqueued_event("good")).await.unwrap();
         tx.commit().await.unwrap();
 
-        let report = process_batch(&store, &b, 100, fixed_now()).await.unwrap();
+        let report = process_batch(&store, &b, &test_site(), 100, fixed_now())
+            .await
+            .unwrap();
         assert_eq!(report.inserted, 1);
         let reasons: Vec<&str> = report.rejected.iter().map(|r| r.reason).collect();
         assert_eq!(

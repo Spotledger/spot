@@ -30,6 +30,13 @@
 //! Case at `needs_decision` with its dependencies. A blocked Case may not take another engine
 //! step until the step completes or a person releases the decision.
 //!
+//! # The audit payload
+//!
+//! [`MigrationAudit::to_payload`](migration::MigrationAudit::to_payload) and
+//! [`MigrationAudit::to_outbox_json`](migration::MigrationAudit::to_outbox_json) (in
+//! [`audit_payload`]) are the one place a [`migration::MigrationAudit`] becomes the
+//! `sys_bpm_case_migrated` event data, so every host target writes the same bytes.
+//!
 //! # Purity
 //!
 //! Time is always an argument, no wall clock is read, there is no `unsafe`, no float arithmetic
@@ -38,6 +45,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod audit_payload;
 pub mod batch;
 pub mod compensation;
 pub mod error;

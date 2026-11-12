@@ -318,7 +318,10 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert!(retaken, "the lock was not released after the holder was dropped");
+        assert!(
+            retaken,
+            "the lock was not released after the holder was dropped"
+        );
     }
 
     #[test]

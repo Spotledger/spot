@@ -379,6 +379,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "serde_core",
@@ -3702,6 +3703,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin 0.9.9",
+ "version_check",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6925,6 +6943,7 @@ dependencies = [
  "spot-dag",
  "spot-dag-exec",
  "spot-errors",
+ "spot-events-contract",
  "spot-storage-contract",
  "thiserror 2.0.21",
 ]
@@ -7660,6 +7679,7 @@ dependencies = [
  "spot-core",
  "spot-document",
  "spot-events-contract",
+ "spot-jobs",
  "spot-l3-documents",
  "spot-links",
  "spot-meta",
@@ -8429,6 +8449,7 @@ dependencies = [
  "deadpool-postgres",
  "serde_json",
  "spot-core",
+ "spot-events-contract",
  "spot-jobs",
  "spot-postgres",
  "spot-scheduler",
@@ -9238,6 +9259,24 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "spot-mgmt-sync"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "spot-agent-linux",
+ "spot-agent-runtime",
+ "spot-conditions",
+ "spot-mgmt-journal",
+ "spot-mgmt-ops",
+ "spot-sync-conditions",
+ "spot-sync-health",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -10409,6 +10448,33 @@ dependencies = [
  "spot-webhooks",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "spot-store-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spot-app-review",
+ "spot-bundle",
+ "spot-bundle-signing",
+ "spot-license",
+ "spot-pg-bridge",
+ "spot-postgres",
+ "spot-registry",
+ "spot-registry-pg",
+ "spot-store-commerce",
+ "spot-store-state",
+ "spot-store-state-pg",
+ "tempfile",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tower",
+ "uuid",
 ]
 
 [[package]]

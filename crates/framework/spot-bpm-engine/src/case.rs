@@ -215,6 +215,8 @@ pub struct CaseUpdate {
     pub child: Option<ChildLink>,
     /// The Case's variables, replacing the stored ones when present.
     pub variables: Option<Json>,
+    /// The instant this update is committed at; a store that logs an attempt or a timer reads it.
+    pub at: Option<Instant>,
 }
 
 impl CaseUpdate {
@@ -235,6 +237,13 @@ impl CaseUpdate {
     #[must_use]
     pub fn with_attempt(mut self, attempt: Attempt) -> Self {
         self.attempt = Some(attempt);
+        self
+    }
+
+    /// Sets the instant this update is committed at.
+    #[must_use]
+    pub fn with_at(mut self, at: Instant) -> Self {
+        self.at = Some(at);
         self
     }
 
@@ -268,3 +277,16 @@ impl CaseUpdate {
 }
 
 // End of the record types; the node-id serde helpers live in `serde_nodes` above.
+
+#[cfg(test)]
+mod at_tests {
+    use super::*;
+    use spot_app_api::prelude::OffsetDateTime;
+
+    #[test]
+    fn with_at_sets_the_instant_and_new_leaves_it_none() {
+        assert_eq!(CaseUpdate::new().at, None);
+        let at = Instant::from_offset(OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(CaseUpdate::new().with_at(at).at, Some(at));
+    }
+}

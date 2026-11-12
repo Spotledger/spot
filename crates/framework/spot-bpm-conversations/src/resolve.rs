@@ -15,7 +15,7 @@ use spot_bpm_engine::{
     expr::evaluate_bool,
 };
 use spot_dag::NodeId;
-use spot_dag_exec::{NodeOutcome as DagOutcome, NodeStatus, RunStatus, complete};
+use spot_dag_exec::{Instant, NodeOutcome as DagOutcome, NodeStatus, RunStatus, complete};
 
 use crate::error::{ConversationError, Result, codes};
 
@@ -147,17 +147,19 @@ pub async fn resolve_wait<S: CaseStore + 'static, T: TimerPort + 'static>(
             )
         }
     };
-    let mut update = CaseUpdate::new().with_attempt(Attempt {
-        node: node_id.clone(),
-        attempt,
-        state,
-        output,
-        branches,
-        failure,
-        started_at: stored.started_at,
-        not_before: None,
-        is_retry: stored.is_retry,
-    });
+    let mut update = CaseUpdate::new()
+        .with_attempt(Attempt {
+            node: node_id.clone(),
+            attempt,
+            state,
+            output,
+            branches,
+            failure,
+            started_at: stored.started_at,
+            not_before: None,
+            is_retry: stored.is_retry,
+        })
+        .with_at(Instant::from_offset(now));
     if variables != record.variables {
         update = update.with_variables(variables);
     }

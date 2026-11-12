@@ -97,7 +97,9 @@ def _last(section: dict[str, list[str]], key: str) -> str | None:
 
 def _inside(path: str, prefixes: tuple[str, ...]) -> bool:
     clean = path.rstrip("/") or "/"
-    return any(clean == p or clean.startswith(p + "/") for p in prefixes)
+    # The prefixes are written with a trailing slash ("/usr/"): compare without it, or no path
+    # below one would ever match (the deb check refused every file of a correct package).
+    return any(clean == p.rstrip("/") or clean.startswith(p.rstrip("/") + "/") for p in prefixes)
 
 
 def lint_unit(text: str) -> list[str]:

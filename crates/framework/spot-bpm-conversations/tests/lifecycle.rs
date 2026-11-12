@@ -386,6 +386,7 @@ fn set_wait_state(booted: &Booted<'_>, case: &str, node: &str, state: AttemptSta
     let record = booted.case(case);
     let mut attempt = record.attempt(&node_id).unwrap().clone();
     attempt.state = state;
+    let at = attempt.started_at;
     block_on(async {
         booted
             .engine
@@ -393,7 +394,9 @@ fn set_wait_state(booted: &Booted<'_>, case: &str, node: &str, state: AttemptSta
             .commit(
                 &id,
                 record.run.version,
-                spot_bpm_engine::CaseUpdate::new().with_attempt(attempt),
+                spot_bpm_engine::CaseUpdate::new()
+                    .with_attempt(attempt)
+                    .with_at(at),
             )
             .await
             .unwrap();

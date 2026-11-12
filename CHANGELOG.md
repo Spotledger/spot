@@ -9,6 +9,19 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.7] - 2026-11-12
+
+Continuous integration and packaging checks: 0.1.6 still failed on the hosted runners.
+
+### Fixed
+
+- The Debian package check refused every file of a correct package: its allowed-prefix test
+  compared paths against prefixes written with a trailing slash, so nothing matched. The check
+  only runs where `dpkg-deb` exists, which is why it was first seen on the hosted runner.
+- `spot-agent-linux` compiles for Windows (the process-group call is Unix-only), so the Windows
+  workspace build no longer stops at that crate.
+- The formatting of the 0.1.6 lock-test fix.
+
 ## [0.1.6] - 2026-11-12
 
 Continuous integration, and one test: the first scheduled nightly run on the hosted runners failed

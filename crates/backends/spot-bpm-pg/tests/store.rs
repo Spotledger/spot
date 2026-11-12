@@ -223,7 +223,9 @@ async fn a_terminal_outcome_is_never_overwritten() {
         .commit(
             &id,
             record.run.version,
-            CaseUpdate::new().with_attempt(done),
+            CaseUpdate::new()
+                .with_attempt(done)
+                .with_at(Instant::from_offset(now())),
         )
         .await
         .unwrap();
@@ -248,7 +250,9 @@ async fn a_terminal_outcome_is_never_overwritten() {
         .commit(
             &id,
             record.run.version,
-            CaseUpdate::new().with_attempt(started),
+            CaseUpdate::new()
+                .with_attempt(started)
+                .with_at(Instant::from_offset(now())),
         )
         .await
         .unwrap();
@@ -344,7 +348,8 @@ async fn list_runnable_reports_due_timers_only() {
             record.run.version,
             CaseUpdate::new()
                 .with_attempt(waiting(Some(now())))
-                .with_timer(timer(Some(now()), None)),
+                .with_timer(timer(Some(now()), None))
+                .with_at(Instant::from_offset(now())),
         )
         .await
         .unwrap();
@@ -367,7 +372,8 @@ async fn list_runnable_reports_due_timers_only() {
             record.run.version,
             CaseUpdate::new()
                 .with_attempt(waiting(Some(later)))
-                .with_timer(timer(Some(later), None)),
+                .with_timer(timer(Some(later), None))
+                .with_at(Instant::from_offset(now())),
         )
         .await
         .unwrap();
@@ -398,7 +404,8 @@ async fn list_runnable_reports_due_timers_only() {
             record.run.version,
             CaseUpdate::new()
                 .with_attempt(waiting(None))
-                .with_timer(timer(None, Some("order.approved"))),
+                .with_timer(timer(None, Some("order.approved")))
+                .with_at(Instant::from_offset(now())),
         )
         .await
         .unwrap();

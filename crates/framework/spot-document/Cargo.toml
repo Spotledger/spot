@@ -68,6 +68,9 @@ spot-l3-documents = { path = "../../../harness/rust/l3-documents" }
 # The journal capture invariant checker (WP-JRN-02.T2): the PostgreSQL capture test compares the
 # real change feed with the real `doc_state` events through it.
 spot-capture-invariant = { path = "../spot-capture-invariant" }
+# The job intake's own type and `process_batch` (WP-CON-04.T10): the job event the engine
+# writes is decoded by the consumer that reads it. `spot-jobs` does not depend on this crate.
+spot-jobs = { path = "../spot-jobs" }
 # The authz matrix is a TOML table, read with the same parser the permission model uses.
 toml = "0.8"
 # The capture layer of the pipeline span tests.

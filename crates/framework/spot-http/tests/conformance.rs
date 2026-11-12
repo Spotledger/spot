@@ -1174,8 +1174,8 @@ fn component_validator(root: &Json, name: &str) -> jsonschema::Validator {
 #[test]
 fn the_0_6_0_properties_are_optional_bounded_and_additive() {
     let root = parse_root();
-    // The contract is at 0.11.1; the 0.6.0 properties must still hold unchanged.
-    assert_eq!(root["info"]["version"], "0.11.1");
+    // The contract is at 0.12.0; the 0.6.0 properties must still hold unchanged.
+    assert_eq!(root["info"]["version"], "0.12.0");
     let meta = component_validator(&root, "DocTypeMeta");
     let row = component_validator(&root, "LookupRow");
     let request = component_validator(&root, "LookupRequest");
@@ -1247,11 +1247,11 @@ fn the_0_6_0_properties_are_optional_bounded_and_additive() {
 #[test]
 fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.11.1");
+    assert_eq!(root["info"]["version"], "0.12.0");
     assert_eq!(
         root["x-spot-error-codes"].as_object().must().len(),
-        62,
-        "the registry counts the two print codes and, from 0.10.0, partition.not_owner"
+        75,
+        "the registry counts the two print codes, from 0.10.0 partition.not_owner and, from 0.12.0, the thirteen process and task codes"
     );
     assert!(root["x-spot-error-codes"]["print.format_unknown"].is_array());
     assert_eq!(root["x-spot-error-codes"]["print.render_failed"][0], 500);
@@ -1328,7 +1328,7 @@ fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
 #[test]
 fn the_0_9_0_properties_are_optional_and_additive() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.11.1");
+    assert_eq!(root["info"]["version"], "0.12.0");
     let field = component_validator(&root, "FieldMeta");
     let kind = component_validator(&root, "FieldType");
 
@@ -1365,8 +1365,9 @@ fn the_0_9_0_properties_are_optional_and_additive() {
     let kinds: Vec<&str> = kinds.iter().filter_map(Json::as_str).collect();
     assert_eq!(kinds, vec!["user", "consumer", "system"]);
 
-    // 0.9.0 added no operation and no error code: 0.10.0 added `partition.not_owner` (the 62nd).
-    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 62);
+    // 0.9.0 added no operation and no error code: 0.10.0 added `partition.not_owner` (the 62nd)
+    // and 0.12.0 the thirteen process and task codes (75 in all).
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 75);
 }
 
 /// Contract 0.10.0 (WP-CON-03.T13), additive: `partition.not_owner`, the notice feed and the
@@ -1375,8 +1376,8 @@ fn the_0_9_0_properties_are_optional_and_additive() {
 #[test]
 fn the_0_10_0_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.11.1");
-    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 62);
+    assert_eq!(root["info"]["version"], "0.12.0");
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 75);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][0], 403);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][1], false);
     // Every 0.9.0 code is still there (the 61 are the 62 less the new one).
@@ -1433,6 +1434,103 @@ fn the_0_10_0_additions_are_additive_and_pinned() {
         !gap.contains("auth_consumer_renew") && registered.contains("auth_consumer_renew"),
         "auth_consumer_renew is served by the registered public renewal group"
     );
+}
+
+/// Contract 0.12.0 (WP-CON-03.T20), additive: the process, run and task inbox operations and
+/// their thirteen error codes. No server yet (the route modules that follow add them to
+/// `SERVES`, and the walk then needs a case for each); this pins the shape a server must keep.
+#[test]
+fn the_0_12_0_process_and_task_operations_are_additive_and_pinned() {
+    let root = parse_root();
+    assert_eq!(root["info"]["version"], "0.12.0");
+    assert_eq!(
+        api_operations(&root).len(),
+        57,
+        "60 operations less the health probes and the realtime upgrade"
+    );
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 75);
+
+    // (operationId, method, path); only `process_webhook` is public.
+    let expected = [
+        ("process_list", "get", "/api/v1/process"),
+        ("run_start", "post", "/api/v1/process/{process}/runs"),
+        ("run_list", "get", "/api/v1/process/runs"),
+        ("run_get", "get", "/api/v1/process/runs/{id}"),
+        ("run_events", "get", "/api/v1/process/runs/{id}/events"),
+        ("run_cancel", "post", "/api/v1/process/runs/{id}/cancel"),
+        ("process_webhook", "post", "/api/v1/process/hook/{trigger}"),
+        ("task_list", "get", "/api/v1/task"),
+        ("task_get", "get", "/api/v1/task/{id}"),
+        ("task_claim", "post", "/api/v1/task/{id}/claim"),
+        ("task_release", "post", "/api/v1/task/{id}/release"),
+        ("task_complete", "post", "/api/v1/task/{id}/complete"),
+        ("task_delegate", "post", "/api/v1/task/{id}/delegate"),
+        ("task_reassign", "post", "/api/v1/task/{id}/reassign"),
+    ];
+    for (id, method, path) in expected {
+        let op = &root["paths"][path][method];
+        assert_eq!(op["operationId"], id, "{method} {path}");
+        let public = op["security"].as_array().is_some_and(Vec::is_empty);
+        assert_eq!(
+            public,
+            id == "process_webhook",
+            "{id}: only the webhook is public"
+        );
+    }
+    for (code, status) in [
+        ("process.not_found", 404),
+        ("process.input_invalid", 422),
+        ("process.run_not_found", 404),
+        ("process.run_not_active", 409),
+        ("process.webhook_rejected", 401),
+        ("task.not_found", 404),
+        ("task.already_claimed", 409),
+        ("task.not_claimed_by_caller", 409),
+        ("task.outcome_invalid", 422),
+        ("task.segregation", 403),
+        ("task.delegation_invalid", 422),
+        ("task.target_invalid", 422),
+        ("task.not_active", 409),
+    ] {
+        assert_eq!(root["x-spot-error-codes"][code][0], status, "{code}");
+        assert_eq!(
+            root["x-spot-error-codes"][code][1], false,
+            "{code} is not retryable"
+        );
+    }
+
+    // The bodies are closed and bounded, and a run answer carries no variables.
+    let start = component_validator(&root, "RunStart");
+    assert!(start.is_valid(&json!({"input": {"amount": "1.00"}, "business_key": "EXP-1"})));
+    assert!(!start.is_valid(&json!({"input": {}, "starter": "someone"})));
+    assert!(!start.is_valid(&json!({"input": {}, "business_key": ""})));
+    assert!(!start.is_valid(&json!({"business_key": "x"})));
+    let complete = component_validator(&root, "TaskComplete");
+    assert!(complete.is_valid(&json!({"outcome": "approve", "comment": "ok", "values": {"a": 1}})));
+    assert!(!complete.is_valid(&json!({"outcome": "approve", "actor": "system:sla"})));
+    assert!(!complete.is_valid(&json!({"outcome": "approve", "comment": "x".repeat(2001)})));
+    let cancel = component_validator(&root, "RunCancel");
+    assert!(cancel.is_valid(&json!({"reason": "wrong customer"})));
+    assert!(!cancel.is_valid(&json!({"reason": ""})));
+    assert!(!cancel.is_valid(&json!({"reason": "x".repeat(501)})));
+    let run = component_validator(&root, "Run");
+    let a_run = json!({
+        "id": "k3J9x0Qw7Zr2Lm8Pa1Bc4D",
+        "process": "expense_claim",
+        "version": 3,
+        "state": "waiting",
+        "business_key": null,
+        "started_at": "2026-11-12T08:00:00Z",
+        "steps": [{"node": "review", "label": "Review", "state": "waiting"}],
+        "documents": [{"doctype": "expense_claim", "id": "0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e6f"}]
+    });
+    assert!(run.is_valid(&a_run));
+    let mut leaky = a_run.clone();
+    leaky["variables"] = json!({"secret": 1});
+    assert!(!run.is_valid(&leaky), "a run carries no variables");
+    let mut stateless = a_run.clone();
+    stateless["state"] = json!("paused");
+    assert!(!run.is_valid(&stateless));
 }
 
 /// The registered feed is guarded like every registered group: no credential and a credential

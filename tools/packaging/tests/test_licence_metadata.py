@@ -119,7 +119,8 @@ class BuildTest(unittest.TestCase):
                                  capture_output=True, text=True, check=True).stdout
         self.assertIn("usr/share/doc/spot/LICENSE", listing)
         self.assertIn("usr/share/doc/spot/NOTICE", listing)
-        self.assertTrue(check.check_deb(artifact, "1.2.3")["ok"])
+        result = check.check_deb(artifact, "1.2.3")
+        self.assertTrue(result["ok"], result.get("errors"))
 
     def test_deb_stage_list_names_both_files(self):
         # Runs without dpkg-deb: the staging list is part of the build source.

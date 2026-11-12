@@ -136,6 +136,32 @@ pub enum Code {
     ServerMaintenance,
     /// 503: concurrent changes kept conflicting.
     ServerConflictRetryExhausted,
+    /// 404: No process with this name that the caller may start.
+    ProcessNotFound,
+    /// 422: The start input does not fit the trigger's input schema.
+    ProcessInputInvalid,
+    /// 404: No run with this id that the caller may see.
+    ProcessRunNotFound,
+    /// 409: The run has already ended, so it cannot be cancelled.
+    ProcessRunNotActive,
+    /// 401: The webhook delivery was rejected.
+    ProcessWebhookRejected,
+    /// 404: No task with this id that the caller may act on or supervise.
+    TaskNotFound,
+    /// 409: Another user holds this task's claim.
+    TaskAlreadyClaimed,
+    /// 409: The caller does not hold the claim on this task.
+    TaskNotClaimedByCaller,
+    /// 422: The outcome is not one the task offers the caller.
+    TaskOutcomeInvalid,
+    /// 403: Segregation of duties: the caller created or already decided the document this step guards.
+    TaskSegregation,
+    /// 422: The delegation is not valid.
+    TaskDelegationInvalid,
+    /// 422: The user the task is to go to is unknown, inactive or the caller.
+    TaskTargetInvalid,
+    /// 409: The task is finished or cancelled, so the action is not allowed.
+    TaskNotActive,
 }
 
 /// The registry table: `code → (status, retryable, meaning)`. Order is the contract's.
@@ -507,6 +533,84 @@ const TABLE: &[(Code, u16, bool, &str)] = &[
         true,
         "Concurrent changes kept conflicting; try again.",
     ),
+    (
+        Code::ProcessNotFound,
+        404,
+        false,
+        "No process with this name that the caller may start (the same answer for one that does not exist).",
+    ),
+    (
+        Code::ProcessInputInvalid,
+        422,
+        false,
+        "The start input does not fit the trigger's input schema; fields carries paths only, never values.",
+    ),
+    (
+        Code::ProcessRunNotFound,
+        404,
+        false,
+        "No run with this id that the caller may see.",
+    ),
+    (
+        Code::ProcessRunNotActive,
+        409,
+        false,
+        "The run has already ended, so it cannot be cancelled.",
+    ),
+    (
+        Code::ProcessWebhookRejected,
+        401,
+        false,
+        "The webhook delivery was rejected (bad signature, unknown or disabled trigger, or a replayed delivery); the reason is never given.",
+    ),
+    (
+        Code::TaskNotFound,
+        404,
+        false,
+        "No task with this id that the caller may act on or supervise.",
+    ),
+    (
+        Code::TaskAlreadyClaimed,
+        409,
+        false,
+        "Another user holds this task's claim.",
+    ),
+    (
+        Code::TaskNotClaimedByCaller,
+        409,
+        false,
+        "The caller does not hold the claim on this task.",
+    ),
+    (
+        Code::TaskOutcomeInvalid,
+        422,
+        false,
+        "The outcome is not one the task offers the caller.",
+    ),
+    (
+        Code::TaskSegregation,
+        403,
+        false,
+        "Segregation of duties: the caller created or already decided the document this step guards.",
+    ),
+    (
+        Code::TaskDelegationInvalid,
+        422,
+        false,
+        "The delegation is not valid (for example an end time in the past).",
+    ),
+    (
+        Code::TaskTargetInvalid,
+        422,
+        false,
+        "The user the task is to go to is unknown, inactive or the caller (the same answer for each).",
+    ),
+    (
+        Code::TaskNotActive,
+        409,
+        false,
+        "The task is finished or cancelled, so the action is not allowed.",
+    ),
 ];
 
 impl Code {
@@ -581,6 +685,19 @@ impl Code {
             Code::ServerUnavailable => "server.unavailable",
             Code::ServerMaintenance => "server.maintenance",
             Code::ServerConflictRetryExhausted => "server.conflict_retry_exhausted",
+            Code::ProcessNotFound => "process.not_found",
+            Code::ProcessInputInvalid => "process.input_invalid",
+            Code::ProcessRunNotFound => "process.run_not_found",
+            Code::ProcessRunNotActive => "process.run_not_active",
+            Code::ProcessWebhookRejected => "process.webhook_rejected",
+            Code::TaskNotFound => "task.not_found",
+            Code::TaskAlreadyClaimed => "task.already_claimed",
+            Code::TaskNotClaimedByCaller => "task.not_claimed_by_caller",
+            Code::TaskOutcomeInvalid => "task.outcome_invalid",
+            Code::TaskSegregation => "task.segregation",
+            Code::TaskDelegationInvalid => "task.delegation_invalid",
+            Code::TaskTargetInvalid => "task.target_invalid",
+            Code::TaskNotActive => "task.not_active",
         }
     }
 
@@ -675,6 +792,6 @@ mod tests {
 
     #[test]
     fn every_variant_is_in_the_table() {
-        assert_eq!(Code::all().len(), 62, "registry entry count");
+        assert_eq!(Code::all().len(), 75, "registry entry count");
     }
 }

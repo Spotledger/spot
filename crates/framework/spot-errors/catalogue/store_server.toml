@@ -1,0 +1,120 @@
+# store_server codes: the store server's own refusals (WP-STR-03.T3), outside the store API
+# contract, whose wire codes are `store.*`. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. A message never carries a key, token, bundle or SQL.
+
+[[entry]]
+code = "store_server.config"
+class = "none"
+summary = "The configuration file is missing, unreadable, unparsable or holds a value outside its bounds."
+explanation_key = "error.store_server.config"
+params = []
+remedy = "Fix the named setting in the configuration file; an unknown key is refused, so a typo shows up here."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.key_file"
+class = "none"
+summary = "A key or secret file is missing, unreadable, malformed or readable by other users."
+explanation_key = "error.store_server.key_file"
+params = []
+remedy = "Create the file with the documented content and mode 0600, and name it in the configuration."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.startup"
+class = "none"
+summary = "The store server could not start: the database, the shared bridge, a trust root, the first revocation list or a thread."
+explanation_key = "error.store_server.startup"
+params = []
+remedy = "Read the sentence, fix the named dependency and start the server again; nothing was served."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.not_found"
+class = "none"
+summary = "No such route, or an operator route names an app version, review or publisher key that does not exist."
+explanation_key = "error.store_server.not_found"
+params = []
+remedy = "Check the path against the store API contract or the operator guide."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.method_not_allowed"
+class = "none"
+summary = "The route exists but does not take that HTTP method."
+explanation_key = "error.store_server.method_not_allowed"
+params = []
+remedy = "Use the method the contract or the operator guide names for the route."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.unavailable"
+class = "none"
+summary = "The server is overloaded or a dependency (the database, the review workers) is unavailable."
+explanation_key = "error.store_server.unavailable"
+params = []
+remedy = "Retry after the number of seconds in Retry-After; the request had no effect."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.internal"
+class = "none"
+summary = "An unexpected failure that the caller cannot fix."
+explanation_key = "error.store_server.internal"
+params = []
+remedy = "Quote the request id to the store operator, who finds the cause in the log."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.admin_unauthorized"
+class = "none"
+summary = "The operator credential is missing or wrong."
+explanation_key = "error.store_server.admin_unauthorized"
+params = []
+remedy = "Send the operator secret as a bearer credential; failures are counted per source address."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.invalid_admin_request"
+class = "none"
+summary = "An operator request is malformed or names a value outside its bounds."
+explanation_key = "error.store_server.invalid_admin_request"
+params = []
+remedy = "Fix the named field and send the request again."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.bad_state"
+class = "none"
+summary = "The requested listing transition is not allowed from the version's current state, or another operator made it first."
+explanation_key = "error.store_server.bad_state"
+params = []
+remedy = "Read the version's state: only pending_review may become listed or rejected, and only listed may become withdrawn."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.review_unavailable"
+class = "none"
+summary = "A review could not be queued: the review queue is full or every review worker is stuck."
+explanation_key = "error.store_server.review_unavailable"
+params = []
+remedy = "Queue it again with the operator rerun route once the review workers are free."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.review_timeout"
+class = "none"
+summary = "A review ran past its wall-clock limit and was recorded as failed."
+explanation_key = "error.store_server.review_timeout"
+params = []
+remedy = "Inspect the bundle for work that never ends, then queue the review again with the operator rerun route."
+since = "0.1.0"
+
+[[entry]]
+code = "store_server.review_failed"
+class = "none"
+summary = "A review ended without a report: the bundle could not be read, or the review worker failed."
+explanation_key = "error.store_server.review_failed"
+params = []
+remedy = "Queue the review again with the operator rerun route; if it fails again, read the server log."
+since = "0.1.0"

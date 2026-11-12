@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Spotledger native API
-  version: 0.11.1
+  version: 0.12.0
   summary: The only way clients reach the Spotledger runtime (ADR-09, ADR-15).
   description: |
     Contract v0.4 (WP-CON-03, ADR-055). Normative rules that JSON Schema cannot express are
@@ -23,7 +23,8 @@ info:
     client shows such a field as plain read-only text once the document exists, and ignores
     an event whose actor kind it does not know; the notification feed, the consumer session
     renewal and the `partition.not_owner` code in 0.9.0 or older, where a client shows the
-    notices it received live and signs the consumer in again). Clients must ignore unknown
+    notices it received live and signs the consumer in again; the process, run and task inbox
+    operations in 0.11.1 or older, where a client hides them). Clients must ignore unknown
     response fields either way.
 
     ## Sites
@@ -121,6 +122,8 @@ tags:
   - name: files
   - name: print
   - name: realtime
+  - name: process
+  - name: task
 
 paths:
   /api/health/live:
@@ -1857,6 +1860,480 @@ paths:
                 next: 0192f3c4-5b6a-7c8d-9e0f-00000000ev01
         default: {$ref: "#/components/responses/Error"}
 
+  /api/v1/process:
+    get:
+      tags: [process]
+      operationId: process_list
+      summary: The processes the caller may start (a manual or API trigger the caller's roles allow).
+      description: |
+        The processes whose **latest published version** has a `manual` or `api` trigger that the
+        caller's roles allow (WP-CON-03.T20, ADR-080). A process the caller may not start is
+        **absent**: there is no flag, no hint and no total that counts it (the list is filtered
+        by the caller's rights before it is paged). Permission is the trigger's role list and
+        nothing else; an empty role list on the trigger means any signed-in caller.
+
+        Each item is `{name, label, version, input_schema}`. `input_schema` is the trigger's JSON
+        Schema subset: bounded, and with no `$ref` to anything outside the schema itself, so a
+        client can build the start form from it and a server never fetches anything on the
+        client's behalf. Paged by an opaque `cursor`, at most 100 per page (default 50); the
+        answer is `{data, next_cursor}`. Rate class `interactive`. Any signed-in user may call
+        it; a caller who may start nothing gets an empty page.
+
+        The processes named `runs` and `hook` are reserved: they cannot be published, because the
+        paths `/api/v1/process/runs` and `/api/v1/process/hook/{trigger}` take those segments.
+      parameters:
+        - {name: cursor, in: query, required: false, description: "The `next_cursor` of the previous page.", schema: {type: string, minLength: 1, maxLength: 2048}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        "200":
+          description: The processes the caller may start.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProcessPage"}
+              example:
+                data:
+                  - name: expense_claim
+                    label: Expense claim
+                    version: 3
+                    input_schema: {type: object, required: [amount], properties: {amount: {type: string, maxLength: 32}}, additionalProperties: false}
+                next_cursor: null
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/{process}/runs:
+    parameters:
+      - $ref: "#/components/parameters/ProcessName"
+    post:
+      tags: [process]
+      operationId: run_start
+      summary: Start a run of a process (manual or API trigger).
+      description: |
+        Starts one **run** of the process's latest published version through its `manual` or
+        `api` trigger, as the authenticated caller (the caller is the run's starter; the body
+        cannot name one). `Idempotency-Key` is **required**: the first request answers
+        `201` with the `Run`; a replay of the same key and body answers `200` with the same `Run`
+        and `Idempotency-Replayed: true` (the key is the start's source event, so a replay never
+        starts a second run). The same key with a different body is
+        `409 api.idempotency_conflict`. Rate class: the class `resource_update` runs in.
+
+        **Permission is the trigger's role list and nothing else.** A process the caller may not
+        start gets exactly the same `404 process.not_found` as a process that does not exist.
+
+        `input` must satisfy the trigger's `input_schema` (see `process_list`). Input that does
+        not is `422 process.input_invalid`; the answer carries **field paths only** in `fields`
+        (`{field, code, message}` with a generic message), never the submitted value. The body is
+        closed: `input` (an object, at most 64 KiB serialised) and an optional `business_key`
+        (1 to 128 characters, visible ASCII; it is the client's own reference and is stored
+        as given; it is not unique and grants nothing).
+
+        The write is audited, a refusal included: who, which process, the idempotency key, and
+        which rule refused (`process.not_found`, `process.input_invalid`); the audit never records
+        the input values.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyRequired"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RunStart"}
+            example: {input: {amount: "125.50"}, business_key: EXP-2026-0042}
+      responses:
+        "201":
+          description: The run was started.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunResponse"}
+        "200":
+          description: A replay of the same `Idempotency-Key`; the same run as the first answer.
+          headers:
+            Idempotency-Replayed: {description: "Always `true`.", schema: {type: string, const: "true"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/runs:
+    get:
+      tags: [process]
+      operationId: run_list
+      summary: The runs the caller may see.
+      description: |
+        Runs the caller may see, newest first. A run is visible to **its starter**, to **an
+        assignee or a supervisor of one of its tasks**, and to **a holder of the platform
+        permission `process.supervise`** on that process. Nothing else. The list is filtered by
+        that rule **before** it is counted or paged, and no total is returned, so a caller learns
+        nothing about runs they may not see. Rate class `interactive`.
+
+        Filters (all optional): `process` (a process name), `state` (one `RunState`), `mine`
+        (true: only runs the caller started). Paged by an opaque `cursor`, `limit` 1 to 100,
+        default 50; the answer is `{data, next_cursor}`. A filter value that matches nothing the
+        caller may see is an empty page, never an error.
+      parameters:
+        - {name: process, in: query, required: false, schema: {$ref: "#/components/schemas/Identifier"}}
+        - {name: state, in: query, required: false, schema: {$ref: "#/components/schemas/RunState"}}
+        - {name: mine, in: query, required: false, schema: {type: boolean, default: false}}
+        - {name: cursor, in: query, required: false, description: "The `next_cursor` of the previous page.", schema: {type: string, minLength: 1, maxLength: 2048}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunPage"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [process]
+      operationId: run_get
+      summary: "One run: its state, steps and the documents it touches."
+      description: |
+        The `Run` with the same visibility as `run_list`. A run the caller may not see and a run
+        that does not exist are both `404 process.run_not_found` with the same body. Rate class
+        `interactive`.
+
+        The answer carries **no run variables, no node outputs and no error text**: a failed run
+        has only a stable `failure_code`. It names documents by `doctype` and `id` only; the client
+        reads each through `resource_get`, which applies the field guard. The run id is the
+        cryptographic id of WP-BPM-12.T3 (opaque; clients never parse it).
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/runs/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [process]
+      operationId: run_events
+      summary: The audit trail of a run, oldest first, without payloads.
+      description: |
+        The events of the run, oldest first: `{seq, at, kind, node?, actor?}` and **no payload**
+        (no variable, no input, no output). `seq` starts at 1 and increases by one; `after` is the
+        `seq` of the last event the client has (default 0, from the start) and `limit` is 1 to 200
+        (default 100). The answer is `{data, next_after}`, where `next_after` is the last `seq` of
+        the page and is absent on an empty page. Same visibility, same `404 process.run_not_found`
+        and same rate class (`interactive`) as `run_get`.
+      parameters:
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+      responses:
+        "200":
+          description: A page of events.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunEventPage"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/runs/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [process]
+      operationId: run_cancel
+      summary: Cancel a running or waiting run.
+      description: |
+        Allowed to **the run's starter** and to **a holder of `process.supervise`** on the process.
+        A caller who may see the run but may do neither gets `403 permission.denied` (the caller
+        knows the run exists); a run the caller may not see is `404 process.run_not_found`. A run
+        that has ended is `409 process.run_not_active`. Cancelling runs the compensation of
+        WP-BPM-15 where the process declares it, and the answer is the `Run` in its new state.
+        The call is idempotent in effect: a repeat on a run this caller already cancelled is
+        `409 process.run_not_active`. Rate class: the class `resource_update` runs in.
+
+        `reason` (1 to 500 characters) is stored in the audit trail and is not shown in any
+        other answer. The write is audited, a refusal included (who, which run, which rule
+        refused).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RunCancel"}
+            example: {reason: Entered for the wrong customer.}
+      responses:
+        "200":
+          description: The run in its new state.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/process/hook/{trigger}:
+    post:
+      tags: [process]
+      operationId: process_webhook
+      summary: Public receiver of a process's incoming webhook (the only operation without a bearer here).
+      description: |
+        **The only public operation of the process and task groups: no bearer token and no
+        cookie.** The caller proves itself by the `X-Spot-Signature` header over the **raw body**
+        (the scheme of `spot_webhooks::signing`, which `spot-bpm-triggers` verifies **before** it
+        parses the body: a body is never parsed, and no JSON error is ever produced, for a
+        request whose signature has not verified). `trigger` is the trigger's webhook path
+        segment, as the process definition declares it. The body is `application/json`, at most
+        256 KiB (`413 http.body_too_large` above that, `415 api.unsupported_media_type` for
+        another type). An optional `Idempotency-Key` header names the delivery; without it the
+        delivery is identified by the SHA-256 of the body, so a redelivery starts nothing twice.
+
+        Success is `202 {accepted: true}`. **The answer never says whether a run started**: an
+        accepted delivery that matches no condition, or that is a replay of one already accepted,
+        is the same `202` (replays are idempotent). A bad or missing signature, a stale timestamp,
+        an unknown trigger, a disabled trigger, a verified body that is not a JSON object and a
+        replayed delivery id whose first delivery was rejected are **all the same**
+        `401 process.webhook_rejected`, with the same body and no detail, so the endpoint reveals
+        neither which triggers exist nor why a delivery failed. Rate class `auth`, per client
+        address (the strictest existing class; this version adds no class), answered
+        `429 api.rate_limited` with `Retry-After`.
+
+        Every delivery is audited, a rejection included (the trigger name as received, the client
+        address, the delivery id, and the rule that refused); the audit never stores the body of a
+        rejected delivery.
+      security: []
+      parameters:
+        - name: trigger
+          in: path
+          required: true
+          description: The trigger's webhook path segment.
+          schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+        - name: X-Spot-Signature
+          in: header
+          required: true
+          description: The signature over the raw body, in the `spot_webhooks::signing` format.
+          schema: {type: string, minLength: 1, maxLength: 512}
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: The sender's delivery id.
+          schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, maxProperties: 1000, description: Any JSON object of at most 256 KiB; its meaning is the trigger's.}
+      responses:
+        "202":
+          description: The delivery was accepted. It does not say whether a run started.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WebhookAccepted"}
+              example: {accepted: true}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task:
+    get:
+      tags: [task]
+      operationId: task_list
+      summary: The caller's task inbox.
+      description: |
+        `view=mine` (default): open tasks the caller may act on (an assignee, a role member or an
+        active delegate). `view=team`: tasks the caller supervises (their direct reports'). 
+        `view=overdue`: `mine` past the task's SLA due time. `process` narrows to one process.
+        The list is filtered by those rights **before** it is counted or paged and has no total.
+        Paged by an opaque `cursor`, `limit` 1 to 100 (default 50); the answer is
+        `{data, next_cursor}`. Rate class `interactive`.
+      parameters:
+        - {name: view, in: query, required: false, schema: {type: string, enum: [mine, team, overdue], default: mine}}
+        - {name: process, in: query, required: false, schema: {$ref: "#/components/schemas/Identifier"}}
+        - {name: cursor, in: query, required: false, description: "The `next_cursor` of the previous page.", schema: {type: string, minLength: 1, maxLength: 2048}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        "200":
+          description: A page of tasks.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskPage"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [task]
+      operationId: task_get
+      summary: One task, the outcomes the caller may choose, the form fields and the task's events.
+      description: |
+        The task, **the outcomes the caller may choose**, **the form fields the step collects
+        (names and types only, never values)** and the task's events (who held it, who decided
+        and on whose behalf). `ETag` carries the task's `version`. A task the caller may neither
+        act on nor supervise is `404 task.not_found`, the same body as an unknown task. The
+        document the step guards is named by `doctype` and `id` only; the client reads it through
+        `resource_get`. Rate class `interactive`.
+      responses:
+        "200":
+          description: The task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskDetailResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}/claim:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [task]
+      operationId: task_claim
+      summary: Claim a task for the caller.
+      description: |
+        Claims an open task for the authenticated caller. `If-Match` is required (`428
+        api.precondition_required` without it, `412 document.stale_version` with a stale one). A
+        repeat by the caller who already holds the claim is a success with no change. Another
+        user's claim is `409 task.already_claimed`; a task that is finished or cancelled is
+        `409 task.not_active`; a task the caller may neither act on nor supervise is
+        `404 task.not_found`. The answer is the task with its new `ETag`. Rate class: the class
+        `resource_update` runs in. The write is audited, a refusal included (who, which task,
+        which rule refused).
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: The claimed task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}/release:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [task]
+      operationId: task_release
+      summary: Give a claimed task back.
+      description: |
+        Releases the claim. Allowed to the user who holds it, and to a supervisor of the task
+        (who may release anyone's claim). A caller who can act on the task but holds no claim and
+        does not supervise it gets `409 task.not_claimed_by_caller`; a task that is not active is
+        `409 task.not_active`; an unknown or invisible task is `404 task.not_found`. `If-Match`
+        is required as for `task_claim`. Rate class: the class `resource_update` runs in. The
+        write is audited, a refusal included.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: The released task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [task]
+      operationId: task_complete
+      summary: Decide a task.
+      description: |
+        Completes the task with one of the outcomes `task_get` listed for the caller. **The actor
+        is always the authenticated caller**: the body cannot name an actor, and the reserved
+        actor `system:sla` is never reachable through the API. `If-Match` and `Idempotency-Key`
+        are both required; a replay of the same key returns the first answer
+        (`Idempotency-Replayed: true`), and a repeat of the same outcome on a completed task by
+        someone who may know it is the same success.
+
+        Errors: `422 task.outcome_invalid` (not one of the listed outcomes; the answer names
+        no submitted value); `403 task.segregation` (the caller created, or already decided, the
+        document the step guards, so the caller knows the task exists); `409 task.not_active`;
+        `409 task.already_claimed` when another user holds the claim; `404 task.not_found`;
+        `412 document.stale_version`. Completing resumes the run exactly once. `comment` is at
+        most 2000 characters and goes to the task's events; `values` is a bounded object of the
+        form fields `task_get` named (at most 100 properties, 64 KiB serialised).
+        Rate class: the class `resource_update` runs in. The write is audited, a refusal
+        included (who, which task, which outcome was tried, which rule refused).
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKeyRequired"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TaskComplete"}
+            example: {outcome: approve, comment: Looks right.}
+      responses:
+        "200":
+          description: The completed task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}/delegate:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [task]
+      operationId: task_delegate
+      summary: Hand a task to another user, optionally until a time.
+      description: |
+        The caller, who must be able to act on the task, delegates it to the user `to`, until
+        `until` when given (an RFC 3339 instant; the delegation then lapses). The scope is
+        always claim and complete. An unknown, inactive or self `to` is the same
+        `422 task.target_invalid`, whatever the reason; an `until` in the past is
+        `422 task.delegation_invalid`. `409 task.not_active`; `404 task.not_found`. `If-Match`
+        is required. Rate class: the class `resource_update` runs in. The write is audited, a
+        refusal included.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TaskDelegate"}
+            example: {to: u_ayesha, until: "2026-11-20T00:00:00Z", reason: On leave.}
+      responses:
+        "200":
+          description: The delegated task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/task/{id}/reassign:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [task]
+      operationId: task_reassign
+      summary: Move a task to another user (supervisors only).
+      description: |
+        Only a supervisor of the task may reassign it: the claim and any delegation are cleared and
+        `to` becomes the only assignee. A caller who sees the task but does not supervise it gets
+        `403 permission.denied`; an unknown, inactive or self-assigning `to` is
+        `422 task.target_invalid`; `409 task.not_active`; `404 task.not_found`. `If-Match` is
+        required. Rate class: the class `resource_update` runs in. The write is audited, a
+        refusal included.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TaskReassign"}
+            example: {to: u_ayesha, reason: Covering the queue.}
+      responses:
+        "200":
+          description: The reassigned task.
+          headers:
+            ETag: {$ref: "#/components/headers/ETag"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
   /api/v1/realtime:
     get:
       tags: [realtime]
@@ -1945,6 +2422,30 @@ components:
       required: false
       schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
 
+    ProcessName:
+      name: process
+      in: path
+      required: true
+      description: The process's storage name.
+      schema: {$ref: "#/components/schemas/Identifier"}
+    RunId:
+      name: id
+      in: path
+      required: true
+      description: The run's id.
+      schema: {$ref: "#/components/schemas/RunId"}
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: The task's id.
+      schema: {$ref: "#/components/schemas/TaskId"}
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 1 to 128 visible ASCII characters; a replay returns the first answer.
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
   responses:
     Error:
       description: Any error. The status and `error.code` follow the registry.
@@ -3209,6 +3710,251 @@ components:
         partition: {type: integer, minimum: 0, maximum: 63}
         position: {$ref: "#/components/schemas/EventPosition"}
 
+    # ---- Processes, runs and the task inbox (0.12.0, WP-CON-03.T20) ----
+    RunId:
+      type: string
+      description: |
+        The id of a run: the cryptographic case id of WP-BPM-12.T3, URL-safe and opaque. A
+        client stores and sends it back as given and never parses it.
+      pattern: '^[A-Za-z0-9_-]{16,64}$'
+    TaskId:
+      type: string
+      description: The id of a task (lower-case, starts with a letter). Opaque to a client.
+      pattern: '^[a-z][a-z0-9_]{0,63}$'
+    UserRef:
+      type: string
+      description: A user id as the directory shows it (the display id), never an email address or a name.
+      minLength: 1
+      maxLength: 128
+    InputSchema:
+      type: object
+      description: |
+        The trigger's JSON Schema subset (`type`, `properties`, `required`, `items`, `enum`,
+        `additionalProperties` as a boolean, and the length, range and pattern bounds). No `$ref`
+        and no keyword outside the subset; at most 64 KiB serialised. Open by nature: it is a
+        schema, not a record.
+      maxProperties: 16
+    RunState:
+      type: string
+      enum: [running, waiting, completed, failed, cancelled]
+      description: |
+        `waiting` is a running run whose every active step waits on a person, a timer or another
+        organisation's reply. `completed`, `failed` and `cancelled` are final.
+    StepState:
+      type: string
+      enum: [pending, active, waiting, completed, failed, skipped, cancelled]
+    DocumentRef:
+      type: object
+      additionalProperties: false
+      required: [doctype, id]
+      properties:
+        doctype: {$ref: "#/components/schemas/Identifier"}
+        id: {$ref: "#/components/schemas/RecordId"}
+    ProcessSummary:
+      type: object
+      additionalProperties: false
+      required: [name, label, version, input_schema]
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        label: {type: string, minLength: 1, maxLength: 140}
+        version: {type: integer, minimum: 1}
+        input_schema: {$ref: "#/components/schemas/InputSchema"}
+    ProcessPage:
+      type: object
+      additionalProperties: false
+      required: [data, next_cursor]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/ProcessSummary"}}
+        next_cursor: {type: [string, "null"], maxLength: 2048, description: "Opaque. `null` on the last page."}
+    RunStart:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input:
+          type: object
+          description: The start input, validated against the trigger's `input_schema`. At most 64 KiB serialised.
+          maxProperties: 200
+        business_key:
+          type: string
+          description: The client's own reference for the run. Not unique; grants nothing.
+          minLength: 1
+          maxLength: 128
+          pattern: '^[\x21-\x7e]+$'
+    RunCancel:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 500}
+    RunStep:
+      type: object
+      additionalProperties: false
+      required: [node, label, state]
+      properties:
+        node: {type: string, minLength: 1, maxLength: 128}
+        label: {type: string, minLength: 1, maxLength: 140}
+        state: {$ref: "#/components/schemas/StepState"}
+        started_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        ended_at: {$ref: "#/components/schemas/DateTimeUtc"}
+    Run:
+      type: object
+      additionalProperties: false
+      required: [id, process, version, state, business_key, started_at, steps, documents]
+      description: |
+        A run. Carries no variables, no node outputs and no error text; `failure_code` is a stable
+        code of the process engine's catalogue, present only on a `failed` run.
+      properties:
+        id: {$ref: "#/components/schemas/RunId"}
+        process: {$ref: "#/components/schemas/Identifier"}
+        version: {type: integer, minimum: 1}
+        state: {$ref: "#/components/schemas/RunState"}
+        business_key: {type: [string, "null"], minLength: 1, maxLength: 128}
+        started_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        ended_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        failure_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'}
+        steps: {type: array, maxItems: 500, items: {$ref: "#/components/schemas/RunStep"}}
+        documents: {type: array, maxItems: 200, items: {$ref: "#/components/schemas/DocumentRef"}}
+    RunResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: "#/components/schemas/Run"}
+        messages: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/Message"}}
+    RunPage:
+      type: object
+      additionalProperties: false
+      required: [data, next_cursor]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/Run"}}
+        next_cursor: {type: [string, "null"], maxLength: 2048, description: "Opaque. `null` on the last page."}
+    RunEvent:
+      type: object
+      additionalProperties: false
+      required: [seq, at, kind]
+      description: One line of a run's audit trail. No payload.
+      properties:
+        seq: {type: integer, minimum: 1}
+        at: {$ref: "#/components/schemas/DateTimeUtc"}
+        kind: {type: string, minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_.]*$'}
+        node: {type: string, minLength: 1, maxLength: 128}
+        actor: {type: string, minLength: 1, maxLength: 128, description: "A user id, `system:<name>` or `consumer:<id>`."}
+    RunEventPage:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {type: array, maxItems: 200, items: {$ref: "#/components/schemas/RunEvent"}}
+        next_after: {type: integer, minimum: 1, description: "The last `seq` of the page; absent on an empty page."}
+    WebhookAccepted:
+      type: object
+      additionalProperties: false
+      required: [accepted]
+      properties:
+        accepted: {type: boolean, const: true}
+    TaskState:
+      type: string
+      enum: [open, claimed, completed, cancelled, expired]
+      description: '`open` and `claimed` are active; the other three are final.'
+    TaskItem:
+      type: object
+      additionalProperties: false
+      required: [id, run, process, node, label, state, assignees, version]
+      properties:
+        id: {$ref: "#/components/schemas/TaskId"}
+        run: {$ref: "#/components/schemas/RunId"}
+        process: {$ref: "#/components/schemas/Identifier"}
+        node: {type: string, minLength: 1, maxLength: 128}
+        label: {type: string, minLength: 1, maxLength: 280}
+        state: {$ref: "#/components/schemas/TaskState"}
+        due_at: {$ref: "#/components/schemas/DateTimeUtc"}
+        assignees: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/UserRef"}}
+        claimed_by: {$ref: "#/components/schemas/UserRef"}
+        document: {$ref: "#/components/schemas/DocumentRef"}
+        version: {type: integer, minimum: 1}
+    TaskPage:
+      type: object
+      additionalProperties: false
+      required: [data, next_cursor]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/TaskItem"}}
+        next_cursor: {type: [string, "null"], maxLength: 2048, description: "Opaque. `null` on the last page."}
+    TaskOutcome:
+      type: object
+      additionalProperties: false
+      required: [outcome, label]
+      properties:
+        outcome: {type: string, minLength: 1, maxLength: 128, description: "The token to send in `task_complete`: `approve`, `reject` or `choose:<path>`."}
+        label: {type: string, minLength: 1, maxLength: 140}
+    TaskField:
+      type: object
+      additionalProperties: false
+      required: [name, type]
+      description: One form field the step collects; the name and the type only.
+      properties:
+        name: {$ref: "#/components/schemas/Identifier"}
+        type: {$ref: "#/components/schemas/FieldType"}
+    TaskEvent:
+      type: object
+      additionalProperties: false
+      required: [at, kind, actor]
+      properties:
+        at: {$ref: "#/components/schemas/DateTimeUtc"}
+        kind:
+          type: string
+          enum: [created, claimed, released, completed, auto_completed, delegated, reassigned, reminded, escalated, cancelled]
+        actor: {type: string, minLength: 1, maxLength: 128, description: "A user id or `system:sla`."}
+        on_behalf_of: {$ref: "#/components/schemas/UserRef"}
+        to: {$ref: "#/components/schemas/UserRef"}
+        outcome: {type: string, minLength: 1, maxLength: 128}
+    TaskDetail:
+      type: object
+      additionalProperties: false
+      required: [task, outcomes, fields, events]
+      properties:
+        task: {$ref: "#/components/schemas/TaskItem"}
+        outcomes: {type: array, maxItems: 20, items: {$ref: "#/components/schemas/TaskOutcome"}}
+        fields: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/TaskField"}}
+        events: {type: array, maxItems: 200, items: {$ref: "#/components/schemas/TaskEvent"}}
+    TaskDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: "#/components/schemas/TaskDetail"}
+        messages: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/Message"}}
+    TaskResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: "#/components/schemas/TaskItem"}
+        messages: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/Message"}}
+    TaskComplete:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: {type: string, minLength: 1, maxLength: 128}
+        comment: {type: string, maxLength: 2000}
+        values: {type: object, maxProperties: 100, description: "Values of the form fields `task_get` named; at most 64 KiB serialised."}
+    TaskDelegate:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to: {$ref: "#/components/schemas/UserRef"}
+        until: {type: string, format: date-time, maxLength: 40}
+        reason: {type: string, maxLength: 500}
+    TaskReassign:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to: {$ref: "#/components/schemas/UserRef"}
+        reason: {type: string, maxLength: 500}
+
 x-spot-error-codes:
   # code: [HTTP status, retryable, meaning]
   api.invalid_request: [400, false, "The request is malformed or does not match the schema."]
@@ -3273,3 +4019,16 @@ x-spot-error-codes:
   server.unavailable: [503, true, "The service is temporarily unavailable; wait for Retry-After."]
   server.maintenance: [503, true, "The site is in maintenance (for example during a migration, ADR-22)."]
   server.conflict_retry_exhausted: [503, true, "Concurrent changes kept conflicting; try again."]
+  process.not_found: [404, false, "No process with this name that the caller may start (the same answer for one that does not exist)."]
+  process.input_invalid: [422, false, "The start input does not fit the trigger's input schema; fields carries paths only, never values."]
+  process.run_not_found: [404, false, "No run with this id that the caller may see."]
+  process.run_not_active: [409, false, "The run has already ended, so it cannot be cancelled."]
+  process.webhook_rejected: [401, false, "The webhook delivery was rejected (bad signature, unknown or disabled trigger, or a replayed delivery); the reason is never given."]
+  task.not_found: [404, false, "No task with this id that the caller may act on or supervise."]
+  task.already_claimed: [409, false, "Another user holds this task's claim."]
+  task.not_claimed_by_caller: [409, false, "The caller does not hold the claim on this task."]
+  task.outcome_invalid: [422, false, "The outcome is not one the task offers the caller."]
+  task.segregation: [403, false, "Segregation of duties: the caller created or already decided the document this step guards."]
+  task.delegation_invalid: [422, false, "The delegation is not valid (for example an end time in the past)."]
+  task.target_invalid: [422, false, "The user the task is to go to is unknown, inactive or the caller (the same answer for each)."]
+  task.not_active: [409, false, "The task is finished or cancelled, so the action is not allowed."]

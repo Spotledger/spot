@@ -12,6 +12,7 @@
 //! [`StdFileSystem`] is the plain `std::fs` reader.
 
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
@@ -51,8 +52,12 @@ impl CommandRunner for StdCommandRunner {
         command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .process_group(0);
+            .stderr(Stdio::piped());
+        // A process group of its own, so a timeout can stop the whole tree. The agent targets
+        // Linux; the group call is Unix-only so the crate still compiles for Windows (the
+        // workspace builds there in CI).
+        #[cfg(unix)]
+        command.process_group(0);
 
         let mut child = command.spawn().map_err(|error| LinuxError::CommandSpawn {
             program: request.program.clone(),

@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::json;
+use spot_core::SiteId;
+use spot_events_contract::{Actor, EventMeta, PayloadDocument};
 use spot_jobs::model::{Claim, InsertResult, Job, JobId, JobState, NewJob};
 use spot_jobs::store::{ClaimedJob, JobFilter, JobStore};
 use spot_jobs::{Error, SYS_JOB_ENQUEUED_TOPIC, process_batch};
@@ -59,8 +61,7 @@ impl Env {
 
     /// An outbox event asking for a job; `key` is its idempotency key, if any.
     fn event(&self, key: Option<&str>) -> OutboxEvent {
-        let payload = json!({
-            "site": "test-site",
+        let data = json!({
             "job": "app:work",
             "args": { "invoice": 7 },
             "idempotency_key": key,
@@ -68,8 +69,22 @@ impl Env {
             "queue": null,
             "context": null,
         });
+        let id = RecordId::new_v7();
+        let payload = PayloadDocument {
+            meta: EventMeta {
+                occurred_at: OffsetDateTime::now_utc(),
+                actor: Actor::System {
+                    component: n("outbox_intake_test"),
+                },
+                command_id: None,
+                causation_id: None,
+                correlation_id: id,
+                trace_id: None,
+            },
+            data,
+        };
         OutboxEvent {
-            id: RecordId::new_v7(),
+            id,
             topic: n(SYS_JOB_ENQUEUED_TOPIC),
             subject: NodeRef {
                 entity: n("party"),
@@ -77,12 +92,19 @@ impl Env {
             },
             subject_version: None,
             schema_version: 1,
-            payload: payload.to_string(),
+            payload: serde_json::to_string(&payload).unwrap(),
         }
     }
 
     async fn intake(&self) -> spot_jobs::Result<spot_jobs::IntakeReport> {
-        process_batch(&*self.store, &self.backend, 100, OffsetDateTime::now_utc()).await
+        process_batch(
+            &*self.store,
+            &self.backend,
+            &SiteId::new("test-site").unwrap(),
+            100,
+            OffsetDateTime::now_utc(),
+        )
+        .await
     }
 
     async fn jobs(&self) -> Vec<Job> {
@@ -192,7 +214,8 @@ async fn a_restart_between_insert_and_position_save_creates_no_duplicate() {
     let dying = DiesBeforeSavingPosition {
         inner: env.store.clone(),
     };
-    let died = process_batch(&dying, &env.backend, 100, OffsetDateTime::now_utc()).await;
+    let site = SiteId::new("test-site").unwrap();
+    let died = process_batch(&dying, &env.backend, &site, 100, OffsetDateTime::now_utc()).await;
     assert!(died.is_err());
     assert_eq!(env.jobs().await.len(), 2, "the jobs were inserted");
     assert_eq!(
