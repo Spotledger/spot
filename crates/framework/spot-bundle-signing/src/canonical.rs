@@ -15,6 +15,8 @@ use serde_json::Value;
 pub const CERTIFICATE_DOMAIN: &str = "SPOT-PUBLISHER-CERT-V1\n";
 /// The domain prefix of a revocation list's signed bytes.
 pub const REVOCATION_DOMAIN: &str = "SPOT-REVOCATION-LIST-V1\n";
+/// The domain prefix of a fresh revocation list's signed bytes (`next_update` inside the body).
+pub const FRESH_REVOCATION_DOMAIN: &str = "SPOT-REVOCATION-LIST-V2\n";
 /// The domain prefix of a bundle signature's signed bytes.
 pub const BUNDLE_DOMAIN: &str = "SPOT-BUNDLE-SIGNATURE-V1\n";
 

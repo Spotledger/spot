@@ -185,16 +185,26 @@ def _read(path: Path) -> bytes:
     return path.read_bytes()
 
 
+def _required_file(name: str) -> bytes:
+    """A licence file from the repository root, or a hard failure naming it.
+
+    There is deliberately no fallback text: a package that silently carries
+    invented licence wording is how a wrong licence ships.
+    """
+    path = REPO_ROOT / name
+    if not path.is_file():
+        raise SystemExit(f"{name} not found at {path}: refusing to build a package without it")
+    return _read(path)
+
+
 def _license_bytes() -> bytes:
-    """The project licence, or an Apache-2.0 notice when the repo has no file."""
-    for candidate in ("LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING"):
-        path = REPO_ROOT / candidate
-        if path.is_file():
-            return _read(path)
-    return (
-        "Copyright (c) 2026 Spotledger (SMC-PRIVATE) Limited.\n"
-        "Licensed under the Apache License, Version 2.0; see https://www.apache.org/licenses/LICENSE-2.0\n"
-    ).encode()
+    """The project ``LICENSE`` (Apache-2.0); the build fails if it is missing."""
+    return _required_file("LICENSE")
+
+
+def _notice_bytes() -> bytes:
+    """The project ``NOTICE``; the build fails if it is missing."""
+    return _required_file("NOTICE")
 
 
 def _readme_install(version: str) -> bytes:
@@ -203,6 +213,7 @@ def _readme_install(version: str) -> bytes:
 
 Files in this tarball
   bin/spot              the release binary
+  LICENSE, NOTICE       Apache-2.0 licence text and the project notice
   etc/spot.toml         safe default configuration (edit before starting)
   etc/environment       empty environment file for the service
   systemd/spot.service  hardened systemd unit
@@ -248,6 +259,7 @@ def _sources(binary: Path, version: str) -> list[Source]:
         Source("spot.toml", _read(PACKAGING / "etc" / "spot.toml"), CONFIG_MODE),
         Source("environment", _read(PACKAGING / "etc" / "environment"), CONFIG_MODE),
         Source("LICENSE", _license_bytes()),
+        Source("NOTICE", _notice_bytes()),
         Source("README.install", _readme_install(version)),
     ]
 
@@ -279,6 +291,7 @@ def tarball_bytes(binary: Path, version: str, arch: str, epoch: int) -> bytes:
         "spot.sysusers": "systemd/spot.sysusers",
         "spot.tmpfiles": "systemd/spot.tmpfiles",
         "LICENSE": "LICENSE",
+        "NOTICE": "NOTICE",
         "README.install": "README.install",
     }
     for source in files:
@@ -443,6 +456,8 @@ def build_deb(binary: Path, version: str, arch: str, out: Path, epoch: int) -> d
             ("etc/spot/spot.toml", sources["spot.toml"].data, CONFIG_MODE),
             ("etc/spot/environment", sources["environment"].data, CONFIG_MODE),
             ("usr/share/doc/spot/copyright", _read(debian / "copyright"), FIXED_MODE),
+            ("usr/share/doc/spot/LICENSE", sources["LICENSE"].data, FIXED_MODE),
+            ("usr/share/doc/spot/NOTICE", sources["NOTICE"].data, FIXED_MODE),
             ("usr/share/doc/spot/README.install", sources["README.install"].data, FIXED_MODE),
         ]
         for name, data, mode in staged:
@@ -483,6 +498,8 @@ def build_container(binary: Path, version: str, arch: str, out: Path, epoch: int
         context = Path(tmp)
         _write(context / "spot", _read(binary), EXEC_MODE)
         _write(context / "spot.toml", _read(PACKAGING / "etc" / "spot.toml"), CONFIG_MODE)
+        _write(context / "LICENSE", _license_bytes(), FIXED_MODE)
+        _write(context / "NOTICE", _notice_bytes(), FIXED_MODE)
         runner = "podman" if Path(tool).name == "podman" else "buildah"
         if runner == "podman":
             command = [

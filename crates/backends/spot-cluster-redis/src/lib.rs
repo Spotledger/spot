@@ -69,7 +69,7 @@ pub use error::{PROTOCOL, RedisError, RedisResult, UNAVAILABLE};
 pub use keys::{DEFAULT_NAMESPACE, KeySpace};
 
 #[cfg(feature = "redis")]
-pub use bus::{BusMessage, RedisBus, SUBSCRIBER_CAPACITY};
+pub use bus::{BusMessage, RedisBus, SUBSCRIBER_CAPACITY, StampedEvent};
 #[cfg(feature = "redis")]
 pub use cache::{RedisCacheConfig, RedisCacheStore};
 #[cfg(feature = "redis")]

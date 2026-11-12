@@ -94,7 +94,9 @@ jobs:
         name: start PostgreSQL 18 with its extensions
         shell: bash
         run: bash tools/ci/start-postgres.sh
-      - if: matrix.shard == 1
+      # Linux only: `cargo fmt --all` hands rustfmt every source file on one command line, which
+      # Windows refuses (os error 206), and formatting does not depend on the platform.
+      - if: matrix.shard == 1 && runner.os == 'Linux'
         run: cargo fmt --all -- --check
       - if: matrix.shard == 1
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
@@ -198,6 +200,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - if: runner.os == 'Linux'
         name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
@@ -222,8 +227,18 @@ jobs:
         run: |
           py=$(command -v python3 || command -v python)
           "$py" tools/ci/dotnet_build.py "$SLN"
-      - if: steps.detect.outputs.sln != ''
+      - if: steps.detect.outputs.sln != '' && runner.os != 'Windows'
         shell: bash
         env:
           SLN: ${{ steps.detect.outputs.sln }}
         run: dotnet test "$SLN" -c Release --no-build
+      # Windows: the screenshot and accessibility baselines are recorded on Linux (font
+      # rasterization differs per OS) and the hostile-file-name refusal tests write names Windows
+      # cannot create; those suites run on Linux, everything else runs here.
+      - if: steps.detect.outputs.sln != '' && runner.os == 'Windows'
+        shell: bash
+        env:
+          SLN: ${{ steps.detect.outputs.sln }}
+        run: |
+          dotnet test "$SLN" -c Release --no-build \
+            --filter "FullyQualifiedName!~ScreenshotTests&FullyQualifiedName!~ShellRtlMatrixTests&FullyQualifiedName!~UrduScreenMatrixTests&FullyQualifiedName!~GalleryAccessibilityTests&FullyQualifiedName!~RefusalTextHardeningTests"

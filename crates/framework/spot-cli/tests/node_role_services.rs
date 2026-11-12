@@ -4,9 +4,9 @@
 //! over a real `spot serve` live in `node_role_host.rs`.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use axum::Router;
@@ -61,11 +61,15 @@ fn local_stack<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
     Box::pin(async { Ok(()) })
 }
 
-static HUB_CALLS: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    /// Per test thread: `#[tokio::test]` runs each test on its own thread, so parallel tests
+    /// that register `hub_only` never move another test's count.
+    static HUB_CALLS: Cell<usize> = const { Cell::new(0) };
+}
 
 /// `ROLES = ["hub"]`: counts its `register` calls.
 fn hub_only<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
-    HUB_CALLS.fetch_add(1, Ordering::SeqCst);
+    HUB_CALLS.with(|c| c.set(c.get() + 1));
     ctx.add(idle("hub_only", Level::Required));
     Box::pin(async { Ok(()) })
 }
@@ -134,16 +138,16 @@ async fn each_role_lists_exactly_its_set() {
 
 #[tokio::test]
 async fn a_skipped_module_never_registers() {
-    let before = HUB_CALLS.load(Ordering::SeqCst);
+    let before = HUB_CALLS.with(Cell::get);
     names_for("standalone").await;
     names_for("edge").await;
     assert_eq!(
-        HUB_CALLS.load(Ordering::SeqCst),
+        HUB_CALLS.with(Cell::get),
         before,
         "register ran on a skipped role"
     );
     names_for("hub").await;
-    assert_eq!(HUB_CALLS.load(Ordering::SeqCst), before + 1);
+    assert_eq!(HUB_CALLS.with(Cell::get), before + 1);
 }
 
 #[tokio::test]

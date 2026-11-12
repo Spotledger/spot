@@ -78,7 +78,7 @@ fn the_seeded_bottleneck_is_detected_and_shown() {
 }
 
 #[test]
-fn percentiles_are_exact_integers() {
+fn percentiles_are_nearest_rank_bucket_bounds_within_one_thirty_second() {
     let mut events = Vec::new();
     // Ten runs of `approve`, each 1 s longer than the last: 1..=10 s.
     for (index, seconds) in (1..=10).enumerate() {
@@ -93,9 +93,16 @@ fn percentiles_are_exact_integers() {
     }
     let insight = aggregate(events);
     let step = &insight.steps()[0];
-    assert_eq!(step.p50, Some(Millis::from_seconds(5)));
-    assert_eq!(step.p90, Some(Millis::from_seconds(9)));
+    // Nearest rank over 1..=10 s is 5 s, 9 s and 10 s; the histogram reports the upper bound of
+    // the bucket holding that rank (clamped to the exact max): never below the true value and
+    // less than 1/32 above it. `min` and `max` stay exact.
+    assert_eq!(step.p50, Some(Millis::from_millis(5119)));
+    assert_eq!(step.p90, Some(Millis::from_millis(9215)));
     assert_eq!(step.p99, Some(Millis::from_seconds(10)));
+    for (got, truth) in [(step.p50, 5000), (step.p90, 9000), (step.p99, 10_000)] {
+        let got = got.unwrap().as_millis();
+        assert!(got >= truth && (got - truth) * 32 < truth);
+    }
     assert_eq!(step.min, Some(Millis::from_seconds(1)));
     assert_eq!(step.max, Some(Millis::from_seconds(10)));
 }
@@ -252,6 +259,13 @@ fn every_raised_code_has_a_catalogue_entry() {
         },
         InsightError::LabelInvalid {
             which: "singular".to_owned(),
+        },
+        InsightError::StateVersion {
+            found: 2,
+            supported: 1,
+        },
+        InsightError::StateCorrupt {
+            detail: "d".to_owned(),
         },
     ];
     for error in &errors {

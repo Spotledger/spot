@@ -283,6 +283,15 @@ where
     }
 }
 
+/// The matched route template for a log line, or the unmatched marker. Never the concrete path,
+/// which may carry a secret on an open route.
+fn matched_route(request: &Request) -> &str {
+    request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or(spot_telemetry::UNMATCHED_ROUTE, |matched| matched.as_str())
+}
+
 /// Fallback for a path no site route serves: `api.unknown_route`.
 pub async fn unknown_route_fallback(request: Request) -> Response {
     let request_id = request
@@ -292,7 +301,7 @@ pub async fn unknown_route_fallback(request: Request) -> Response {
         .unwrap_or_else(RequestId::generate);
     tracing::debug!(
         request_id = %request_id,
-        path = request.uri().path(),
+        route = matched_route(&request),
         "unknown route",
     );
     error_response(
@@ -312,7 +321,7 @@ pub async fn method_not_allowed_fallback(request: Request) -> Response {
     tracing::debug!(
         request_id = %request_id,
         method = %request.method(),
-        path = request.uri().path(),
+        route = matched_route(&request),
         "method not allowed",
     );
     error_response(

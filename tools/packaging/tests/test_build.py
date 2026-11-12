@@ -50,7 +50,7 @@ class BuildTest(unittest.TestCase):
                 {
                     "bin", "bin/spot", "etc", "etc/spot.toml", "etc/environment",
                     "systemd", "systemd/spot.service", "systemd/spot.sysusers",
-                    "systemd/spot.tmpfiles", "LICENSE", "README.install",
+                    "systemd/spot.tmpfiles", "LICENSE", "NOTICE", "README.install",
                 },
             )
             spot = archive.getmember("bin/spot")

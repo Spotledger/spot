@@ -8,7 +8,7 @@
 //!
 //! | Topic | Producer | Payload (`data`) |
 //! | --- | --- | --- |
-//! | [`JOB_ENQUEUED_TOPIC`] | `spot-document` | `job`, `args`, `idempotency_key`, `not_before` |
+//! | [`JOB_ENQUEUED_TOPIC`] | `spot-document` | `job`, `args`, `idempotency_key`, `not_before`, `queue`, `context` |
 //! | [`USER_NOTICE_TOPIC`] | `spot-document` | `user`, `payload` |
 //! | [`OPERATION_RECEIPT_TOPIC`] | `spot-document` | the operation receipt, plus `undeclared` |
 //! | [`OPERATION_RECEIPT_EFFECT_TOPIC`] | `spot-document` | `operation`, `effect`, `undeclared` |
@@ -26,6 +26,34 @@
 //! of more than [`MAX_STRING_CHARS`](crate::system::MAX_STRING_CHARS) characters. The two payloads
 //! an app fills (`args` of a job, `payload` of a notice) are app data: the contract bounds their
 //! shape and refuses a floating-point number (ADR-12), and the producer owns their content.
+//!
+//! # Null, and what is not yet enforced
+//!
+//! **Null.** A required field is never null. An optional field may be absent or an explicit
+//! `null`, and the two mean the same (absent), so a producer is not asked to omit keys:
+//! `spot-document` writes `"args": null`, `"idempotency_key": null` and `"not_before": null` for a
+//! job that has none, and that literal shape validates. The table below is checked against the
+//! schemas by a test, so a field that gains or loses optionality changes this text with it.
+//!
+//! | Topic | Optional fields (explicit null accepted as absent) |
+//! | --- | --- |
+//! | `sys_job_enqueued` | `args`, `idempotency_key`, `not_before`, `queue`, `context` |
+//! | `sys_user_notice` | none: null is refused everywhere |
+//! | `sys_operation_receipt` | `undeclared` |
+//! | `sys_operation_receipt_effect` | none: null is refused everywhere |
+//! | `sys_partition_range_low` | none: null is refused everywhere |
+//! | `sys_bpm_governance` | `on_behalf_of`, `subject` |
+//! | `sys_bpm_case_migrated` | `actor` |
+//! | `sys_condition_raised` | `severity`, `from`, `to` |
+//! | `sys_condition_cleared` | none: null is refused everywhere |
+//!
+//! **Not yet enforced.** These nine schemas describe what producers write; nothing on the
+//! publish or consume path calls [`system::validate`](crate::system::validate) or
+//! `registry::check_publishable` for them yet, so no payload is refused at run time because of
+//! them. Enforcement is a code change in the calling crate, not a contract bump, and it lands
+//! only after WP-CON-04.T8, T9 and T10 so that the first strict check does not refuse what real
+//! producers write. From the first `main` release that carries them, revision 0 of each is
+//! frozen (see the changelog's version policy).
 //!
 //! # Where the wire form is only inferred
 //!
@@ -139,11 +167,19 @@ pub fn schema_of(topic: &str) -> Option<EventSchema> {
         JOB_ENQUEUED_TOPIC => {
             // `app:job`; checked by `check`.
             req(&mut f, "job", text());
-            // Arguments in the native value encoding; absent when the job has none.
+            // Arguments in the native value encoding; absent or null when the job has none.
             opt(&mut f, "args", PayloadType::Json);
+            // Absent or null when the job has none.
             opt(&mut f, "idempotency_key", text());
             // RFC 3339, with the offset the requester gave; checked by `check`.
             opt(&mut f, "not_before", text());
+            // The queue the job runs on: 1 to 64 bytes of `[a-z0-9_-]`; absent or null means
+            // `default`. Read by the job intake; checked by `check`.
+            opt(&mut f, "queue", text());
+            // The invocation context the job runs with: a JSON object under the same rules as
+            // `args` (no float at any depth); absent or null means none. Checked by `check`.
+            // There is no `site`: the site is the intake's own context.
+            opt(&mut f, "context", PayloadType::Json);
         }
         USER_NOTICE_TOPIC => {
             req(&mut f, "user", PayloadType::Id);
@@ -302,6 +338,13 @@ fn is_qualified_name(s: &str) -> bool {
         .is_some_and(|(a, n)| is_name(a) && is_name(n))
 }
 
+/// A queue name: 1 to 64 bytes of `[a-z0-9_-]`.
+fn is_queue_name(s: &str) -> bool {
+    (1..=64).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
 /// Whether `value` holds a JSON number that is not an integer, at any depth.
 fn has_float(value: &Json) -> bool {
     match value {
@@ -328,6 +371,22 @@ fn check_job(obj: &Map<String, Json>, errors: &mut Vec<SchemaError>) {
             "args",
             "no floating-point number; a decimal is a string (ADR-055)",
         ));
+    }
+    if let Some(context) = obj.get("context") {
+        match context {
+            Json::Null => {}
+            Json::Object(_) if has_float(context) => errors.push(err(
+                "context",
+                "no floating-point number; a decimal is a string (ADR-055)",
+            )),
+            Json::Object(_) => {}
+            _ => errors.push(err("context", "an object")),
+        }
+    }
+    if let Some(Json::String(queue)) = obj.get("queue")
+        && !is_queue_name(queue)
+    {
+        errors.push(err("queue", "1 to 64 bytes of a-z, 0-9, _ and -"));
     }
     if let Some(Json::String(key)) = obj.get("idempotency_key")
         && key.is_empty()

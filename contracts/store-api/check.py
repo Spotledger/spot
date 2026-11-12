@@ -24,10 +24,15 @@ failure names the rule and the JSON pointer it failed at.
 9. The review schema (``ReviewVerdict``) offers exactly ``spot-app-review``'s three verdict
    values and no more, and no schema description claims a reviewed app is "safe" on the
    store's own authority.
+10. The revocation list's worked example is the golden vector: the signed bytes rebuilt from the
+   ``200`` example (domain ``SPOT-REVOCATION-LIST-V2``, compact JSON, keys sorted, times as
+   integer UTC seconds) equal the bytes quoted in the operation description. The Ed25519
+   signature itself is checked by ``spot-bundle-signing``'s own golden test.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -212,6 +217,37 @@ def check_review_verdict(spec: dict[str, Any], errors: list[str]) -> None:
             errors.append(f"rule 9: components/schemas/{name}: description must not claim an app is safe")
 
 
+REVOCATION_ROUTE = "/store/v1/revocations"
+DOMAIN_V2 = "SPOT-REVOCATION-LIST-V2\n"
+
+
+def _seconds(text: str) -> int:
+    from datetime import datetime, timezone
+    return int(datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+
+
+def check_revocation_golden(spec: dict[str, Any], errors: list[str]) -> None:
+    op = spec.get("paths", {}).get(REVOCATION_ROUTE, {}).get("get", {})
+    try:
+        data = op["responses"]["200"]["content"]["application/json"]["example"]["data"]
+    except KeyError:
+        errors.append("rule 10: revocations_get has no 200 example")
+        return
+    body = {k: data[k] for k in ("bundles", "generation", "issued_at", "issued_by", "keys",
+                                 "next_update", "publishers")}
+    body = json.loads(json.dumps(body))
+    for field in ("issued_at", "next_update"):
+        body[field] = _seconds(body[field])
+    for entry in body["keys"] + body["publishers"]:
+        entry["effective_from"] = _seconds(entry["effective_from"])
+    rebuilt = DOMAIN_V2 + json.dumps(body, separators=(",", ":"), sort_keys=True, ensure_ascii=False)
+    quoted = [line.strip() for line in op.get("description", "").splitlines()
+              if line.strip().startswith("SPOT-REVOCATION-LIST-V2")]
+    if len(quoted) != 1 or quoted[0].replace("\\n", "\n", 1) != rebuilt:
+        errors.append("rule 10: the signed bytes quoted in revocations_get do not equal the bytes "
+                      "rebuilt from its 200 example")
+
+
 def run_rules(spec: dict[str, Any]) -> tuple[list[str], int, int]:
     errors: list[str] = []
     check_openapi(spec, errors)
@@ -223,6 +259,7 @@ def run_rules(spec: dict[str, Any]) -> tuple[list[str], int, int]:
     n = check_examples(spec, codes, errors)
     check_download_trust(spec, errors)
     check_review_verdict(spec, errors)
+    check_revocation_golden(spec, errors)
     return errors, len(codes), n
 
 
@@ -250,6 +287,8 @@ def self_test() -> int:
                           ["application/json"]["example"]["data"].__setitem__("generation", "seven")),
         "rule 8": broken(lambda s: s["paths"][DOWNLOAD_ROUTE]["get"].update(
             description="This download is already verified and safe to install without checking anything.")),
+        "rule 10": broken(lambda s: s["paths"][REVOCATION_ROUTE]["get"]["responses"]["200"]["content"]
+                          ["application/json"]["example"]["data"].__setitem__("generation", 8)),
         "rule 9": broken(lambda s: schemas(s)["ReviewVerdict"].update(
             enum=["rejected", "needs_human_review", "looks_clean", "approved"])),
     }

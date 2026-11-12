@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Spotledger store API
-  version: 0.2.0
+  version: 0.2.1
   summary: >-
     ADR-21 (docs/blueprint/platform.md, section WS11): third-party apps are distributed
     through Spotledger's own app store as signed WASM components. This contract is that
@@ -25,10 +25,18 @@ info:
     text for user-facing errors) and is modelled on that contract's files.
 
     ## Decisions already taken (lead, 31 Oct 2026; do not reopen here)
-    - The store never signs a bundle on a publisher's behalf and holds no private signing key:
-      it stores and serves exactly what the publisher signed (`spot-bundle-signing`,
-      `spot-registry::SignatureRef`). Every publish call carries the publisher's own detached
-      signature; the store only verifies it.
+    - The store never signs a bundle on a publisher's behalf and holds no key that can sign a
+      bundle or certify a publisher: it stores and serves exactly what the publisher signed
+      (`spot-bundle-signing`, `spot-registry::SignatureRef`). Every publish call carries the
+      publisher's own detached signature; the store only verifies it. It holds exactly one
+      **revocation-issuing store key**, reached through a port
+      (`spot-bundle-signing::RevocationSigner`, so hardware is allowed), whose public key is a
+      root that sites pin; that key signs revocation lists only (and, in WP-STR-08, licences),
+      never a bundle, a certificate or a review.
+    - Approval, rejection and withdrawal of a listing are operator routes behind an admin
+      credential, outside this contract. An unlisted version (under review, rejected or
+      withdrawn) is answered as unknown, exactly as a version that never existed, to everyone
+      except its owning publisher, who sees it with its review state.
     - The review report never says an app is safe. `verdict` is exactly one of
       `spot-app-review::Verdict`'s three values, `looks_clean` the best of them; a person
       still approves listing after reading the full report outside this contract. No field of
@@ -51,7 +59,7 @@ info:
     ## Feature negotiation
     This is the first version. A client that wants to know what a later store serves reads
     `info.version` of the served document, or (once one exists) a liveness probe analogous to
-    the native API's `GET /api/health/live`; none is defined in 0.2.0 because a store process
+    the native API's `GET /api/health/live`; none is defined in 0.2.1 because a store process
     with no site tenancy needs no per-tenant readiness story yet.
 
     ## Versioning
@@ -466,44 +474,62 @@ paths:
       operationId: revocations_get
       summary: The signed revocation list (keys, publishers and bundle digests no longer trusted).
       description: |
-        `spot-bundle-signing::RevocationList` plus `next_update`: a `generation` that strictly
-        increases, the root key that issued it, and the three sorted lists (`keys`,
-        `publishers`, `bundles`). Sites poll this and refuse to install or keep running a
-        bundle that the list now revokes (the verifier, not this endpoint, makes that
-        decision). A site verifies the list's signature against its pinned root itself and
-        refuses a list whose `generation` is lower than the highest it has accepted (a replayed
-        older list must never replace a newer one). `ETag` is `"<generation>"`; cacheable, conditional `If-None-Match` answers
-        `304`. No credential required. Rate class `store_public`.
+        `spot-bundle-signing::FreshRevocationList` (the V2 form): a `generation` that strictly
+        increases, the store key that issued it, `issued_at` and `next_update`, and the three
+        sorted lists (`keys`, `publishers`, `bundles`). Sites poll this and refuse to install or
+        keep running a bundle that the list now revokes (the verifier, not this endpoint, makes
+        that decision). A site verifies the list's signature against its pinned roots itself
+        (`spot-bundle-signing::verify_fresh_revocation_list`) and refuses a list whose
+        `generation` is lower than the highest it has accepted (a replayed older list must never
+        replace a newer one; an equal generation is accepted). `ETag` is `"<generation>"`;
+        cacheable, conditional `If-None-Match` answers `304`. No credential required. Rate class
+        `store_public`.
+
+        **The body.** The `200` body is `{"data": <RevocationList>}`. The `data` object is
+        exactly what `FreshRevocationList::to_wire_json` emits and `from_wire_json` parses
+        (compact, no envelope of its own; the `{data: ...}` wrapper belongs to the serving
+        layer). Parsing is strict: an unknown field, a duplicate key, a time that is not
+        `YYYY-MM-DDTHH:MM:SSZ`, a field outside the limits of the schema, trailing text or a
+        document over 8 MiB is refused. Limits: `generation` 0 to 2^53; `reason` at most 2000
+        bytes; `publisher_id` `^[A-Za-z0-9_-]{1,128}$`; `issued_by` and every `key_id` a 32-digit
+        lower-case hex key id; `digest` 64 lower-case hex; `signature` the base64 of 64 bytes.
 
         **Freshness (normative).** The list carries `issued_at` and `next_update` (both
         RFC 3339 UTC, both inside the signed body, so neither can be altered in transit), and
-        a `200` carries `Cache-Control: max-age=300`. A client MUST fail closed for **new**
-        installs and updates: when the newest list it holds has `next_update` in the past
-        (stale) and a fresh one cannot be fetched, it refuses the install or update. A stale
-        list never permits a new install. Bundles that are **already installed** keep running
-        while the list is stale; their revocation is checked when the next fresh list is
-        accepted, at which point a revoked bundle stops. The store issues a new list (even
-        with unchanged entries, with a higher `generation`) before `next_update` passes.
-        **Rebuilding the signed bytes (normative).** A client verifies `signature` over bytes
-        it rebuilds from the JSON, never over the response body as received. It builds the
-        same object `spot-bundle-signing::RevocationBody::signed_bytes`
-        (`crates/framework/spot-bundle-signing/src/revocation.rs`) builds: the ASCII domain
-        prefix `SPOT-REVOCATION-LIST-V1\n` followed by the compact JSON (no whitespace, UTF-8)
-        of an object holding `bundles`, `generation`, `issued_at`, `issued_by`, `keys`,
-        `next_update` and `publishers` (every object's keys in lexicographic order; `signature`
-        itself is excluded), each entry of `keys`, `publishers` and `bundles` carrying exactly
-        its schema fields, entries in the order the list gives them (the store sorts by key id,
-        publisher id and digest respectively). Timestamps enter the body as the integer UTC
-        seconds of the RFC 3339 string. The root's signature is checked against that byte string.
+        a `200` carries `Cache-Control: max-age=300`. `next_update` is after `issued_at` and at
+        most 7 days later (a longer list is refused); the store issues with a 24 hour lifetime
+        and reissues (even with unchanged entries, with a higher `generation`) every 6 hours,
+        so a healthy client always holds a list with time to spare. A client MUST fail closed
+        for **new** installs and updates: when the newest list it holds is stale (`next_update`
+        has been reached) and a fresh one cannot be fetched, it refuses the install or update.
+        A stale list never permits a new install. Bundles that are **already installed** keep
+        running while the list is stale; their revocation is checked when the next fresh list is
+        accepted, at which point a revoked bundle stops.
 
-        **Open follow-up for the serving task (known wire divergences from the crate).** The
-        crate as of this contract differs from this wire form in three ways, and the crate or
-        the serving layer must reconcile them before the contract ships: (1) `next_update` is
-        inside the signed body here but `RevocationBody` has no such field; (2) times are RFC
-        3339 strings on the wire but `i64` UTC seconds in the crate (the client converts, as
-        above); (3) a revoked bundle's digest is `digest` on the wire (and in the crate's signed
-        object) but the Rust field is `digest_hex`. Until reconciled, a list signed by the
-        current crate does not verify against the rebuild above.
+        **Rebuilding the signed bytes (normative).** A client verifies `signature` over bytes
+        it rebuilds from the parsed JSON, never over the response body as received. The bytes
+        are the ASCII domain prefix `SPOT-REVOCATION-LIST-V2\n` (the `\n` is one line feed)
+        followed by the compact JSON (no whitespace, UTF-8, no escape beyond what JSON requires)
+        of an object holding `bundles`, `generation`, `issued_at`, `issued_by`, `keys`,
+        `next_update` and `publishers`, every object's keys in lexicographic order and
+        `signature` excluded. Each entry carries exactly its schema fields: a key holds
+        `compromised`, `effective_from`, `key_id`, `reason`; a publisher `effective_from`,
+        `publisher_id`, `reason`; a bundle `digest`, `reason`. Entries keep the order the list
+        gives them (the store sorts by key id, publisher id and digest). Every time (`issued_at`,
+        `next_update`, `effective_from`) enters the body as the **integer UTC seconds** of its
+        RFC 3339 string; the domain `V1` of the earlier crate form (no `next_update`) is not
+        accepted for this list. The issuer's Ed25519 signature is checked against that byte
+        string.
+
+        **Worked example (golden vector).** The `200` example below is the list pinned by
+        `crates/framework/spot-bundle-signing/tests/fresh.rs`, whose test rebuilds the bytes
+        independently from this text. Its signed bytes are, with `\n` a line feed:
+
+            SPOT-REVOCATION-LIST-V2\n{"bundles":[{"digest":"0101010101010101010101010101010101010101010101010101010101010101","reason":"legal"},{"digest":"abababababababababababababababababababababababababababababababab","reason":"malware"}],"generation":7,"issued_at":1793404800,"issued_by":"34750f98bd59fcfc946da45aaabe933b","keys":[{"compromised":false,"effective_from":0,"key_id":"6a3803d5f059902a1c6dafbc9ba47292","reason":"rotated"},{"compromised":true,"effective_from":1793401200,"key_id":"b62e867fa2f33afe62d5d6b1642e1621","reason":"leaked \"key\" é"}],"next_update":1793426400,"publishers":[{"effective_from":951782400,"publisher_id":"acme","reason":"takedown"},{"effective_from":1793318400,"publisher_id":"zeta-2","reason":"abuse"}]}
+
+        (the `é` is the two UTF-8 bytes `C3 A9`, not a JSON escape, and `\"` is the JSON escape of a
+        double quote) and the signature is
+        `5naGBPBRz9g3k2Y0nkauRq8TJKjMAHp+RcNjSekaE8v3UaxLohh2rc60f/6ZROWpap1BHFc0s+UeYp9xjIqTCw==`.
       security: []
       parameters:
         - name: If-None-Match
@@ -531,14 +557,29 @@ paths:
                   generation: 7
                   issued_at: "2026-10-31T00:00:00Z"
                   next_update: "2026-10-31T06:00:00Z"
-                  issued_by: root-2026
-                  signature: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHw==
-                  keys: []
+                  issued_by: "34750f98bd59fcfc946da45aaabe933b"
+                  signature: "5naGBPBRz9g3k2Y0nkauRq8TJKjMAHp+RcNjSekaE8v3UaxLohh2rc60f/6ZROWpap1BHFc0s+UeYp9xjIqTCw=="
+                  keys:
+                    - key_id: "6a3803d5f059902a1c6dafbc9ba47292"
+                      effective_from: "1970-01-01T00:00:00Z"
+                      compromised: false
+                      reason: "rotated"
+                    - key_id: "b62e867fa2f33afe62d5d6b1642e1621"
+                      effective_from: "2026-10-30T23:00:00Z"
+                      compromised: true
+                      reason: "leaked \"key\" é"
                   publishers:
-                    - publisher_id: 0192f3c4-5b6a-7c8d-9e0f-1a2b3c4d5e04
+                    - publisher_id: "acme"
+                      effective_from: "2000-02-29T00:00:00Z"
+                      reason: "takedown"
+                    - publisher_id: "zeta-2"
                       effective_from: "2026-10-30T00:00:00Z"
-                      reason: "Certificate authority reported key compromise."
-                  bundles: []
+                      reason: "abuse"
+                  bundles:
+                    - digest: "0101010101010101010101010101010101010101010101010101010101010101"
+                      reason: "legal"
+                    - digest: "abababababababababababababababababababababababababababababababab"
+                      reason: "malware"
         "304":
           description: Unchanged since the generation named in If-None-Match.
         default: {$ref: "#/components/responses/Error"}
@@ -799,15 +840,25 @@ components:
           maxLength: 2000
           description: Why, for the audit trail and for VersionDetail.yanked_reason.
 
+    KeyId:
+      type: string
+      description: A signing key id (spot-bundle-signing::KeyId), 32 lower-case hex digits.
+      pattern: '^[0-9a-f]{32}$'
+
+    RevocationReason:
+      type: string
+      description: Why an entry was revoked, for the audit trail. At most 2000 bytes (UTF-8), which is a byte limit, so the character count may be lower.
+      maxLength: 2000
+
     RevokedKey:
       type: object
       additionalProperties: false
       required: [key_id, effective_from, compromised, reason]
       properties:
-        key_id: {type: string, maxLength: 256}
+        key_id: {$ref: "#/components/schemas/KeyId"}
         effective_from: {$ref: "#/components/schemas/DateTimeUtc"}
         compromised: {type: boolean}
-        reason: {type: string, maxLength: 2000}
+        reason: {$ref: "#/components/schemas/RevocationReason"}
 
     RevokedPublisher:
       type: object
@@ -816,7 +867,7 @@ components:
       properties:
         publisher_id: {$ref: "#/components/schemas/PublisherId"}
         effective_from: {$ref: "#/components/schemas/DateTimeUtc"}
-        reason: {type: string, maxLength: 2000}
+        reason: {$ref: "#/components/schemas/RevocationReason"}
 
     RevokedBundle:
       type: object
@@ -824,25 +875,26 @@ components:
       required: [digest, reason]
       properties:
         digest: {$ref: "#/components/schemas/Digest"}
-        reason: {type: string, maxLength: 2000}
+        reason: {$ref: "#/components/schemas/RevocationReason"}
 
     RevocationList:
       type: object
       additionalProperties: false
       required: [generation, issued_at, next_update, issued_by, signature, keys, publishers, bundles]
       description: |
-        The unsigned body plus the root's signature, mirroring spot-bundle-signing's
-        RevocationBody/RevocationList property for property, plus `next_update`, which is part
-        of the signed body (see revocations_get, "Freshness").
+        The unsigned body plus the issuer's signature, mirroring
+        spot-bundle-signing's FreshRevocationList (the V2 form) property for property, with
+        `next_update` inside the signed body (see revocations_get, "Freshness"). Times are
+        RFC 3339 `Z` strings here and integer UTC seconds in the signed bytes.
       properties:
-        generation: {type: integer, minimum: 0, description: Strictly increasing per issued list.}
+        generation: {type: integer, minimum: 0, maximum: 9007199254740992, description: Strictly increasing per issued list; at most 2^53, the largest integer every JSON implementation reads exactly.}
         issued_at: {$ref: "#/components/schemas/DateTimeUtc"}
         next_update:
           allOf:
             - $ref: "#/components/schemas/DateTimeUtc"
           description: Latest time a client may treat this list as fresh. After it, the list is stale and a client refuses new installs and updates until it holds a fresh one.
-        issued_by: {type: string, maxLength: 256, description: The signing root's key id.}
-        signature: {type: string, contentEncoding: base64, description: The root's signature over the canonical body bytes.}
+        issued_by: {allOf: [{$ref: "#/components/schemas/KeyId"}], description: The store's revocation-issuing key id; a root of the site's trust anchor.}
+        signature: {type: string, contentEncoding: base64, minLength: 88, maxLength: 88, description: "The issuer's Ed25519 signature (64 bytes, base64 with padding) over the domain-separated body bytes."}
         keys:
           type: array
           items: {$ref: "#/components/schemas/RevokedKey"}

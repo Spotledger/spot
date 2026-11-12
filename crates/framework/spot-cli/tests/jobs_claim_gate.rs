@@ -32,6 +32,8 @@ const TTL: Duration = Duration::from_secs(3);
 struct Counting {
     inner: Arc<dyn Coordinator>,
     fences: AtomicU32,
+    /// When set, the next `check_fence` announces it entered and waits to be let go.
+    block: std::sync::Mutex<Option<(Arc<Notify>, Arc<Notify>)>>,
 }
 
 impl Coordinator for Counting {
@@ -58,7 +60,17 @@ impl Coordinator for Counting {
         token: FencingToken,
     ) -> BoxFuture<'a, CoordResult<()>> {
         self.fences.fetch_add(1, Ordering::SeqCst);
-        self.inner.check_fence(name, token)
+        let block = self.block.lock().unwrap().take();
+        Box::pin(async move {
+            // The answer is computed before the pause, as a slow coordinator would: it can be
+            // true when the caller finally sees it, although the lease was lost meanwhile.
+            let answer = self.inner.check_fence(name, token).await;
+            if let Some((entered, proceed)) = block {
+                entered.notify_one();
+                proceed.notified().await;
+            }
+            answer
+        })
     }
     fn next<'a>(&'a self, name: &'a str, by: u64) -> BoxFuture<'a, CoordResult<u64>> {
         self.inner.next(name, by)
@@ -102,6 +114,7 @@ async fn fixture() -> Fixture {
     let coordinator = Arc::new(Counting {
         inner,
         fences: AtomicU32::new(0),
+        block: std::sync::Mutex::new(None),
     });
     let keeper = Arc::new(Keeper::new(
         coordinator.clone(),
@@ -297,6 +310,88 @@ async fn release_closes_the_gate_and_renewal_refreshes_it() {
     f.keeper.release().await;
     f.gate.cleared();
     assert!(!f.gate.permit().await, "no lease, no claim");
+}
+
+/// Another node takes the lease over, so node-1's token is stale; returns nothing.
+async fn depose(f: &Fixture) {
+    let mine = f.keeper_lease().await;
+    f.coordinator.release(&mine).await.unwrap();
+    f.coordinator
+        .acquire(LEASE, "node-2", TTL)
+        .await
+        .expect("the other node takes the released lease");
+}
+
+/// A failed renewal closes the gate at once, inside the cache window, with no coordinator call
+/// and no clock movement.
+#[tokio::test]
+async fn a_failed_renewal_closes_the_gate_inside_the_cache_window() {
+    let f = fixture().await;
+    assert!(f.gate.permit().await);
+    let fences = f.coordinator.fences.load(Ordering::SeqCst);
+    depose(&f).await;
+    // The cache still says true; nothing has asked the coordinator since.
+    assert!(
+        !f.keeper.renew().await,
+        "the renewal of a deposed node fails"
+    );
+    assert!(
+        !f.gate.permit().await,
+        "lost is authoritative inside the cache window"
+    );
+    assert_eq!(f.coordinator.fences.load(Ordering::SeqCst), fences);
+}
+
+/// A stale fence check made by someone else (the intake) closes the gate inside the window.
+#[tokio::test]
+async fn a_stale_fence_check_elsewhere_closes_the_gate() {
+    let f = fixture().await;
+    assert!(f.gate.permit().await);
+    depose(&f).await;
+    assert!(!f.keeper.still_held().await);
+    let fences = f.coordinator.fences.load(Ordering::SeqCst);
+    assert!(!f.gate.permit().await);
+    assert_eq!(f.coordinator.fences.load(Ordering::SeqCst), fences);
+}
+
+/// Loss landing during the gate's own fence check discards its `true`, and the discarded
+/// answer is not cached for later.
+#[tokio::test]
+async fn a_loss_during_the_check_discards_the_answer() {
+    let f = fixture().await;
+    let entered = Arc::new(Notify::new());
+    let proceed = Arc::new(Notify::new());
+    *f.coordinator.block.lock().unwrap() = Some((entered.clone(), proceed.clone()));
+    let gate = f.gate.clone();
+    let asking = tokio::spawn(async move { gate.permit().await });
+    entered.notified().await;
+    // The lease is lost while the check is in flight (it already computed `true`).
+    f.keeper.release().await;
+    proceed.notify_one();
+    assert!(
+        !asking.await.unwrap(),
+        "an answer overtaken by a loss must not permit a claim"
+    );
+    assert!(!f.gate.permit().await, "and it was not cached");
+    // Re-acquiring returns to permit, by a fresh check rather than the discarded answer.
+    let fences = f.coordinator.fences.load(Ordering::SeqCst);
+    assert!(f.keeper.acquire().await);
+    assert!(f.gate.permit().await);
+    assert_eq!(f.coordinator.fences.load(Ordering::SeqCst), fences + 1);
+}
+
+/// A gate refusal is sticky until the keeper takes the lease again, however long the clock
+/// runs, and then permits again.
+#[tokio::test]
+async fn the_refusal_lasts_until_the_lease_is_taken_again() {
+    let f = fixture().await;
+    depose(&f).await;
+    assert!(!f.keeper.renew().await);
+    f.clock.advance(Duration::from_secs(60));
+    assert!(!f.gate.permit().await);
+    // node-2's lease lapsed meanwhile; node-1 takes it again with a new token.
+    assert!(f.keeper.acquire().await);
+    assert!(f.gate.permit().await);
 }
 
 /// The cache period is a tenth of the time to live, between 50 ms and 500 ms.

@@ -24,6 +24,20 @@ pub enum InsightError {
         /// Which of the pair: `singular` or `plural`.
         which: String,
     },
+    /// A stored accumulator state has a version this build does not know.
+    #[error("the stored insight state has version {found}; this build reads version {supported}")]
+    StateVersion {
+        /// The version found in the state.
+        found: u32,
+        /// The version this build reads.
+        supported: u32,
+    },
+    /// A stored accumulator state is inconsistent or corrupt.
+    #[error("the stored insight state is corrupt: {detail}")]
+    StateCorrupt {
+        /// What is wrong, in plain language.
+        detail: String,
+    },
 }
 
 impl InsightError {
@@ -33,6 +47,8 @@ impl InsightError {
         match self {
             Self::ReportDefinition { .. } => "bpm_insight.report_definition",
             Self::LabelInvalid { .. } => "bpm_insight.label_invalid",
+            Self::StateVersion { .. } => "bpm_insight.state_version",
+            Self::StateCorrupt { .. } => "bpm_insight.state_corrupt",
         }
     }
 }

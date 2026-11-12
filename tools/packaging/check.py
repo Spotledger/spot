@@ -300,7 +300,7 @@ def check_tarball(path: Path) -> dict:
     expected = {
         "bin", "bin/spot", "etc", "etc/spot.toml", "etc/environment",
         "systemd", "systemd/spot.service", "systemd/spot.sysusers",
-        "systemd/spot.tmpfiles", "LICENSE", "README.install",
+        "systemd/spot.tmpfiles", "LICENSE", "NOTICE", "README.install",
     }
     errors: list[str] = []
     with tarfile.open(path, "r:gz") as archive:
@@ -366,7 +366,8 @@ def check_rpm(path: Path, version: str | None = None) -> dict:
     conffiles = set(configs.stdout.splitlines()) if configs.returncode == 0 else set()
     for required in ("/usr/bin/spot", "/usr/lib/systemd/system/spot.service",
                      "/usr/lib/sysusers.d/spot.conf", "/usr/lib/tmpfiles.d/spot.conf",
-                     "/etc/spot/spot.toml", "/etc/spot/environment"):
+                     "/etc/spot/spot.toml", "/etc/spot/environment",
+                     "/usr/share/licenses/spot/LICENSE", "/usr/share/licenses/spot/NOTICE"):
         if required not in listed:
             errors.append(f"missing {required}")
     for config in ("/etc/spot/spot.toml", "/etc/spot/environment"):
@@ -427,7 +428,9 @@ def check_deb(path: Path, version: str | None = None) -> dict:
                 listed.setdefault(name, 0o755)
     for required in ("usr/bin/spot", "usr/lib/systemd/system/spot.service",
                      "usr/lib/sysusers.d/spot.conf", "usr/lib/tmpfiles.d/spot.conf",
-                     "etc/spot/spot.toml", "etc/spot/environment"):
+                     "etc/spot/spot.toml", "etc/spot/environment",
+                     "usr/share/doc/spot/LICENSE", "usr/share/doc/spot/NOTICE",
+                     "usr/share/doc/spot/copyright"):
         if required not in listed:
             errors.append(f"missing {required}")
     if listed.get("usr/bin/spot") not in (None, 0o755):

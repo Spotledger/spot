@@ -74,6 +74,14 @@ pub enum SigningError {
     /// The revocation list is older than the one the caller already holds.
     #[error("the revocation list is older than the one already held")]
     StaleRevocationList,
+    /// A fresh revocation list's `next_update` has been reached: it is stale, so it never
+    /// permits a new install or update.
+    #[error("the revocation list is stale: its next update time has passed")]
+    RevocationListExpired,
+    /// A fresh revocation list's `next_update` is not after `issued_at`, or it is more than 7
+    /// days later.
+    #[error("the revocation list's lifetime is not between zero and seven days")]
+    RevocationLifetimeInvalid,
 }
 
 impl SigningError {
@@ -102,6 +110,8 @@ impl SigningError {
             Self::VersionMismatch => "signing.version_mismatch",
             Self::RevocationSignatureInvalid => "signing.revocation_signature_invalid",
             Self::StaleRevocationList => "signing.stale_revocation_list",
+            Self::RevocationListExpired => "signing.revocation_list_expired",
+            Self::RevocationLifetimeInvalid => "signing.revocation_lifetime_invalid",
         }
     }
 }

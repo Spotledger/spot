@@ -19,6 +19,7 @@ Source4:        spot.toml
 Source5:        environment
 Source6:        LICENSE
 Source7:        README.install
+Source8:        NOTICE
 
 BuildArch:      @ARCH@
 # systemd-rpm-macros provides the scriptlet helpers used by the pre, post and
@@ -64,6 +65,7 @@ install -d -m 0755 %{buildroot}%{_docdir}/spot
 install -m 0644 %{SOURCE7} %{buildroot}%{_docdir}/spot/README.install
 install -d -m 0755 %{buildroot}%{_licensedir}/spot
 install -m 0644 %{SOURCE6} %{buildroot}%{_licensedir}/spot/LICENSE
+install -m 0644 %{SOURCE8} %{buildroot}%{_licensedir}/spot/NOTICE
 
 install -d -m 0750 %{buildroot}%{_localstatedir}/lib/spot
 install -d -m 0750 %{buildroot}%{_localstatedir}/log/spot
@@ -92,6 +94,7 @@ install -d -m 0750 %{buildroot}%{_localstatedir}/log/spot
 %{_tmpfilesdir}/spot.conf
 %doc %{_docdir}/spot/README.install
 %license %{_licensedir}/spot/LICENSE
+%license %{_licensedir}/spot/NOTICE
 %dir %attr(0750,spot,spot) %{_localstatedir}/lib/spot
 %dir %attr(0750,spot,spot) %{_localstatedir}/log/spot
 %ghost %dir %attr(0750,spot,spot) %{_rundir}/spot

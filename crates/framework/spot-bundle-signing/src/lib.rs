@@ -8,6 +8,7 @@
 //! - [`signature`]: the detached bundle signature over the canonical digest, bound to app id,
 //!   version and publisher.
 //! - [`revocation`]: the signed revocation list (keys, publishers, bundle digests).
+//! - [`fresh`]: the fresh revocation list (domain V2, `next_update` signed, signer port, wire codec).
 //! - [`verify`](crate::verify::verify): the one check the installer and the startup loader call.
 //! - [`documents`]: the JSON file forms, parsed with every field checked.
 //!
@@ -19,6 +20,7 @@ pub mod canonical;
 pub mod certificate;
 pub mod documents;
 pub mod error;
+pub mod fresh;
 pub mod keys;
 pub mod revocation;
 pub mod signature;
@@ -29,6 +31,10 @@ pub use certificate::{
     CertificateChain, PublisherCertificate, SignedCertificate, issue_certificate,
 };
 pub use error::SigningError;
+pub use fresh::{
+    FreshRevocationBody, FreshRevocationList, RevocationSigner, issue_fresh_revocation_list,
+    verify_fresh_revocation_list,
+};
 pub use keys::{KeyId, KeyPair, PublicKey, generate_keypair};
 pub use revocation::{
     RevocationBody, RevocationList, RevokedBundle, RevokedKey, RevokedPublisher,

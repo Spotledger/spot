@@ -9,6 +9,22 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.6] - 2026-11-12
+
+Continuous integration, and one test: the first scheduled nightly run on the hosted runners failed
+in four places, none of them in the product.
+
+### Fixed
+
+- The Linux-lock test in `spot-agent-linux-sys` waits for the release instead of assuming it is
+  instant: a sibling test's forked child holds the lock's open file description until its `exec`.
+- The nightly and weekly workflows check formatting on Linux only (Windows refuses the one long
+  command line `cargo fmt --all` builds) and the nightly Rust tests use `--no-fail-fast`.
+- The Windows .NET jobs check the sources out without line-ending conversion and leave out the
+  suites whose baselines are recorded on Linux (screenshots, accessibility) and the file-name
+  refusal tests that need names Windows cannot create.
+- A red L7 nightly now keeps the PostgreSQL log and prints the cluster's state.
+
 ## [0.1.5] - 2026-11-12
 
 Continuous integration, and nothing else: 0.1.4 failed two of the lint gates.

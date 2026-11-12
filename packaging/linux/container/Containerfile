@@ -5,7 +5,8 @@
 # Build by hand:
 #   podman build --build-arg VERSION=1.2.3 -t spot:1.2.3 packaging/linux/container
 #
-# The context must contain `spot` (the release binary) and `spot.toml`.
+# The context must contain `spot` (the release binary), `spot.toml`, `LICENSE`
+# and `NOTICE`.
 
 ARG VERSION=0.0.0
 
@@ -32,6 +33,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 curl-minimal shadow-utils \
 
 COPY --from=payload /spot /usr/bin/spot
 COPY spot.toml /etc/spot/spot.toml
+COPY LICENSE NOTICE /usr/share/licenses/spot/
 
 VOLUME ["/var/lib/spot"]
 EXPOSE 8000

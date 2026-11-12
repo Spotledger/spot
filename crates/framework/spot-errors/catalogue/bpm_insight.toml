@@ -18,3 +18,21 @@ explanation_key = "error.bpm_insight.label_invalid"
 params = ["which"]
 remedy = "Give the label override a non-empty value, or leave it unset for the default."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_insight.state_version"
+class = "none"
+summary = "The stored insight state has version {found}; this build reads version {supported}."
+explanation_key = "error.bpm_insight.state_version"
+params = ["found", "supported"]
+remedy = "Rebuild the insight from the event feed with this build, or run the build that wrote the state; the state is never guessed at."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_insight.state_corrupt"
+class = "none"
+summary = "The stored insight state is corrupt: {detail}."
+explanation_key = "error.bpm_insight.state_corrupt"
+params = ["detail"]
+remedy = "Discard the stored state and rebuild the insight from the start of the event feed; the message names what is inconsistent."
+since = "0.1.0"

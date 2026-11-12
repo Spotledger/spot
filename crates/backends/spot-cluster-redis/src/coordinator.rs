@@ -30,7 +30,8 @@
 //! A Redis error becomes `coordinator.unavailable`; the caller falls back to the database
 //! coordinator or fails closed, exactly as the trait specifies.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use redis::Script;
@@ -49,12 +50,117 @@ use crate::scripts;
 /// The coordinator's unavailable code, in the catalogued `coordinator.*` family.
 pub const UNAVAILABLE: &str = "coordinator.unavailable";
 
+/// How long `acquire` and `current` wait for this instance's own abandoned acquires to finish
+/// their compensating release before giving up with `coordinator.unavailable`.
+pub const ABANDONED_WAIT: Duration = Duration::from_secs(5);
+
 /// The [`Coordinator`] over one Redis/Valkey server.
 #[derive(Clone)]
 pub struct RedisCoordinator {
     connection: RedisConnection,
     clock: Arc<dyn Clock>,
     waker: Arc<Notify>,
+    abandoned: Arc<Abandoned>,
+    abandoned_wait: Duration,
+}
+
+/// The acquires this instance (and its clones) abandoned that have not yet finished: their
+/// script may still land and take a lease, and the compensating release has not yet run.
+///
+/// While the count is above zero, the name may look free and then be taken, so `acquire` and
+/// `current` wait for zero first (bounded by [`RedisCoordinator::with_abandoned_wait`]). Only this
+/// instance's own attempts are waited for; a lease taken by another node is unaffected.
+#[derive(Debug, Default)]
+struct Abandoned {
+    pending: AtomicUsize,
+    idle: Notify,
+}
+
+impl Abandoned {
+    fn begin(&self) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn finish(&self) {
+        if self.pending.fetch_sub(1, Ordering::SeqCst) == 1 {
+            self.idle.notify_waiters();
+        }
+    }
+
+    /// Waits until no abandoned acquire is outstanding, or `limit` passes (`false`).
+    async fn drained(&self, limit: Duration) -> bool {
+        let wait = async {
+            loop {
+                // Register before checking, so a `finish` in between is not missed.
+                let notified = self.idle.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if self.pending.load(Ordering::SeqCst) == 0 {
+                    return;
+                }
+                notified.await;
+            }
+        };
+        tokio::time::timeout(limit, wait).await.is_ok()
+    }
+}
+
+/// Where one spawned acquire stands, shared by the task and the caller's future.
+enum Slot {
+    /// The script is in flight and the caller still waits.
+    Running,
+    /// The caller dropped its future first: the task owns the compensating release.
+    Abandoned,
+    /// The script answered and the caller has not yet taken the answer.
+    Done(CoordResult<Lease>),
+    /// The caller has the answer (or the attempt needs nothing more).
+    Taken,
+}
+
+fn locked(slot: &Mutex<Slot>) -> MutexGuard<'_, Slot> {
+    slot.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Held by the caller's future: dropping it before the answer is taken abandons the attempt and
+/// makes sure a lease the attempt takes is released.
+struct Attempt {
+    slot: Arc<Mutex<Slot>>,
+    owner: RedisCoordinator,
+}
+
+impl Attempt {
+    fn take(&self) -> Option<CoordResult<Lease>> {
+        match std::mem::replace(&mut *locked(&self.slot), Slot::Taken) {
+            Slot::Done(result) => Some(result),
+            _ => None,
+        }
+    }
+}
+
+impl Drop for Attempt {
+    fn drop(&mut self) {
+        let mut slot = locked(&self.slot);
+        match std::mem::replace(&mut *slot, Slot::Taken) {
+            // The task is still running: it releases when it finishes. Counted under the slot
+            // lock, so no caller can see "no abandoned acquire" between here and the release.
+            Slot::Running => {
+                self.owner.abandoned.begin();
+                *slot = Slot::Abandoned;
+            }
+            // The answer arrived but nobody took it: release the lease it carries.
+            Slot::Done(Ok(lease)) => {
+                if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                    self.owner.abandoned.begin();
+                    let owner = self.owner.clone();
+                    runtime.spawn(async move {
+                        let _ = owner.release_once(&lease).await;
+                        owner.abandoned.finish();
+                    });
+                }
+            }
+            other => *slot = other,
+        }
+    }
 }
 
 impl std::fmt::Debug for RedisCoordinator {
@@ -73,6 +179,28 @@ impl RedisCoordinator {
             connection,
             clock,
             waker: Arc::new(Notify::new()),
+            abandoned: Arc::new(Abandoned::default()),
+            abandoned_wait: ABANDONED_WAIT,
+        }
+    }
+
+    /// Changes how long `acquire` and `current` wait for this instance's abandoned acquires
+    /// (default [`ABANDONED_WAIT`]); past it they fail closed with `coordinator.unavailable`.
+    #[must_use]
+    pub fn with_abandoned_wait(mut self, wait: Duration) -> Self {
+        self.abandoned_wait = wait;
+        self
+    }
+
+    /// Waits for every abandoned acquire of this instance to finish its release.
+    async fn settle(&self) -> CoordResult<()> {
+        if self.abandoned.drained(self.abandoned_wait).await {
+            Ok(())
+        } else {
+            Err(Error::new(
+                UNAVAILABLE,
+                "an abandoned acquire has not finished releasing",
+            ))
         }
     }
 
@@ -223,25 +351,60 @@ impl Coordinator for RedisCoordinator {
             validate_name(name)?;
             validate_name(holder)?;
             let ttl_us = ttl_micros(ttl)?;
+            self.settle().await?;
             let now = self.now_us()?;
             let expires_at = self.expires_at(ttl)?;
             // Cancellation safety: the script runs in a spawned task and the lease it may have
             // taken is released if the caller dropped this future before the answer arrived.
-            // Dropping the future can therefore never leave a lease nobody owns.
+            // Until that release has run, every later `acquire` and `current` of this instance
+            // waits (`settle`), so an abandoned attempt can neither be observed as "free, then
+            // taken" nor block its own caller's retry.
             let this = self.clone();
             let name = name.to_owned();
             let holder = holder.to_owned();
+            let slot = Arc::new(Mutex::new(Slot::Running));
+            let attempt = Attempt {
+                slot: Arc::clone(&slot),
+                owner: self.clone(),
+            };
             let (tx, rx) = tokio::sync::oneshot::channel();
             tokio::spawn(async move {
                 let result = this
                     .acquire_once(&name, &holder, ttl_us, now, expires_at)
                     .await;
-                if let Err(Ok(lease)) = tx.send(result) {
-                    let _ = this.release_once(&lease).await;
+                // `Some(result)` when the caller abandoned the attempt: this task releases.
+                let leftover = {
+                    let mut guard = locked(&slot);
+                    match std::mem::replace(&mut *guard, Slot::Taken) {
+                        Slot::Running => {
+                            *guard = Slot::Done(result);
+                            None
+                        }
+                        Slot::Abandoned => Some(result),
+                        other => {
+                            *guard = other;
+                            None
+                        }
+                    }
+                };
+                match leftover {
+                    Some(result) => {
+                        if let Ok(lease) = result {
+                            let _ = this.release_once(&lease).await;
+                        }
+                        this.abandoned.finish();
+                    }
+                    None => {
+                        let _ = tx.send(());
+                    }
                 }
             });
-            rx.await
-                .map_err(|_| Error::new(UNAVAILABLE, "the acquire task did not answer"))?
+            if rx.await.is_err() {
+                return Err(Error::new(UNAVAILABLE, "the acquire task did not answer"));
+            }
+            attempt
+                .take()
+                .unwrap_or_else(|| Err(Error::new(UNAVAILABLE, "the acquire task did not answer")))
         })
     }
 
@@ -286,6 +449,7 @@ impl Coordinator for RedisCoordinator {
     fn current<'a>(&'a self, name: &'a str) -> BoxFuture<'a, CoordResult<Option<Lease>>> {
         Box::pin(async move {
             validate_name(name)?;
+            self.settle().await?;
             let now = self.now_us()?;
             let mut manager = self.connection.manager();
             let fields: Vec<Option<String>> = redis::cmd("HMGET")

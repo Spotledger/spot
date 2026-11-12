@@ -34,6 +34,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use spot_coordinator::{Coordinator, Lease};
@@ -191,6 +192,120 @@ pub struct Keeper {
     holder: String,
     ttl: Duration,
     held: std::sync::Mutex<Option<Lease>>,
+    view: Arc<LeaseView>,
+}
+
+/// What the claim gate sees of a [`Keeper`]'s lease: written by the keeper, read by the
+/// gate.
+///
+/// The keeper marks the view *lost*, and bumps the generation, the moment it learns the lease is
+/// gone (a failed or stale renewal, a stale fence check, a release): before it logs and before
+/// it does anything else. The gate honours a cached `true` only under the generation it was
+/// computed under, answers `false` for a lost view without a coordinator call, and a lost view
+/// stays lost until the keeper takes the lease again (a new token), not until a cache period
+/// passes. The view starts lost: a keeper that never held the lease permits nothing.
+///
+/// A claim already past the gate when the loss lands is not covered here; the lease token the
+/// job store checks on the claim (job fencing) covers it.
+pub struct LeaseView {
+    generation: std::sync::atomic::AtomicU64,
+    state: std::sync::Mutex<ViewState>,
+}
+
+struct ViewState {
+    lost: bool,
+    /// The generation, the monotonic time and the answer of the last fence check.
+    cached: Option<(u64, Duration, bool)>,
+}
+
+/// What the gate does for one claim attempt.
+enum Consult {
+    /// The lease is lost: refuse.
+    Closed,
+    /// A fresh answer under the current generation says the lease is held.
+    Permit,
+    /// Ask the coordinator; remember this generation, read before the call.
+    Ask(u64),
+}
+
+impl LeaseView {
+    fn new() -> Self {
+        Self {
+            generation: std::sync::atomic::AtomicU64::new(0),
+            state: std::sync::Mutex::new(ViewState {
+                lost: true,
+                cached: None,
+            }),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, ViewState> {
+        self.state.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    /// The lease is gone: refuse everything, drop the cache, invalidate answers in flight.
+    pub fn mark_lost(&self) {
+        let mut state = self.lock();
+        state.lost = true;
+        state.cached = None;
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The keeper took the lease (a new token): permit again, under a new generation.
+    fn reacquired(&self) {
+        let mut state = self.lock();
+        state.lost = false;
+        state.cached = None;
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// `true` while the lease is lost.
+    pub fn is_lost(&self) -> bool {
+        self.lock().lost
+    }
+
+    fn consult(&self, now: Duration, period: Duration) -> Consult {
+        let state = self.lock();
+        if state.lost {
+            return Consult::Closed;
+        }
+        let generation = self.generation();
+        if let Some((cached_generation, at, true)) = state.cached
+            && cached_generation == generation
+            // A clock reading before the cached one is not trusted: ask again (fail closed).
+            && now >= at
+            && now - at < period
+        {
+            return Consult::Permit;
+        }
+        Consult::Ask(generation)
+    }
+
+    /// Records the answer of a fence check started under `generation`. A loss that landed during
+    /// the call discards the answer: `false` is returned whatever the call said.
+    fn finish(&self, generation: u64, answer: bool, now: Duration) -> bool {
+        let mut state = self.lock();
+        if state.lost || self.generation() != generation {
+            return false;
+        }
+        if answer {
+            state.cached = Some((generation, now, true));
+        }
+        answer
+    }
+
+    /// A renewal just succeeded: the lease is current as of `now`.
+    fn refreshed(&self, now: Duration) {
+        let mut state = self.lock();
+        if !state.lost {
+            let generation = self.generation();
+            state.cached = Some((generation, now, true));
+        }
+    }
 }
 
 impl Keeper {
@@ -202,7 +317,13 @@ impl Keeper {
             holder,
             ttl,
             held: std::sync::Mutex::new(None),
+            view: Arc::new(LeaseView::new()),
         }
+    }
+
+    /// What the claim gate reads: lost as soon as this keeper knows the lease is.
+    pub fn view(&self) -> Arc<LeaseView> {
+        Arc::clone(&self.view)
     }
 
     fn handle(&self) -> Option<Lease> {
@@ -223,6 +344,7 @@ impl Keeper {
         {
             Ok(lease) => {
                 self.put(Some(lease));
+                self.view.reacquired();
                 true
             }
             Err(e) => {
@@ -241,6 +363,8 @@ impl Keeper {
         match self.coordinator.check_fence(&self.name, lease.token).await {
             Ok(()) => true,
             Err(e) => {
+                // Lost first: nothing, not even the log line, comes before the gate closes.
+                self.view.mark_lost();
                 tracing::warn!(lease = %self.name, %e, "fencing token is stale; the lease is lost");
                 self.put(None);
                 false
@@ -259,6 +383,7 @@ impl Keeper {
                 true
             }
             Err(e) => {
+                self.view.mark_lost();
                 tracing::warn!(lease = %self.name, %e, "lease renewal failed; the lease is lost");
                 self.put(None);
                 false
@@ -268,6 +393,7 @@ impl Keeper {
 
     /// Gives the lease up, so another node takes over at once.
     pub async fn release(&self) {
+        self.view.mark_lost();
         let lease = self.held.lock().unwrap_or_else(|p| p.into_inner()).take();
         if let Some(lease) = lease {
             // Releasing lets another node take over at once instead of after the time to
@@ -291,10 +417,9 @@ impl Keeper {
 /// until the node takes the lease again; a failed check call is a refusal (fail closed).
 pub struct LeaseClaimGate {
     keeper: Arc<Keeper>,
+    view: Arc<LeaseView>,
     clock: Arc<dyn Clock>,
     period: Duration,
-    /// The monotonic time of the last answer and the answer.
-    cache: std::sync::Mutex<Option<(Duration, bool)>>,
 }
 
 /// How long [`LeaseClaimGate`] keeps an answer for a lease with time to live `ttl`.
@@ -306,11 +431,12 @@ impl LeaseClaimGate {
     /// A gate over `keeper`, timed by `clock`.
     pub fn new(keeper: Arc<Keeper>, clock: Arc<dyn Clock>) -> Self {
         let period = claim_gate_period(keeper.ttl);
+        let view = keeper.view();
         Self {
             keeper,
+            view,
             clock,
             period,
-            cache: std::sync::Mutex::new(None),
         }
     }
 
@@ -319,45 +445,38 @@ impl LeaseClaimGate {
         self.period
     }
 
-    fn cached(&self) -> Option<(Duration, bool)> {
-        *self.cache.lock().unwrap_or_else(|p| p.into_inner())
-    }
-
-    fn store(&self, answer: Option<bool>) {
-        *self.cache.lock().unwrap_or_else(|p| p.into_inner()) =
-            answer.map(|a| (self.clock.monotonic(), a));
-    }
-
     /// A renewal just succeeded: the lease is current as of now.
     pub fn renewed(&self) {
-        self.store(Some(true));
+        self.view.refreshed(self.clock.monotonic());
     }
 
-    /// The lease was lost or given up: forget the answer, the next ask sees no handle.
+    /// The lease was lost or given up: the gate closes until the keeper takes it again.
     pub fn cleared(&self) {
-        self.store(None);
+        self.view.mark_lost();
     }
 }
 
 impl ClaimGate for LeaseClaimGate {
     fn permit<'a>(&'a self) -> BoxFuture<'a, bool> {
         Box::pin(async move {
-            // No handle (never acquired, released, lost): closed, whatever the cache says.
+            // No handle (never acquired, released, lost): closed, whatever the cache says. The
+            // view is already lost then (every path that drops the handle marks it first), so
+            // the gate does not mark it again: a re-acquire landing between this read and a
+            // second mark would leave a held lease with a gate that stays shut.
             if self.keeper.handle().is_none() {
-                self.cleared();
                 return false;
             }
-            // A clock reading before the cached one is not trusted: ask again (fail closed).
-            let now = self.clock.monotonic();
-            if let Some((at, answer)) = self.cached()
-                && now >= at
-                && now - at < self.period
-            {
-                return answer;
+            match self.view.consult(self.clock.monotonic(), self.period) {
+                Consult::Closed => false,
+                Consult::Permit => true,
+                Consult::Ask(generation) => {
+                    // The generation was read before the call: a loss that lands while the
+                    // coordinator answers discards the answer.
+                    let answer = self.keeper.still_held().await;
+                    self.view
+                        .finish(generation, answer, self.clock.monotonic())
+                }
             }
-            let answer = self.keeper.still_held().await;
-            self.store(Some(answer));
-            answer
         })
     }
 }

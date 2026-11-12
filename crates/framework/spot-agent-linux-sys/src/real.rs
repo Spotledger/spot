@@ -305,7 +305,20 @@ mod tests {
         assert!(held.is_some());
         assert!(fs.try_lock_exclusive(&path).unwrap().is_none());
         drop(held);
-        assert!(fs.try_lock_exclusive(&path).unwrap().is_some());
+        // `flock` belongs to the open file description. A sibling test that spawns a process
+        // forks while this descriptor is open, and the child keeps the description (and so the
+        // lock) until its `exec` closes it, so the release can lag the drop by a moment on a
+        // slow runner. The lock must come back; wait for it rather than assume the instant.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut retaken = false;
+        while std::time::Instant::now() < deadline {
+            if fs.try_lock_exclusive(&path).unwrap().is_some() {
+                retaken = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(retaken, "the lock was not released after the holder was dropped");
     }
 
     #[test]

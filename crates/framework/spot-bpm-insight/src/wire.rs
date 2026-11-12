@@ -77,3 +77,28 @@ pub(crate) mod node_id {
         NodeId::new(&raw).map_err(serde::de::Error::custom)
     }
 }
+
+/// An optional instant as its exact integer pair, or null.
+pub(crate) mod option_instant {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use spot_app_api::prelude::OffsetDateTime;
+
+    use super::{InstantRepr, from_repr, to_repr};
+
+    /// Serialises an optional instant.
+    pub(crate) fn serialize<S: Serializer>(
+        value: &Option<OffsetDateTime>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value.map(to_repr).serialize(serializer)
+    }
+
+    /// Deserialises an optional instant.
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<OffsetDateTime>, D::Error> {
+        let repr = Option::<InstantRepr>::deserialize(deserializer)?;
+        repr.map(|r| from_repr(&r).map_err(serde::de::Error::custom))
+            .transpose()
+    }
+}

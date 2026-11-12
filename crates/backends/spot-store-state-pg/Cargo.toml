@@ -1,0 +1,31 @@
+[package]
+name = "spot-store-state-pg"
+description = "PostgreSQL implementation of the store server's durable state (WP-STR-03.T4, ADR-082 class C): hashed publisher keys, reviews and the fail-closed listing, idempotency keys, revocation state and the audit log in the control schema, reached through the shared blocking bridge."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `StoreStateStore` trait, the model and the `store_state.*` errors.
+spot-store-state = { path = "../../framework/spot-store-state" }
+# `AppName`, `Version` and `Digest`: parsed back from stored text.
+spot-registry = { path = "../../framework/spot-registry" }
+# The one shared blocking bridge (ADR-082 addendum 1); this crate never writes its own `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool whose size the constructor validates the bridge against.
+deadpool-postgres = "0.14"
+# The driver: transactions, SQLSTATE codes.
+tokio-postgres = "0.7"
+# The constructor asks the ambient runtime flavor (a current-thread runtime is refused).
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The setup runtime that prepares and inspects the scratch database from outside the bridge.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

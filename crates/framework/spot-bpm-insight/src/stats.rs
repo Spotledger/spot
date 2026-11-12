@@ -2,7 +2,8 @@
 //!
 //! One [`StepStats`] is one `(process version, node)` pair. It is built by the
 //! [`Accumulator`](crate::Accumulator) and never carries a float: durations are
-//! [`Millis`], percentiles are exact integers (the nearest-rank method) and rates are an exact
+//! [`Millis`], percentiles are integers (the nearest-rank bucket value of a fixed-bucket histogram: exact up to
+//! 31 ms, within 3.2% above beyond) and rates are an exact
 //! `part / whole` pair with a rounded per-mille rendering.
 
 use serde::{Deserialize, Serialize};
@@ -82,11 +83,12 @@ pub struct StepStats {
     pub wait: Millis,
     /// The shortest completed-attempt cycle time.
     pub min: Option<Millis>,
-    /// The exact 50th percentile of the completed-attempt cycle times.
+    /// The 50th percentile of the completed-attempt cycle times: nearest rank, reported as its
+    /// histogram bucket's upper bound (exact up to 31 ms, less than 3.2% above beyond).
     pub p50: Option<Millis>,
-    /// The exact 90th percentile.
+    /// The 90th percentile, by the same rule.
     pub p90: Option<Millis>,
-    /// The exact 99th percentile.
+    /// The 99th percentile, by the same rule.
     pub p99: Option<Millis>,
     /// The longest completed-attempt cycle time.
     pub max: Option<Millis>,

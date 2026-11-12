@@ -188,3 +188,21 @@ explanation_key = "error.signing.stale_revocation_list"
 params = []
 remedy = "Fetch the current revocation list from the store."
 since = "0.1.0"
+
+[[entry]]
+code = "signing.revocation_list_expired"
+class = "none"
+summary = "The revocation list is stale: its next update time has passed."
+explanation_key = "error.signing.revocation_list_expired"
+params = []
+remedy = "Fetch a fresh revocation list from the store; until then no new install or update is allowed, and installed bundles keep running."
+since = "0.1.0"
+
+[[entry]]
+code = "signing.revocation_lifetime_invalid"
+class = "none"
+summary = "The revocation list's lifetime is not between zero and seven days."
+explanation_key = "error.signing.revocation_lifetime_invalid"
+params = []
+remedy = "Re-issue the list with next_update after issued_at and at most 7 days later."
+since = "0.1.0"

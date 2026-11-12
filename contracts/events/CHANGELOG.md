@@ -2,6 +2,31 @@
 
 Every change is an ADR plus a semantic version bump (blueprint §4, contracts-first rule).
 
+## 0.7.7 (draft, awaiting architecture-owner approval)
+
+Additive (WP-CON-04.T7, lead decisions of 2 and 12 Nov 2026). A patch version: gate G6 needs a
+VERSION change and 0.7.6 is on `dev`. **Version policy for the 0.7 line:** (1) additive changes
+and first schemas for unschemaed topics are patch versions; (2) `0.8.0` is reserved for removing
+the three functions deprecated in 0.7.1, with its ADR; (3) **freeze rule:** once a version
+carrying the nine `sys_*` schemas of 0.7.2 is on `main`, revision 0 of each is frozen, and a later
+change to a shape is an additive revision 1 or, if it removes or retypes a field, a new major of
+that topic; (4) enforcement (a producer or consumer calling `system::validate`) is a code change
+in the calling crate, not a contract bump, and lands only after WP-CON-04.T8, T9 and T10.
+- `sys_job_enqueued` gains two optional fields the job intake reads: `queue` (1 to 64 bytes of
+  `[a-z0-9_-]`; absent or null means `default`) and `context` (a JSON object, no float at any
+  depth, same key and string bounds as `args`). Still no `site`: the site is the intake's own
+  context, so a payload carrying it stays refused. The example now uses both.
+- Null for absent: every optional field of every schema accepts an explicit `null` and treats it
+  as absent (this was already how the schema engine behaved); `spot-document`'s literal job shape
+  (`"args": null`, `"idempotency_key": null`, `"not_before": null`) is now a tested case. The
+  `system_platform` module doc gains a table stating, per topic, which fields are optional; a
+  test checks it against the schemas.
+- The nine schemas are documented as not yet enforced: nothing on the publish or consume path
+  calls them, so no payload is refused at run time because of them.
+- Compatible: no field removed or retyped, no payload accepted before is refused (a payload with
+  `queue` or `context` was refused by the strict 0.7.2 schema and is accepted now).
+  `registry.snapshot.json` changes only `contract_version`.
+
 ## 0.7.6 (draft, awaiting architecture-owner approval)
 
 Additive (ADR-061 sections 7 and 8 and the answer to question 5; ADR-067; ADR-062 section 3;

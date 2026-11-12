@@ -106,6 +106,7 @@ impl PublicKey {
 pub struct KeyPair {
     signing: SigningKey,
     public: PublicKey,
+    id: KeyId,
 }
 
 /// Builds a key pair from 32 seed bytes the caller drew from a cryptographic source.
@@ -118,13 +119,24 @@ impl KeyPair {
     fn from_seed(seed: &[u8; 32]) -> Self {
         let signing = SigningKey::from_bytes(seed);
         let public = PublicKey(signing.verifying_key().to_bytes());
-        Self { signing, public }
+        let id = public.key_id();
+        Self {
+            signing,
+            public,
+            id,
+        }
     }
 
     /// The public half.
     #[must_use]
     pub fn public(&self) -> PublicKey {
         self.public
+    }
+
+    /// The key's id.
+    #[must_use]
+    pub fn id(&self) -> &KeyId {
+        &self.id
     }
 
     /// The 32 seed bytes. The only way the secret leaves this type: it is for the caller's
@@ -145,7 +157,7 @@ impl fmt::Debug for KeyPair {
         write!(
             f,
             "KeyPair {{ key_id: {}, secret: <redacted> }}",
-            self.public.key_id().as_str()
+            self.id.as_str()
         )
     }
 }

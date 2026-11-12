@@ -5,6 +5,38 @@ following the same rule `contracts/native-api/CHANGELOG.md` uses. Additive chang
 minor version and keep the `/store/v1` prefix; breaking changes need a new major version and
 prefix (see `openapi.yaml`, "Versioning").
 
+## 0.2.1 (draft, awaiting architecture-owner approval; WP-STR-03.T6, lead decisions of 12 Nov 2026)
+
+Reconciles the contract with `spot-bundle-signing` as WP-STR-03.T5 delivered it
+(`FreshRevocationList`), so the store server (T3) and every site verify one form. **This is a
+public contract change.** `VERSION` moves to 0.2.1 only because 0.2.0 is already on `dev` and gate
+G6 needs a higher number; the contract has not shipped, so the revocation list text of 0.2.0 was
+never served, and nothing is renamed or removed: no operation, error code or schema name changes,
+and the one list a store could have served before is replaced by its corrected form before any
+server exists.
+- revocation list V2: the signed bytes use the domain `SPOT-REVOCATION-LIST-V2\n` (not `V1`),
+  with `next_update` inside the signed body, times as RFC 3339 `Z` strings on the wire and integer
+  UTC seconds in the signed bytes, a bundle entry's `digest`. The "open follow-up, known wire
+  divergences" paragraph is deleted: the crate and the contract now agree, and the golden vector
+  of `tests/fresh.rs` (bytes and signature) is quoted as the worked example and used as the
+  example response;
+- pinned limits (as the crate enforces them): `generation` 0 to 2^53; `reason` at most 2000
+  bytes; `publisher_id` `^[A-Za-z0-9_-]{1,128}$`; digest 64 lower-case hex; `issued_by` and every
+  revoked `key_id` a 32-digit lower-case hex key id (new schema `KeyId`; the example `root-2026`
+  and `maxLength: 256` are gone); `signature` the base64 of 64 bytes; `next_update` after
+  `issued_at`, at most 7 days later. Recommended lifetime 24 hours, reissue every 6 hours;
+  `ETag` stays `"<generation>"` and `Cache-Control` `max-age=300`;
+- the wire object is exactly what `to_wire_json` emits, with no envelope of its own: the
+  `{data: ...}` wrapper stays the serving layer's;
+- key custody reworded: the store holds no key that can sign a bundle or certify a publisher; it
+  holds one revocation-issuing key behind a port (hardware allowed), whose public key is a root
+  sites pin, used for revocation lists only (and licences in WP-STR-08);
+- recorded: approval, rejection and withdrawal of a listing are operator routes outside this
+  contract, and an unlisted version is answered as unknown to everyone but its owning publisher.
+- Compatible for clients: a client that ignores unknown fields and verifies per the text above
+  needs no change other than the domain string, which was never usable (the crate had no
+  `next_update`).
+
 ## 0.2.0 (draft, pre-freeze revision; lead decisions of 8 Nov 2026 on PR 2924)
 
 The contract has not shipped, so this stays a 0.x revision of the same draft. Four changes:

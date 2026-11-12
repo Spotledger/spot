@@ -204,6 +204,7 @@ members = [
     "crates/framework/spot-sod",
     "crates/framework/spot-sso",
     "crates/framework/spot-store-commerce",
+    "crates/framework/spot-store-state",
     "crates/framework/spot-support-grants",
     "crates/framework/spot-support-session",
     "crates/framework/spot-sync-acks",

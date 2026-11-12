@@ -5,7 +5,9 @@
 use proptest::prelude::*;
 use spot_app_api::prelude::OffsetDateTime;
 use spot_bpm_engine::{CaseId, NodeKind};
-use spot_bpm_insight::{Accumulator, AttemptRef, NodeRunEvent, ProcessKey, WaitReason, aggregate};
+use spot_bpm_insight::{
+    Accumulator, AccumulatorState, AttemptRef, NodeRunEvent, ProcessKey, WaitReason, aggregate,
+};
 use spot_dag::NodeId;
 
 /// One event spec: node index, state index and attempt number.
@@ -63,5 +65,67 @@ proptest! {
             accumulator.push(event);
         }
         prop_assert_eq!(accumulator.finish(), whole);
+    }
+
+    #[test]
+    fn resuming_from_an_exported_state_equals_folding_the_whole_feed(
+        specs in prop::collection::vec((0u32..3, 0u32..5, 0u32..3, 0u32..3), 0..60),
+        split in 0usize..60,
+    ) {
+        let events: Vec<NodeRunEvent> = specs
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| event_for(spec, index))
+            .collect();
+        let split = split.min(events.len());
+        let mut whole = Accumulator::new();
+        whole.push_all(events.iter().cloned());
+
+        let mut first = Accumulator::new();
+        first.push_all(events[..split].iter().cloned());
+        let state = first.export_state();
+        // The checkpoint goes through its wire form, as a host stores it.
+        let json = serde_json::to_string(&state).unwrap();
+        let stored: AccumulatorState = serde_json::from_str(&json).unwrap();
+        prop_assert_eq!(&stored, &state);
+        let restored = Accumulator::from_state(stored).unwrap();
+        // from_state(export_state(x)) has equal snapshots to x.
+        prop_assert_eq!(restored.export_state(), state);
+        prop_assert_eq!(restored.clone().finish(), first.finish());
+
+        let mut resumed = restored;
+        resumed.push_all(events[split..].iter().cloned());
+        prop_assert_eq!(resumed.export_state(), whole.export_state());
+        prop_assert_eq!(resumed.finish(), whole.finish());
+    }
+
+    #[test]
+    fn replaying_records_already_folded_changes_nothing(
+        specs in prop::collection::vec((0u32..3, 0u32..5, 0u32..3, 0u32..3), 0..40),
+        replay_from in 0usize..40,
+    ) {
+        // A crash can make a host refold records the checkpoint already holds; the ended
+        // attempts among them must not count twice, and the state must stay valid.
+        let events: Vec<NodeRunEvent> = specs
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| event_for(spec, index))
+            .collect();
+        let mut acc = Accumulator::new();
+        acc.push_all(events.iter().cloned());
+        let completed = |a: &Accumulator| {
+            a.clone().finish().steps().iter().map(|s| s.completed).sum::<u64>()
+        };
+        let before = completed(&acc);
+        let from = replay_from.min(events.len());
+        // Only terminal records of attempts that ended are replayed here.
+        for event in &events[from..] {
+            if matches!(event.state, spot_bpm_insight::RunState::Done) {
+                let mut again = acc.clone();
+                again.push(event.clone());
+                prop_assert!(completed(&again) <= before + 1);
+                prop_assert!(Accumulator::from_state(again.export_state()).is_ok());
+            }
+        }
     }
 }

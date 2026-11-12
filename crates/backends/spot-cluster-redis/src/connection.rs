@@ -25,6 +25,7 @@ impl std::fmt::Debug for RedisConfig {
             .field("keyspace", &self.keyspace)
             .field("connect_attempts", &self.connect_attempts)
             .field("connect_backoff", &self.connect_backoff)
+            .field("connect_timeout", &self.connect_timeout)
             .finish()
     }
 }
@@ -40,7 +41,14 @@ pub struct RedisConfig {
     pub connect_attempts: u32,
     /// The first retry delay; each later retry doubles it (bounded by [`MAX_BACKOFF`]).
     pub connect_backoff: Duration,
+    /// The longest the whole initial connect (every attempt and every retry delay) may take. The
+    /// driver retries inside one attempt, so without this bound an unreachable server takes about
+    /// 48 s to refuse; with it the start fails in this time.
+    pub connect_timeout: Duration,
 }
+
+/// The default [`RedisConfig::connect_timeout`].
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The longest a retry waits.
 pub const MAX_BACKOFF: Duration = Duration::from_secs(2);
@@ -54,6 +62,7 @@ impl RedisConfig {
             keyspace: KeySpace::default(),
             connect_attempts: 5,
             connect_backoff: Duration::from_millis(50),
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
         }
     }
 
@@ -69,6 +78,13 @@ impl RedisConfig {
     pub fn with_connect_attempts(mut self, attempts: u32, backoff: Duration) -> Self {
         self.connect_attempts = attempts.max(1);
         self.connect_backoff = backoff;
+        self
+    }
+
+    /// The same config with a different bound on the total initial-connect time (at least 1 ms).
+    #[must_use]
+    pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
+        self.connect_timeout = timeout.max(Duration::from_millis(1));
         self
     }
 
@@ -108,9 +124,24 @@ impl RedisConnection {
     ///
     /// # Errors
     ///
-    /// `cluster_redis.unavailable` when every attempt failed.
+    /// `cluster_redis.unavailable` when every attempt failed or
+    /// [`RedisConfig::connect_timeout`] passed first.
     pub async fn connect(config: &RedisConfig) -> RedisResult<Self> {
         let client = config.client()?;
+        tokio::time::timeout(
+            config.connect_timeout,
+            Self::connect_attempts(config, client),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(RedisError::unavailable(
+                "connecting to Redis",
+                format!("no connection within {:?}", config.connect_timeout),
+            ))
+        })
+    }
+
+    async fn connect_attempts(config: &RedisConfig, client: Client) -> RedisResult<Self> {
         let mut last: Option<redis::RedisError> = None;
         for attempt in 1..=config.connect_attempts {
             match ConnectionManager::new(client.clone()).await {

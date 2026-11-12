@@ -1,6 +1,8 @@
 {
   "args": {"customer": "0192f1c0-0000-7000-8000-000000000043", "limit": 20, "dry_run": false},
+  "context": {"company": "main", "locale": "en"},
   "idempotency_key": "overdue-2026-11-02",
   "job": "erp_selling:send_overdue_reminders",
-  "not_before": "2026-11-03T06:00:00Z"
+  "not_before": "2026-11-03T06:00:00Z",
+  "queue": "reminders"
 }

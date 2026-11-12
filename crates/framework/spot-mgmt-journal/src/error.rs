@@ -5,6 +5,23 @@
 
 use thiserror::Error;
 
+/// The operation id is not one of the journal's.
+pub const UNKNOWN_OPERATION: &str = "journal_ops.unknown_operation";
+/// The invocation does not parse into the operation's typed arguments.
+pub const BAD_ARGUMENTS: &str = "journal_ops.bad_arguments";
+/// A result could not be turned into JSON.
+pub const SERIALISE: &str = "journal_ops.serialise";
+/// The caller's permission check failed (or could not decide).
+pub const DENIED: &str = "journal_ops.denied";
+/// The thing named does not exist.
+pub const NOT_FOUND: &str = "journal_ops.not_found";
+/// The state does not allow the operation now.
+pub const CONFLICT: &str = "journal_ops.conflict";
+/// A dependency is unreachable.
+pub const UNAVAILABLE: &str = "journal_ops.unavailable";
+/// The operation started and failed.
+pub const FAILED: &str = "journal_ops.failed";
+
 /// Why an executor refused or failed an operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ExecKind {
@@ -32,7 +49,27 @@ pub struct ExecError {
     pub reason: String,
 }
 
+impl ExecKind {
+    /// The stable, machine-readable code for this class of failure.
+    #[must_use]
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Denied => DENIED,
+            Self::NotFound => NOT_FOUND,
+            Self::Conflict => CONFLICT,
+            Self::Unavailable => UNAVAILABLE,
+            Self::Failed => FAILED,
+        }
+    }
+}
+
 impl ExecError {
+    /// The stable code of this failure's class; the reason stays a separate field.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        self.kind.code()
+    }
+
     /// An executor failure; `reason` is reduced to `[a-z0-9_]` and 64 characters. It is a
     /// code, never a message: callers pass constants, and this keeps stray punctuation out.
     #[must_use]
@@ -80,6 +117,20 @@ pub enum OpError {
         /// The operation.
         op: String,
     },
+}
+
+impl OpError {
+    /// The stable, machine-readable code for this error. An executor failure reports its
+    /// class's code; no code embeds an operation id, a parameter or a reason.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::UnknownOperation { .. } => UNKNOWN_OPERATION,
+            Self::BadArguments { .. } => BAD_ARGUMENTS,
+            Self::Exec(e) => e.code(),
+            Self::Serialise { .. } => SERIALISE,
+        }
+    }
 }
 
 #[cfg(test)]

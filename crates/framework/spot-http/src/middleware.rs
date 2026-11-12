@@ -19,12 +19,11 @@ use crate::error::{HttpErrorCode, error_response};
 use crate::request::{REQUEST_ID_WIRE, RequestId};
 use crate::site::SiteContext;
 
-/// Outermost span: every request gets a span with method, path and request id; the response
+/// Outermost span: every request gets a span with method, route template and request id (never the concrete path: an open route may carry a secret in it); the response
 /// status is recorded when the handler returns. Tracing stays optional: with no subscriber
 /// installed, the span is a cheap no-op (WP-PLT-01, not WP-PLT-15).
 pub(crate) async fn span_middleware(request: Request, next: Next) -> Response {
     let method = request.method().to_string();
-    let path = request.uri().path().to_owned();
     let request_id = request
         .extensions()
         .get::<RequestId>()
@@ -33,7 +32,6 @@ pub(crate) async fn span_middleware(request: Request, next: Next) -> Response {
     let span = tracing::info_span!(
         "spot_http_request",
         method = %method,
-        path = %path,
         site = tracing::field::Empty,
         route = tracing::field::Empty,
         request_id = %request_id,

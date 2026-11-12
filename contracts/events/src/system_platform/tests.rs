@@ -174,9 +174,129 @@ fn job_enqueued_rules() {
         ),
     );
     bad(t, &with(&base, "not_before", Some(json!("tomorrow"))));
-    // The intake's `site`, `queue` and `context` are not fields the producer writes.
-    for extra in ["site", "queue", "context"] {
-        bad(t, &with(&base, extra, Some(json!("x"))));
+    // `site` is the intake's own context, never a payload field.
+    bad(t, &with(&base, "site", Some(json!("x"))));
+    // `queue`: 1 to 64 bytes of a-z, 0-9, `_` and `-`.
+    ok(t, &with(&base, "queue", Some(json!("default"))));
+    ok(t, &with(&base, "queue", Some(json!("a"))));
+    ok(t, &with(&base, "queue", Some(json!("q-1_b".repeat(12)))));
+    for queue in ["", "Default", "a b", "a.b", "é"] {
+        bad(t, &with(&base, "queue", Some(json!(queue))));
+    }
+    bad(t, &with(&base, "queue", Some(json!("a".repeat(65)))));
+    bad(t, &with(&base, "queue", Some(json!(3))));
+    // `context`: an object, no float at any depth, same key and string bounds as `args`.
+    ok(t, &with(&base, "context", Some(json!({}))));
+    ok(
+        t,
+        &with(
+            &base,
+            "context",
+            Some(json!({"user": "u", "n": [1, {"d": "1.50"}]})),
+        ),
+    );
+    for context in [
+        json!("x"),
+        json!([1]),
+        json!(3),
+        json!({"qty": 1.5}),
+        json!({"a": {"b": [2.5]}}),
+    ] {
+        bad(t, &with(&base, "context", Some(context)));
+    }
+    bad(t, &with(&base, "context", Some(json!({"api_token": "x"}))));
+    bad(
+        t,
+        &with(&base, "context", Some(json!({"note": "x".repeat(257)}))),
+    );
+}
+
+#[test]
+fn job_enqueued_uses_queue_and_context_in_its_example() {
+    let base = example("sys_job_enqueued");
+    assert!(base.get("queue").is_some_and(Json::is_string));
+    assert!(base.get("context").is_some_and(Json::is_object));
+}
+
+#[test]
+fn the_engines_literal_job_shape_validates() {
+    // `spot-document`'s `engine::outbox::job` writes every optional key, null when absent.
+    let t = "sys_job_enqueued";
+    ok(
+        t,
+        &json!({"job": "erp_selling:send_overdue_reminders", "args": null,
+                "idempotency_key": null, "not_before": null}),
+    );
+    // And with every optional key null, including the intake's two.
+    ok(
+        t,
+        &json!({"job": "erp_selling:send_overdue_reminders", "args": null,
+                "idempotency_key": null, "not_before": null, "queue": null, "context": null}),
+    );
+    // A required field is never null.
+    bad(t, &json!({"job": null, "args": null}));
+}
+
+/// The optional top-level fields of a topic's schema, sorted.
+fn optional_fields(topic: &str) -> Vec<String> {
+    let schema = system::schema_of(topic).unwrap_or_else(|| panic!("{topic}"));
+    schema
+        .fields
+        .iter()
+        .filter(|(_, f)| !f.required)
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+#[test]
+fn every_nine_schema_states_whether_a_null_is_accepted() {
+    // The module doc's null table is the statement; it must match the schema, row by row.
+    let source = include_str!("../system_platform.rs");
+    for topic in NINE {
+        let needle = format!("//! | `{topic}` | ");
+        let row = source
+            .lines()
+            .find(|l| l.starts_with(&needle) && !l.contains("`spot-"))
+            .unwrap_or_else(|| panic!("{topic} has no row in the null table"));
+        let cell = row[needle.len()..].trim_end_matches(" |");
+        let optional = optional_fields(topic);
+        if optional.is_empty() {
+            assert!(cell.starts_with("none"), "{topic}: {cell}");
+        } else {
+            let stated: Vec<String> = cell
+                .split('`')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_owned)
+                .collect();
+            let mut sorted = stated.clone();
+            sorted.sort();
+            assert_eq!(sorted, optional, "{topic}: the table names other fields");
+        }
+    }
+}
+
+#[test]
+fn null_is_accepted_for_every_optional_field_and_refused_for_every_required_one() {
+    for topic in NINE {
+        let schema = system::schema_of(topic).unwrap_or_else(|| panic!("{topic}"));
+        let base = example(topic);
+        for (name, field) in &schema.fields {
+            let data = with(&base, name, Some(Json::Null));
+            let result = schema.validate(&data);
+            if field.required {
+                assert!(
+                    result.is_err(),
+                    "{topic}.{name}: null accepted for a required field"
+                );
+            } else {
+                assert_eq!(
+                    result,
+                    Ok(()),
+                    "{topic}.{name}: null refused for an optional field"
+                );
+            }
+        }
     }
 }
 

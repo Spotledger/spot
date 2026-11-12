@@ -25,6 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+use futures_util::task::AtomicWaker;
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use spot_core::SiteId;
@@ -32,6 +33,7 @@ use spot_meta_live::{
     BusEvent, BusFuture, Invalidation, InvalidationBus, InvalidationKind, InvalidationStream,
     LiveError, MetaHash, Version,
 };
+use time::OffsetDateTime;
 use tokio::sync::mpsc;
 
 use crate::connection::RedisConnection;
@@ -57,6 +59,41 @@ pub struct BusMessage {
     /// The keys a cache message invalidates; empty for a metadata change.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keys: Vec<String>,
+    /// When the publisher sent the message, in milliseconds since the Unix epoch, from the
+    /// publisher's injected clock. Absent from an older node's message (still accepted) and from a
+    /// publish made without a time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent_at_ms: Option<i64>,
+}
+
+/// The wire form of a publish time (milliseconds since the Unix epoch).
+fn unix_ms(at: OffsetDateTime) -> Option<i64> {
+    i64::try_from(at.unix_timestamp_nanos() / 1_000_000).ok()
+}
+
+/// One event of a [`RedisBus::subscribe_stamped`] stream: the event and when its publisher sent it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StampedEvent {
+    /// The event, exactly what [`InvalidationBus::subscribe`] would have yielded.
+    pub event: BusEvent,
+    /// The publisher's send time in milliseconds since the Unix epoch; `None` for a gap, a message
+    /// from an older node or a publish made without a time.
+    pub sent_at_ms: Option<i64>,
+}
+
+impl StampedEvent {
+    /// How long the message was in flight, given the receiver's `now` from its own `Clock`.
+    ///
+    /// `None` when the message carries no publish time. Never negative: clock skew between nodes
+    /// that puts the send time after `now` reads as zero.
+    #[must_use]
+    pub fn lag(&self, now: OffsetDateTime) -> Option<Duration> {
+        let sent = self.sent_at_ms?;
+        let now_ms = unix_ms(now)?;
+        Some(Duration::from_millis(
+            u64::try_from(now_ms.saturating_sub(sent)).unwrap_or(0),
+        ))
+    }
 }
 
 impl BusMessage {
@@ -69,6 +106,7 @@ impl BusMessage {
                 version: invalidation.version.get(),
                 hash: invalidation.hash.as_hex().to_owned(),
                 keys: keys.clone(),
+                sent_at_ms: None,
             },
             // `Meta`, and any future kind whose payload is just the version and hash.
             _ => Self {
@@ -76,8 +114,16 @@ impl BusMessage {
                 version: invalidation.version.get(),
                 hash: invalidation.hash.as_hex().to_owned(),
                 keys: Vec::new(),
+                sent_at_ms: None,
             },
         }
+    }
+
+    /// The same message stamped with the publisher's time.
+    #[must_use]
+    pub fn sent_at(mut self, at: OffsetDateTime) -> Self {
+        self.sent_at_ms = unix_ms(at);
+        self
     }
 
     /// Decodes the wire message back into an [`Invalidation`].
@@ -131,15 +177,46 @@ impl RedisBus {
     }
 }
 
-impl InvalidationBus for RedisBus {
-    fn publish<'a>(&'a self, site: &'a SiteId, invalidation: Invalidation) -> BusFuture<'a, ()> {
+impl RedisBus {
+    /// Publishes like [`InvalidationBus::publish`], and stamps the message with `now`, the
+    /// caller's `Clock` reading, so a subscriber of [`subscribe_stamped`](Self::subscribe_stamped)
+    /// can measure the receive lag.
+    pub fn publish_at<'a>(
+        &'a self,
+        site: &'a SiteId,
+        invalidation: Invalidation,
+        now: OffsetDateTime,
+    ) -> BusFuture<'a, ()> {
+        self.send(site, BusMessage::of(&invalidation).sent_at(now))
+    }
+
+    /// Subscribes like [`InvalidationBus::subscribe`], keeping each message's publish time so the
+    /// consumer can compute the lag with [`StampedEvent::lag`].
+    #[must_use]
+    pub fn subscribe_stamped(
+        &self,
+        site: &SiteId,
+    ) -> std::pin::Pin<Box<dyn Stream<Item = StampedEvent> + Send>> {
+        let flag = Arc::new(LagFlag::default());
+        let (tx, rx) = mpsc::channel(self.capacity);
+        let channel = self.channel(site);
+        let client = self.connection.client();
+        let reader_flag = Arc::clone(&flag);
+        // The trait's `subscribe` is synchronous; the reader needs a runtime. Without one the
+        // stream simply ends (a host that subscribes always has one).
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                run_reader(client, channel, tx, reader_flag).await;
+            });
+        }
+        Box::pin(ChannelStream { rx, flag })
+    }
+
+    fn send<'a>(&'a self, site: &'a SiteId, message: BusMessage) -> BusFuture<'a, ()> {
         Box::pin(async move {
-            let payload =
-                serde_json::to_string(&BusMessage::of(&invalidation)).map_err(|error| {
-                    LiveError::Store {
-                        message: format!("encoding the bus message: {error}"),
-                    }
-                })?;
+            let payload = serde_json::to_string(&message).map_err(|error| LiveError::Store {
+                message: format!("encoding the bus message: {error}"),
+            })?;
             let mut manager = self.connection.manager();
             redis::cmd("PUBLISH")
                 .arg(self.channel(site))
@@ -152,21 +229,32 @@ impl InvalidationBus for RedisBus {
             Ok(())
         })
     }
+}
+
+impl InvalidationBus for RedisBus {
+    /// Publishes without a time (the trait carries no clock); use [`RedisBus::publish_at`] to
+    /// stamp the message.
+    fn publish<'a>(&'a self, site: &'a SiteId, invalidation: Invalidation) -> BusFuture<'a, ()> {
+        self.send(site, BusMessage::of(&invalidation))
+    }
 
     fn subscribe(&self, site: &SiteId) -> InvalidationStream {
-        let lagged = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = mpsc::channel(self.capacity);
-        let channel = self.channel(site);
-        let client = self.connection.client();
-        let flag = Arc::clone(&lagged);
-        // The trait's `subscribe` is synchronous; the reader needs a runtime. Without one the
-        // stream simply ends (a host that subscribes always has one).
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn(async move {
-                run_reader(client, channel, tx, flag).await;
-            });
-        }
-        Box::pin(ChannelStream { rx, lagged })
+        Box::pin(self.subscribe_stamped(site).map(|stamped| stamped.event))
+    }
+}
+
+/// "A message was lost", plus the waker of the stream that must report it.
+#[derive(Default)]
+struct LagFlag {
+    lagged: AtomicBool,
+    waker: AtomicWaker,
+}
+
+impl LagFlag {
+    /// Marks a loss and wakes the stream, so a quiet subscriber sees the `Gap` at once.
+    fn raise(&self) {
+        self.lagged.store(true, Ordering::SeqCst);
+        self.waker.wake();
     }
 }
 
@@ -174,8 +262,8 @@ impl InvalidationBus for RedisBus {
 async fn run_reader(
     client: redis::Client,
     channel: String,
-    tx: mpsc::Sender<BusEvent>,
-    lagged: Arc<AtomicBool>,
+    tx: mpsc::Sender<StampedEvent>,
+    lagged: Arc<LagFlag>,
 ) {
     let mut delay = RECONNECT_BACKOFF;
     let mut first = true;
@@ -195,7 +283,7 @@ async fn run_reader(
         if !first {
             // Messages published while the connection was down are lost: the consumer must
             // reload from the version store.
-            lagged.store(true, Ordering::SeqCst);
+            lagged.raise();
         }
         first = false;
         let mut messages = pubsub.on_message();
@@ -203,7 +291,7 @@ async fn run_reader(
             let payload: String = match message.get_payload() {
                 Ok(payload) => payload,
                 Err(_) => {
-                    lagged.store(true, Ordering::SeqCst);
+                    lagged.raise();
                     continue;
                 }
             };
@@ -211,14 +299,20 @@ async fn run_reader(
                 .map_err(|error| LiveError::Store {
                     message: error.to_string(),
                 })
-                .and_then(BusMessage::into_invalidation)
-            {
-                Ok(invalidation) => {
-                    if tx.try_send(BusEvent::Change(invalidation)).is_err() {
-                        lagged.store(true, Ordering::SeqCst);
+                .and_then(|message| {
+                    let sent_at_ms = message.sent_at_ms;
+                    message.into_invalidation().map(|inv| (inv, sent_at_ms))
+                }) {
+                Ok((invalidation, sent_at_ms)) => {
+                    let stamped = StampedEvent {
+                        event: BusEvent::Change(invalidation),
+                        sent_at_ms,
+                    };
+                    if tx.try_send(stamped).is_err() {
+                        lagged.raise();
                     }
                 }
-                Err(_) => lagged.store(true, Ordering::SeqCst),
+                Err(_) => lagged.raise(),
             }
         }
         back_off(&mut delay).await;
@@ -233,17 +327,25 @@ async fn back_off(delay: &mut Duration) {
 
 /// One subscriber's queue, as a [`Stream`]. A lost message is reported once as [`BusEvent::Gap`].
 struct ChannelStream {
-    rx: mpsc::Receiver<BusEvent>,
-    lagged: Arc<AtomicBool>,
+    rx: mpsc::Receiver<StampedEvent>,
+    flag: Arc<LagFlag>,
 }
 
 impl Stream for ChannelStream {
-    type Item = BusEvent;
+    type Item = StampedEvent;
 
-    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<BusEvent>> {
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<StampedEvent>> {
         let this = self.get_mut();
-        if this.lagged.swap(false, Ordering::SeqCst) {
-            return Poll::Ready(Some(BusEvent::Gap));
+        // Register before checking, so a loss raised in between still wakes this task.
+        this.flag.waker.register(cx.waker());
+        if this.flag.lagged.swap(false, Ordering::SeqCst) {
+            return Poll::Ready(Some(StampedEvent {
+                event: BusEvent::Gap,
+                sent_at_ms: None,
+            }));
         }
         this.rx.poll_recv(cx)
     }

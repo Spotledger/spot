@@ -254,6 +254,10 @@ pub const FREE_FORM_FIELDS: &[&str] = &[
     "plan_digest",
     "id",
     "params",
+    // 0.7.7: `queue` (1 to 64 bytes of `[a-z0-9_-]`) and `context` (an object, no float) of
+    // `sys_job_enqueued`, both validated by `system_platform::check`.
+    "queue",
+    "context",
     // 0.7.6: the five journal and sync audit topics of `journal` (WP-JRN-01.T2). Each is a
     // bounded id, code or name; none is prose.
     "grant",

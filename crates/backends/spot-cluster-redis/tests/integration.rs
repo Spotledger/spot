@@ -39,6 +39,7 @@ fn bus_message_round_trips() {
         version: 1,
         hash: String::new(),
         keys: Vec::new(),
+        sent_at_ms: None,
     };
     assert!(unknown.into_invalidation().is_err());
 }

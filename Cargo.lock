@@ -10412,6 +10412,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-store-state"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "spot-registry",
+]
+
+[[package]]
+name = "spot-store-state-pg"
+version = "0.1.0"
+dependencies = [
+ "deadpool-postgres",
+ "spot-pg-bridge",
+ "spot-postgres",
+ "spot-registry",
+ "spot-store-state",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "spot-support-eval"
 version = "0.1.0"
 dependencies = [

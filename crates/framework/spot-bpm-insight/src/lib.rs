@@ -17,6 +17,9 @@
 //!   attempt, derived by the host from the engine's durable node-run records.
 //! - [`accumulator`]: [`Accumulator`] folds a feed into an [`Insight`]; [`aggregate`] is the
 //!   one-shot form. [`Insight::steps`] is the per-process-version-and-node [`StepStats`].
+//! - [`histogram`] and [`state`]: the fixed-bucket cycle-time histogram that bounds memory, and
+//!   the versioned, serialisable [`AccumulatorState`] a host stores as its checkpoint. Memory is
+//!   `O(steps x buckets)` plus `O(open attempts)`; see [`accumulator`] for the exact statement.
 //! - [`stats`]: [`StepStats`] — count, exact p50/p90/p99, waiting versus work time, retry and
 //!   failure rates.
 //! - [`bottleneck`]: [`bottlenecks`] ranks steps by their share of cycle time and by queue
@@ -65,10 +68,12 @@ pub mod bottleneck;
 pub mod duration;
 pub mod error;
 pub mod event;
+pub mod histogram;
 pub mod labels;
 pub mod percentile;
 pub mod process;
 pub mod report;
+pub mod state;
 pub mod stats;
 pub mod stuck;
 
@@ -80,6 +85,7 @@ pub use bottleneck::{Bottleneck, BottleneckPolicy, bottlenecks};
 pub use duration::Millis;
 pub use error::{InsightError, InsightResult};
 pub use event::{AttemptRef, NodeRunEvent, RunState, WaitReason};
+pub use histogram::{BUCKETS, Histogram, HistogramState};
 pub use labels::RunLabels;
 pub use percentile::percentile;
 pub use process::{ProcessKey, StepKey};
@@ -87,6 +93,7 @@ pub use report::{
     CYCLE_TIME_BY_STEP, NODE_RUN_DOCTYPE, RUN_DOCTYPE, STUCK_QUEUE, THROUGHPUT_BY_WEEK,
     report_definitions,
 };
+pub use state::{AccumulatorState, EndedState, OpenState, STATE_VERSION, StepState};
 pub use stats::{Rate, StepStats};
 pub use stuck::{StuckCase, StuckPolicy, StuckReason, stuck_cases};
 

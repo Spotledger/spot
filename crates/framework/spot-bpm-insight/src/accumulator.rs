@@ -5,6 +5,15 @@
 //! property test proves it): push a chunk, keep going, and finish once. Only the per-step
 //! counters, the per-step completed-attempt cycle times and the currently open attempts are
 //! retained; a finished attempt leaves only its numbers behind.
+//!
+//! # The memory bound
+//!
+//! Memory is `O(steps x buckets)` plus `O(open attempts)`: each step holds a fixed-bucket
+//! [`Histogram`] of at most 1,216 buckets whatever its history, and an attempt that has started
+//! or waits and has not ended holds one track. An ended attempt holds nothing, except that the
+//! last [`ENDED_WINDOW`] ended attempts are remembered (a constant) so a refolded record after
+//! a crash is ignored. [`Accumulator::export_state`] is the versioned, serialisable checkpoint
+//! (see [`crate::state`]).
 
 use std::collections::BTreeMap;
 
@@ -17,7 +26,7 @@ use crate::access::ProcessAccess;
 use crate::bottleneck::{Bottleneck, BottleneckPolicy, bottlenecks};
 use crate::duration::Millis;
 use crate::event::{NodeRunEvent, RunState, WaitReason};
-use crate::percentile::percentile;
+use crate::histogram::Histogram;
 use crate::process::{ProcessKey, StepKey};
 use crate::stats::StepStats;
 use crate::stuck::{StuckCase, StuckPolicy, stuck_cases};
@@ -26,7 +35,13 @@ use crate::stuck::{StuckCase, StuckPolicy, stuck_cases};
 ///
 /// The engine runs at most one attempt of a node at a time, so this key identifies the open
 /// attempt uniquely; the attempt number is carried inside the track.
-type OpenKey = (ProcessKey, CaseId, NodeId);
+pub(crate) type OpenKey = (ProcessKey, CaseId, NodeId);
+
+/// How many recently ended attempts the fold remembers to ignore a replayed record.
+///
+/// A constant, so it is part of the bound; a host whose checkpoint lags its cursor by fewer
+/// ended attempts than this is safe.
+pub(crate) const ENDED_WINDOW: usize = 256;
 
 /// What closed an attempt, for the counters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,17 +56,17 @@ enum CloseKind {
 
 /// The state of one open attempt, kept only until it finishes.
 #[derive(Clone, Debug)]
-struct Track {
-    attempt: u32,
-    kind: NodeKind,
-    owner: Option<String>,
-    started_at: OffsetDateTime,
-    segment_start: OffsetDateTime,
-    wait_start: Option<OffsetDateTime>,
-    state: RunState,
-    wait: Option<WaitReason>,
-    work: Millis,
-    wait_time: Millis,
+pub(crate) struct Track {
+    pub(crate) attempt: u32,
+    pub(crate) kind: NodeKind,
+    pub(crate) owner: Option<String>,
+    pub(crate) started_at: OffsetDateTime,
+    pub(crate) segment_start: OffsetDateTime,
+    pub(crate) wait_start: Option<OffsetDateTime>,
+    pub(crate) state: RunState,
+    pub(crate) wait: Option<WaitReason>,
+    pub(crate) work: Millis,
+    pub(crate) wait_time: Millis,
 }
 
 impl Track {
@@ -73,20 +88,20 @@ impl Track {
 
 /// The running aggregate of one step, folded from events and finished into a [`StepStats`].
 #[derive(Clone, Debug)]
-struct StepAgg {
-    kind: NodeKind,
-    attempts: u64,
-    done: u64,
-    failed: u64,
-    retries: u64,
-    completed: u64,
-    work: Millis,
-    wait: Millis,
-    cycles: Vec<i64>,
-    queue_entered: u64,
-    queue_left: u64,
-    waiting: u64,
-    max_waiting: u64,
+pub(crate) struct StepAgg {
+    pub(crate) kind: NodeKind,
+    pub(crate) attempts: u64,
+    pub(crate) done: u64,
+    pub(crate) failed: u64,
+    pub(crate) retries: u64,
+    pub(crate) completed: u64,
+    pub(crate) work: Millis,
+    pub(crate) wait: Millis,
+    pub(crate) cycles: Histogram,
+    pub(crate) queue_entered: u64,
+    pub(crate) queue_left: u64,
+    pub(crate) waiting: u64,
+    pub(crate) max_waiting: u64,
 }
 
 impl StepAgg {
@@ -100,7 +115,7 @@ impl StepAgg {
             completed: 0,
             work: Millis::ZERO,
             wait: Millis::ZERO,
-            cycles: Vec::new(),
+            cycles: Histogram::new(),
             queue_entered: 0,
             queue_left: 0,
             waiting: 0,
@@ -108,8 +123,7 @@ impl StepAgg {
         }
     }
 
-    fn finish(mut self, process: ProcessKey, node: NodeId) -> StepStats {
-        self.cycles.sort_unstable();
+    fn finish(self, process: ProcessKey, node: NodeId) -> StepStats {
         let cycles = &self.cycles;
         let as_millis = |value: Option<i64>| value.map(Millis::from_millis);
         StepStats {
@@ -124,11 +138,11 @@ impl StepAgg {
             total: self.work + self.wait,
             work: self.work,
             wait: self.wait,
-            min: as_millis(cycles.first().copied()),
-            p50: as_millis(percentile(cycles, 50)),
-            p90: as_millis(percentile(cycles, 90)),
-            p99: as_millis(percentile(cycles, 99)),
-            max: as_millis(cycles.last().copied()),
+            min: as_millis(cycles.min()),
+            p50: as_millis(cycles.percentile(50)),
+            p90: as_millis(cycles.percentile(90)),
+            p99: as_millis(cycles.percentile(99)),
+            max: as_millis(cycles.max()),
             queue_entered: self.queue_entered,
             queue_left: self.queue_left,
             queue_growth: i64::try_from(self.queue_entered).unwrap_or(i64::MAX)
@@ -261,8 +275,21 @@ impl Insight {
 /// The incremental fold of a node-run event feed.
 #[derive(Clone, Debug, Default)]
 pub struct Accumulator {
-    steps: BTreeMap<StepKey, StepAgg>,
-    open: BTreeMap<OpenKey, Track>,
+    pub(crate) steps: BTreeMap<StepKey, StepAgg>,
+    pub(crate) open: BTreeMap<OpenKey, Track>,
+    /// The latest ended attempt per key, for the last [`ENDED_WINDOW`] ended attempts.
+    pub(crate) ended: BTreeMap<OpenKey, Ended>,
+    /// The same keys by recency (`seq`), oldest first, for eviction and export.
+    pub(crate) ended_order: BTreeMap<u64, OpenKey>,
+    pub(crate) next_seq: u64,
+}
+
+/// One remembered ended attempt.
+#[derive(Clone, Debug)]
+pub(crate) struct Ended {
+    pub(crate) attempt: u32,
+    pub(crate) at: OffsetDateTime,
+    pub(crate) seq: u64,
 }
 
 impl Accumulator {
@@ -285,6 +312,9 @@ impl Accumulator {
             event.case.clone(),
             event.node.clone(),
         );
+        if self.is_replay(&open_key, &event) {
+            return;
+        }
         match event.state {
             RunState::Started => self.on_started(open_key, event),
             RunState::Waiting => self.on_waiting(open_key, event),
@@ -333,6 +363,31 @@ impl Accumulator {
             .map(|(key, track)| OpenAttempt::from_track(key.clone(), track))
             .collect();
         Insight { steps, open }
+    }
+
+    /// Whether the event repeats a record of an attempt that already ended: the same attempt
+    /// number, at or before its end. A refolded record after a crash looks exactly like this; a
+    /// later run of the same node (a loop) has a later instant and is folded normally.
+    fn is_replay(&self, key: &OpenKey, event: &NodeRunEvent) -> bool {
+        self.ended
+            .get(key)
+            .is_some_and(|ended| ended.attempt == event.attempt && event.at <= ended.at)
+    }
+
+    fn remember_ended(&mut self, key: &OpenKey, attempt: u32, at: OffsetDateTime) {
+        if let Some(old) = self.ended.remove(key) {
+            self.ended_order.remove(&old.seq);
+        }
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        self.ended.insert(key.clone(), Ended { attempt, at, seq });
+        self.ended_order.insert(seq, key.clone());
+        while self.ended_order.len() > ENDED_WINDOW {
+            let Some((_, oldest)) = self.ended_order.pop_first() else {
+                break;
+            };
+            self.ended.remove(&oldest);
+        }
     }
 
     fn step_mut(&mut self, process: &ProcessKey, node: &NodeId, kind: &NodeKind) -> &mut StepAgg {
@@ -419,7 +474,7 @@ impl Accumulator {
         let step = self.step_mut(&event.process, &event.node, &event.kind);
         step.attempts += 1;
         step.completed += 1;
-        step.cycles.push(0);
+        step.cycles.record(0);
         match kind {
             CloseKind::Done => step.done += 1,
             CloseKind::Failed => step.failed += 1,
@@ -443,14 +498,16 @@ impl Accumulator {
             step.waiting = step.waiting.saturating_sub(1);
         }
         step.completed += 1;
+        let attempt = track.attempt;
         step.work += track.work;
         step.wait += track.wait_time;
-        step.cycles.push(cycle.as_millis());
+        step.cycles.record(cycle.as_millis());
         match kind {
             CloseKind::Done => step.done += 1,
             CloseKind::Failed => step.failed += 1,
             CloseKind::Retried => step.retries += 1,
         }
+        self.remember_ended(open_key, attempt, at);
     }
 }
 
@@ -547,5 +604,70 @@ mod tests {
         accumulator.push_all(events[..2].iter().cloned());
         accumulator.push_all(events[2..].iter().cloned());
         assert_eq!(accumulator.finish(), whole);
+    }
+
+    #[test]
+    fn a_refolded_done_for_an_attempt_already_ended_is_ignored() {
+        let mut acc = Accumulator::new();
+        acc.push(NodeRunEvent::started(attempt("approve", 1), at(0)));
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(10)));
+        let once = acc.clone().finish();
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(10)));
+        assert_eq!(acc.clone().finish(), once);
+        assert_eq!(once.steps()[0].completed, 1);
+        assert_eq!(once.steps()[0].done, 1);
+    }
+
+    #[test]
+    fn a_refolded_started_and_done_pair_is_ignored_too() {
+        let mut acc = Accumulator::new();
+        acc.push(NodeRunEvent::started(attempt("approve", 1), at(0)));
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(10)));
+        let once = acc.clone().finish();
+        acc.push(NodeRunEvent::started(attempt("approve", 1), at(0)));
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(10)));
+        assert_eq!(acc.finish(), once);
+    }
+
+    #[test]
+    fn a_later_run_of_the_same_node_is_not_mistaken_for_a_replay() {
+        let mut acc = Accumulator::new();
+        acc.push(NodeRunEvent::started(attempt("approve", 1), at(0)));
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(10)));
+        // A loop runs the node again; the attempt number restarts, the instant is later.
+        acc.push(NodeRunEvent::started(attempt("approve", 1), at(20)));
+        acc.push(NodeRunEvent::done(attempt("approve", 1), at(25)));
+        let insight = acc.finish();
+        assert_eq!(insight.steps()[0].completed, 2);
+        assert_eq!(insight.steps()[0].done, 2);
+    }
+
+    #[test]
+    fn the_ended_window_is_bounded() {
+        let mut acc = Accumulator::new();
+        for index in 0..(ENDED_WINDOW as i64 + 50) {
+            let case = format!("c{index}");
+            acc.push(NodeRunEvent::started(
+                attempt_of(&case, "approve", 1),
+                at(index),
+            ));
+            acc.push(NodeRunEvent::done(
+                attempt_of(&case, "approve", 1),
+                at(index + 1),
+            ));
+        }
+        assert_eq!(acc.ended.len(), ENDED_WINDOW);
+        assert_eq!(acc.ended_order.len(), ENDED_WINDOW);
+        assert_eq!(acc.export_state().ended.len(), ENDED_WINDOW);
+    }
+
+    fn attempt_of(case: &str, node: &str, attempt: u32) -> AttemptRef {
+        AttemptRef::new(
+            ProcessKey::new("order_flow", 1),
+            CaseId::new(case).unwrap(),
+            NodeId::new(node).unwrap(),
+            attempt,
+            NodeKind::Decision,
+        )
     }
 }
