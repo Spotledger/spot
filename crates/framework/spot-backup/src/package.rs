@@ -402,6 +402,18 @@ pub fn verify_quick(package: &PackageFile) -> Result<()> {
             reason: "the package header and the opened manifest differ".to_owned(),
         });
     }
+    if let Some(key) = manifest.encryption.as_ref() {
+        let total = reader.get_ref().metadata()?.len();
+        let header_len = u64::try_from(manifest_text.len())
+            .unwrap_or(u64::MAX)
+            .saturating_add(16);
+        return verify_quick_encrypted(
+            &mut reader,
+            &manifest,
+            key,
+            total.saturating_sub(header_len),
+        );
+    }
     let (size, count, digest) = hash_payload(&mut reader)?;
     if size != manifest.size {
         return Err(BackupError::VerifyFailed {
@@ -443,6 +455,12 @@ pub fn unpack(package: &PackageFile, dest: &Path) -> Result<()> {
     let mut reader = BufReader::new(file);
     let manifest_text = read_header(&mut reader)?;
     let manifest = BackupManifest::from_toml(&manifest_text)?;
+    if manifest.encryption.is_some() {
+        return Err(BackupError::EncryptionUnavailable {
+            reason: "the package is encrypted; open it with decrypt_package before unpacking"
+                .to_owned(),
+        });
+    }
     std::fs::create_dir_all(dest)?;
     let mut hasher = Sha256::new();
     let mut size = 0u64;
@@ -581,6 +599,245 @@ fn hash_payload(reader: &mut impl Read) -> Result<(u64, u64, String)> {
         });
     }
     Ok((size, u64::from(file_count), hex(&hasher.finalize())))
+}
+
+/// Seals the payload of a plain package (WP-PRD-04.T6).
+///
+/// The payload section (everything after the manifest) is encrypted with
+/// [`crate::encrypt::encrypt_stream`] under a fresh data key wrapped through `provider`
+/// and `key`. The package is rebuilt at the same path with a manifest whose `digest`
+/// is the SHA-256 of the stored (encrypted) payload section and whose `encryption` is
+/// `key`; `size` and `file_count` stay plaintext facts. The new package is composed in a
+/// temporary file and renamed over the plain one, so the plaintext package is replaced
+/// atomically and never stays next to its encrypted twin.
+///
+/// # Errors
+/// The errors of [`crate::encrypt::encrypt_stream`], [`BackupError::Io`] and
+/// [`BackupError::ManifestInvalid`]. On error the plain package is left untouched and
+/// every temporary file is removed.
+pub async fn seal_package(
+    plain: &PackagedBackup,
+    provider: &dyn spot_secrets::KeyProvider,
+    key: &crate::model::KeyRef,
+) -> Result<PackagedBackup> {
+    let work_dir = work_dir_of(&plain.package.path);
+    let sequence = next_temp_sequence();
+    let sealed_tmp = work_dir.join(format!(".sealed-{}-{sequence}.tmp", std::process::id()));
+    let package_tmp = work_dir.join(format!(".package-{}-{sequence}.tmp", std::process::id()));
+    let result = seal_into(plain, provider, key, &sealed_tmp, &package_tmp).await;
+    let _ = std::fs::remove_file(&sealed_tmp);
+    if result.is_err() {
+        let _ = std::fs::remove_file(&package_tmp);
+    }
+    result
+}
+
+async fn seal_into(
+    plain: &PackagedBackup,
+    provider: &dyn spot_secrets::KeyProvider,
+    key: &crate::model::KeyRef,
+    sealed_tmp: &Path,
+    package_tmp: &Path,
+) -> Result<PackagedBackup> {
+    let mut source = File::open(&plain.package.path)?;
+    read_header(&mut source)?;
+    let reader = tokio::fs::File::from_std(source);
+    let mut writer = tokio::fs::File::from_std(private_new(sealed_tmp)?);
+    crate::encrypt::encrypt_stream(provider, key, &plain.manifest.id, reader, &mut writer).await?;
+    writer.sync_all().await?;
+    drop(writer);
+
+    let (_, digest) = hash_file(sealed_tmp)?;
+    let mut manifest = plain.manifest.clone();
+    manifest.digest = digest;
+    manifest.encryption = Some(key.clone());
+    manifest
+        .canonical_checks()
+        .map_err(|_| BackupError::ManifestInvalid {
+            reason: "the sealed manifest failed its own checks".to_owned(),
+        })?;
+    let package_bytes = compose_package(package_tmp, &manifest, sealed_tmp)?;
+    std::fs::rename(package_tmp, &plain.package.path)?;
+    sync_dir(&work_dir_of(&plain.package.path));
+    Ok(PackagedBackup {
+        package: PackageFile {
+            path: plain.package.path.clone(),
+            manifest: manifest.clone(),
+            package_bytes,
+        },
+        manifest,
+    })
+}
+
+/// Decrypts an encrypted package into a new **plain** package next to it and returns
+/// the plain package; the caller removes it (it holds plaintext) when done.
+///
+/// The decrypted payload is checked against the manifest's `size` and `file_count`
+/// (the same structural checks a plain package gets from [`verify_quick`]); the plain
+/// package's digest is the SHA-256 of the decrypted payload section. Wrong key, a
+/// tampered, truncated, reordered or extended payload and a retired key all fail
+/// closed. Temporary files are mode 0600 on Unix and removed on error.
+///
+/// # Errors
+/// [`BackupError::ManifestInvalid`] when the package is not encrypted, the errors of
+/// [`crate::encrypt::decrypt_stream`], and [`BackupError::VerifyFailed`] when the
+/// decrypted payload does not match the manifest.
+pub async fn decrypt_package(
+    package: &PackageFile,
+    provider: &dyn spot_secrets::KeyProvider,
+) -> Result<PackageFile> {
+    if package.manifest.encryption.is_none() {
+        return Err(BackupError::ManifestInvalid {
+            reason: "the package is not encrypted".to_owned(),
+        });
+    }
+    let work_dir = work_dir_of(&package.path);
+    let sequence = next_temp_sequence();
+    let payload_tmp = work_dir.join(format!(".opened-{}-{sequence}.payload", std::process::id()));
+    let package_tmp = work_dir.join(format!(".opened-{}-{sequence}.tmp", std::process::id()));
+    let final_path = work_dir.join(format!(
+        ".opened-{}-{sequence}.{PACKAGE_EXTENSION}",
+        std::process::id()
+    ));
+    let result = decrypt_into(package, provider, &payload_tmp, &package_tmp, &final_path).await;
+    let _ = std::fs::remove_file(&payload_tmp);
+    let _ = std::fs::remove_file(&package_tmp);
+    if result.is_err() {
+        let _ = std::fs::remove_file(&final_path);
+    }
+    result
+}
+
+async fn decrypt_into(
+    package: &PackageFile,
+    provider: &dyn spot_secrets::KeyProvider,
+    payload_tmp: &Path,
+    package_tmp: &Path,
+    final_path: &Path,
+) -> Result<PackageFile> {
+    let mut source = File::open(&package.path)?;
+    read_header(&mut source)?;
+    let reader = tokio::fs::File::from_std(source);
+    let mut writer = tokio::fs::File::from_std(private_new(payload_tmp)?);
+    crate::encrypt::decrypt_stream(provider, &package.manifest.id, reader, &mut writer).await?;
+    writer.sync_all().await?;
+    drop(writer);
+
+    let (_, digest) = hash_file(payload_tmp)?;
+    let mut manifest = package.manifest.clone();
+    manifest.digest = digest;
+    manifest.encryption = None;
+    let package_bytes = compose_package(package_tmp, &manifest, payload_tmp)?;
+    std::fs::rename(package_tmp, final_path)?;
+    let plain = PackageFile {
+        path: final_path.to_path_buf(),
+        manifest,
+        package_bytes,
+    };
+    verify_quick(&plain)?;
+    Ok(plain)
+}
+
+/// Quick verification of an encrypted package: the header parses within its caps and
+/// names the manifest's key, the chunk framing is plausible and the SHA-256 of the
+/// stored payload section matches the manifest's digest. It needs no key.
+fn verify_quick_encrypted(
+    reader: &mut impl Read,
+    manifest: &BackupManifest,
+    key: &crate::model::KeyRef,
+    payload_len: u64,
+) -> Result<()> {
+    let mut head = Vec::new();
+    (&mut *reader)
+        .take(crate::encrypt::MAX_HEADER_LEN as u64)
+        .read_to_end(&mut head)?;
+    crate::encrypt::check_framing(&head, payload_len, key).map_err(|error| {
+        BackupError::VerifyFailed {
+            reason: format!(
+                "the encrypted payload header is not valid: {}",
+                error.reason()
+            ),
+        }
+    })?;
+    let mut hasher = Sha256::new();
+    hasher.update(&head);
+    let mut seen = head.len() as u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        seen = seen.saturating_add(read as u64);
+    }
+    if seen != payload_len {
+        return Err(BackupError::VerifyFailed {
+            reason: format!(
+                "the encrypted payload holds {seen} bytes but the package frames {payload_len}"
+            ),
+        });
+    }
+    let digest = hex(&hasher.finalize());
+    if !digest.eq_ignore_ascii_case(&manifest.digest) {
+        return Err(BackupError::VerifyFailed {
+            reason: format!(
+                "the encrypted payload digest {digest} does not match the manifest's {}",
+                manifest.digest
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// The directory a package lives in (its temporary siblings go there too).
+fn work_dir_of(path: &Path) -> PathBuf {
+    path.parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+}
+
+/// Creates a new file for writing, failing if it exists; mode 0600 on Unix.
+fn private_new(path: &Path) -> Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    Ok(options.open(path)?)
+}
+
+/// The byte length and SHA-256 of a whole file.
+fn hash_file(path: &Path) -> Result<(u64, String)> {
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut hasher = Sha256::new();
+    let mut bytes = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        bytes = bytes.saturating_add(read as u64);
+    }
+    Ok((bytes, hex(&hasher.finalize())))
+}
+
+/// Writes `package_tmp` as magic, manifest, then the bytes of `body`; syncs it and
+/// returns its length. The caller renames it into place.
+fn compose_package(package_tmp: &Path, manifest: &BackupManifest, body: &Path) -> Result<u64> {
+    let manifest_text = manifest.to_toml()?;
+    let mut package = BufWriter::new(private_new(package_tmp)?);
+    package.write_all(MAGIC)?;
+    package.write_all(&(manifest_text.len() as u64).to_le_bytes())?;
+    package.write_all(manifest_text.as_bytes())?;
+    let mut body_reader = BufReader::new(File::open(body)?);
+    std::io::copy(&mut body_reader, &mut package)?;
+    package.flush()?;
+    package.get_ref().sync_all()?;
+    Ok(package.get_ref().metadata()?.len())
 }
 
 /// Whether `path` is a safe relative package path (no root, no `..`, no empty part).

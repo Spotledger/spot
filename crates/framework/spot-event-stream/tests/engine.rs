@@ -27,9 +27,11 @@ fn spec(name: &str, partitions: u32) -> ConsumerSpec {
     ConsumerSpec {
         name: name.to_owned(),
         owner: "owner".to_owned(),
-        topics: vec![TopicSelector::Prefix("doc".to_owned())],
+        topics: vec![TopicSelector::Prefix("task".to_owned())],
         filter: None,
         partitions,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::Fields,
         start: Start::FromBeginning,
     }
@@ -371,7 +373,7 @@ async fn a_reserved_topic_class_needs_the_stream_right() {
     .await;
     let error = f
         .engine
-        .register(spec("reserved", 1), &Principal::system())
+        .register(with_topic("reserved", "doc_.*"), &Principal::system())
         .await
         .unwrap_err();
     assert_eq!(error.code(), spot_event_stream::error::CODE_SPEC_INVALID);

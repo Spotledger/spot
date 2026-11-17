@@ -369,3 +369,51 @@ fn key_ring_refuses_a_bad_public_key() {
         "audit.key_invalid"
     );
 }
+
+#[test]
+fn append_many_gives_the_chain_one_append_after_another_would() {
+    let one_by_one = built(7, 3).0;
+    let s = signer(1);
+    let batched = AuditChain::new(InMemoryStore::new(), SITE, s, CheckpointPolicy { every: 3 });
+    // Three then four, as two groups of one drain would.
+    let first = block_on(batched.append_many((1..=3).map(record).collect())).unwrap();
+    let second = block_on(batched.append_many((4..=7).map(record).collect())).unwrap();
+    assert_eq!(first.len() + second.len(), 7);
+    assert_eq!(
+        block_on(batched.read_range(1, 7)).unwrap(),
+        block_on(one_by_one.read_range(1, 7)).unwrap(),
+        "the same seq, links and hashes"
+    );
+    let cp = block_on(batched.store().latest_checkpoint(SITE))
+        .unwrap()
+        .unwrap();
+    assert_eq!(cp.seq, 6, "a checkpoint after every third entry");
+    assert!(
+        block_on(batched.append_many(Vec::new()))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn append_many_is_all_or_nothing_when_the_head_moved() {
+    let chain = built(2, 0).0;
+    let rival = built(2, 0).0;
+    // Entries built on a head that is no longer the head are refused whole.
+    let stale = block_on(rival.read_range(1, 2)).unwrap();
+    let moved = block_on(
+        chain
+            .store()
+            .append_many_if_head(SITE, 1, vec![stale[1].clone()]),
+    )
+    .unwrap();
+    assert_eq!(moved, AppendOutcome::HeadMoved);
+    assert_eq!(block_on(chain.read_range(1, 9)).unwrap().len(), 2);
+    let broken = block_on(
+        chain
+            .store()
+            .append_many_if_head(SITE, 2, vec![stale[0].clone()]),
+    );
+    assert!(matches!(broken, Err(AuditError::Store(_))), "{broken:?}");
+    assert_eq!(block_on(chain.read_range(1, 9)).unwrap().len(), 2);
+}

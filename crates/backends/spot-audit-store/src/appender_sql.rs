@@ -119,3 +119,25 @@ WHERE spot_audit_site_checkpoint.at <= EXCLUDED.at";
 pub(crate) const COLUMNS_OF: &str = "\
 SELECT column_name::text FROM information_schema.columns \
 WHERE table_schema = current_schema() AND table_name = $1 ORDER BY column_name";
+
+/// Where each of several event ids was chained (`$2` is the array of ids).
+pub(crate) const EVENT_GET_MANY: &str = "\
+SELECT event_id, lane, seq FROM spot_audit_event_index WHERE site = $1 AND event_id = ANY($2)";
+
+/// Records several event ids (`$2` ids, `$3` lanes, `$4` seqs); an existing row is never
+/// overwritten (the caller compares it).
+pub(crate) const EVENT_INSERT_MANY: &str = "\
+INSERT INTO spot_audit_event_index (site, event_id, lane, seq) \
+SELECT $1, t.event_id, t.lane, t.seq \
+FROM unnest($2::text[], $3::bigint[], $4::bigint[]) AS t(event_id, lane, seq) \
+ON CONFLICT (site, event_id) DO NOTHING";
+
+/// Records several document entries in the order given (`$2` doctypes, `$3` ids, `$4` lanes,
+/// `$5` seqs); a repeated entry changes nothing.
+pub(crate) const DOC_INSERT_MANY: &str = "\
+INSERT INTO spot_audit_doc_index (site, doctype, id, lane, seq) \
+SELECT $1, t.doctype, t.id, t.lane, t.seq \
+FROM unnest($2::text[], $3::text[], $4::bigint[], $5::bigint[]) WITH ORDINALITY \
+     AS t(doctype, id, lane, seq, n) \
+ORDER BY t.n \
+ON CONFLICT (site, doctype, id, lane, seq) DO NOTHING";

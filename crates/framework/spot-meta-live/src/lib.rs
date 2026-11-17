@@ -77,7 +77,7 @@ pub use bus::{
 pub use error::{LiveError, LiveResult};
 pub use follower::{Follower, LoadFuture, MetaLoader};
 pub use invalidation::{BusEvent, Invalidation, InvalidationKind};
-pub use live::{Adopt, LiveMeta, MetaChange};
+pub use live::{Adopt, LiveMeta, MetaChange, next_change_version};
 pub use polling::{MemoryVersionStore, PollSchedule, PollingBus, StoreFuture, VersionStore};
 pub use snapshot::{Definitions, MetaHash, Snapshot, Version};
 

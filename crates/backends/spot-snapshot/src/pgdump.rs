@@ -408,7 +408,11 @@ pub(crate) fn build_manifest(
         provider_version: crate::PROVIDER_VERSION.to_owned(),
         provider_kind: provider_kind.to_owned(),
         pg_major: crate::SUPPORTED_MAJOR_VERSION,
-        catalogue_version: facts.catalogue_version.clone(),
+        catalogue_version: if facts.catalogue_version.is_empty() {
+            crate::manifest::UNRECORDED_CATALOGUE.to_owned()
+        } else {
+            facts.catalogue_version.clone()
+        },
         feed_schema: facts.feed_schema.clone(),
         outbox_generation: facts.outbox_generation,
         outbox_last_published_seq: facts.outbox_last_published_seq,

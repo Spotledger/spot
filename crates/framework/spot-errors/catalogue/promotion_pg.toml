@@ -1,0 +1,32 @@
+# promotion_pg codes: the refusals of the durable promotion snapshot and its PostgreSQL store
+# (WP-ALM-04.T6, ADR-082 class C). The snapshot codes are raised by spot-promotion's snapshot
+# module and the stale-save code by both stores; every other store failure reuses
+# promotion.store_failed. No message carries a promotion id, a bundle, a document, SQL or a
+# connection string.
+
+[[entry]]
+code = "promotion_pg.snapshot_version"
+class = "none"
+summary = "A stored promotion snapshot is of a schema version this build does not read."
+explanation_key = "error.promotion_pg.snapshot_version"
+params = []
+remedy = "Run the spot version that wrote the promotion to finish or abort it, or upgrade this one; a snapshot is never rewritten to another version by guesswork."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion_pg.snapshot_invalid"
+class = "none"
+summary = "A stored promotion snapshot is not a valid promotion: it is unreadable, inconsistent, changed after approval, or belongs to another tenant."
+explanation_key = "error.promotion_pg.snapshot_invalid"
+params = []
+remedy = "The row was changed outside the store; restore it from a backup, or start a new promotion (an id is never reused, so abort the damaged one first)."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion_pg.stale_save"
+class = "none"
+summary = "A promotion was saved against a revision the store no longer holds: another process saved it first, so nothing was written."
+explanation_key = "error.promotion_pg.stale_save"
+params = []
+remedy = "Load the promotion again, look at its state, and repeat the step only if it is still needed."
+since = "0.1.0"

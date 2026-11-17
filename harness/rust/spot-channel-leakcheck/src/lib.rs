@@ -55,58 +55,34 @@ pub const CHANNELS: &[(Channel, Coverage)] = &[
         Channel::Export,
         covered("export_never_leaks", "spot-bulk-data"),
     ),
-    (
-        Channel::Print,
-        pending(
-            "spot-print renders whatever context it is given and calls no guard; the host adapter that loads the document as the caller does not exist yet",
-            "WP-PRD-01.T8",
-        ),
-    ),
+    (Channel::Print, covered("print_never_leaks", "spot-http")),
     (
         Channel::Report,
         covered("report_never_leaks", "spot-reports"),
     ),
     (
         Channel::ListColumn,
-        pending(
-            "the list path (spot-api-services query) applies the permission engine itself and does not call the guard; it needs the full engine to drive end to end",
-            "unregistered (lead to register)",
-        ),
+        covered("list_column_never_leaks", "spot-api-services"),
     ),
     (
         Channel::LinkTitle,
-        pending(
-            "the lookup endpoint is a port the host implements; no producer behind it calls the guard yet",
-            "unregistered (lead to register)",
-        ),
+        covered("link_title_never_leaks", "spot-api-services"),
     ),
     (
         Channel::Search,
-        pending(
-            "spot-retrieval refuses to index protected fields by policy and re-checks reads through a host ReadCheck; no guard call to prove end to end yet",
-            "unregistered (lead to register)",
-        ),
+        covered("search_never_leaks", "spot-retrieval"),
     ),
     (
         Channel::Notification,
-        pending(
-            "spot-realtime-bridge forwards events and calls no guard; the notification payload builder does not exist yet",
-            "unregistered (lead to register)",
-        ),
+        covered("notification_never_leaks", "spot-realtime-bridge"),
     ),
     (
         Channel::Journal,
-        pending(
-            "the journal crates carry sealed record images and calls no guard; the names-only journal projection does not exist yet",
-            "unregistered (lead to register)",
-        ),
+        covered("journal_never_leaks", "spot-journal-relay"),
     ),
     (
         Channel::ApiScim,
-        pending(
-            "spot-iam-scim mirrors users and groups, not DocType records, and calls no guard",
-            "unregistered (lead to register)",
-        ),
+        covered("api_scim_never_leaks", "spot-iam-scim"),
     ),
 ];
 

@@ -12,7 +12,7 @@ Time is an argument: nothing here reads the clock. The L8 fault scenarios use se
 test source; their reports record the seed they used, and `summary.json` records the seed given
 here for the L7 and isolation runs, so a red night can be replayed.
 
-    nightly_profiles.py --run-id 123456 [--out target/nightly-profiles] [--seeds 5] [--dry-run]
+    nightly_profiles.py --run-id 123456 [--out target/nightly-profiles] [--seeds 5] [--l8-txns N] [--dry-run]
 """
 from __future__ import annotations
 
@@ -45,10 +45,20 @@ def parse_args(argv: Sequence[str], environ: Mapping[str, str]) -> argparse.Name
     p.add_argument("--seed", type=int, default=None, help="explicit base seed; overrides --run-id")
     p.add_argument("--out", default=DEFAULT_OUT, help=f"output directory (default {DEFAULT_OUT})")
     p.add_argument("--seeds", type=int, default=DEFAULT_SEEDS, help="isolation seeds per workload")
+    p.add_argument(
+        "--l8-txns",
+        type=int,
+        default=None,
+        help="transactions per L8 isolation run (default: the nightly profile's 100000; a hosted "
+        "runner needs fewer: a list-append history grows with the square of this and the checker "
+        "used 19 GB at 100000)",
+    )
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     args = p.parse_args(argv)
     if args.seeds < 1:
         p.error("--seeds must be at least 1")
+    if args.l8_txns is not None and args.l8_txns < 1:
+        p.error("--l8-txns must be at least 1")
     args.base_seed = resolve_seed(args.seed, args.run_id, p)
     return args
 
@@ -65,7 +75,7 @@ def resolve_seed(seed: int | None, run_id: str | None, parser: argparse.Argument
     return int(run_id)
 
 
-def build_steps(base_seed: int, out: Path, seeds: int) -> list[Step]:
+def build_steps(base_seed: int, out: Path, seeds: int, l8_txns: int | None = None) -> list[Step]:
     l7_dir = out / "l7"
     faults_dir = out / "l8-faults"
     iso_dir = out / "l8-isolation"
@@ -93,6 +103,7 @@ def build_steps(base_seed: int, out: Path, seeds: int) -> list[Step]:
                         "cargo", "run", "--quiet", "-p", "spot-l8-isolation", "--bin", "spot-l8", "--",
                         "matrix", "--profile", "nightly", "--workload", workload,
                         "--seed", str(seed), "--report", str(report),
+                        *(["--txns", str(l8_txns)] if l8_txns else []),
                     ],
                     {},
                     [report],
@@ -150,7 +161,7 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     environ = os.environ if environ is None else environ
     args = parse_args(sys.argv[1:] if argv is None else argv, environ)
     out = Path(args.out)
-    steps = build_steps(args.base_seed, out, args.seeds)
+    steps = build_steps(args.base_seed, out, args.seeds, args.l8_txns)
     if args.dry_run:
         print(f"seed={args.base_seed} out={out}")
         for s in steps:

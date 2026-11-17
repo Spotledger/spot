@@ -25,9 +25,16 @@
 //!
 //! # Which entries are replayed
 //!
-//! Only the **state** class (`doc_state`) and the **audit** class (`sys_*` topics) are handed to
-//! the sink (see [`classify`]); domain events are counted and skipped, because the state they
-//! caused is in the stream. Replaying domain events would run the consumers' reactions twice.
+//! Only the **state** class and the **audit** class (the identity audit events among them) are
+//! handed to the sink; domain events are counted and skipped, because the state they caused is in
+//! the stream and replaying them would run the consumers' reactions twice (ADR-061 amendment
+//! A.0.1). The class of a topic comes from an [`EventClassifier`]
+//! ([`RebuildOptions::classifier`]); the default is [`RegistryClassifier`], the events contract
+//! registry, and a topic the registry does not hold is **never guessed**: it is refused by default
+//! (`journal_rebuild.unknown_topic`, before anything is applied when the prescan is on). With
+//! [`RebuildOptions::strict_topics`] off it is treated as domain and listed in
+//! [`RebuildOutcome::unknown_topics`]; with [`RebuildOptions::allow_unregistered`] (a tenant in
+//! recovery) it is applied as state and the outcome carries a warning.
 //!
 //! # Ordering and versions
 //!
@@ -78,7 +85,8 @@ mod tests;
 pub use error::RebuildError;
 pub use execute::{RebuildKeys, execute};
 pub use options::{
-    AUDIT_PREFIX, EventClass, Progress, RebuildOptions, RebuildOutcome, STATE_TOPIC, classify,
+    EventClass, EventClassifier, IDENTITY_PREFIX, MAX_UNKNOWN_TOPICS, Progress, RebuildOptions,
+    RebuildOutcome, RegistryClassifier, UNKNOWN_CLASS, WARN_UNREGISTERED_AS_STATE,
 };
 pub use recording::{Call, RecordedImage, RecordingSink};
 pub use sink::{

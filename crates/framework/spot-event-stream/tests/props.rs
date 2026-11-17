@@ -16,9 +16,11 @@ fn spec() -> ConsumerSpec {
     ConsumerSpec {
         name: "prop".to_owned(),
         owner: "owner".to_owned(),
-        topics: vec![TopicSelector::Prefix("doc".to_owned())],
+        topics: vec![TopicSelector::Prefix("task".to_owned())],
         filter: None,
         partitions: 1,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::IdsOnly,
         start: Start::FromBeginning,
     }

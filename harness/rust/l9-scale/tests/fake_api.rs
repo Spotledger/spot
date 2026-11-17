@@ -196,7 +196,7 @@ async fn start(addr: SocketAddr, n: usize, password: &str) -> Result<ApiExecutor
     .await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn every_operation_has_the_expected_shape_and_classification() {
     let (addr, log) = fake().await;
     let exec = start(addr, 3, "pw").await.unwrap();
@@ -261,7 +261,7 @@ async fn every_operation_has_the_expected_shape_and_classification() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_user_who_cannot_sign_in_stops_the_run_before_it_starts_and_the_password_is_not_in_the_message()
  {
     let (addr, _) = fake().await;
@@ -273,7 +273,7 @@ async fn a_user_who_cannot_sign_in_stops_the_run_before_it_starts_and_the_passwo
     assert!(!error.contains("wrong-password-xyz"), "{error}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_whole_profile_runs_through_the_runner_without_failures() {
     let (addr, _) = fake().await;
     let exec = Arc::new(start(addr, 4, "pw").await.unwrap());

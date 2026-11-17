@@ -33,7 +33,7 @@ fn refusal(e: &BulkError) -> Output {
     Output::Text(format!("{} {}", e.code(), e.message()))
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn export_never_leaks() {
     let core = core();
     let corpus = corpus();
@@ -118,7 +118,7 @@ async fn export_never_leaks() {
     assert!(cells >= 2 * PRINCIPALS.len() * SECRETS.len());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_export_of_a_denied_group_is_refused_by_name_not_dropped() {
     let core = core();
     let corpus = corpus();

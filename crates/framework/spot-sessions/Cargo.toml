@@ -11,6 +11,7 @@ rust-version.workspace = true
 # OpaqueToken and TokenDigest: only the digest of a token is ever stored or compared;
 # the token text lives only as long as issuance and validation take.
 spot-auth = { path = "../spot-auth" }
+spot-core = { path = "../spot-core" }
 # The salted one-way digest of client source addresses. sha2 is already the workspace
 # digest (spot-auth stores SHA-256 token digests); the SaltKey construction is SHA-256
 # over salt || separator || source.

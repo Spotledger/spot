@@ -273,11 +273,19 @@ impl Launched {
             root.join("common.toml"),
             format!(
                 "apps = [{:?}, \"sample\"]\n[server]\nbind = [\"127.0.0.1:{port}\"]\nshutdown_grace = 5\n\
-                 [postgres]\nadmin_url = {pg_url:?}\n[trust]\nrequire_signed = false\n",
-                platform.display().to_string()
+                 [postgres]\nadmin_url = {pg_url:?}\n[services.secrets]\nkek_file = {:?}\n[trust]\nrequire_signed = false\n",
+                platform.display().to_string(),
+                format!("{}/keys/{{site}}.json", root.display()),
             ),
         )
         .map_err(|e| format!("cannot write common.toml: {e}"))?;
+        // The sign-in stores seal their credentials through the vault: the site's key file is made
+        // with the binary before the site exists.
+        std::fs::create_dir_all(root.join("keys"))
+            .map_err(|e| format!("cannot create the key directory: {e}"))?;
+        spot_cli::services::secrets::init_key_file(&root.join(format!("keys/{site}.json")), site)
+            .await
+            .map_err(|e| format!("the key file of `{site}`: {e}"))?;
 
         spot(bin, root, &["new-site", site], None).await?;
         let admin_password = random_password();

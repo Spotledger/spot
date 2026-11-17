@@ -21,29 +21,29 @@
 //! refusal, an unknown id included, is the same `404 document.not_found`. No route lives in this
 //! crate, no path or storage key ever leaves the process, and file bytes are never logged.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 
 use axum::body::Bytes;
-use spot_app_api::meta::FieldKind;
-use spot_app_api::{HookPoint, Operation, Phase, Target};
 use spot_app_api::context::{Actor, DocumentService, Invocation};
+use spot_app_api::meta::FieldKind;
 use spot_app_api::prelude::{Name, RecordId, Value, Version};
 use spot_app_api::{Document, DocumentPatch};
+use spot_app_api::{HookPoint, Operation, Phase, Target};
 use spot_core::{Clock, SiteId};
 use spot_document::engine::{
-    Authorizer, CommittedBatch, CommittedDelivery, CommittedSteps, CommittedStep, OutboxSink,
+    Authorizer, CommittedBatch, CommittedDelivery, CommittedStep, CommittedSteps, OutboxSink,
 };
 use spot_files::local::LocalFileStore;
 use spot_files::memory::MemoryFileStore;
 use spot_files::store::{Body, FileStore};
 use spot_files_service::{
     AttachAccess, AttachTarget, Caller, CallerSource, Download, DownloadRequest, DownloadStatus,
-    FileCtx, FilePolicy, FileRecord, FileRecordStore, FileServiceError, FileState, FilesApi,
-    FilesService, FileAttachHook, UploadRequest, storage_key,
+    FileAttachHook, FileCtx, FilePolicy, FileRecord, FileRecordStore, FileServiceError, FileState,
+    FilesApi, FilesService, UploadRequest, storage_key,
 };
 use spot_http::api::files::{
     BoxByteStream, ByteStream, FileDownload, FileGetRequest, FileGetStatus, FilePortError,
@@ -62,7 +62,8 @@ use tokio::sync::watch;
 
 use crate::audit::PathClass;
 use crate::live::SiteLive;
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
+use crate::{config, error};
 
 type ServiceResult<T> = Result<T, FileServiceError>;
 
@@ -76,6 +77,30 @@ const FILES_ROUTE: &str = "/api/v1/files";
 fn internal(message: impl Into<String>) -> FileServiceError {
     FileServiceError::Internal {
         message: message.into(),
+    }
+}
+
+/// A storage failure as the service's error: unavailability (the pool wait ran out, the backend
+/// is unreachable, a lock or statement timed out, the commit outcome is unknown) is
+/// `server.unavailable`; every other kind keeps today's `file.store_failed`.
+fn storage(error: &spot_storage_contract::StorageError) -> FileServiceError {
+    use spot_storage_contract::ErrorKind;
+    match error.kind {
+        ErrorKind::Unavailable
+        | ErrorKind::LockTimeout
+        | ErrorKind::LockNotAvailable
+        | ErrorKind::StatementTimeout
+        | ErrorKind::CommitOutcomeUnknown => FileServiceError::unavailable(None),
+        _ => FileServiceError::store(error.to_string()),
+    }
+}
+
+/// An engine failure as the service's error: the `Unavailable` class is `server.unavailable`.
+fn app(error: &spot_app_api::AppError) -> FileServiceError {
+    if error.class == spot_app_api::ErrorClass::Unavailable {
+        FileServiceError::unavailable(None)
+    } else {
+        FileServiceError::store(error.to_string())
     }
 }
 
@@ -184,7 +209,7 @@ impl DocRecords {
         match engine.load(&inv, FILE, id).await {
             Ok(loaded) => Ok(Some(loaded.value)),
             Err(e) if e.class == spot_app_api::ErrorClass::NotFound => Ok(None),
-            Err(e) => Err(FileServiceError::store(e.to_string())),
+            Err(e) => Err(app(&e)),
         }
     }
 
@@ -269,10 +294,10 @@ impl DocRecords {
                 TxOptions::new(name("spot_cli_files")?, Isolation::ReadCommitted),
             )
             .await
-            .map_err(|e| FileServiceError::store(e.to_string()))?;
+            .map_err(|e| storage(&e))?;
         let rows = tx.query(&query).await;
         let _ = tx.rollback().await;
-        let rows = rows.map_err(|e| FileServiceError::store(e.to_string()))?;
+        let rows = rows.map_err(|e| storage(&e))?;
         Ok(rows
             .rows
             .into_iter()
@@ -334,7 +359,11 @@ impl DocRecords {
         query.select = selection;
         let mut parts = vec![Expr::Or(named)];
         if let Some(after) = after {
-            parts.push(id_field.clone().cmp(CmpOp::Gt, Expr::value(Value::Id(after))));
+            parts.push(
+                id_field
+                    .clone()
+                    .cmp(CmpOp::Gt, Expr::value(Value::Id(after))),
+            );
         }
         query.filter = Some(Expr::And(parts));
         query.order_by = vec![Order {
@@ -350,10 +379,10 @@ impl DocRecords {
                 TxOptions::new(name("spot_cli_files")?, Isolation::ReadCommitted),
             )
             .await
-            .map_err(|e| FileServiceError::store(e.to_string()))?;
+            .map_err(|e| storage(&e))?;
         let rows = tx.query(&query).await;
         let _ = tx.rollback().await;
-        let rows = rows.map_err(|e| FileServiceError::store(e.to_string()))?;
+        let rows = rows.map_err(|e| storage(&e))?;
         let mut found = Vec::new();
         for row in rows.rows {
             let mut cells = row.into_iter();
@@ -387,7 +416,7 @@ impl FileRecordStore for DocRecords {
                 .create(&inv, doc)
                 .await
                 .map(|_| ())
-                .map_err(|e| FileServiceError::store(e.to_string()))
+                .map_err(|e| app(&e))
         })
     }
 
@@ -425,7 +454,7 @@ impl FileRecordStore for DocRecords {
                 .update(&inv, FILE, record.id, patch, version)
                 .await
                 .map(|_| ())
-                .map_err(|e| FileServiceError::store(e.to_string()))
+                .map_err(|e| app(&e))
         })
     }
 
@@ -450,7 +479,7 @@ impl FileRecordStore for DocRecords {
                 .delete(&inv, FILE, id, version)
                 .await
                 .map(|_| true)
-                .map_err(|e| FileServiceError::store(e.to_string()))
+                .map_err(|e| app(&e))
         })
     }
 
@@ -565,11 +594,16 @@ impl CallerSource for Callers {
                 request_id: RequestId::generate(),
                 peer: None,
             };
-            Ok(match auth.authenticate_on(&request, PathClass::of_path(FILES_ROUTE)).await {
-                // A caller that has not chosen a password yet may do nothing with files.
-                Ok(who) if !auth.is_restricted(&who) => Caller::User(who.user_id),
-                _ => Caller::Guest,
-            })
+            Ok(
+                match auth
+                    .authenticate_on(&request, PathClass::of_path(FILES_ROUTE))
+                    .await
+                {
+                    // A caller that has not chosen a password yet may do nothing with files.
+                    Ok(who) if !auth.is_restricted(&who) => Caller::User(who.user_id),
+                    _ => Caller::Guest,
+                },
+            )
         })
     }
 }
@@ -716,6 +750,11 @@ impl ByteStream for ReadStream {
 }
 
 fn port_error(error: &FileServiceError) -> FilePortError {
+    if let Some(wait) = error.retry_after() {
+        // Unavailability is a 503 with the wait; the message names no path, key or connection.
+        return FilePortError::new(503, "server.unavailable", error.to_string(), true)
+            .with_retry_after(wait);
+    }
     FilePortError::new(
         error.status(),
         error.code(),
@@ -904,9 +943,7 @@ impl Files {
                         }
                         let target = AttachTarget::field(&doctype, id, field.clone());
                         let uploader = Caller::User(record.uploaded_by);
-                        if !record.quarantined
-                            && self.access.may_read(&uploader, &target).await?
-                        {
+                        if !record.quarantined && self.access.may_read(&uploader, &target).await? {
                             pending = true;
                             kept.push((field, file));
                         }
@@ -1297,5 +1334,112 @@ impl Service for FilesCheck {
             let _ = stop.changed().await;
             Ok(())
         })
+    }
+}
+
+/// This module's start order: the one it had in the host's table before it moved here.
+pub const ORDER: u32 = 900;
+
+/// Files: the provider's folder takes writes; the cluster profile cannot serve without it.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    let env = *ctx.env()?;
+    let settings = files_settings(
+        env.root,
+        env.loaded,
+        env.site,
+        env.live,
+        env.backend,
+        ctx.clock(),
+    )?;
+    ctx.add(FilesCheck::new(&settings));
+    // The in-process committed step can be lost to a crash between commit and step: re-apply it
+    // for documents that name a file still pending. Best effort; the next start tries again.
+    if let Some(files) = env.live.files()
+        && let Err(error) = files.reconcile_attachments().await
+    {
+        tracing::warn!(error = %error, "the attach reconcile at start failed");
+    }
+    Ok(())
+}
+
+/// What the file service of `site` is built from. `build_site` calls it too, so it stays here
+/// as the one place that reads `services.files`.
+pub(crate) fn files_settings(
+    root: &Path,
+    loaded: &config::Loaded,
+    site: &config::Site,
+    live: &Arc<SiteLive>,
+    backend: &PgBackend,
+    clock: &Arc<dyn spot_core::Clock>,
+) -> crate::Result<Settings> {
+    let files = &loaded.common.services.files;
+    Ok(Settings {
+        site: SiteId::new(&site.site).map_err(error)?,
+        live: live.clone(),
+        backend: backend.clone(),
+        clock: clock.clone(),
+        provider: files.provider.clone(),
+        root: root.join("sites").join(&site.site).join(&files.root),
+        max_bytes: files.max_bytes,
+        required: loaded.common.services.profile == "cluster",
+    })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod unavailable_tests {
+    use super::*;
+    use spot_app_api::{AppError, ErrorClass};
+    use spot_storage_contract::{ErrorKind, StorageError};
+
+    #[test]
+    fn unavailability_kinds_become_server_unavailable() {
+        for kind in [
+            ErrorKind::Unavailable,
+            ErrorKind::LockTimeout,
+            ErrorKind::LockNotAvailable,
+            ErrorKind::StatementTimeout,
+            ErrorKind::CommitOutcomeUnknown,
+        ] {
+            let error = storage(&StorageError::new(kind, "pool wait exceeded on host db1"));
+            assert_eq!(error.code(), "server.unavailable", "{kind:?}");
+            assert_eq!(error.status(), 503);
+            assert!(error.retryable());
+        }
+    }
+
+    #[test]
+    fn other_kinds_keep_todays_mapping() {
+        for kind in [
+            ErrorKind::Internal,
+            ErrorKind::InvalidValue,
+            ErrorKind::Deadlock,
+        ] {
+            let error = storage(&StorageError::new(kind, "x"));
+            assert_eq!(error.code(), "file.store_failed", "{kind:?}");
+        }
+        let missing = AppError::new(ErrorClass::NotFound, "document.not_found", "no");
+        assert_eq!(app(&missing).code(), "file.store_failed");
+    }
+
+    #[test]
+    fn an_engine_unavailable_class_is_server_unavailable() {
+        let down = AppError::new(ErrorClass::Unavailable, "server.unavailable", "pool");
+        assert_eq!(app(&down).code(), "server.unavailable");
+    }
+
+    #[test]
+    fn the_port_error_carries_the_wait_and_names_no_detail() {
+        let port = port_error(&FileServiceError::unavailable(None));
+        assert_eq!(port.status, 503);
+        assert_eq!(port.code, "server.unavailable");
+        assert!(port.retryable);
+        assert_eq!(port.retry_after_secs, Some(1));
+        assert!(!port.message.contains("db1"));
+        let waited = port_error(&FileServiceError::unavailable(Some(7)));
+        assert_eq!(waited.retry_after_secs, Some(7));
+        // Today's mapping is untouched.
+        let stored = port_error(&FileServiceError::store("disk"));
+        assert_eq!((stored.status, stored.retry_after_secs), (500, None));
     }
 }

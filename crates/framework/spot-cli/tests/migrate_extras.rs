@@ -56,7 +56,7 @@ fn extra_steps(plan: &spot_pg_migrate::MigrationPlan) -> Vec<&str> {
         .collect()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_fresh_database_gets_the_platform_tables_and_a_second_run_plans_nothing() {
     let Some(db) = TestDb::create().await else {
         return;
@@ -68,31 +68,37 @@ async fn a_fresh_database_gets_the_platform_tables_and_a_second_run_plans_nothin
         .await
         .unwrap();
     assert!(plan.refused.is_empty(), "{:?}", plan.refused);
-    assert_eq!(
-        extra_steps(&plan),
-        vec![
-            "extra_table:spot_graph_edge",
-            "extra_table:spot_graph_edge_owner_idx",
-            "extra_table:spot_edge_drift_report",
-            "extra_table:spot_edge_drift_entry",
-            "extra_table:spot_edge_repair_audit",
-            "extra_table:spot_mail_sent_log",
-            "extra_table:spot_mail_sent_log_recorded_idx",
-            "extra_table:spot_audit_chain",
-            "extra_table:spot_audit_checkpoint",
-            "extra_table:spot_condition_open",
-            "extra_table:spot_condition_history",
-            "extra_table:spot_condition_history_subject_idx",
-            "extra_table:spot_node_role_state",
-            "extra_table:spot_capture_watermark",
-        ],
-        "the owning crates' DDL, one statement per entry, a table before its index"
-    );
+    // The first platform tables, in this relative order (later features add more between and after
+    // them), each statement one entry, a table before its index.
+    let planned = extra_steps(&plan);
+    let mut from = 0;
+    for want in [
+        "extra_table:spot_graph_edge",
+        "extra_table:spot_graph_edge_owner_idx",
+        "extra_table:spot_edge_drift_report",
+        "extra_table:spot_edge_drift_entry",
+        "extra_table:spot_edge_repair_audit",
+        "extra_table:spot_mail_sent_log",
+        "extra_table:spot_mail_sent_log_recorded_idx",
+        "extra_table:spot_audit_chain",
+        "extra_table:spot_audit_checkpoint",
+        "extra_table:spot_condition_open",
+        "extra_table:spot_condition_history",
+        "extra_table:spot_condition_history_subject_idx",
+        "extra_table:spot_node_role_state",
+        "extra_table:spot_capture_watermark",
+    ] {
+        let at = planned[from..]
+            .iter()
+            .position(|key| *key == want)
+            .unwrap_or_else(|| panic!("{want} is planned after position {from}: {planned:?}"));
+        from += at + 1;
+    }
     // Before the apply: what a serve start-up refuses over.
     let pending = schema::pending_platform_tables(&backend, &catalog)
         .await
         .unwrap();
-    assert_eq!(pending.len(), 14);
+    assert_eq!(pending.len(), extra_steps(&plan).len());
 
     schema::refusals(&plan).unwrap();
     schema::apply(&backend, &plan, None).await.unwrap();
@@ -142,7 +148,7 @@ async fn a_fresh_database_gets_the_platform_tables_and_a_second_run_plans_nothin
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_populated_database_gets_its_document_table_and_the_platform_tables_together() {
     let Some(db) = TestDb::create().await else {
         return;
@@ -158,7 +164,7 @@ async fn a_populated_database_gets_its_document_table_and_the_platform_tables_to
         keys.iter().any(|key| key.starts_with("create_table:party")),
         "the document table is planned: {keys:?}"
     );
-    assert_eq!(extra_steps(&plan).len(), 14);
+    assert!(extra_steps(&plan).len() >= 14);
     schema::apply(&backend, &plan, None).await.unwrap();
     let live = spot_pg_migrate::LiveSchema::read(&backend).await.unwrap();
     for name in REQUIRED.iter().chain(["party"].iter()) {
@@ -178,7 +184,7 @@ async fn a_populated_database_gets_its_document_table_and_the_platform_tables_to
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spot_migrate_on_a_new_site_reports_nothing_to_do_and_the_tables_are_there() {
     let Some(env) = support::Env::new().await else {
         return;

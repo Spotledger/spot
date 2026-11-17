@@ -32,6 +32,19 @@ pub trait UserDirectory: Send + Sync + 'static {
         id: RecordId,
     ) -> BoxFuture<'a, Result<Option<UserRecord>, LoginError>>;
 
+    /// Loads a user by its stable id for a check that needs only who the user is and whether the
+    /// user may sign in (every authenticated request): the credential fields of the record
+    /// (`password_hash`, `totp_secret`, `recovery_digests`, `totp_last_step`) may be left empty.
+    /// A directory that seals those fields opens none of them here, so a request that only
+    /// proves a session does not decrypt a credential, or write a secret-audit event for it,
+    /// every time. The default is the full record.
+    fn find_standing_by_id<'a>(
+        &'a self,
+        id: RecordId,
+    ) -> BoxFuture<'a, Result<Option<UserRecord>, LoginError>> {
+        self.find_by_id(id)
+    }
+
     /// Replaces the user's password hash.
     fn set_password_hash<'a>(
         &'a self,
@@ -52,6 +65,36 @@ pub trait UserDirectory: Send + Sync + 'static {
         id: RecordId,
         index: usize,
     ) -> BoxFuture<'a, Result<(), LoginError>>;
+
+    /// Stores a TOTP secret as a **pending** enrolment: sealed, not a second factor yet (a
+    /// sign-in does not ask for it) until [`UserDirectory::set_second_factor`] confirms it. A
+    /// second call replaces the pending secret. The default refuses, so a directory that cannot
+    /// hold a pending secret fails closed.
+    fn begin_totp_enrolment<'a>(
+        &'a self,
+        _id: RecordId,
+        _secret: TotpSecret,
+    ) -> BoxFuture<'a, Result<(), LoginError>> {
+        Box::pin(async {
+            Err(LoginError::new(
+                LoginErrorKind::StoreFailed,
+                "this directory cannot hold a pending second factor",
+            ))
+        })
+    }
+
+    /// The pending TOTP secret of an enrolment in progress, if any. The default refuses.
+    fn pending_totp<'a>(
+        &'a self,
+        _id: RecordId,
+    ) -> BoxFuture<'a, Result<Option<TotpSecret>, LoginError>> {
+        Box::pin(async {
+            Err(LoginError::new(
+                LoginErrorKind::StoreFailed,
+                "this directory cannot hold a pending second factor",
+            ))
+        })
+    }
 
     /// Replaces the whole second factor: an optional new TOTP secret and a fresh set of
     /// recovery-code digests.

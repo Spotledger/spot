@@ -70,3 +70,42 @@ async fn the_wait_and_timer_lookups_use_their_indexes() {
         "due plan:\n{p}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_node_run_cursor_read_is_a_primary_key_range_scan() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let store = PgCaseStore::new(pool(&db, 4, "bpm-plans-log"));
+    store.prepare().await.unwrap();
+    let client = db.raw_client().await;
+
+    // 120,000 log rows over two tenants; the reader asks for a page near the end of one.
+    client
+        .batch_execute(
+            "INSERT INTO spot_bpm_node_run_event \
+                 (tenant, seq, case_id, dag_key, dag_version, case_version, node, attempt, \
+                  state, \"at\", is_retry) \
+             SELECT t, g, 'case_' || g, 'chain', 1, 1, 'n0', 1, 'started', now(), false \
+             FROM generate_series(1, 60000) g, unnest(ARRAY['default', 'other']) t;",
+        )
+        .await
+        .unwrap();
+    client
+        .batch_execute("VACUUM ANALYZE spot_bpm_node_run_event")
+        .await
+        .unwrap();
+
+    let p = explain(
+        &client,
+        sql::LIST_NODE_RUNS,
+        &[&"default", &59_000_i64, &100_i64],
+    )
+    .await;
+    println!("node-run cursor read:\n{p}\n");
+    assert!(p.contains("spot_bpm_node_run_event_pkey"), "plan:\n{p}");
+    assert!(
+        !p.contains("Seq Scan on spot_bpm_node_run_event"),
+        "plan:\n{p}"
+    );
+}

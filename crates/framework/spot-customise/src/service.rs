@@ -657,7 +657,13 @@ impl CustomiseService {
                 let grant = DefaultGrant {
                     doctype: r.name.clone(),
                     role: SYSTEM_MANAGER.to_owned(),
-                    rights: vec![Right::Read, Right::Write, Right::Create, Right::Delete],
+                    rights: vec![
+                        Right::Read,
+                        Right::Write,
+                        Right::Create,
+                        Right::Delete,
+                        Right::Report,
+                    ],
                 };
                 self.grants
                     .set_default_grants(&r.name, &[grant])
@@ -860,9 +866,9 @@ impl CustomiseService {
             .await
             .map_err(|e| self.gate.observe(&e))?
             .map_or(Version::ZERO, |(v, _)| v);
-        current
-            .max(head)
-            .checked_next()
+        // The same rule as `LiveMeta::apply`: never version 1, because the starting snapshot
+        // already reports metadata version 1 (a first customisation must change the number).
+        spot_meta_live::next_change_version(current.max(head))
             .ok_or_else(|| self.gate.observe(&LiveError::Exhausted))
     }
 

@@ -192,7 +192,7 @@ bit-vec 0.8.0
   licence: Apache-2.0 OR MIT
   text: T-7e1b38c607 (LICENSE-APACHE), T-4c4e6eed8b (LICENSE-MIT)
 
-bit-vec 0.9.1 [dev only]
+bit-vec 0.9.1
   licence: Apache-2.0 OR MIT
   text: T-7e1b38c607 (LICENSE-APACHE), T-4c4e6eed8b (LICENSE-MIT)
 
@@ -1676,7 +1676,7 @@ pdf-writer 0.15.0
   licence: MIT OR Apache-2.0
   text: T-85ad950cce (LICENSE-APACHE), T-1847e0e069 (LICENSE-MIT)
 
-pem 4.0.0 [dev only]
+pem 4.0.0
   licence: MIT
   text: T-fd270b8c59 (LICENSE.md)
 
@@ -1960,7 +1960,7 @@ rayon-core 1.13.0
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-9e0027807b (LICENSE-MIT)
 
-rcgen 0.14.10 [dev only]
+rcgen 0.14.10
   licence: MIT OR Apache-2.0
   text: T-acce84ab5a (LICENSE)
 
@@ -3160,7 +3160,7 @@ yaml-rust 0.4.5
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-f853326256 (LICENSE-MIT)
 
-yasna 0.6.0 [dev only]
+yasna 0.6.0
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-02273814a8 (LICENSE-MIT)
 

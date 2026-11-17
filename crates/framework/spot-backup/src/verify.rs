@@ -106,6 +106,15 @@ pub async fn full(
     if !quick_report.ok {
         return Ok(quick_report);
     }
+    if package.manifest().encryption.is_some() {
+        return Ok(VerifyReport::failed(
+            VerifyMode::Full,
+            package,
+            "backup.encryption_unavailable: the package is encrypted and full verification \
+             needs a key provider (use full_with_provider)"
+                .to_owned(),
+        ));
+    }
     let mut report = VerifyReport::ok(
         VerifyMode::Full,
         package,
@@ -146,6 +155,48 @@ pub async fn full(
         report.failure = Some(invariant_report.violations.join("; "));
     }
     report.invariants = Some(invariant_report);
+    Ok(report)
+}
+
+/// The full verification of a package that may be encrypted: when it is, the payload is
+/// decrypted through `provider` (into a temporary plain package next to it, removed
+/// afterwards) before the scratch restore, schema checks and invariants run. A key the
+/// provider refuses (retired, unknown) or a payload that fails authentication is a
+/// failed report naming the `backup.*` code, never a fallback to another key.
+///
+/// # Errors
+/// As [`full`].
+pub async fn full_with_provider(
+    package: &PackageFile,
+    provider: &dyn spot_secrets::KeyProvider,
+    scratch: &dyn ScratchSite,
+    invariants: &dyn InvariantRunner,
+) -> Result<VerifyReport> {
+    let quick_report = quick(package);
+    if !quick_report.ok {
+        return Ok(quick_report);
+    }
+    if package.manifest().encryption.is_none() {
+        return full(package, scratch, invariants).await;
+    }
+    let plain = match crate::package::decrypt_package(package, provider).await {
+        Ok(plain) => plain,
+        Err(error) => {
+            return Ok(VerifyReport::failed(
+                VerifyMode::Full,
+                package,
+                format!("{}: {}", error.code(), error.reason()),
+            ));
+        }
+    };
+    let outcome = full(&plain, scratch, invariants).await;
+    let _ = std::fs::remove_file(plain.path());
+    let mut report = outcome?;
+    report.digest = package.manifest().digest.clone();
+    report.package_bytes = package.package_bytes();
+    if report.checks.len() >= 4 {
+        report.checks.insert(4, "decrypt".to_owned());
+    }
     Ok(report)
 }
 

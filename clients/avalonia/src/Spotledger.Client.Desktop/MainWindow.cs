@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Spotledger.Client.Api;
 using Spotledger.Client.Desktop.Hosting;
 using Spotledger.Client.Forms;
@@ -21,6 +22,7 @@ public sealed class MainWindow : Window, IDisposable
     private readonly ContentControl _host = new();
     private readonly DraftSessionHost _drafts;
     private readonly WorkspaceHost _workspace;
+    private readonly NotificationHost _notifications;
     private ShellViewHooks? _hooks;
 
     public MainWindow()
@@ -39,6 +41,15 @@ public sealed class MainWindow : Window, IDisposable
             _drafts,
             new NativeDocumentGateway(Connection, new MetaCache(Connection)),
             () => Connection.BaseUri?.GetLeftPart(UriPartial.Authority) ?? string.Empty);
+        // The notification centre (WP-UI-02.T6): the bell, the flyout, the toast and each open form's
+        // staleness bar. A notice's link opens through the workspace host's open-document path.
+        _notifications = new NotificationHost(
+            Stage.Shell,
+            () => new RealtimeRoomSession(Connection, text => Dispatcher.UIThread.Post(() => Stage.Shell.ShowStatus(text))),
+            () => Connection.BaseUri?.GetLeftPart(UriPartial.Authority) ?? string.Empty,
+            (doctype, id) => _workspace.OpenDocument(doctype, id),
+            appIsFocused: () => IsActive);
+        _workspace.StalenessFactory = _notifications.WatchForm;
         Deactivated += (_, _) => _ = _workspace.FlushAllAsync();
         Closing += (_, _) => FlushOnClose();
         Closed += (_, _) => Dispose();
@@ -59,6 +70,7 @@ public sealed class MainWindow : Window, IDisposable
     {
         _hooks?.Dispose();
         _hooks = null;
+        _notifications.Dispose();
         _workspace.Dispose();
         _drafts.Dispose();
     }

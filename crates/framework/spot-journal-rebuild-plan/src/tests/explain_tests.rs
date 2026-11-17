@@ -82,11 +82,12 @@ fn a_backup_base_is_explained_with_its_position() {
         ranges(1, &[(1, 10), (11, 20)]),
         vec![],
     );
-    let plan = plan(&catalog, Some(&crate::Backup { position: 15 }), Target::End)
-        .expect("the backup is covered");
+    let plan =
+        plan(&catalog, Some(&crate::Backup::new(15)), Target::End).expect("the backup is covered");
     let lines = explain(&plan);
     assert_eq!(lines[0].key, "journal-rebuild-base-backup");
     assert_eq!(lines[0].param("position"), Some("15"));
+    assert_eq!(lines[0].param("generation"), Some("1"));
 }
 
 #[test]

@@ -184,6 +184,8 @@ impl Shared {
                 PayloadModeIn::Fields => PayloadMode::Fields,
             },
             start,
+            classes: None,
+            entities: None,
         };
         consumer.validate().map_err(|e| self.error(e))?;
         let reserved = consumer.topics.iter().any(|t| t.reserved_class().is_some());

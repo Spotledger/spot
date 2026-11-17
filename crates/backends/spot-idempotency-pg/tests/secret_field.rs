@@ -176,7 +176,7 @@ async fn a_secret_in_a_post_is_refused_and_the_refusal_is_stored_without_it() {
     let body = json!({"label": "x", "password": b64(PASSWORD), "api_key": b64(API_KEY)});
     let first = rig.create("k1", body.clone()).await;
     assert_eq!(first.status, 422);
-    assert_eq!(first.error_code(), "document.validation_failed");
+    assert_eq!(first.error_code(), "document.invalid_value");
     assert_eq!(rig.accounts().await, 1, "nothing was created");
     for what in [PASSWORD, API_KEY] {
         assert!(!leaks(&first.raw, what), "the refusal echoes a secret");

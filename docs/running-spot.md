@@ -270,6 +270,20 @@ and duration. Tracing spans and the Prometheus counters come from the same layer
 `[telemetry]` in `common.toml` sets the filter, the format and an OTLP collector; without an
 OTLP endpoint nothing is exported, and traces stay local.
 
+## The database pool
+
+```toml
+[postgres]
+admin_url = "postgres://..."
+pool_max_size = 16     # connections per site (default 16); background services and requests share them
+pool_wait_ms = 5000    # how long a request waits for a free connection, 100 to 60000 (default 5000)
+```
+
+A request that finds no free connection within `pool_wait_ms` is answered `503 server.unavailable`
+with `Retry-After`, the same for a known and an unknown sign-in name; requests that need no
+connection (`/api/health/live`) keep being served. Keep `pool_max_size` at the number of
+background services you run plus the concurrency you expect; the task inbox alone needs three.
+
 ## `common.toml` services
 
 Every option below defaults to the single-node desktop profile: one process, nothing shared.
@@ -466,10 +480,9 @@ What a site installs today:
   database call inside a request is refused by design, ADR-082). A change of ownership therefore
   reaches a running node within half a minute, and `spot reload <site>` rebuilds the site around
   the same snapshot. A single-node site (no `[partition]` section) installs no owner check.
-- **The audit participant** is not installed yet: the audit chain has no store the host can reach
-  (its DDL is not published for the migrator and there is no durable appender store), so an event
-  written now would never be chained. WP-PRD-01.T22 installs it and documents what is audited.
-  Readiness says `docaudit: off`.
+- **The audit participant**, always, first in the order. Every stored version and every refused
+  operation produces exactly one audit event (see "The document audit" below and
+  [participants](running-spot/participants.md)).
 
 A partitioned profile is configuration, not a DocType property:
 
@@ -513,7 +526,10 @@ them warns and serves anyway.
 | --- | --- | --- |
 | `partition.scope_uncovered` | `partition.doctypes` names a DocType with no `[[partition.scope]]` entry | add the entry (DocType, key type, field) or drop the DocType from `doctypes`; the site serves nothing until then |
 | `cli.partition_registry_missing` | the site names a partition node but the host could not build the ownership registry (a pool too small to serve the bridge, or the store unavailable) | check `[postgres] pool_max_size` (at least 3) and run `spot migrate <site> --apply` |
-| `docaudit.double_registration` | an installed app registers an `AuditStep` for a DocType the audit participant already audits | remove the app's audit step: the participant records the write. Armed for WP-PRD-01.T22; with no audit participant installed today it cannot fire |
+| `docaudit.double_registration` | an installed app registers an `AuditStep` for a DocType the audit participant already audits | remove the app's audit step: the participant records the write |
+| `cli.doc_audit_lanes_invalid` | `[audit] doc_lanes`, `doc_append_poll_ms` or `doc_append_batch` is out of range | fix the value (lanes 1 to 64, poll 100 to 60000 ms, batch 1 to 5000) |
+| `cli.doc_audit_masker_unavailable` | the field masker of a metadata generation could not be built | the metadata or the permission model is inconsistent: fix it, then `spot reload <site>` |
+| "the audit chain is not fully protected" | the chain tables exist but the role, the grants or a guard trigger (or an appender table) is missing | `spot migrate <site> --apply`: it installs the guard after the plan |
 | "the database is missing the partition ownership tables" | a partitioned site whose `spot migrate --apply` has not run | `spot migrate <site> --apply` |
 
 ### What `ready` says about the participants
@@ -523,7 +539,7 @@ them warns and serves anyway.
 - `partition: off` for a single-node site;
 - `partition: node <id>, <n> DocTypes` for a partitioned one — the node it runs as and how many
   DocTypes it checks. Never an assignment, a scope key or a value;
-- `docaudit: on` or `docaudit: off`;
+- `docaudit: on; <n> lane(s), pending <k>, oldest <s> s; denials dropped <d>, not recorded <r>` (or `docaudit: on (lagging)` when the oldest unchained event is older than a minute; warn only). Counts and ages only, never an event body, an actor or a value;
 - `installed: audit, owner, edge` — the participants, in the order they run.
 
 ### Where the participants do not run

@@ -1,0 +1,100 @@
+# data_policy_host codes: the hosted retention job (WP-SEC-05.T4). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "data_policy_host.policy_invalid"
+class = "none"
+summary = "The retention policy files could not be read or are invalid, so no plan or run was made."
+explanation_key = "error.data_policy_host.policy_invalid"
+params = []
+remedy = "Fix the rules, holds, statutory floors or classification files in the policy directory; the next pass loads them again."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.store_unavailable"
+class = "none"
+summary = "No retention store could be opened (the ledger or the record source is unavailable, or no store provider is configured)."
+explanation_key = "error.data_policy_host.store_unavailable"
+params = []
+remedy = "Check the site's database and that a retention store provider is installed; the service is degraded until then."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.plan_failed"
+class = "none"
+summary = "A retention plan could not be built; nothing was changed."
+explanation_key = "error.data_policy_host.plan_failed"
+params = []
+remedy = "Check the record source and the database; a failed read is never treated as an empty tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.no_pending_plan"
+class = "none"
+summary = "There is no pending retention plan to confirm or run."
+explanation_key = "error.data_policy_host.no_pending_plan"
+params = []
+remedy = "Request a preview first; the scheduled pass also builds one."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.digest_mismatch"
+class = "none"
+summary = "The confirmed digest does not name the pending plan."
+explanation_key = "error.data_policy_host.digest_mismatch"
+params = []
+remedy = "Read the pending plan's digest again and confirm that one; a changed plan has a new digest."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.self_approval"
+class = "none"
+summary = "The person who requested a retention plan cannot confirm it."
+explanation_key = "error.data_policy_host.self_approval"
+params = []
+remedy = "Ask a second administrator to confirm the plan digest."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.not_confirmed"
+class = "none"
+summary = "The pending retention plan has not been confirmed by an administrator."
+explanation_key = "error.data_policy_host.not_confirmed"
+params = []
+remedy = "Confirm the plan digest before running."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.enforcement_off"
+class = "none"
+summary = "Retention enforcement is off, so nothing is executed."
+explanation_key = "error.data_policy_host.enforcement_off"
+params = []
+remedy = "Set `[services.data_policy] enforcement` to `manual` or `automatic` when the dry runs look right."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.run_in_progress"
+class = "none"
+summary = "A retention run is already in progress."
+explanation_key = "error.data_policy_host.run_in_progress"
+params = []
+remedy = "Wait for it to finish or stop it with the kill switch."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.run_failed"
+class = "none"
+summary = "A retention run stopped on an error; the checkpoint and the outcome rows show what was done."
+explanation_key = "error.data_policy_host.run_failed"
+params = []
+remedy = "Read the service log and the run's outcomes; the next run continues from the saved checkpoint without repeating an effect."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_host.audit_failed"
+class = "none"
+summary = "The audit entry that must precede a deletion could not be written, so nothing was deleted."
+explanation_key = "error.data_policy_host.audit_failed"
+params = []
+remedy = "Check the retention audit chain in the site's database; no run starts until its entries can be written."
+since = "0.1.0"

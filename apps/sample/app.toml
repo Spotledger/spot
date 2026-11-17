@@ -33,3 +33,21 @@ step = "sample:roll_up_hours_add"
 doctype = "time_entry"
 event = "after_cancel"
 step = "sample:roll_up_hours_subtract"
+
+# Whitelisted module-level functions (ADR-16, WP-PLT-17.T4). Their native handlers are built into
+# the binary (crates/framework/spot-cli/src/natives.rs); none of them touches a document.
+[[functions]]
+module = "profile"
+name = "whoami"
+http = ["GET"]
+
+[[functions]]
+module = "profile"
+name = "greet"
+http = ["POST"]
+
+[[functions]]
+module = "public"
+name = "ping"
+http = ["GET"]
+guest = true

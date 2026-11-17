@@ -90,6 +90,46 @@ type = "dynamic_link"
 options = "party_type"
 
 [[fields]]
+name = "scim_profile"
+label = "SCIM Profile"
+type = "json"
+read_only = true
+no_copy = true
+description = "The attributes SCIM carries that the user record has no field for (userName as sent, name parts, e-mails, enterprise extension)."
+
+[[fields]]
+name = "scim_external_id"
+label = "SCIM External Id"
+type = "text"
+max_chars = 254
+read_only = true
+no_copy = true
+index = true
+
+[[fields]]
+name = "scim_version"
+label = "SCIM Version"
+type = "int"
+default = "1"
+read_only = true
+no_copy = true
+description = "The SCIM resource version: the ETag's source, bumped on every SCIM change."
+
+[[fields]]
+name = "scim_created_at"
+label = "SCIM Created At"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
+name = "scim_updated_at"
+label = "SCIM Updated At"
+type = "datetime"
+read_only = true
+no_copy = true
+
+[[fields]]
 name = "last_sign_in"
 label = "Last Sign-in"
 type = "datetime"

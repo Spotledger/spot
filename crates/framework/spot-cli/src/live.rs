@@ -22,16 +22,18 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
 use serde_json::Value as Json;
 use spot_api_services::{
-    AccessControl, CurrentMeta, EngineResources, MetaSource, PermissionResources, PrincipalSource,
+    AccessControl, CurrentMeta, EngineLookup, EngineResources, ListFieldGuard, MetaSource,
+    PermissionResources, PrincipalSource,
 };
 use spot_app_api::context::Actor;
 use spot_customise::MetaGate;
 use spot_document::engine::{Engine, PermissionAuthorizer};
 use spot_http::api::codec::{ApiDocument, DocumentPatchApi};
+use spot_http::api::lookup::{LookupPage, LookupRequest};
 use spot_http::api::registry::Code;
 use spot_http::api::service::{
-    ApiError, BoxFuture, Message, MethodOutcome, Page, PermissionService, QuerySpec, RequestCtx,
-    ResourceService, WriteResult,
+    ApiError, BoxFuture, LookupService, Message, MethodOutcome, Page, PermissionService, QuerySpec,
+    RequestCtx, ResourceService, WriteResult,
 };
 use spot_meta::EffectiveMeta;
 use spot_permissions::{Model, PermissionEngine, Right, Rights, RoleGrant};
@@ -100,7 +102,16 @@ pub struct SiteLive {
     /// How the transaction participants are rebuilt for a new metadata generation
     /// (WP-PRD-01.T11), set by the first runtime build.
     participants: Mutex<Option<Arc<ParticipantsFactory>>>,
+    /// The participants the engine runs now, so a failed swap can put them back
+    /// (WP-PRD-01.T22).
+    installed: Mutex<Option<InstalledParticipants>>,
+    /// The hosted document audit's status, for readiness (WP-PRD-01.T22).
+    doc_audit: Mutex<Option<Arc<crate::audit::doc::DocAuditHost>>>,
 }
+
+/// The participant list of one generation.
+pub type InstalledParticipants =
+    Vec<Arc<dyn spot_document::engine::TxParticipant<spot_postgres::PgTransaction>>>;
 
 /// Rebuilds one site's transaction participants for one metadata generation, in the order the
 /// engine requires, or says why they cannot be installed.
@@ -111,6 +122,7 @@ pub struct SiteLive {
 /// [`SiteLive::swap_to`] runs it.
 pub type ParticipantsFactory = dyn Fn(
         &Arc<EffectiveMeta>,
+        &Arc<PermissionEngine>,
     ) -> std::result::Result<
         Vec<Arc<dyn spot_document::engine::TxParticipant<spot_postgres::PgTransaction>>>,
         String,
@@ -148,6 +160,8 @@ impl SiteLive {
             files: OnceLock::new(),
             print: OnceLock::new(),
             mail: OnceLock::new(),
+            installed: Mutex::new(None),
+            doc_audit: Mutex::new(None),
             participants: Mutex::new(None),
         }
     }
@@ -408,6 +422,22 @@ impl SiteLive {
         *lock(&self.participants) = Some(factory);
     }
 
+    /// Records the participants the engine runs now (set by the runtime build), so a swap that
+    /// fails after installing the next generation's participants can put these back.
+    pub fn remember_participants(&self, participants: InstalledParticipants) {
+        *lock(&self.installed) = Some(participants);
+    }
+
+    /// Records the site's hosted document audit (appenders, denial sink, status).
+    pub fn set_doc_audit(&self, host: Arc<crate::audit::doc::DocAuditHost>) {
+        *lock(&self.doc_audit) = Some(host);
+    }
+
+    /// The site's hosted document audit, when the runtime build made one.
+    pub fn doc_audit(&self) -> Option<Arc<crate::audit::doc::DocAuditHost>> {
+        lock(&self.doc_audit).clone()
+    }
+
     /// Points the engine, the permission snapshot and the served pair at `meta`.
     ///
     /// `defaults` are the default grants of the customised DocTypes. Order matters: the engine
@@ -431,20 +461,34 @@ impl SiteLive {
         model.grants.extend(defaults.iter().cloned());
         let apps = lock(&self.apps).clone();
         let decision = permissions::engine(&meta, &model, &apps).map_err(|e| e.to_string())?;
-        // The participants of the new generation, built before the engine takes the metadata: a
-        // refusal here leaves the previous metadata and its participants fully in force. They are
-        // installed after the metadata, so no write sees the new metadata with the old schema.
+        // The participants of the new generation (the masker follows the metadata and the
+        // decision), built before anything is installed: a refusal here leaves the previous
+        // metadata and its participants fully in force.
         let participants = match &*lock(&self.participants) {
-            Some(factory) => Some(factory(&meta)?),
+            Some(factory) => Some(factory(&meta, &decision)?),
             None => None,
         };
-        target
-            .engine
-            .set_meta(Arc::clone(&meta))
-            .await
-            .map_err(|e| e.to_string())?;
+        // Participants first, then the metadata (WP-PRD-01.T22). A write that runs between the two
+        // steps sees the new participants over the old metadata: the audit masks by field name,
+        // fail-closed, and a field the new metadata protects is masked by the new masker either
+        // way, so no write is audited with an older mask than the metadata it runs under. The
+        // reverse order (new metadata, old masker) could audit a newly protected field in the
+        // clear, which is what this order closes.
+        if let Some(participants) = &participants {
+            target.engine.set_participants(participants.clone());
+        }
+        if let Err(e) = target.engine.set_meta(Arc::clone(&meta)).await {
+            // The metadata did not change: put the previous participants back so the pair stays
+            // consistent.
+            if participants.is_some()
+                && let Some(previous) = lock(&self.installed).clone()
+            {
+                target.engine.set_participants(previous);
+            }
+            return Err(e.to_string());
+        }
         if let Some(participants) = participants {
-            target.engine.set_participants(participants);
+            *lock(&self.installed) = Some(participants);
         }
         target.authorizer.swap(Arc::clone(&decision));
         *lock(&self.pending) = None;
@@ -464,7 +508,13 @@ impl SiteLive {
         RoleGrant {
             doctype: doctype.to_owned(),
             role: spot_permissions::Role(role.to_owned()),
-            rights: Rights::new([Right::Read, Right::Write, Right::Create, Right::Delete]),
+            rights: Rights::new([
+                Right::Read,
+                Right::Write,
+                Right::Create,
+                Right::Delete,
+                Right::Report,
+            ]),
             if_owner: false,
         }
     }
@@ -510,18 +560,129 @@ pub struct LiveResources {
     pub(crate) actor: Arc<spot_api_services::engine_resources::ActorResolver>,
     /// The function and report delegates a hosting module provided as ports (WP-PRD-01.T48).
     pub(crate) delegates: spot_api_services::Delegates,
+    /// Who holds which roles: the field guard turns the acting user into a principal with it
+    /// (WP-SEC-04.T14).
+    pub(crate) principals: Arc<dyn PrincipalSource>,
 }
 
 impl LiveResources {
+    /// The resources of the metadata served now, with the list path behind the field guard.
+    ///
+    /// Fails closed: when nothing can be served (a diverged node, no runtime attached) this is an
+    /// error and no resources are handed out, never an unguarded list.
     fn current(&self) -> Result<EngineResources<GuardedEngine>, ApiError> {
         let served = self.live.current()?;
+        let guard = field_guard(&served, &self.clock);
         Ok(EngineResources::new(
             Arc::clone(&self.engine),
             Arc::clone(&served.meta),
             Arc::clone(&self.clock),
             Arc::clone(&self.actor),
         )
-        .with_delegates(self.delegates.clone()))
+        .with_delegates(self.delegates.clone())
+        .with_field_guard(guard, Arc::clone(&self.principals)))
+    }
+}
+
+/// The field guard's sinks: a record names who, what and through which door, never a value.
+struct GuardSinks;
+
+impl spot_field_guard::TraceSink for GuardSinks {
+    fn offer(&self, record: spot_field_guard::FieldAccessRecord) -> spot_field_guard::Offer {
+        tracing::info!(
+            target: "spot::audit::field_access",
+            who = %record.who,
+            doctype = %record.doctype,
+            field = %record.field,
+            via = record.via.as_str(),
+            authorised = record.authorised,
+            "field access"
+        );
+        spot_field_guard::Offer::Accepted
+    }
+}
+
+impl spot_field_guard::AuditSink for GuardSinks {
+    fn offer(&self, _record: spot_field_guard::AuditRecord) -> spot_field_guard::Offer {
+        tracing::info!(target: "spot::audit::field_guard", "field guard record");
+        spot_field_guard::Offer::Accepted
+    }
+}
+
+/// The field guard over one served snapshot: its decision core and its protection facts. The
+/// list path, the link lookup and (through [`LiveProtection`]) the realtime bridge all read the
+/// same snapshot, so they agree on what is protected.
+#[must_use]
+pub fn field_guard(
+    served: &Served,
+    clock: &Arc<dyn spot_core::Clock>,
+) -> Arc<spot_field_guard::FieldGuard> {
+    Arc::new(spot_field_guard::FieldGuard::new(
+        Arc::clone(&served.decision),
+        Arc::new(spot_field_guard::MetaProtection::new(&served.meta))
+            as Arc<dyn spot_field_guard::ProtectionSource>,
+        Arc::new(GuardSinks),
+        Arc::new(GuardSinks),
+        Arc::clone(clock),
+    ))
+}
+
+/// The protection facts of the metadata served now, read on every call, so a field protected by a
+/// customisation swapped in while the server runs is protected on the very next notice. An
+/// unknown DocType, or a site with nothing served, answers `None`, which the guard treats as
+/// "release nothing".
+pub struct LiveProtection {
+    live: Arc<SiteLive>,
+}
+
+impl LiveProtection {
+    /// A source over `live`.
+    #[must_use]
+    pub fn new(live: Arc<SiteLive>) -> Self {
+        Self { live }
+    }
+}
+
+impl spot_field_guard::ProtectionSource for LiveProtection {
+    fn protection(&self, doctype: &str) -> Option<Arc<spot_field_guard::DocProtection>> {
+        let served = self.live.served()?;
+        spot_field_guard::MetaProtection::new(&served.meta).protection(doctype)
+    }
+}
+
+/// The platform link lookup, built per call over the metadata served now, with the title behind
+/// the field guard (WP-SEC-04.T6, installed by WP-SEC-04.T14). A lookup typed against a protected
+/// title answers like a plain miss; when nothing can be served the call fails, never an unguarded
+/// answer.
+pub struct LiveLookup {
+    pub(crate) live: Arc<SiteLive>,
+    pub(crate) engine: Arc<GuardedEngine>,
+    pub(crate) clock: Arc<dyn spot_core::Clock>,
+    pub(crate) actor: Arc<spot_api_services::engine_resources::ActorResolver>,
+    pub(crate) principals: Arc<dyn PrincipalSource>,
+}
+
+impl LookupService for LiveLookup {
+    fn search<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        field: &'a str,
+        request: &'a LookupRequest,
+    ) -> BoxFuture<'a, Result<LookupPage, ApiError>> {
+        Box::pin(async move {
+            let served = self.live.current()?;
+            let guard = field_guard(&served, &self.clock);
+            EngineLookup::new(
+                Arc::clone(&self.engine),
+                Arc::clone(&served.meta),
+                Arc::clone(&self.clock),
+                Arc::clone(&self.actor),
+                ListFieldGuard::new(guard, Arc::clone(&self.principals)),
+            )
+            .search(ctx, doctype, field, request)
+            .await
+        })
     }
 }
 

@@ -163,3 +163,23 @@ explanation_key = "error.iam_scim.internal"
 params = []
 remedy = "Report this to the platform team with the request id."
 since = "0.1.0"
+
+# Raised by the hosting module (spot-cli `services/scim.rs`, WP-IAM-06.T2), not by the core.
+
+[[entry]]
+code = "iam_scim.unavailable"
+class = "none"
+summary = "The directory could not be read or written, or a concurrent change won the race (HTTP 503 with Retry-After); nothing was written."
+explanation_key = "error.iam_scim.unavailable"
+params = []
+remedy = "Repeat the request after the Retry-After interval; the identity provider's own retry does this."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_scim.vault_missing"
+class = "none"
+summary = "The site has no secrets vault, so a SCIM credential cannot be verified or issued and every SCIM call fails closed (HTTP 503)."
+explanation_key = "error.iam_scim.vault_missing"
+params = []
+remedy = "Configure [services.secrets] with a key file and restart the host; there is no plaintext fallback."
+since = "0.1.0"

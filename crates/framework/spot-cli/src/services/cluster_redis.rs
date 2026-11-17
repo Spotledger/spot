@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use futures_core::Stream;
 use serde::Deserialize;
-use spot_cache::CacheStore;
+use spot_cache::{BoxLoader, Bytes, CacheFuture, CacheResult, CacheStats, CacheStore, Ttl};
 use spot_cluster_redis::{
     DEFAULT_NAMESPACE, RedisBus, RedisCacheStore, RedisConfig, RedisConnection, RedisCoordinator,
 };
@@ -822,6 +822,426 @@ impl Stream for Merged {
     }
 }
 
+// ---- The cache decorator: a read after an outage never sees a pre-outage entry
+
+/// The least time between two liveness probes made by the cache gate while the server is down.
+const GATE_RETRY: Duration = Duration::from_millis(250);
+
+/// Wraps the Redis [`CacheStore`] so no call between a reconnect and the supervisor's next probe
+/// is answered from a namespace that may hold entries cached before the outage.
+///
+/// The Redis cache is lossy by design: a lost server is a miss, not an error, so no call can
+/// *report* an outage. The decorator therefore reads the plugin's [`Status`]: once the supervisor
+/// has seen the server down, the site is marked "needs reset"; the first call after that checks
+/// the server (at most every 250 ms while it is down, so an outage adds no latency to each call)
+/// and, when it answers, clears the site's namespace **before** serving the call (which then
+/// reads an empty namespace: a miss). The supervisor's probe stays the second path, and the two
+/// never reset twice (whoever flips `connected` back to `true` first resets).
+pub struct ResetOnRecovery {
+    inner: Arc<dyn CacheStore>,
+    connection: RedisConnection,
+    status: Arc<Status>,
+    site: SiteId,
+    clock: Arc<dyn Clock>,
+    needs_reset: AtomicBool,
+    /// The supervisor's reset count when the outage was first seen: a later count means the
+    /// probe already cleared the namespace and the gate owes nothing.
+    marked_at: AtomicU64,
+    last_try_ms: AtomicU64,
+}
+
+impl ResetOnRecovery {
+    /// Wraps `inner` for `site`.
+    pub fn new(
+        inner: Arc<dyn CacheStore>,
+        connection: RedisConnection,
+        status: Arc<Status>,
+        site: SiteId,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            inner,
+            connection,
+            status,
+            site,
+            clock,
+            needs_reset: AtomicBool::new(false),
+            marked_at: AtomicU64::new(0),
+            last_try_ms: AtomicU64::new(0),
+        }
+    }
+
+    /// Whether a reset is owed (a known outage that has not been cleared yet).
+    pub fn reset_owed(&self) -> bool {
+        self.needs_reset.load(Ordering::SeqCst) || !self.status.connected()
+    }
+
+    async fn gate(&self) {
+        if !self.status.connected() && !self.needs_reset.swap(true, Ordering::SeqCst) {
+            self.marked_at
+                .store(self.status.cache_resets(), Ordering::SeqCst);
+        }
+        if !self.needs_reset.load(Ordering::SeqCst) {
+            return;
+        }
+        if self.status.cache_resets() != self.marked_at.load(Ordering::SeqCst) {
+            // The supervisor's probe saw the server back and cleared the namespace first.
+            self.needs_reset.store(false, Ordering::SeqCst);
+            return;
+        }
+        let now_ms = u64::try_from(self.clock.monotonic().as_millis()).unwrap_or(u64::MAX);
+        let last = self.last_try_ms.load(Ordering::SeqCst);
+        let retry_ms = u64::try_from(GATE_RETRY.as_millis()).unwrap_or(250);
+        if last != 0 && now_ms.saturating_sub(last) < retry_ms {
+            return;
+        }
+        self.last_try_ms.store(now_ms.max(1), Ordering::SeqCst);
+        if self.connection.ping().await.is_err() {
+            return;
+        }
+        // The first caller to see the server back clears the namespace; the others wait on the
+        // same decision through the flag and then read the cleared namespace.
+        if self.needs_reset.swap(false, Ordering::SeqCst) {
+            self.inner.clear_site(&self.site).await;
+            self.status.set_connected(true);
+            self.status.cache_resets.fetch_add(1, Ordering::SeqCst);
+            metrics::counter!(metric::CACHE_RESETS_TOTAL).increment(1);
+            tracing::info!(site = %self.site, "coordination server is back; cache namespace reset before the next read");
+        }
+    }
+}
+
+impl CacheStore for ResetOnRecovery {
+    fn get<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Option<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.get(site, key).await
+        })
+    }
+
+    fn set<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        value: Bytes,
+        ttl: Option<Duration>,
+    ) -> CacheFuture<'a, CacheResult<()>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.set(site, key, value, ttl).await
+        })
+    }
+
+    fn set_nx<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        value: Bytes,
+        ttl: Option<Duration>,
+    ) -> CacheFuture<'a, CacheResult<bool>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.set_nx(site, key, value, ttl).await
+        })
+    }
+
+    fn delete<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, bool> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.delete(site, key).await
+        })
+    }
+
+    fn exists<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, bool> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.exists(site, key).await
+        })
+    }
+
+    fn expire<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        ttl: Duration,
+    ) -> CacheFuture<'a, bool> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.expire(site, key, ttl).await
+        })
+    }
+
+    fn ttl<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, Ttl> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.ttl(site, key).await
+        })
+    }
+
+    fn incr_by<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        delta: i64,
+    ) -> CacheFuture<'a, CacheResult<i64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.incr_by(site, key, delta).await
+        })
+    }
+
+    fn delete_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.delete_prefix(site, prefix).await
+        })
+    }
+
+    fn clear_site<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, ()> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.clear_site(site).await
+        })
+    }
+
+    fn get_or_load<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        ttl: Option<Duration>,
+        loader: BoxLoader,
+    ) -> CacheFuture<'a, CacheResult<Bytes>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.get_or_load(site, key, ttl, loader).await
+        })
+    }
+
+    fn stats<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, CacheStats> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.stats(site).await
+        })
+    }
+
+    fn hset<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        field: &'a str,
+        value: Bytes,
+    ) -> CacheFuture<'a, CacheResult<bool>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hset(site, key, field, value).await
+        })
+    }
+
+    fn hget<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        field: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Option<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hget(site, key, field).await
+        })
+    }
+
+    fn hdel<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        fields: &'a [&'a str],
+    ) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hdel(site, key, fields).await
+        })
+    }
+
+    fn hgetall<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Vec<(String, Bytes)>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hgetall(site, key).await
+        })
+    }
+
+    fn hexists<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        field: &'a str,
+    ) -> CacheFuture<'a, CacheResult<bool>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hexists(site, key, field).await
+        })
+    }
+
+    fn hlen<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hlen(site, key).await
+        })
+    }
+
+    fn hincr_by<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        field: &'a str,
+        delta: i64,
+    ) -> CacheFuture<'a, CacheResult<i64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.hincr_by(site, key, field, delta).await
+        })
+    }
+
+    fn lpush<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        values: &'a [Bytes],
+    ) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.lpush(site, key, values).await
+        })
+    }
+
+    fn rpush<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        values: &'a [Bytes],
+    ) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.rpush(site, key, values).await
+        })
+    }
+
+    fn lpop<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Option<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.lpop(site, key).await
+        })
+    }
+
+    fn rpop<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Option<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.rpop(site, key).await
+        })
+    }
+
+    fn lrange<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        start: i64,
+        stop: i64,
+    ) -> CacheFuture<'a, CacheResult<Vec<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.lrange(site, key, start, stop).await
+        })
+    }
+
+    fn llen<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.llen(site, key).await
+        })
+    }
+
+    fn ltrim<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        start: i64,
+        stop: i64,
+    ) -> CacheFuture<'a, CacheResult<()>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.ltrim(site, key, start, stop).await
+        })
+    }
+
+    fn sadd<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        members: &'a [Bytes],
+    ) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.sadd(site, key, members).await
+        })
+    }
+
+    fn srem<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        members: &'a [Bytes],
+    ) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.srem(site, key, members).await
+        })
+    }
+
+    fn smembers<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+    ) -> CacheFuture<'a, CacheResult<Vec<Bytes>>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.smembers(site, key).await
+        })
+    }
+
+    fn sismember<'a>(
+        &'a self,
+        site: &'a SiteId,
+        key: &'a str,
+        member: &'a [u8],
+    ) -> CacheFuture<'a, CacheResult<bool>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.sismember(site, key, member).await
+        })
+    }
+
+    fn scard<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, CacheResult<u64>> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.scard(site, key).await
+        })
+    }
+}
+
 // ---- The service and the assembly
 
 /// The supervisor: probes the server on an interval, keeps [`Status`] and the gauge current and,
@@ -860,6 +1280,11 @@ impl Service for ClusterRedis {
         // The site keeps serving reads without it; the jobs and scheduler fail closed through the
         // coordinator, and `Status` says what is degraded.
         Level::Optional
+    }
+
+    fn degraded(&self) -> Option<String> {
+        // In memory only; the reason names no key, URL, address or credential.
+        self.status.degraded_reason()
     }
 
     fn check(&self) -> CheckFuture<'_> {
@@ -951,7 +1376,16 @@ pub async fn build(settings: &Settings, site: &SiteId, clock: Arc<dyn Clock>) ->
         Arc::clone(&status),
         Arc::clone(&clock),
     ));
-    let cache: Arc<dyn CacheStore> = Arc::new(RedisCacheStore::with_default(connection.clone()));
+    let raw_cache: Arc<dyn CacheStore> =
+        Arc::new(RedisCacheStore::with_default(connection.clone()));
+    // The site reads through the decorator; the supervisor resets through the raw store.
+    let cache: Arc<dyn CacheStore> = Arc::new(ResetOnRecovery::new(
+        Arc::clone(&raw_cache),
+        connection.clone(),
+        Arc::clone(&status),
+        site.clone(),
+        Arc::clone(&clock),
+    ));
     let bus: Arc<dyn InvalidationBus> = Arc::new(FallbackBus::new(
         Arc::new(RedisBus::new(connection.clone())),
         Arc::clone(&status),
@@ -960,7 +1394,7 @@ pub async fn build(settings: &Settings, site: &SiteId, clock: Arc<dyn Clock>) ->
     let service = Arc::new(ClusterRedis {
         connection,
         site: site.clone(),
-        cache: Arc::clone(&cache),
+        cache: raw_cache,
         status: Arc::clone(&status),
         interval: validated.probe_interval,
     });

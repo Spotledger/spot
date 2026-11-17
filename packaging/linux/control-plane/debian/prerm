@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+# Nothing is stopped here; an upgrade restarts a running service once, in postinst.
+#DEBHELPER#
+
+exit 0

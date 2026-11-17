@@ -7,6 +7,8 @@
 use std::fmt;
 
 use spot_auth::{PasswordHash, StoredDigest, TokenDigest, TotpSecret};
+use spot_core::Audience;
+use spot_iam_directory::UserType;
 use spot_storage_contract::RecordId;
 use time::OffsetDateTime;
 
@@ -54,6 +56,31 @@ impl UserState {
     }
 }
 
+/// Parses the `user.user_type` select value. `None` for anything else: a user whose type cannot
+/// be read is refused (fail closed), never treated as a default type.
+#[must_use]
+pub fn parse_user_type(text: &str) -> Option<UserType> {
+    match text {
+        "internal" => Some(UserType::Internal),
+        "portal" => Some(UserType::Portal),
+        "service" => Some(UserType::Service),
+        "agent" => Some(UserType::Agent),
+        _ => None,
+    }
+}
+
+/// The audience a session for a user of this type is issued for (ADR-083 Barrier 1). The match
+/// is exhaustive with no wildcard arm, so a new user type fails to compile until it is decided
+/// here. Only `Staff` and `Partner` can result: the staff login path never issues `Consumer`
+/// (the consumer-plane login service is the only issuer of that audience).
+#[must_use]
+pub fn audience_for(user_type: UserType) -> Audience {
+    match user_type {
+        UserType::Internal | UserType::Service | UserType::Agent => Audience::Staff,
+        UserType::Portal => Audience::Partner,
+    }
+}
+
 /// A user as the sign-in service needs it, including credential material.
 ///
 /// Not `Clone` on purpose: the credential fields are secret-class and must not be duplicated.
@@ -68,6 +95,9 @@ pub struct UserRecord {
     pub full_name: String,
     /// The lifecycle state.
     pub state: UserState,
+    /// What kind of principal the user is (immutable by ADR-083 Barrier 4); read live at every
+    /// lookup, never copied onto the session.
+    pub user_type: UserType,
     /// The stored Argon2id hash, when the user has a password.
     pub password_hash: Option<PasswordHash>,
     /// The enrolled TOTP secret, when the user has a second factor.
@@ -86,6 +116,7 @@ impl fmt::Debug for UserRecord {
             .field("email", &self.email)
             .field("full_name", &self.full_name)
             .field("state", &self.state)
+            .field("user_type", &self.user_type)
             .field(
                 "password_hash",
                 &self.password_hash.as_ref().map(|_| "Secret(***)"),
@@ -136,6 +167,9 @@ pub struct KeyRecord {
     pub state: KeyState,
     /// The instant it stops working, when one was set.
     pub expires_at: Option<OffsetDateTime>,
+    /// The key is scoped for the SCIM provisioning endpoint: it is that endpoint's credential and
+    /// no credential of the native API.
+    pub scim_only: bool,
 }
 
 impl fmt::Debug for KeyRecord {

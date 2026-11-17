@@ -1,0 +1,33 @@
+[package]
+name = "spot-sync-policy-host"
+description = "Sync policy hosted (WP-RTB-02.T8, ADR-063): the policy view built from a metadata generation with the lints run at load, a refused generation keeping the previous one serving with the reason visible, fail-closed routing decisions (what may leave a node, who may edit master data), and the readiness line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The model, the lints and `verify` (resolve + lint at load).
+spot-sync-policy = { path = "../spot-sync-policy" }
+# `EffectiveMeta`: the metadata generation a policy is resolved against.
+spot-meta = { path = "../spot-meta" }
+# `DestinationScope`, `Destination`: what the hub relay takes per destination.
+spot-sync-hub = { path = "../spot-sync-hub" }
+# `ScopeKeysOf`, `PolicyBook`, `PolicyRedactor`, `MasterScope`: the adapters the providers feed.
+spot-sync-hub-adapters = { path = "../spot-sync-hub-adapters" }
+# `Subscription`, `ScopeKey`: the destination's entitlement.
+spot-sync-master = { path = "../spot-sync-master" }
+# `RecordKey` and the `Redactor` seam.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# `NodeReport`: what a destination reports at its handshake.
+spot-sync-skew = { path = "../spot-sync-skew" }
+# Images are JSON values.
+serde_json = "1"
+
+[dev-dependencies]
+# `NodeId`, the subscription's node.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+
+[lints]
+workspace = true

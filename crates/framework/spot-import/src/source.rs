@@ -141,7 +141,7 @@ pub struct Row {
 ///
 /// The rows borrow their source (the XLSX cell reader borrows the open workbook), so one
 /// stream exists per source at a time and the source stays the stream's owner.
-pub type BoxedRows<'a> = Box<dyn Iterator<Item = Result<Row, ImportError>> + 'a>;
+pub type BoxedRows<'a> = Box<dyn Iterator<Item = Result<Row, ImportError>> + Send + 'a>;
 
 /// A streaming source of rows for one file.
 ///

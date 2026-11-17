@@ -34,8 +34,11 @@ pub const MANIFEST: &str = include_str!("../../../../apps/platform/app.toml");
 pub mod doctype {
     /// A person, service or agent that can sign in.
     pub const USER: &str = "user";
-    /// Child of `user`: one-time recovery digests.
+    /// Child of `user`: legacy recovery digests. No longer written (the secret path refuses child
+    /// rows); recovery codes live in [`RECOVERY_CODE`] since WP-PLT-02.T10.
     pub const USER_RECOVERY_DIGEST: &str = "user_recovery_digest";
+    /// One single-use second-factor recovery code of a user (WP-PLT-02.T10).
+    pub const RECOVERY_CODE: &str = "recovery_code";
     /// A named set of duties.
     pub const ROLE: &str = "role";
     /// Child of `role`: one duty it includes.
@@ -44,8 +47,12 @@ pub mod doctype {
     pub const ROLE_ASSIGNMENT: &str = "role_assignment";
     /// Child of `role_assignment`: one value restriction.
     pub const ROLE_ASSIGNMENT_SCOPE: &str = "role_assignment_scope";
+    /// An identity-provider group: its SCIM members and the role it gives (WP-IAM-06.T2).
+    pub const GROUP_MAPPING: &str = "group_mapping";
     /// A user's identity at an external provider.
     pub const LINKED_IDENTITY: &str = "linked_identity";
+    /// A pending invitation to sign in (WP-IAM-12.T5).
+    pub const INVITATION: &str = "invitation";
     /// A service credential.
     pub const API_KEY: &str = "api_key";
     /// Child of `api_key`: one scope.
@@ -64,16 +71,23 @@ pub mod doctype {
     pub const WEBHOOK: &str = "webhook";
     /// One delivery attempt of a webhook; written only by the delivery service.
     pub const WEBHOOK_DELIVERY: &str = "webhook_delivery";
+    /// A configured connector to an outside system (WP-INT-05.T3).
+    pub const CONNECTOR: &str = "connector";
+    /// One run of a connector; written only by the connector service (WP-INT-05.T3).
+    pub const CONNECTOR_RUN: &str = "connector_run";
 
     /// Every DocType of the app, parents before their children, sorted otherwise.
-    pub const ALL: [&str; 16] = [
+    pub const ALL: [&str; 21] = [
         USER,
         USER_RECOVERY_DIGEST,
+        RECOVERY_CODE,
         ROLE,
         ROLE_DUTY,
         ROLE_ASSIGNMENT,
         ROLE_ASSIGNMENT_SCOPE,
         LINKED_IDENTITY,
+        INVITATION,
+        GROUP_MAPPING,
         API_KEY,
         API_KEY_SCOPE,
         SESSION,
@@ -83,6 +97,8 @@ pub mod doctype {
         PROPERTY_SETTER,
         WEBHOOK,
         WEBHOOK_DELIVERY,
+        CONNECTOR,
+        CONNECTOR_RUN,
     ];
 }
 
@@ -110,10 +126,12 @@ pub mod role {
     pub const USER_MANAGER: &str = "User Manager";
     /// Reads webhooks and their delivery log (never the signing secret).
     pub const WEBHOOK_MANAGER: &str = "Webhook Manager";
+    /// Reads connectors and their run log (never a credential).
+    pub const INTEGRATION_MANAGER: &str = "Integration Manager";
 }
 
 /// The embedded definitions, in the order of [`doctype::ALL`].
-const DOCTYPE_SOURCES: [(&str, &str); 16] = [
+const DOCTYPE_SOURCES: [(&str, &str); 21] = [
     (
         "user.toml",
         include_str!("../../../../apps/platform/doctypes/user.toml"),
@@ -121,6 +139,10 @@ const DOCTYPE_SOURCES: [(&str, &str); 16] = [
     (
         "user_recovery_digest.toml",
         include_str!("../../../../apps/platform/doctypes/user_recovery_digest.toml"),
+    ),
+    (
+        "recovery_code.toml",
+        include_str!("../../../../apps/platform/doctypes/recovery_code.toml"),
     ),
     (
         "role.toml",
@@ -141,6 +163,14 @@ const DOCTYPE_SOURCES: [(&str, &str); 16] = [
     (
         "linked_identity.toml",
         include_str!("../../../../apps/platform/doctypes/linked_identity.toml"),
+    ),
+    (
+        "invitation.toml",
+        include_str!("../../../../apps/platform/doctypes/invitation.toml"),
+    ),
+    (
+        "group_mapping.toml",
+        include_str!("../../../../apps/platform/doctypes/group_mapping.toml"),
     ),
     (
         "api_key.toml",
@@ -178,6 +208,14 @@ const DOCTYPE_SOURCES: [(&str, &str); 16] = [
         "webhook_delivery.toml",
         include_str!("../../../../apps/platform/doctypes/webhook_delivery.toml"),
     ),
+    (
+        "connector.toml",
+        include_str!("../../../../apps/platform/doctypes/connector.toml"),
+    ),
+    (
+        "connector_run.toml",
+        include_str!("../../../../apps/platform/doctypes/connector_run.toml"),
+    ),
 ];
 
 /// The platform DocTypes, parsed from the embedded TOML, in the order of [`doctype::ALL`].
@@ -200,6 +238,8 @@ pub fn permission_texts() -> ModelTexts {
     ModelTexts {
         grants: [
             include_str!("../../../../apps/platform/permissions/grants.toml"),
+            // The disk loader reads `grants.toml`, then every other `*grants.toml` by file name.
+            include_str!("../../../../apps/platform/permissions/connector_grants.toml"),
             include_str!("../../../../apps/platform/permissions/webhook_grants.toml"),
         ]
         .join("\n"),

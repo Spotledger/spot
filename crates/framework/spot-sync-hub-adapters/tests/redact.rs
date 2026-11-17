@@ -126,6 +126,26 @@ fn missing_for_lists_exactly_the_uncovered_entities() {
     assert_eq!(PolicyBook::new().missing_for(&["x".to_owned()]), vec!["x"]);
 }
 
+#[test]
+fn a_row_field_named_like_an_excluded_one_is_gone_from_both() {
+    let image = json!({"f0": "keep", "t0": [{"r0": "x", "r1": "y"}, {"r0": "z"}]});
+    let map = image.as_object().unwrap().clone();
+    let p = policy(&["r0"]);
+    let from_policy = from_document(&outgoing_view(&to_document(&map), &p));
+
+    let b = book("doc", &["r0"]);
+    let r = PolicyRedactor::new(&b);
+    let mut got = image;
+    r.redact_down("doc", &mut got);
+
+    let want = json!({"f0": "keep", "t0": [{"r1": "y"}, {}]});
+    assert_eq!(
+        got, want,
+        "the redactor keeps a row field the policy excludes"
+    );
+    assert_eq!(Value::Object(from_policy), want, "outgoing_view keeps it");
+}
+
 // ---- property: equals outgoing_view through a JSON <-> Document conversion ----
 
 /// A valid UUIDv7 record id made of one repeated byte.
@@ -216,8 +236,11 @@ proptest! {
             proptest::collection::vec(
                 proptest::collection::btree_map("r[0-3]", "[a-z]{0,3}", 0..4), 0..3),
             0..4),
+        // Excluded names are drawn from all three pools: parent fields, child tables and the
+        // field names inside child rows (`r[0-3]`), where the redactor and `outgoing_view` once
+        // disagreed (fixed by WP-SYN-01.T5).
         excluded in proptest::collection::btree_set(
-            prop_oneof!["f[0-5]", "t[0-3]"], 0..5),
+            prop_oneof!["f[0-5]", "t[0-3]", "r[0-3]"], 0..6),
     ) {
         let mut image = Map::new();
         for (k, v) in &fields {
@@ -275,6 +298,7 @@ fn entry(position: u64, entity: &str, id: &str) -> StreamEntry {
         topic: entity.into(),
         major: 1,
         lane: Lane::Bulk,
+        deleted: false,
     }
 }
 

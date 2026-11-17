@@ -20,36 +20,22 @@ use crate::{ensure, failure};
 /// After `secrets`; independent of the other groups' data (it owns its fixture).
 pub const ORDER: u32 = 40;
 
-const BASE: &str = "/api/v1/method/sample/reports";
+const BASE: &str = "/api/v1/method/sample/profile";
+const PUBLIC: &str = "/api/v1/method/sample/public";
+const REPORTS: &str = "/api/v1/method/sample/reports";
 
 pub fn cases() -> Vec<CaseDef> {
     vec![CaseDef::run(
         "function: a_declared_function_is_served_with_its_verbs_schema_limit_and_sign_in_rules",
         "Functions",
-        "a function an app declares is called with `GET` and `POST` as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function is `404`, nobody signed in is `401`, a user the function refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After`",
+        "the functions the sample app ships (`profile/whoami` GET, `profile/greet` POST with an argument schema and a limit, `public/ping` guest GET) are called as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function and a non-guest one asked by nobody are the same `404`, a guest function answers a caller with no credential, a handler that refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After`",
         false,
         |_| Box::pin(a_declared_function_is_served()),
     )]
 }
 
+/// A function of this case's own: the shipped ones cannot show a handler that refuses a user.
 fn register(admin_id: String) {
-    register_function_fn(
-        "sample",
-        "reports",
-        "total",
-        FunctionSpec {
-            limit: None,
-            arguments: Some(json!({
-                "type": "object",
-                "required": ["n"],
-                "properties": {"n": {"type": "integer"}}
-            })),
-        },
-        |call| Box::pin(async move { Ok(json!({"total": call.args["n"]})) }),
-    );
-    register_function_fn("sample", "reports", "stamp", FunctionSpec::default(), |_| {
-        Box::pin(async { Ok(json!({"stamped": true})) })
-    });
     register_function_fn(
         "sample",
         "reports",
@@ -70,21 +56,13 @@ fn register(admin_id: String) {
             })
         },
     );
-    register_function_fn(
-        "sample",
-        "reports",
-        "limited",
-        FunctionSpec {
-            limit: Some((2, Duration::from_secs(600))),
-            arguments: None,
-        },
-        |_| Box::pin(async { Ok(json!({"ok": true})) }),
-    );
 }
 
 async fn a_declared_function_is_served() -> CaseResult {
-    let Some(mut fixture) = Fixture::start().await else {
-        return Err(failure!("the function case could not start its own fixture"));
+    let Some(mut fixture) = Fixture::start_secondary().await else {
+        return Err(failure!(
+            "the function case could not start its own fixture"
+        ));
     };
     let result = run(&fixture).await;
     fixture.finish().await;
@@ -92,30 +70,24 @@ async fn a_declared_function_is_served() -> CaseResult {
 }
 
 async fn run(fixture: &Fixture) -> CaseResult {
+    // The shipped functions are declared by the sample app already; only the refusing one of this
+    // case is added, with a reload (the registry is rebuilt from the manifests on every reload).
     register(fixture.admin_id().to_owned());
     let manifest = fixture.root().join("sample/app.toml");
-    let text = std::fs::read_to_string(&manifest)
+    let mut declared = std::fs::read_to_string(&manifest)
         .map_err(|e| failure!("cannot read {}: {e}", manifest.display()))?;
-    let mut declared = text;
-    for (name, verb) in [
-        ("total", "GET"),
-        ("stamp", "POST"),
-        ("admin_only", "GET"),
-        ("limited", "GET"),
-    ] {
-        declared.push_str(&format!(
-            "\n[[functions]]\nmodule = \"reports\"\nname = \"{name}\"\nhttp = [\"{verb}\"]\n"
-        ));
-    }
+    declared.push_str(
+        "\n[[functions]]\nmodule = \"reports\"\nname = \"admin_only\"\nhttp = [\"GET\"]\n",
+    );
     std::fs::write(&manifest, declared)
         .map_err(|e| failure!("cannot write {}: {e}", manifest.display()))?;
-    spot_cli::request_reload(fixture.root(), fixture.site())
+    tokio::task::block_in_place(|| spot_cli::request_reload_and_wait(fixture.root(), fixture.site()))
         .map_err(|e| failure!("cannot request a reload: {e}"))?;
 
     let admin = fixture.admin();
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let reply = admin.get(&format!("{BASE}/total?n=1")).await?;
+        let reply = admin.get(&format!("{REPORTS}/admin_only")).await?;
         if reply.status == 200 {
             break;
         }
@@ -127,21 +99,32 @@ async fn run(fixture: &Fixture) -> CaseResult {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
-    // GET arguments are read by the schema; a POST body carries `args`.
-    let total = admin.get(&format!("{BASE}/total?n=41")).await?;
-    total.expect(200)?;
+    // The read function answers with the caller's own user id.
+    let whoami = admin.get(&format!("{BASE}/whoami")).await?;
+    whoami.expect(200)?;
     ensure!(
-        total.data()["total"] == json!(41),
-        "the integer argument was not read as an integer: {}",
-        total.text()
+        whoami.data()["user"] == json!(fixture.admin_id()),
+        "whoami did not return the caller's user id: {}",
+        whoami.text()
     );
-    let stamped = admin
-        .send_json("POST", &format!("{BASE}/stamp"), &[], &json!({"args": {}}))
+    // The write function reads its arguments from the body, by its schema.
+    let greeted = admin
+        .send_json(
+            "POST",
+            &format!("{BASE}/greet"),
+            &[],
+            &json!({"args": {"name": "Ama", "formal": true}}),
+        )
         .await?;
-    stamped.expect(200)?;
+    greeted.expect(200)?;
+    ensure!(
+        greeted.data()["greeting"] == json!("Good day, Ama."),
+        "unexpected greeting: {}",
+        greeted.text()
+    );
 
     // A verb the function does not answer: 405 with the `Allow` set.
-    let wrong = admin.get(&format!("{BASE}/stamp")).await?;
+    let wrong = admin.get(&format!("{BASE}/greet")).await?;
     wrong.expect(405)?.expect_error("api.method_not_allowed")?;
     ensure!(
         wrong.error_details()["allow"] == json!("POST"),
@@ -150,41 +133,77 @@ async fn run(fixture: &Fixture) -> CaseResult {
     );
 
     // A bad argument names the problem and never the value.
-    let bad = admin.get(&format!("{BASE}/total?n=SECRET-VALUE-77")).await?;
+    let bad = admin
+        .send_json(
+            "POST",
+            &format!("{BASE}/greet"),
+            &[],
+            &json!({"args": {"name": 12345678}}),
+        )
+        .await?;
     bad.expect(400)?.expect_error("api.invalid_request")?;
     ensure!(
-        !bad.text().contains("SECRET-VALUE-77"),
+        !bad.text().contains("12345678"),
         "the argument value was echoed: {}",
         bad.text()
     );
-    let missing = admin.get(&format!("{BASE}/total")).await?;
+    let missing = admin
+        .send_json("POST", &format!("{BASE}/greet"), &[], &json!({"args": {}}))
+        .await?;
     missing.expect(400)?;
 
-    // Unknown, and nobody signed in.
+    // Unknown is `404`; a non-guest function asked by nobody is the very same answer; a guest
+    // function answers a caller with no credential.
     admin
         .get(&format!("{BASE}/nothing"))
         .await?
         .expect(404)?
         .expect_error("method.not_found")?;
-    fixture
-        .client()
-        .anonymous()
-        .get(&format!("{BASE}/total?n=1"))
+    let anonymous = fixture.client().anonymous();
+    anonymous
+        .get(&format!("{BASE}/whoami"))
         .await?
-        .expect(401)?;
+        .expect(404)?
+        .expect_error("method.not_found")?;
+    let ping = anonymous.get(&format!("{PUBLIC}/ping")).await?;
+    ping.expect(200)?;
+    ensure!(
+        ping.data()["ok"] == json!(true),
+        "the guest function did not answer: {}",
+        ping.text()
+    );
 
-    // A user the function refuses is denied, not served an empty success.
-    admin.get(&format!("{BASE}/admin_only")).await?.expect(200)?;
+    // A handler that refuses a user is denied, not served an empty success.
+    admin
+        .get(&format!("{REPORTS}/admin_only"))
+        .await?
+        .expect(200)?;
     let viewer = fixture.sign_in(VIEWER).await?;
-    let denied = viewer.get(&format!("{BASE}/admin_only")).await?;
+    let denied = viewer.get(&format!("{REPORTS}/admin_only")).await?;
     denied.expect(403)?.expect_error("permission.denied")?;
 
-    // The rate limit: two calls pass, the third is 429 with `Retry-After`.
-    for _ in 0..2 {
-        admin.get(&format!("{BASE}/limited")).await?.expect(200)?;
+    // The rate limit (20 calls per ten minutes on `greet`): the call after the last permit is
+    // `429` with `Retry-After`.
+    let mut limited = None;
+    for _ in 0..25 {
+        let reply = admin
+            .send_json(
+                "POST",
+                &format!("{BASE}/greet"),
+                &[],
+                &json!({"args": {"name": "Ama"}}),
+            )
+            .await?;
+        if reply.status == 429 {
+            limited = Some(reply);
+            break;
+        }
+        reply.expect(200)?;
     }
-    let limited = admin.get(&format!("{BASE}/limited")).await?;
-    limited.expect(429)?.expect_error("api.rate_limited")?;
+    let Some(limited) = limited else {
+        return Err(failure!("the rate limit of `greet` never answered 429"));
+    };
+    limited.expect_error("api.rate_limited")?;
     ensure!(
         limited.header("retry-after").is_some(),
         "a spent rate limit carries no Retry-After: {}",

@@ -47,3 +47,13 @@ pub const ENVIRONMENT_MISMATCH: &str = "promotion.environment_mismatch";
 /// The approval service refused the approval or rejection (unknown author, wrong role, a
 /// claimed role the identity does not hold, or an approver who authored the plan).
 pub const APPROVAL_REFUSED: &str = "promotion.approval_refused";
+
+// The three codes below belong to the durable store (WP-ALM-04.T6). Their catalogue entries live
+// in `promotion_pg.toml`, so they carry that file's prefix.
+
+/// A snapshot names a schema version this build does not read.
+pub const SNAPSHOT_VERSION: &str = "promotion_pg.snapshot_version";
+/// A snapshot is not a valid promotion: unreadable, inconsistent or tampered with.
+pub const SNAPSHOT_INVALID: &str = "promotion_pg.snapshot_invalid";
+/// A save was made against a revision the store no longer holds.
+pub const STALE_SAVE: &str = "promotion_pg.stale_save";

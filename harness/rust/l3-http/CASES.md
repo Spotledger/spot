@@ -7,7 +7,7 @@ per case; a **blocked** case names the work package that owns the missing surfac
 distance between the brief and the product is visible in every run instead of being deleted.
 The pass or fail state is not listed here: the run report carries it.
 
-62 cases, of which 16 are blocked by surfaces the host does not serve yet.
+241 cases, of which 153 are blocked by surfaces the host does not serve yet.
 
 ## Authentication and sessions
 
@@ -97,6 +97,11 @@ The pass or fail state is not listed here: the run report carries it.
 | `meta: a_runtime_created_doctype_is_usable_at_once` | a DocType created at run time is usable at once | blocked: WP-PLT-16.T2: `spot serve` builds metadata from the app directories only and never reads the customisation records |
 | `naming: a_series_is_gapless_under_50_concurrent_creates` | a naming series is gapless under 50 concurrent creates | blocked: WP-DOC-05: the engine renders no name yet; the sample clients supply `code` themselves |
 | `export: a_filtered_export_matches_the_query` | an export under a filter holds the rows the same query lists | blocked: WP-PRD-01.T4: no `/api/v1/export*` route is mounted by the host |
+| `search: a_missing_extension_or_an_unusable_ctype_reports_degraded_with_the_exact_fix` | `/api/health/ready` names the `search` service degraded with the missing prerequisite and the exact fix, and search answers `501 search.unsupported` | blocked: WP-STO-13.T6 (sample DocType with `[search]` and `install_hook` in the host): the `search` service is not mounted for a site whose backend has no search hook |
+| `search: a_protected_field_never_matches_and_a_search_for_it_is_no_oracle` | a value of a protected field never matches, searching for it returns what searching for a string that exists nowhere returns, and naming the field in `search.fields`, `facets` or `snippets` is `403 permission.field_denied` | blocked: WP-STO-13.T6 (sample DocType with `[search]` and `install_hook` in the host): no shipped DocType declares `[search]`, so the `search` clause is `501 search.unsupported` |
+| `search: a_write_is_searchable_in_the_same_request_sequence_and_a_rolled_back_write_leaves_no_projection_row` | create, update and delete a document and the next search sees it; a write that rolls back leaves no projection row; a rebuild after dropping the projection restores identical results | blocked: WP-STO-13.T6 (sample DocType with `[search]` and `install_hook` in the host): no projection is installed in the site's storage |
+| `search: english_and_urdu_recall_and_p95_meet_the_g2_budgets` | on 10,000 listings per tenant a search has recall at 10 of at least 0.90 for English queries and 0.70 for Urdu, and p95 of at most 50 ms (decision G2; the large-runner case, figures from WP-STO-15.T4) | blocked: WP-STO-13.T6 (sample DocType with `[search]` and `install_hook` in the host): `POST /resource/{doctype}/query` with a `search` clause answers `501 search.unsupported` for every shipped DocType |
+| `search: tenant_b_never_sees_tenant_a_rows_and_a_user_never_sees_an_unreadable_row_in_results_facets_or_snippets` | tenant B's search never returns tenant A's rows even for an identical term (the projection tables are per tenant database), and a user who cannot read a row never sees it in results, facet counts or snippets | blocked: WP-STO-13.T6 (sample DocType with `[search]` and `install_hook` in the host): no shipped DocType declares `[search]`, so there is no projection to isolate |
 
 ## Bulk export
 
@@ -111,6 +116,14 @@ The pass or fail state is not listed here: the run report carries it.
 | `reports: hours_by_task_sums_posted_time_entries_per_task_from_a_date_and_is_not_found_for_a_viewer` | `POST /report/hours_by_task/run` as a Project Manager returns one row per Task with the exact decimal sum of its Time Entry hours on or after `from_date`, leaves out an entry dated before it, and is 404 `report.not_found` for a Viewer | case |
 | `reports: the_catalogue_is_served_and_an_unknown_report_is_not_found_for_describe_and_run` | `GET /report` is 200 with a list for a signed-in user and 401 without a credential, and an unknown report is 404 `report.not_found` for `GET /report/{report}` and for `POST /report/{report}/run`, the same answer for a Viewer, never an empty success | case |
 
+## Import
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `import: a_csv_is_dry_run_then_run_with_its_digest_and_the_rows_are_written_as_the_caller` | upload then `POST /import` is 202 with a ready job and a digest, a run with a wrong digest is 409 `import.digest_changed`, a run with the digest writes every good row, reports the bad row with its row and column, and the job ends `done` | case |
+| `import: a_hundred_thousand_rows_import_within_the_budget` | 100,000 rows of a CSV import through dry run and run within the wall-clock budget of WP-DOC-09 (the large-runner case), with exact totals | case |
+| `import: a_job_that_is_not_yours_a_foreign_file_and_an_unsigned_request_fail_closed` | another user's `GET`, `errors`, `run` and `cancel` of a job are `404 document.not_found`, a file id the caller did not upload is `404`, an unsigned request is `401`, and a Viewer without the import right is `403 import.right_missing` | case |
+
 ## Sessions
 
 | Case | Pins | Kind |
@@ -118,11 +131,86 @@ The pass or fail state is not listed here: the run report carries it.
 | `sessions: a_first_sign_in_session_and_a_bearer_secret_cannot_manage_sessions` | `GET /auth/sessions` and `DELETE /auth/sessions/{id}` from a session that has not chosen its password are 403, never an empty list; the one-time secret as a bearer and an unsigned request are 401; reading the session with a refused bearer is not a 500 (the API-key refusal itself, `403 permission.denied`, is pinned in `spot-cli`'s `tests/session.rs`) | case |
 | `sessions: a_user_lists_and_ends_only_their_own_sessions_and_a_foreign_id_is_not_found` | `GET /auth/sessions` lists the caller's own live sessions, the current one first, with no token in the answer; `DELETE /auth/sessions/{id}` is 204 for an own session (that token is 401 on the next request, the current one included) and the same 404 `auth.session_not_found` for another user's id as for an unknown one | case |
 
+## Roles snapshot
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `roles_snapshot: a_failing_build_keeps_the_old_snapshot_and_degrades_the_site` | with the role records unreadable the node keeps serving under the previous snapshot, readiness reports degraded with `roles_host.source_unavailable`, and no request is allowed that the old snapshot denied | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs a fault point on the RoleSource adapter |
+| `roles_snapshot: a_grant_on_node_1_is_effective_on_node_2_within_the_refresh_bound` | an assignment written through node 1 is in force on node 2 within `services.roles.refresh_seconds` (default 5 seconds) | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs a two-node fixture |
+| `roles_snapshot: a_role_of_another_tenant_answers_like_a_missing_one` | `GET /identity/roles/{id}` with a role id of another tenant is the same 404 `identity.not_found` as an unknown id | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs the identity group mounted over this host module (WP-IAM-12.T2) |
+| `roles_snapshot: a_time_boxed_assignment_ends_at_the_second_on_every_node` | an assignment with `valid_to` stops granting at that second on both nodes without a restart | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs a two-node fixture with a controllable clock |
+| `roles_snapshot: an_in_flight_request_keeps_the_snapshot_it_started_with` | a request that started before a revoke finishes under the snapshot it started with; the next request sees the new one | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs the engine's authoriser to read the published snapshot (the engine reads stored assignments per request today) |
+| `roles_snapshot: an_upgrade_shows_a_diff_and_changes_no_copy` | `GET /identity/roles/{id}/upgrade-diff` lists what a newer reference role adds and removes and a customised copy is byte-identical afterwards | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs a reference pack upgrade fixture |
+| `roles_snapshot: one_user_is_manager_for_company_a_and_viewer_for_company_b_and_sees_only_that` | a user holding Manager scoped to Company A and Viewer scoped to Company B reads and writes Company A documents and only reads Company B ones | blocked: WP-IAM-03.T2 follow-up: the PostgreSQL RoleSource adapter and the two-node fixture: needs the stored role and role_assignment records behind a RoleSource |
+
+## Assignment rules
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `assignment_rules: a_bad_rule_is_isolated` | a rule that fails validation is reported and the other rules keep running | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the adapter |
+| `assignment_rules: a_cross_tenant_rule_run_is_refused` | preview and run for another tenant answer like a missing resource | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the identity group mounted |
+| `assignment_rules: a_manual_assignment_of_the_same_role_is_untouched` | ending the rule's assignment leaves a manual assignment of the same role in force | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the RuleStore adapter |
+| `assignment_rules: a_rule_grants_on_a_field_change_and_revokes_when_it_reverts` | a rule-sourced assignment appears when the user's field changes and ends when it reverts | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the RuleStore adapter |
+| `assignment_rules: an_idp_managed_role_refuses_a_manual_edit` | a manual edit of an IdP-managed role is refused | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the identity group (WP-IAM-12.T2) and the adapter |
+| `assignment_rules: expiry_fires_once_across_a_restart` | an assignment's end event is raised once, also after the node restarts | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the adapter and a restartable host |
+| `assignment_rules: the_bulk_guard_holds_a_large_removal` | a rule edit that would end more than 25 percent of a role's assignments is held until its previewed digest is run | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the adapter |
+| `assignment_rules: the_sod_gate_blocks_a_conflicting_rule_grant` | a rule that would create a segregation-of-duties conflict is reported and applies nothing | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs the governance host |
+| `assignment_rules: two_nodes_one_reconciler` | with two nodes only the lease holder reconciles; the other stops at once when it loses the lease | blocked: WP-IAM-04.T3 follow-up: the PostgreSQL RuleStore adapter and the two-node fixture: needs a two-node fixture |
+
+## Offline identity
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `offline_identity: a_reduction_raises_the_epoch_and_the_stale_node_is_reported` | reducing a user's access raises the epoch of the next snapshot; a node still holding the old epoch shows in readiness and in the needs-you list | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs a hub and an edge |
+| `offline_identity: a_replayed_journal_does_not_duplicate_quarantine_items` | the same journal position arriving twice leaves one quarantine item | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs the sync carrier |
+| `offline_identity: a_snapshot_built_from_a_seeded_role_matrix_matches_the_live_decisions` | the permission snapshot issued to a node says exactly what the live role snapshot decides for each user the node serves | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs a hub and an edge and the HubFacts provider |
+| `offline_identity: a_snapshot_of_another_tenant_answers_like_a_missing_one` | a node of tenant A asking for a snapshot or reporting an epoch for tenant B is refused exactly like an unknown node | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs two tenants on one hub |
+| `offline_identity: an_offline_write_by_a_user_revoked_after_issue_is_quarantined_on_arrival` | a write made offline under epoch N by a user revoked at epoch N+1 is quarantined when it reaches the hub, visible in the quarantine list, never dropped | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs the sync carrier and the quarantine queue on the hub |
+| `offline_identity: every_entry_point_honours_an_expired_lease` | with an expired lease the API, realtime, jobs, scripts, controllers and management entry points all refuse the offline decision | blocked: WP-IAM-09.T4 follow-up: the HubFacts provider, the issuer and the entry-point wiring: needs the entry points to call decide_at (their files are owned by other tasks) |
+
+## Access review
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `access_review: a_campaign_of_another_tenant_answers_like_a_missing_one` | a campaign id of another tenant is the same answer as an unknown id | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs the review routes mounted |
+| `access_review: a_campaign_runs_from_open_to_close_and_a_removed_user_loses_access_on_both_nodes` | keep and remove decisions complete the campaign and the removed user loses the access at once on both nodes | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs a two-node fixture |
+| `access_review: a_restart_in_the_middle_of_a_campaign_loses_nothing` | after a restart the open campaign and its pending removals continue | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs a restartable host |
+| `access_review: an_override_stops_covering_at_its_expiry` | an SoD override covers one rule, user and scope and stops at its expiry | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs the env adapter |
+| `access_review: seeded_conflict_matrix_is_detected` | the seeded SoD conflict matrix is found by the nightly and the on-change analysis | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs the env adapter |
+| `access_review: self_review_is_refused` | a reviewer cannot decide an item about themselves and the owner cannot decide others' items | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs the env adapter |
+| `access_review: the_deadline_escalates_or_removes_exactly_as_the_policy_says` | at the deadline undecided items follow the policy and nothing else | blocked: WP-SEC-02.T4 follow-up: the ReviewEnv adapter, the PG stores in the site and the two-node fixture: needs a controllable clock |
+
 ## The event stream
 
 | Case | Pins | Kind |
 | --- | --- | --- |
 | `events: a_consumer_reads_in_order_acknowledges_replays_and_denies_a_viewer` | `/events/consumers` put, pull (a repeat returns the same events), ack, restart from the beginning replays; a Viewer's `GET /events/consumers` is 403 `permission.denied`, not an empty list | case |
+
+## Governance attacks
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `governance_attacks: a_closed_campaign_takes_no_more_decisions` | governance_review_item_decide after governance_review_close answers 409 governance.review_closed | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: a_conflicting_grant_is_blocked_with_the_rule_ids_only` | identity_assignment_create for a user who would conflict with a segregation rule answers 409 identity.sod_conflict with details.rule_ids and no other user's data, and no assignment exists afterwards | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the seeded role matrix behind a RoleSource adapter and the routes |
+| `governance_attacks: a_consumer_audience_session_reaches_no_governance_operation` | a consumer-audience session on any governance operation is refused (ADR-083: staff only) with the audience refusal of the contract, never a 200 | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the routes and a consumer session fixture |
+| `governance_attacks: a_cursor_of_another_user_is_refused` | a list cursor issued to one user and presented by another (governance_review_list, governance_emergency_list, governance_grant_request_list) answers 422 governance.invalid with details.fields naming `cursor` and returns no row | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: a_decided_request_cannot_be_decided_again` | a second governance_grant_request_decide for a request already approved or rejected (a replay) answers 409 governance.request_not_pending and changes nothing | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: a_grant_request_id_of_another_tenant_answers_like_a_missing_one` | governance_grant_request_decide with a guessed request id of another tenant answers 404 governance.not_found, byte-identical to an id that never existed | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs a second tenant in the harness and the routes |
+| `governance_attacks: a_requester_cannot_approve_their_own_grant_request` | governance_grant_request_decide by the requester, and by the beneficiary, answers 403 governance.self_approval and the request stays pending | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: a_reviewer_cannot_decide_another_reviewers_item` | governance_review_item_decide on an item whose reviewer is someone else answers 403 governance.not_reviewer and the item is unchanged | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: a_reviewer_cannot_name_themselves_or_forge_an_item` | governance_review_item_decide with a reviewer field in the body, or an item id that is not in the campaign, answers 422 governance.invalid (field path only) or 404 governance.not_found; the reviewer is always the authenticated user | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: an_emergency_session_is_reviewed_by_someone_other_than_its_user` | governance_emergency_create is time-boxed and notifies the named controller; governance_emergency_review by that controller (200) closes the loop; the same call by the beneficiary answers 403 governance.self_approval | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: an_expired_request_cannot_be_decided` | governance_grant_request_decide after the request's expiry answers 409 governance.request_not_pending and no assignment is created | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the routes and a controllable clock |
+| `governance_attacks: an_override_with_a_reason_and_a_control_lets_exactly_that_grant_through_until_it_expires` | governance_sod_override_create (201) for one rule, user and scope with a reason and a mitigating control lets the same identity_assignment_create succeed; another user, another scope and the same grant after the expiry answer 409 identity.sod_conflict again | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the seeded role matrix behind a RoleSource adapter and the routes |
+| `governance_attacks: an_override_without_a_control_or_a_reason_or_an_expiry_is_refused` | governance_sod_override_create without the mitigating control, without the reason, or without an expiry answers 422 governance.override_invalid and stores nothing | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: every_governance_operation_answers_a_cross_tenant_id_like_a_missing_one` | each governance operation that takes an id answers 404 governance.not_found for an id of another tenant, byte-identical to one that never existed | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs a second tenant in the harness and the routes |
+| `governance_attacks: every_refusal_is_audited_and_names_no_secret_or_other_user` | each refusal above writes an audit record with who, what and the outcome, and no error body, log line or audit record carries a token, a reason text or another user's data | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the routes and the audit chain read back |
+| `governance_attacks: nobody_overrides_a_conflict_of_their_own_account` | governance_sod_override_create naming the caller's own user answers 403 governance.self_approval, audited as a refusal | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: the_assignment_rule_route_cannot_grant_across_a_conflict` | identity_assignment_rules_run for a rule that would give a conflicting role skips that assignment with 409 identity.sod_conflict in its outcome and writes none | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the seeded role matrix behind a RoleSource adapter and the routes |
+| `governance_attacks: the_controller_of_an_emergency_cannot_be_its_beneficiary` | governance_emergency_create naming the caller as controller answers 403 governance.controller_is_beneficiary and creates no access | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the governance and identity routes mounted over the hosted ports (no route serves them yet) |
+| `governance_attacks: the_emergency_route_cannot_grant_across_a_conflict` | governance_emergency_create for a role that conflicts with the beneficiary's own roles answers 409 identity.sod_conflict unless an active override covers it | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the seeded role matrix behind a RoleSource adapter and the routes |
+| `governance_attacks: the_four_access_questions_are_correct_on_the_seeded_matrix` | governance_question_user_permissions, governance_question_who_can, governance_question_who_can_see and governance_question_changes answer exactly what the seeded matrix of roles, scopes and assignments implies, and a user without governance.questions.use gets 403 | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the seeded role matrix behind a RoleSource adapter and the routes |
+| `governance_attacks: the_scim_route_cannot_grant_across_a_conflict` | a SCIM group membership that would give a conflicting role is refused with the SCIM conflict answer (409) and no assignment exists | blocked: WP-IAM-08.T10 follow-up: the governance and identity routes mounted over the hosted ports, and the seeded matrix fixture: needs the SCIM route over the grant gate (the exact SCIM error body is an open question) and the matrix |
 
 ## Secrets
 
@@ -130,8 +218,289 @@ The pass or fail state is not listed here: the run report carries it.
 | --- | --- | --- |
 | `secrets: an_unusable_key_file_makes_the_site_unavailable_and_a_good_one_serves_it_again` | a reload onto a missing key file answers 503 for the whole site (no plaintext fallback), a reload onto a good key file serves again, and no key reaches the server log | case |
 
+## AI audit
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `ai_audit: an_agent_tool_call_over_http_produces_a_chain_entry` | a tool call made by a test agent over HTTP is a verifiable chain entry with agent and acting user | blocked: WP-AI-04.T4: no HTTP route hands an agent action to the AI audit port yet; the MCP server is not mounted in `spot serve` |
+| `ai_audit: an_ai_action_is_chained_once_with_masked_arguments_and_the_chain_verifies` | an action appended through the hosted port is one chain entry per event id, a secret argument is not stored, a viewer with no access sees no timeline entry, and the chain verifies | case |
+| `ai_audit: tampering_with_an_ai_entry_is_found_by_the_audit_verifier` | the scheduled verifier of the audit chain flags an altered AI entry | blocked: WP-SEC-06.T8: the verifier service does not walk the `ai:<site>` scope until WP-SEC-06.T8 lists it |
+| `ai_audit: the_document_timeline_route_merges_ai_entries_for_readers_only` | the document timeline route lists AI entries only for a viewer who may read the document, masked as the document is | blocked: WP-AI-11.T8: no route serves the timeline, and no engine-backed ReadAccess provider exists (the host denies every viewer) |
+
+## Webhook signing secrets
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `webhook_secret: the_signing_secret_is_write_only_fails_closed_without_a_vault_and_is_refused_alike_to_a_viewer` | `PUT /webhooks/{name}/signing-secret` is 501 `service.not_configured` without a vault and 401 unsigned; with one, a Viewer is 403 for a webhook that exists and one that does not, a supplied secret is never echoed, a generated one is shown once with `Cache-Control: no-store`, `GET` shows a fingerprint and no value, and no value is in a document, a list or the server log | case |
+
+## Persistent sign-in
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `login_persistent: a_session_survives_a_reload_and_the_site_file_holds_no_chosen_verifier` | a session started before a reload answers after it with the same token, a signed-out token stays dead after it, and `site.toml` holds no `[[api_keys]]` and no credential that is not a one-time first sign-in secret | case |
+
+## Retention
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `retention: a_dry_run_changes_nothing_and_a_confirmed_run_deletes_exactly_the_plan` | a dry run leaves every record; a run with the confirmed digest deletes exactly the planned items and each has a verifiable proof | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+| `retention: a_hold_added_mid_run_protects_the_held_records` | a legal hold added between batches protects its records from the next batch on | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+| `retention: a_posted_ledger_document_is_never_deleted_by_a_raw_path` | a posted document is deleted only through the document lifecycle | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+| `retention: a_run_killed_mid_way_resumes_without_double_deletion` | a killed run continues from its checkpoint and no record is deleted twice | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+| `retention: a_statutory_floor_beats_a_shorter_rule` | a record inside its statutory period is skipped whatever the rule says | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+| `retention: an_unconfirmed_or_modified_plan_is_refused_and_tenants_stay_apart` | a run without the confirmed digest or with another plan's digest is refused, and tenant B's rule never touches tenant A | blocked: WP-SEC-05.T4: no module provides the production `StoreProvider` (PostgreSQL ledger plus a document-lifecycle record source), so `[services.data_policy]` starts degraded |
+
+## SCIM provisioning
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `scim: scim_is_off_by_default_and_closed_to_any_caller_without_a_scim_key` | `/scim/v2/Users` is 404 until `[services.scim] enabled = true`; then no token, a made-up key, the Administrator's session and a Viewer's session are each 401 with an RFC 7644 error body (`application/scim+json`, status as text, no echo of the credential), and the SCIM base answers the same | case |
+
+## Residency
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `residency: a_replica_a_search_store_and_a_clone_in_a_forbidden_region_are_refused` | the modules that place a replica, an analytics mirror, a search store or a rehearsal clone ask the residency port before placing | blocked: WP-PRD-04.T5: the placing modules do not call the ResidencyCheck port yet (hook sites are listed in the task report) |
+| `residency: a_site_with_a_backup_target_outside_the_policy_refuses_to_start` | a configured backup target in a forbidden or undeclared region stops the site at start-up with the clause named and no region list | blocked: WP-SEC-05.T5: the start-up check is covered by unit tests; the shared fixture has no residency policy or backup target to reload onto |
+| `residency: a_tenant_move_without_the_owner_approval_is_refused` | a cross-region tenant move with no approval, or approved by the requester, is refused and audited | blocked: WP-SEC-05.T5: no HTTP route starts a tenant move on the node |
+
+## Server scripts
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `scripts: a_validate_script_blocks_a_write_on_the_next_request_and_bad_scripts_cannot_be_saved` | a saved `validate` script refuses a Project create with a 422 field error on `title` at once (a title without the marker still saves), disabling it lets the same create through, a source that does not compile is refused on `script` with its line and column, a script for a reserved DocType is refused with `serverscript.record_invalid`, and a Viewer cannot create a script | case |
+
+## Sign-in throttle
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `signin_throttle: the_account_limit_survives_a_reload_refuses_the_right_password_and_treats_unknown_names_alike` | with `[services.signin_throttle]` on, attempts on one account beyond the limit are `api.rate_limited` with Retry-After even with the right password, the refusal survives a reload, another account still signs in, and a name that belongs to nobody is refused after the same number of attempts | case |
+
+## Data policy attacks
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `data_policy_attacks: a_deletion_proof_verifies_against_the_chain_and_one_flipped_byte_fails` | the proof from security_retention_proof_list matches the retention.proof chain entry; flipping one byte of the proof makes verification fail and the verifier names the entry | blocked: WP-SEC-05.T4: no production retention store provider exists, so no proof is produced over HTTP |
+| `data_policy_attacks: a_hold_created_between_preview_and_run_protects_the_record` | a hold created after the dry run and before the confirmed run leaves its record in place, and the outcome row says legal_hold | blocked: WP-SEC-05.T4: no production retention store provider exists |
+| `data_policy_attacks: a_real_retention_run_without_the_digest_is_refused_at_the_edge` | POST security_retention_run_create with dry_run=false and no plan_digest answers 422 security.plan_required before the port, deletes nothing, and the refusal is audited | blocked: WP-SEC-05.T6: the data-policy operations are not registered in the route registry (WP-SEC-05.T6 mounts them by hand) |
+| `data_policy_attacks: a_retention_kill_switch_stops_a_run_within_one_batch_over_http` | stopping the retention job mid-run leaves the remaining records and a checkpoint, and the next run continues without deleting a record twice | blocked: WP-SEC-05.T4: no production retention store provider exists, and the administrator kill operation is not routed |
+| `data_policy_attacks: a_revoked_node_is_refused_its_next_release_and_the_group_epoch_advances` | after security_node_key_revoke the node's next key-release request is refused, the protected group's key epoch is higher, and the revocation is audited | blocked: WP-SEC-10.T6: no engine write/read seam: a protected field cannot be written on a node, so no key release exists to refuse |
+| `data_policy_attacks: a_run_with_another_tenants_digest_or_a_modified_plan_is_refused` | a digest minted for tenant B answers the same 404-shaped envelope as a missing plan, a digest of a modified plan is refused, and no record of either tenant is deleted | blocked: WP-SEC-05.T4: no production retention store provider exists, so no plan can be minted over HTTP |
+| `data_policy_attacks: every_placement_path_reachable_over_http_refuses_a_forbidden_region` | with a policy allowing one region, security_residency_check and each reachable placement answer a refusal naming the clause and no region list; an undeclared destination is refused | blocked: WP-SEC-05.T5: security_residency_check is not registered and the placing modules do not call the ResidencyCheck port yet |
+| `data_policy_attacks: no_response_body_in_any_case_contains_key_material` | every response body of every case above is scanned for key, secret, seed, private or wrapped-key fields and for the key text of the node's key file: none appears | blocked: WP-SEC-05.T6: the data-policy operations are not registered in the route registry (WP-SEC-05.T6 mounts them by hand) |
+| `data_policy_attacks: only_an_administrator_starts_a_run_or_creates_and_releases_a_hold` | a Team Member and a Viewer get 403 on run create, hold create and hold delete; the administrator succeeds; a released hold is audited with who released it | blocked: WP-SEC-05.T6: the data-policy operations are not registered in the route registry (WP-SEC-05.T6 mounts them by hand) |
+
+## Single logout
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `sso_logout: garbage_logout_messages_are_refused_alike_and_without_detail` | the logout receivers need no session, refuse a garbage, empty or oversized token and a malformed SAML request with `sso.logout_rejected`, and answer an unknown provider exactly like a bad token | case |
+
+## Second factor
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `totp: a_user_enrols_signs_in_with_the_code_and_removes_the_factor` | enrol shows the secret once and uncached, a wrong confirm code is `auth.totp_invalid`, confirm answers recovery codes, sign-in then needs a code, a code works once per step, a recovery code works once, enrolling again and a disable with a wrong code are refused, and a disable with the password and a code removes the factor | case |
+
+## Outbound webhooks
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `webhooks: a_delivery_to_a_refused_address_dead_letters_without_payload_or_url` | a webhook on `project` create aimed at a loopback address with `max_attempts = 1` leaves one `webhook_delivery` row in `dead_letter` with a non-empty `error_class` and no status code, and the row and the server log carry neither the target URL nor the project's title | case |
+
+## Sign-in policy
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `signin_policy: required_sso_refuses_passwords_except_break_glass_and_an_unreadable_policy_refuses_everyone` | under `sso_required` a password sign-in is refused with `sso.required` except for the break-glass administrators, a third administrator is refused, and a policy that cannot be read refuses everyone | blocked: WP-IAM-05.T10: no module implements SsoAdminPort (the policy admin route is unserved) and none provides a PolicySource for the sign-in policy service |
+
+## Single sign-on
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `sso_attacks: every_attack_case_is_refused_with_its_exact_code_and_leaves_no_session` | tampered or replayed state, foreign binding, replayed code, wrong nonce, alg none, HMAC with the public key, wrong audience, expiry, SAML wrapping, assertion replay, InResponseTo mismatch, open redirect, cross-tenant identity, consumer provider on a staff user, SSRF through discovery, and a downgrade to password are each refused | blocked: WP-IAM-05.T11: needs the same production ports as the happy path; the library-level cases run in spot-sso's tests |
+| `sso_attacks: oidc_and_saml_sign_in_work_end_to_end_against_a_stub_identity_provider` | a stub OIDC and a stub SAML identity provider sign a person in end to end, including linking by invitation and just-in-time creation without roles | blocked: WP-IAM-05.T11: spot serve has no production SsoIdentityPort, SsoSecrets or SAML provider store, so a sign-in cannot complete |
+| `sso_attacks: sso_required_refuses_passwords_except_the_two_break_glass_administrators` | with the policy required a password attempt is refused, a break-glass administrator signs in, a third administrator is refused | blocked: WP-IAM-05.T12: needs the policy source, the admin route and the host wiring of the policy port into the login service |
+
+## Apps
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `apps: a_signed_sample_app_installs_and_runs_and_its_hook_effect_is_observable` | install, function call and hook effect observable; uninstall removes it from the list at once | blocked: WP-EXT-05.T3 (host adapter and install path): `GET /api/v1/apps` is not mounted by the host: no `AppsPort` adapter is provided and no signed app can be installed by the harness |
+| `apps: a_tampered_bundle_or_a_revoked_publisher_is_failed_in_the_list_and_the_site_is_healthy` | an edited stored bundle after restart is `failed` with a code; the site stays healthy | blocked: WP-EXT-05.T3 (host adapter and install path): `GET /api/v1/apps` is not mounted by the host: no `AppsPort` adapter is provided and no signed app can be installed by the harness |
+| `apps: a_timeout_kills_the_app_and_an_unrelated_request_stays_under_the_latency_bound` | the app is killed on timeout; the runtime and other requests are unaffected | blocked: WP-EXT-05.T3 (host adapter and install path): `GET /api/v1/apps` is not mounted by the host: no `AppsPort` adapter is provided and no signed app can be installed by the harness |
+| `apps: the_network_capability_passes_the_egress_policy_and_loopback_metadata_and_rebinding_are_refused_and_audited` | an allow-listed host succeeds; 127.0.0.1, the metadata address and a DNS-rebinding stub are refused and audited | blocked: WP-EXT-05.T3 (host adapter and install path): `GET /api/v1/apps` is not mounted by the host: no `AppsPort` adapter is provided and no signed app can be installed by the harness |
+
 ## Functions
 
 | Case | Pins | Kind |
 | --- | --- | --- |
-| `function: a_declared_function_is_served_with_its_verbs_schema_limit_and_sign_in_rules` | a function an app declares is called with `GET` and `POST` as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function is `404`, nobody signed in is `401`, a user the function refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After` | case |
+| `function: a_declared_function_is_served_with_its_verbs_schema_limit_and_sign_in_rules` | the functions the sample app ships (`profile/whoami` GET, `profile/greet` POST with an argument schema and a limit, `public/ping` guest GET) are called as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function and a non-guest one asked by nobody are the same `404`, a guest function answers a caller with no credential, a handler that refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After` | case |
+
+## Audit verification
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `audit_verify: a_clean_chain_verifies_and_the_head_is_anchored` | a clean chain verifies, the verified head advances and a signed head anchor is appended outside the database role's reach | blocked: WP-SEC-06.T8: the host mounts no `/api/v1/security/audit/*` route and provides no audit keys or access port |
+| `audit_verify: a_deleted_segment_a_reorder_and_a_rolled_back_head_are_found` | a deleted entry (sequence gap), two reordered entries (broken link) and a head rolled back in the database (the anchor catches it) are each reported | blocked: WP-SEC-06.T8: the host mounts no `/api/v1/security/audit/*` route and provides no audit keys or access port |
+| `audit_verify: a_non_auditor_is_refused_and_entries_stay_masked` | a caller without `security.audit.read` is refused (and the refusal audited), an export needs the step-up, and no entry view carries a payload value | blocked: WP-SEC-06.T8: the host mounts no `/api/v1/security/audit/*` route and provides no audit keys or access port |
+| `audit_verify: an_altered_entry_is_flagged_at_exactly_its_index` | an entry altered through a superuser connection degrades the audit service, names the lane, the index and the kind and never the content, and the verified head stops advancing | blocked: WP-SEC-06.T8: the host mounts no `/api/v1/security/audit/*` route and provides no audit keys or access port |
+| `audit_verify: the_nightly_pass_resumes_after_a_restart_and_tenants_are_isolated` | the nightly full pass continues from its saved cursor after a restart, and a second tenant's audit entries are unreachable (a cursor into another lane answers like an empty page) | blocked: WP-SEC-06.T8: the host mounts no `/api/v1/security/audit/*` route and provides no audit keys or access port |
+
+## EDI
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `edi: an_inbound_x12_850_creates_the_documents_as_the_service_principal_and_a_997_is_queued` | an interchange posted to `POST /api/v1/connectors/{name}/inbound` creates mapped documents as the connector's principal, a repeat control number is acknowledged as rejected, and the acknowledgement is queued | blocked: WP-INT-06.T2 (host registration of the `edi` kind and the ingress mount): `POST /api/v1/connectors/{name}/inbound` is not mounted by the host and the connector service does not register `edi` yet |
+
+## Graph and lineage over HTTP
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `graph: a_bad_rule_set_keeps_the_old_one_and_names_itself` | a rule set of an app loads and readiness is clean; a set that is not range-restricted arrives with a reload and readiness (still 200, the site stays in rotation) names it and says `did not compile` without the good set's name or any predicate; a fixed set clears the report | case |
+| `graph: a_hidden_edge_property_is_absent` | an edge property the caller may not read is absent from the answer while the edge shows | blocked: WP-GRA-02.T2: the host derives the graph model with no relation specs, so no edge carries properties and the fixture has no relation DocType to hide one on |
+| `graph: a_pushed_batch_carries_edge_keys_only` | enabled against a local sink the projection pushes edge keys and types only, never a document value | blocked: WP-GRA-07.T3: the egress guard refuses a loopback sink and the projection takes https endpoints only, so no local sink can receive a push; the batch bytes are pinned by the module's unit tests |
+| `graph: a_rule_set_derives_an_approver_differently_for_two_principals` | a rule set from the fixture metadata derives an approver differently for two principals with different visibility | blocked: WP-GRA-04.T2: no route and no in-process handle reaches the rule graph port (`derive` is a Rust trait), so a derivation cannot be asked for over HTTP |
+| `graph: edges_follow_document_writes_and_a_rolled_back_write_leaves_none` | an order, receipt, invoice and payment chain is one walk in either direction; moving a link moves the edge; a refused write (a duplicate unique number) leaves no edge row and no node; a deleted payment leaves the walk | case |
+| `graph: lineage_answers_chain_trace_bom_and_where_used_with_exact_decimals` | the chain around an order, a forward and a backward trace, a bill of materials whose quantities are decimal strings (0.10 + 0.20 is 0.3, 99999999999999999.99 + 0.01 is 100000000000000000), where-used, a node limit and a depth limit that truncate and say so | case |
+| `graph: queries_and_lineage_respect_permissions` | a Viewer who cannot read the receipt gets the order with the receipt and everything beyond it removed and `withheld: true` (equal to the answer for an order with no receipts, apart from the flag; at once and from the hot index), the same for lineage, and an unreadable start (a Viewer's receipt, an Observer's order) is byte for byte the `404 graph.not_found` of an unknown id for the query and every lineage kind | case |
+| `graph: the_graph_routes_refuse_forged_bodies_and_injection` | a body naming `tenant` or a principal is `422 graph.query_invalid` without echoing the value (graph and lineage), a header naming another site changes nothing, hostile strings as ids, DocTypes, edge types and filters are 4xx data and leave the edge table and the answers unchanged, no document value is in an answer, a site file or the run log, and the projection is off by default (no cursor file, no table) | case |
+| `graph: the_hard_limits_refuse_first_and_a_flood_is_answered_in_budget` | depth 9, limit 1001, 17 edge types and filters nested 6 deep or of 40 terms are `422 graph.too_large` for a record that does not exist (so before any work), other faults are `graph.query_invalid` without the value, lineage depth 13 and limit 5001 are too large; a star of more than 1,000 spokes (`L3_GRAPH_STAR`, up to 100000) is answered `truncated` by `nodes` inside 15 s while plain reads keep being served | case |
+| `graph: the_index_survives_a_restart_and_a_gap_and_equals_the_database` | after a server restart mid-feed the answer is the same; an edge that vanishes behind the feed (a gap) is found by the drift check and the index rebuilds; then the index and a database-only host give the same answer, and a rebuilt index equals the database | case |
+| `graph: two_sites_share_no_edge` | two sites of one server each see only their own edges by query, lineage and list, a record of the other site is the answer of an unknown id, a session of one site is refused on the other, and all of it holds again after a restart rebuilds both indexes | case |
+
+## Connectors
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `connectors: a_scheduled_run_fires_once_with_two_nodes_and_a_killed_server_resumes_without_a_duplicate_effect` | two server nodes fire a scheduled run once; a server killed mid-run resumes without a duplicate side effect (the idempotency key reaches the stub) | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): the harness has no local stub server, stub resolver, redirecting stub or second server node |
+| `connectors: a_user_without_the_right_and_a_user_of_another_tenant_cannot_list_get_or_invoke` | a user without the right cannot invoke (403); tenant B cannot list, get or invoke tenant A's connector (404), and an inbound request for A's connector sent to B's host is the uniform 401 | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): `/api/v1/connectors*` is not mounted by the host: no `ConnectorsPort` adapter is provided |
+| `connectors: an_invoke_injects_the_credential_and_no_secret_reaches_the_response_run_log_document_or_server_log` | with an allow-listed local stub and a secret stored through the write-only action, a permitted user invokes an operation; the stub sees the injected credential; the response, the run log, the connector document read and the server log never contain the secret | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): `/api/v1/connectors*` is not mounted by the host: no `ConnectorsPort` adapter is provided |
+| `connectors: secret_rotation_takes_effect_on_the_next_run_and_deleting_the_connector_deletes_its_secret` | a rotated secret is used by the next run; deleting the connector deletes its secret | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): `/api/v1/connectors*` is not mounted by the host: no `ConnectorsPort` adapter is provided |
+| `connectors: ssrf_targets_are_refused_and_audited` | 127.0.0.1, 10.x, 169.254.169.254, localhost, a name resolving to loopback, an IPv6 loopback, an open redirect to a private address and a port outside the allow-list are all refused and audited | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): the harness has no local stub server, stub resolver, redirecting stub or second server node |
+| `connectors: the_inbound_ingress_accepts_a_signed_request_and_refuses_replay_tamper_and_unknown_names_alike` | a signed request is accepted and processed by the job, a replayed delivery id is 409, a tampered body is 401, and an unknown name equals a bad signature in status and body | blocked: WP-INT-05.T5 (host registration of the connector service and the ingress mount): `POST /api/v1/connectors/{name}/inbound` is not mounted by the host |
+
+## User administration
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `identity_admin: users_are_administered_and_a_disable_ends_the_session_at_once` | an administrator creates a user (a duplicate is `409 identity.user_exists`, a bad audience `422`), lists and gets it, patches it with `If-Match`, disables a signed-in Viewer so the Viewer's next request is `401` within a second and the answer lists the leaver actions, enables, anonymises (same id, address gone, `confirm_email` required); the last administrator cannot be disabled or anonymised (`409 identity.last_administrator`); a Viewer, an Observer and an anonymous caller are refused and an unknown or malformed id is `404 identity.not_found` | case |
+
+## Key and session administration
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `key_admin: keys_and_sessions_are_administered_and_impersonation_is_refused` | the key list is `200` for an administrator and `403` for a Viewer, a key request with a bad scope is `422 identity.invalid`, ending a Viewer's sessions makes the Viewer's next request `401`, a session list never carries a token, and impersonation is refused for everyone (`403`) because no support grant exists | case |
+
+## Grant governance
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `governance: a_conflicting_grant_is_refused_an_override_needs_a_reason_and_a_control` | a grant that creates a segregation-of-duties conflict is refused with the rule ids only; an override with a reason and a mitigating control is accepted and listed, one without a control is refused, an expired override stops applying | blocked: WP-IAM-12.T4: the identity assignment route (`identity_assignment_create`) is served by a module that does not exist yet and calls no `GrantGuard`; the gate is reachable only in process |
+| `governance: an_approval_grant_fails_closed_without_a_launcher_and_the_requester_cannot_approve` | a grant that needs approval with no process launcher is refused (`iam_governance.approval_unavailable`), never granted; the requester and the beneficiary cannot approve; a decision is made once | blocked: WP-IAM-08.T11: no route decides an approval and no launcher is provided until the approval process is hosted |
+
+## Access questions
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `access_questions: emergency_access_starts_expires_and_is_reviewed_by_someone_else` | an emergency grant is requested with a reason, limited in time and roles, started through the governed grant path with source `emergency`, reviewed by a controller who is not the beneficiary, and ends at expiry | blocked: WP-IAM-08.T7: emergency access needs the governed grant path with a caller and a stored request; neither exists yet (the gate has no caller and keeps its state in memory) |
+| `access_questions: the_four_questions_answer_from_a_seeded_matrix_for_authorised_askers_only` | what a user can do, who can do an action, who can see a document and what changed between two dates return the expected rows with the producing rule; an unauthorised asker is refused and audited; a document the asker cannot read never appears | blocked: WP-CON-03.T41: the native API contract has no operation for the access questions, so no route can carry them; the module provides the `AccessQuestions` port only |
+
+## Sealed fields
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `sealed_fields: a_group_with_no_class_refuses_the_write` | a protected field of a group tagged secret with no sync class is refused with `sealed_fields.class_unset` | blocked: WP-SEC-10.T6 follow-up: the shared fixture's metadata declares no protection group |
+| `sealed_fields: a_sealed_field_written_on_the_branch_is_unreadable_there_on_every_channel` | a sealed value written on the branch node is not returned by a read, list, report, export, print, journal view, search or realtime payload there | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
+| `sealed_fields: a_sealed_value_cannot_be_moved_to_another_tenant_or_record` | a ciphertext copied to another record or tenant fails to open at the hub, and a cross-tenant id answers like a missing one | blocked: WP-SEC-10.T6 follow-up: the harness has one tenant and no hub unseal call |
+| `sealed_fields: a_write_from_a_revoked_node_is_quarantined` | a node revoked at the hub has its later writes quarantined, and its key release is refused | blocked: WP-SEC-10.T6 follow-up: the sync apply path has no quarantine for a revoked node's writes in the harness |
+| `sealed_fields: an_encrypted_field_round_trips_under_a_live_lease` | an encrypted field is written under the held group key and read back while the lease is live, and fails closed with `sealed_fields.lease_expired` after it | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
+| `sealed_fields: an_offline_reveal_answers_reveal_offline_and_serves_no_cached_value` | with the hub unreachable the reveal answers `sealed_fields.reveal_offline` and never a stored or cached plaintext | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
+| `sealed_fields: the_database_dump_holds_no_plaintext_of_a_sealed_or_encrypted_field` | a dump of the node's database searched for the planted values finds none | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
+| `sealed_fields: the_hub_reveals_a_sealed_value_to_an_authorised_user_online_and_audits_it` | the reveal route returns the value once, to a user holding the reveal right, and writes one audit record naming the field and document but not the value | blocked: WP-SEC-10.T6 follow-up: no reveal route is mounted by the host and no hub is reachable from a second node |
+
+## AI isolation
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `ai_isolation: twenty_agents_do_not_degrade_human_latency_and_are_shed_first` | with isolation on, twenty agents calling MCP in parallel leave the human p95 inside its budget and are answered `429` with `Retry-After` (shed), never the humans | case |
+
+## Compliance evidence
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `compliance: a_disabled_retention_run_shows_as_a_gap` | turning the retention run off makes the next collection report `ctl.retention` as failing | blocked: WP-SEC-08.T3 (compliance routes): no `/api/v1/compliance/*` route is mounted: the port exists in spot-cli, the route file is outside this task's owned paths |
+| `compliance: each_automatic_control_produces_evidence_from_a_seeded_state` | `GET /compliance/controls` lists every automatic control with a latest result taken from the seeded subsystem state (audit chain, access review, SoD, retention, keys, backups, MFA, vulnerabilities) | blocked: WP-SEC-08.T3 (compliance routes): no `/api/v1/compliance/*` route is mounted: the port exists in spot-cli, the route file is outside this task's owned paths |
+| `compliance: evidence_cannot_be_edited` | there is no write route for evidence, and the chain proves an item changed after sealing no longer verifies | blocked: WP-SEC-08.T3 (compliance routes): no `/api/v1/compliance/*` route is mounted: the port exists in spot-cli, the route file is outside this task's owned paths |
+| `compliance: the_auditor_reads_the_pack_and_nothing_else` | the auditor role reads the controls and the evidence pack (200) and is `403 permission.denied` on a customer document list; any other role is 403 on the pack | blocked: WP-SEC-08.T3 (compliance routes): no `/api/v1/compliance/*` route is mounted: the port exists in spot-cli, the route file is outside this task's owned paths |
+
+## MCP
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `mcp: a_credential_of_one_tenant_is_401_on_another` | tenant A's token against tenant B's host is `401` with the same answer as junk; identical DocType names in two tenants never mix results | case |
+| `mcp: a_runtime_created_doctype_is_a_tool_on_the_next_request` | a DocType added while the server runs is listed and callable on the next request, and a deleted one disappears | case |
+| `mcp: a_tool_never_returns_what_the_user_cannot_read` | a field the user cannot read is absent from `get_*`, `search_*` and `query` results and filtering by it is `permission.field_denied`; a document the user may not read is the same not-found as over REST; the MCP rows equal the REST rows for each user | case |
+| `mcp: an_api_key_scope_narrows_every_decision` | a key scoped to read-only on one DocType cannot create or read another DocType though its owner can, and a key outliving its owner's role removal loses the right at once | blocked: WP-AI-04.T4: the host has no stored KeyScope source: a key acts with its owner's rights until a `KeyScopes` hook is installed (open question of WP-AI-04.T4), and a test cannot issue a scoped key |
+| `mcp: data_a_tool_returns_is_data_and_runs_nothing` | a document titled with instructions comes back as plain data and triggers no further call or write | case |
+| `mcp: every_call_is_audited_and_a_failed_audit_fails_a_write_closed` | each call leaves a row in the site's `mcp-<site>` audit chain without the arguments' values; with the chain unwritable a write tool fails closed and a read tool still answers | case |
+| `mcp: strictly_the_calling_user` | two users with different rights get different tool lists and results; a create-draft call is refused for a user without create; no tool acts as administrator | case |
+| `mcp: the_transport_refuses_a_foreign_origin_an_oversize_body_and_a_flood` | a foreign `Origin` is `403` before the credential, an oversize body is `413`, `GET` is `405`, and a flood of calls meets the rate limit with the contract error | case |
+
+## Support access
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `support_access: a_request_without_consent_cannot_become_access` | a pending request lists with zero approvals; issuing from it is refused; a consent by the wrong key, an expired consent, a wider scope and another tenant's request are `security.consent_invalid` or `security.not_found` | blocked: WP-SEC-07.T3 (route registration): the `/api/v1/security/support-access/*` routes are not mounted by the host: the route group is not in the registry yet |
+| `support_access: a_write_request_needs_two_administrators` | the first approval leaves the request pending (2 needed); the same administrator again is refused; a second administrator approves it | blocked: WP-SEC-07.T3 (route registration): the `/api/v1/security/support-access/*` routes are not mounted by the host: the route group is not in the registry yet |
+| `support_access: revocation_takes_effect_on_the_next_action` | a revoked request ends its sessions at once (`state` is `revoked`) and the audit chain holds the revocation | blocked: WP-SEC-07.T3 (route registration): the `/api/v1/security/support-access/*` routes are not mounted by the host: the route group is not in the registry yet |
+| `support_access: the_customer_sees_every_action_of_a_session` | `GET .../sessions/{id}/recording` lists `at`, `action` and `target` from the audit chain, and a user who is not a security administrator gets `permission.denied` | blocked: WP-SEC-07.T3 (route registration): the `/api/v1/security/support-access/*` routes are not mounted by the host: the route group is not in the registry yet |
+
+## Processes
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `process: a_cancel_closes_the_task` | the requester cancels a waiting run: `run_cancel` answers the run `cancelled`, the task leaves the approver's inbox and a repeat is `409 process.run_not_active`; a caller who may not see the run gets `404 process.run_not_found` | case |
+| `process: a_new_version_leaves_a_running_run_on_its_own_version` | publish v2 while a run is on v1: the run finishes on v1, new runs start on v2, `process_version_list` shows both and the migration plan names what can move | case |
+| `process: a_request_is_published_started_approved_and_the_document_node_acts` | publish through `process_version_publish`; the requester starts a run (a repeat of the `Idempotency-Key` is the same run); the approver's inbox shows the task and the requester's does not; claim and complete with `If-Match`; the Document node creates its document once; `run_get` shows `completed`; the events name the requester and the approver; the cycle-time report answers integers | case |
+| `process: a_server_restart_in_the_middle_completes_the_run_once` | a run waits at the Decision node; the server is stopped and started again; the task is still there and completing it finishes the run exactly once with exactly one document | case |
+| `process: a_signed_webhook_and_a_document_event_each_start_one_run` | a signed webhook starts one run and a redelivery none; a document-event trigger starts one run per saved document even when the event is redelivered | blocked: WP-BPM-03.T4: a test needs the trigger's webhook secret and a trigger node with a path or event: `TriggerConfig` has them, but no operation hands the secret back, and the host's signing secret is not reachable over HTTP |
+| `process: a_webhook_that_does_not_verify_is_one_identical_401` | an unsigned delivery, a badly signed one and one for an unknown trigger are the same `401 process.webhook_rejected` with the same body, and none starts a run | case |
+| `process: an_sla_reminder_arrives_and_never_auto_approves` | a node with a short SLA sends a reminder; with the auto-approve flag unset it never auto-approves | blocked: WP-BPM-05.T8: the model's Decision node has no SLA setting (`spot-bpm-model::DecisionConfig` carries title, assignee and outcomes only), so a definition cannot ask for one over HTTP |
+
+## Process security
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `process_security: a_caller_cannot_name_an_actor_or_a_system_outcome` | bodies and headers naming `actor`, `completed_by`, `principal`, `tenant`, `initiator` or `system`, and an outcome like `system:sla`, are refused or ignored: the run's starter and the task's decider are the authenticated caller | case |
+| `process_security: a_hidden_field_never_reaches_a_run_task_or_report` | a document with a hidden field is mapped into a run; no run, task, event, report or graph answer exposes the value or the field name to a user without access | blocked: WP-BPM-04.T6: needs a definition whose Document node maps a document's hidden field into the run: the mapping setting is not reachable from the model text over HTTP yet, so no run carries a hidden value to look for |
+| `process_security: a_token_of_one_site_reaches_nothing_of_another` | with two sites on one server, a run, task, version, migration and trigger name of site B answer a site A token exactly as a nonexistent id does (status, body and caching headers equal) | case |
+| `process_security: hostile_input_is_data_and_bounds_hold` | SQL metacharacters, expression source and markup in input, comment and business key never execute or echo; deep nesting, a huge limit, a bad cursor and a replayed Idempotency-Key with another body are clean refusals | case |
+| `process_security: removing_a_role_mid_flight_stops_the_decision` | a task is claimed, the approver's role is removed, and completing the task is refused, never served | case |
+| `process_security: secrets_and_values_stay_out_of_the_log_and_every_refusal_is_audited` | after a scenario the server log holds no session token and no input value, and the refusals left audit lines | case |
+| `process_security: the_webhook_endpoint_refuses_abuse_cheaply` | a wrong content type, a path-like or overlong trigger name and a 10 MiB body are refused without a server error | case |
+| `process_security: unknown_and_forbidden_are_one_answer` | an unknown and a forbidden run, task, version, process and migration are the same answer; a colliding business key is indistinguishable from a fresh one | case |
+
+## Break-glass (customer side)
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `break_glass: a_non_administrator_cannot_read_a_recording_and_the_read_is_audited` | a user without the security administrator duty is refused (never an empty recording); an allowed read is itself an event on the chain | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: a_revoke_ends_the_session_and_later_actions_are_refused` | revoking an active session answers at once and every later `authorise` is refused, even when the agent bridge is unreachable | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: a_session_appears_for_the_customer_within_a_second_of_approval` | the security administrator's session list shows an approved break-glass session with who, why and window within a second of approval | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: a_session_of_another_tenant_is_not_found` | another tenant's session id answers exactly like a missing one on every operation | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: an_operator_cannot_delete_or_rewrite_an_archive_object` | a vendor-side delete or a second write under the same session id is refused and the object is unchanged | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: the_expiry_sweep_kills_a_session_the_operator_never_ended` | a session past its window is killed and marked `expired` on the customer's chain without any report from the operator side | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+| `break_glass: the_recording_hash_matches_the_audit_chain_and_tamper_is_detected` | a recording served to the administrator hashes to the digest on the audit chain; a changed archive object is refused | blocked: WP-SEC-07.T2: the host mounts no support-access routes and the fixture has no agent bridge to make unreachable |
+
+## Support access (attacks)
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `support_access: a_consent_signed_by_the_wrong_key_is_refused_and_issues_no_credential` | a consent signed with a key that is not the tenant's registered customer key answers the stable code and no credential exists afterwards | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: a_normal_user_sees_no_support_sessions_and_a_recording_read_is_audited` | a user without the security administrator duty sees nothing and is refused (never an empty list); the administrator sees sessions and recordings and each recording read is itself on the chain | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: a_replayed_receipt_nonce_is_refused` | the same receipt nonce presented twice (also from a second node) is refused the second time | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: a_revoked_credential_is_refused_on_the_next_action_and_the_chain_verifies` | request, consent, issue, use and revoke appear in order on the audit chain, the chain verifies, and the next action under the credential is refused | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: a_two_person_consent_cannot_be_confirmed_by_its_own_requester` | when the policy asks for a second administrator, the user who gave the consent cannot also confirm it | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: an_expired_consent_a_consent_for_another_scope_and_another_tenants_request_are_refused` | each refusal carries its stable code, writes an audit record and leaves no credential; the other tenant's request answers like a missing one | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `support_access: an_operator_cannot_delete_an_archive_object_or_alter_a_chain_entry` | a delete or rewrite of an archive object, or an edit of a chain entry, is refused and the chain still verifies | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |

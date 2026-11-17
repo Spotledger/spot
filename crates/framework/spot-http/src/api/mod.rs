@@ -16,7 +16,9 @@
 //! - [`registry`]: the code → (status, retryable) table that must equal the contract's
 //!   `x-spot-error-codes`;
 //! - [`ports`]: the typed port map and `PortKey`, one file per port of a registered route group;
-//! - [`router`]: `api::router(services)` → an `axum::Router` to mount with
+//! - [`routes`]: the route table, an audience mark on every route (ADR-083), and the
+//!   [`RouteMark`] the router stamps on a matched request;
+//! - [`router`]: `api::router(services)` (and `router_for(audiences, ..)`) → an `axum::Router` to mount with
 //!   `ServerBuilder::site_routes`.
 //!
 //! Realtime (`/api/v1/realtime`) is WP-PLT-08.T2 and is **not** mounted here.
@@ -34,6 +36,7 @@ pub mod ports;
 pub mod print;
 pub mod registry;
 pub mod router;
+pub mod routes;
 pub mod service;
 pub mod storage_error;
 
@@ -51,7 +54,11 @@ pub use ports::{PortKey, Ports};
 pub use print::{MemoryPrintPort, PdfBytes, PrintPort, PrintPortError};
 pub use registry::Code;
 pub use router::routes::{MountReport, Registration, RouteState, SkipReason};
-pub use router::{ApiServices, HAND_WIRED_SERVES, router, router_with, served_operations};
+pub use router::{
+    ApiServices, HAND_WIRED_SERVES, has_hand_wired_handler, router, router_for, router_with,
+    served_operations,
+};
+pub use routes::{GuestCall, RouteAuth, RouteEntry, RouteMark, route_table};
 pub use service::{
     ApiError, AuthService, Credential, DocTypeMeta, ErrorCode, FieldIssue, FieldValue, LoginBody,
     LookupService, Message, MetaService, Page, PermissionService, QuerySpec, ReportColumn,

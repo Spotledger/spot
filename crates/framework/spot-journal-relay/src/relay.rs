@@ -7,10 +7,10 @@ use spot_journal_segment::{
 };
 use spot_journal_store::{JournalStore, Layout, StoreError};
 
-use crate::chunk::{self, Entry};
 use crate::config::{Appended, Batch, Durability, RelayConfig};
 use crate::error::RelayError;
 use crate::signer::ManifestSigner;
+use crate::tail::{self, EncodeError, Entry, MAX_CHUNK_BYTES};
 
 /// The relay of one tenant and one source, writing into one generation.
 pub struct Relay<S: JournalStore> {
@@ -35,6 +35,9 @@ pub struct Relay<S: JournalStore> {
     pub(crate) open_chunks: Vec<u64>,
     pub(crate) opened_at: Option<i64>,
     pub(crate) last_batch_id: Option<u64>,
+    /// The id the next tail chunk gets: the highest id in the store's listing at start plus one
+    /// (ADR-061 A.4, D4), then one more per chunk written.
+    pub(crate) next_batch_id: u64,
     /// The latest time the caller supplied; used where `resume` needs a time and has no argument.
     pub(crate) last_now: i64,
     /// A call failed part-way: the cached view of the store may be stale.
@@ -113,6 +116,7 @@ impl<S: JournalStore> Relay<S> {
             open_chunks: Vec::new(),
             opened_at: None,
             last_batch_id: None,
+            next_batch_id: 1,
             last_now: now_millis,
             needs_resume: true,
             halted: false,
@@ -216,11 +220,33 @@ impl<S: JournalStore> Relay<S> {
             self.seal_open(now_millis).await?;
         }
         let remote = self.cfg.durability == Durability::RemoteSync;
+        let mut batch = batch;
         if remote {
-            let bytes = chunk::encode(&batch.entries)
-                .ok_or(RelayError::EntryInvalid("the batch is too large"))?;
+            // The relay names the chunk (D4); the caller's id is advisory under remote-sync.
+            batch.batch_id = self.next_batch_id;
             let key =
                 Layout::tail_chunk(&self.cfg.tenant, self.generation, batch.batch_id)?.to_key();
+            let keys = self
+                .cfg
+                .tail_keys
+                .clone()
+                .ok_or(RelayError::ConfigInvalid("remote-sync needs the tail keys"))?;
+            // Nothing is written until the whole chunk is built and within the size limit.
+            let bytes = tail::encode_v2(&keys, &key, batch.batch_id, &batch.entries)
+                .await
+                .map_err(|error| match error {
+                    EncodeError::TooLarge { bytes } => RelayError::BatchTooLarge {
+                        bytes,
+                        limit: MAX_CHUNK_BYTES,
+                    },
+                    EncodeError::Count => RelayError::EntryInvalid(
+                        "the batch has too many entries or a line is too long",
+                    ),
+                    EncodeError::NotUtf8 => RelayError::EntryInvalid("a line is not valid UTF-8"),
+                    EncodeError::Key => RelayError::Store(StoreError::Backend {
+                        message: "the tail key provider failed".to_owned(),
+                    }),
+                })?;
             self.needs_resume = true;
             match self.store.put_new(&key, bytes).await {
                 Ok(_) => {}
@@ -231,6 +257,7 @@ impl<S: JournalStore> Relay<S> {
             }
             self.needs_resume = false;
             self.open_chunks.push(batch.batch_id);
+            self.next_batch_id = batch.batch_id.saturating_add(1);
         }
         for (_, line) in &batch.entries {
             self.open_bytes = self
@@ -299,9 +326,10 @@ impl<S: JournalStore> Relay<S> {
         if batch.entries.is_empty() {
             return Err(RelayError::EntryInvalid("the batch is empty"));
         }
-        if self
-            .last_batch_id
-            .is_some_and(|last| batch.batch_id <= last)
+        if self.cfg.durability != Durability::RemoteSync
+            && self
+                .last_batch_id
+                .is_some_and(|last| batch.batch_id <= last)
         {
             return Err(RelayError::EntryInvalid(
                 "the batch id is not after the last batch id",

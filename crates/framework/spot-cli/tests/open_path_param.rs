@@ -15,7 +15,7 @@ use axum::http::{Method, StatusCode};
 use axum::routing::{get, post};
 use spot_cli::services::{
     MemoryOpenAudit, OpenOutcome, OpenPath, OpenPaths, RateLimit, RegisterFuture, Registration,
-    SiteCtx, register_all,
+    SiteCtx, register_all_with_roles,
 };
 use spot_cli::{Options, Running};
 use spot_login::LoginConfig;
@@ -25,6 +25,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use support::Env;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// The registry without the host's role conditions: these tests give their own tables, and the
+/// generated conditions name modules those tables do not hold.
+async fn register_all(ctx: &mut SiteCtx<'_>, tables: &[&[Registration]]) -> spot_cli::Result<()> {
+    register_all_with_roles(ctx, tables, &[]).await
+}
 
 /// What a host-owned handler answers in the unit router: it must never be reached through an
 /// open entry.
@@ -156,7 +162,7 @@ fn cases() -> Vec<Case> {
     ]
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_param_pattern_cannot_open_a_reserved_path() {
     for case in cases() {
         let label = format!("{} {}", case.method, case.pattern);
@@ -194,7 +200,7 @@ async fn a_param_pattern_cannot_open_a_reserved_path() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_pattern_inside_the_auth_tree_is_refused_at_declaration() {
     let table = [open_module!("auth_hook", Method::POST, "/api/v1/auth/{x}")];
     let mut ctx = SiteCtx::new(
@@ -246,7 +252,7 @@ async fn broad_site() -> (Arc<OpenPaths>, Arc<MemoryOpenAudit>) {
     .await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn trailing_and_doubled_slashes_do_not_open_a_reserved_path() {
     let (open, _) = broad_site().await;
     for path in [
@@ -261,7 +267,7 @@ async fn trailing_and_doubled_slashes_do_not_open_a_reserved_path() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn another_case_does_not_open_a_reserved_path() {
     let (open, _) = broad_site().await;
     for path in [
@@ -276,7 +282,7 @@ async fn another_case_does_not_open_a_reserved_path() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_percent_encoded_letter_does_not_open_a_reserved_path() {
     let (open, _) = broad_site().await;
     for path in [
@@ -291,7 +297,7 @@ async fn a_percent_encoded_letter_does_not_open_a_reserved_path() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn other_methods_do_not_open_a_reserved_path() {
     let (open, audit) = broad_site().await;
     for method in [Method::HEAD, Method::OPTIONS] {
@@ -463,7 +469,21 @@ async fn an_open_param_pattern_does_not_lift_authentication_on_host_paths() {
     let open = http(addr, &host, None, "GET", "/anything", "").await;
     assert_eq!(open.status, 200, "{}", open.raw);
     assert_eq!(open.body, PROBE_OPEN);
-    assert_eq!(server.open_paths(), ["GET /{section} (open_param_probe)"]);
+    // The host's own modules that authenticate themselves (the MCP endpoint, the process trigger
+    // hook) declare open paths too; the probe's pattern is the one under test.
+    let declared = server.open_paths();
+    assert!(
+        declared
+            .iter()
+            .any(|p| p == "GET /{section} (open_param_probe)"),
+        "{declared:?}"
+    );
+    assert!(
+        declared.iter().all(|p| p.ends_with("(open_param_probe)")
+            || p.ends_with("(mcp)")
+            || p.ends_with("(process_triggers)")),
+        "{declared:?}"
+    );
 
     // Next to it, the host's own paths keep the authenticate-first rule.
     let metrics = http(addr, &host, None, "GET", "/metrics", "").await;

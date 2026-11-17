@@ -6,14 +6,16 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A position in the journal: the sequence number of an entry within its generation.
+/// A position in the journal: the sequence number of an entry **within its generation**.
 ///
-/// Positions are integers, never floating point. The wire `Position` of `contracts/events`
-/// pairs this sequence number with its generation; the planner keeps the two apart because
-/// every structure it reads already carries the generation beside the position (a snapshot is
-/// `(position, generation)`, a segment range is `(generation, first_seq, last_seq)`), and a
-/// target position has to be resolvable against the journal on its own — see
-/// [`Target::At`].
+/// Positions are integers, never floating point. A new generation starts again at
+/// [`FIRST_POSITION`] (WP-JRN-03.T10: the journal numbers the stream as the manifest and the feed
+/// do), so a sequence number names a record only together with its generation. The wire
+/// `Position` of `contracts/events` pairs the two; the planner keeps them apart because every
+/// structure it reads already carries the generation beside the position (a snapshot is
+/// `(position, generation)`, a segment range is `(generation, first_seq, last_seq)`). Where a
+/// bare position is offered it is explicit about which generation it is in: see [`Target`] and
+/// [`Backup`].
 pub type Position = u64;
 
 /// A stream generation (ADR-061 s6): rebuilding to a point in time forks into `generation + 1`.
@@ -79,31 +81,46 @@ pub struct JournalCatalog {
 }
 
 impl JournalCatalog {
-    /// Whether a fork cut history before `snapshot`: the snapshot is of an older generation than
-    /// the fork's and lies after the fork point.
-    fn abandoned_by_fork(&self, snapshot: &SnapshotInfo) -> bool {
-        self.forks
+    /// The generation a fork branched from: the newest generation below the fork's that holds
+    /// segments, or the one just before it when none does.
+    fn parent_of(&self, fork: &ForkInfo) -> Generation {
+        self.segments
             .iter()
-            .any(|f| snapshot.generation < f.generation && snapshot.position > f.from_position)
+            .map(|s| s.generation)
+            .filter(|g| *g < fork.generation)
+            .max()
+            .unwrap_or_else(|| fork.generation.saturating_sub(1))
     }
 
-    /// The snapshot a rebuild to `target` starts from: the latest **verified** snapshot at or
-    /// before `target`.
+    /// Whether a fork cut history before `snapshot`: the snapshot is of the generation the fork
+    /// branched from and lies after the fork point.
+    fn abandoned_by_fork(&self, snapshot: &SnapshotInfo) -> bool {
+        self.forks.iter().any(|f| {
+            self.parent_of(f) == snapshot.generation && snapshot.position > f.from_position
+        })
+    }
+
+    /// The snapshot a rebuild to position `target` of `generation` starts from: the latest
+    /// **verified** snapshot at or before it, in the journal's order `(generation, position)`.
     ///
-    /// Ties are broken by the higher generation, then by the later `taken_at_millis`, then by
-    /// the later entry in [`Self::snapshots`], so the choice is deterministic for one catalogue.
+    /// Ties are broken by the later `taken_at_millis`, then by the later entry in
+    /// [`Self::snapshots`], so the choice is deterministic for one catalogue.
     ///
     /// A snapshot of a generation that a fork abandoned, taken after the fork point, holds
     /// history the live journal no longer contains, so it is never a base.
     #[must_use]
-    pub fn best_snapshot(&self, target: Position) -> Option<&SnapshotInfo> {
+    pub fn best_snapshot(&self, generation: Generation, target: Position) -> Option<&SnapshotInfo> {
         self.snapshots
             .iter()
-            .filter(|s| s.verified && s.position <= target && !self.abandoned_by_fork(s))
+            .filter(|s| {
+                s.verified
+                    && (s.generation, s.position) <= (generation, target)
+                    && !self.abandoned_by_fork(s)
+            })
             .max_by(|a, b| {
-                (a.position, a.generation, a.taken_at_millis).cmp(&(
-                    b.position,
+                (a.generation, a.position, a.taken_at_millis).cmp(&(
                     b.generation,
+                    b.position,
                     b.taken_at_millis,
                 ))
             })
@@ -112,13 +129,38 @@ impl JournalCatalog {
 
 /// A database backup the journal is rolled forward from (the normal disaster path, ADR-061 s6).
 ///
-/// A backup carries only the position it holds every record as of; its generation is the
-/// generation of the live range that covers that position.
+/// A backup carries the position it holds every record as of, and (since positions restart in
+/// each generation) should carry the generation too. Without one, the generation is that of the
+/// single live range that covers the position; when two generations cover it the planner refuses
+/// ([`PlanError::BackupAmbiguous`](crate::PlanError::BackupAmbiguous)) instead of choosing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Backup {
     /// The journal position the backup holds every record as of.
     pub position: Position,
+    /// The generation that position belongs to, when the backup knows it.
+    #[serde(default)]
+    pub generation: Option<Generation>,
+}
+
+impl Backup {
+    /// A backup at `position` whose generation is taken from the live history.
+    #[must_use]
+    pub const fn new(position: Position) -> Self {
+        Self {
+            position,
+            generation: None,
+        }
+    }
+
+    /// A backup at `position` of `generation`.
+    #[must_use]
+    pub const fn in_generation(position: Position, generation: Generation) -> Self {
+        Self {
+            position,
+            generation: Some(generation),
+        }
+    }
 }
 
 /// Where a rebuild should stop.
@@ -127,6 +169,18 @@ pub struct Backup {
 pub enum Target {
     /// Rebuild to the end of the journal: the stream keeps its generation.
     End,
-    /// Rebuild to a position (point in time); a position before the end forks the stream.
+    /// Rebuild to a position **of the current generation** (the generation of the newest live
+    /// segment): a point in time, which forks the stream. A position of an older generation is
+    /// named with [`Target::In`], so a bare number can never pick the wrong generation.
     At(Position),
+    /// Rebuild to a position of a named generation. Only the current generation is a valid
+    /// point-in-time target: an older generation's live history was continued by the next one,
+    /// and a fork from inside it cannot be recorded in the manifest chain, so it is refused
+    /// ([`PlanError::TargetBeforeFork`](crate::PlanError::TargetBeforeFork)).
+    In {
+        /// The generation the position belongs to.
+        generation: Generation,
+        /// The position within that generation.
+        position: Position,
+    },
 }

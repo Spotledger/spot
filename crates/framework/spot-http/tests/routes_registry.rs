@@ -479,6 +479,10 @@ fn the_real_registry_agrees_with_the_real_contract() {
     assert!(ops.len() > 20, "the scan finds the contract's operations");
     for r in spot_http::api::router::routes::REGISTRY {
         for id in r.serves {
+            // SCIM is served at /scim/v2, outside the native API contract.
+            if *id == "scim_v2" {
+                continue;
+            }
             let public = ops.iter().find(|(op, _)| op == id).map(|(_, p)| *p);
             assert_eq!(
                 public,

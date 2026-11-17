@@ -33,7 +33,7 @@ pub mod writer;
 
 pub use error::{EdgePgError, Result};
 pub use repair::{BatchAudit, DEFAULT_BATCH_SIZE, EdgeRepair, RepairReport};
-pub use report::{DriftEntry, DriftKind, DriftReport, read_report, write_report};
+pub use report::{DriftEntry, DriftKind, DriftReport, delete_report, read_report, write_report};
 pub use verify::{DEFAULT_PAGE_SIZE, EdgeVerifyJob, handler};
 pub use writer::{PgEdgeWriter, PgEdgeWriters};
 

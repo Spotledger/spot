@@ -153,6 +153,16 @@ pub enum RebuildError {
         /// The sink's reason (the sink never puts a value in it).
         reason: String,
     },
+    /// With `strict_topics`, an entry has a topic the classifier does not know.
+    #[error("the entry at generation {generation} position {seq} has the unknown topic {topic}")]
+    UnknownTopic {
+        /// The generation of the entry.
+        generation: u64,
+        /// The position of the entry.
+        seq: u64,
+        /// The topic name.
+        topic: String,
+    },
     /// The caller cancelled the rebuild; the sink was told to abort.
     #[error("the rebuild was cancelled after {processed} entries")]
     Cancelled {
@@ -182,6 +192,7 @@ impl RebuildError {
             Self::MissingUpcast { .. } => "journal_rebuild.missing_upcast",
             Self::UpcastFailed { .. } => "journal_rebuild.upcast_failed",
             Self::SinkFailed { .. } => "journal_rebuild.sink_failed",
+            Self::UnknownTopic { .. } => "journal_rebuild.unknown_topic",
             Self::Cancelled { .. } => "journal_rebuild.cancelled",
         }
     }

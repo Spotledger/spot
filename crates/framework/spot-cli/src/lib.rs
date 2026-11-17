@@ -59,7 +59,8 @@ pub fn platform_registry() -> Result<spot_seams::Registry> {
 }
 
 pub use host::{
-    Options, Running, request_reload, start, start_with, start_with_audit, start_with_modules,
+    Options, Running, request_reload, request_reload_and_wait, start, start_with, start_with_audit,
+    start_with_modules,
 };
 /// Host failure. Secret configuration values are never included.
 #[derive(Debug)]
@@ -271,6 +272,8 @@ async fn provision(
     }
     // The audit chain's role, grants and guard triggers: the plan creates its tables only.
     crate::schema::protect_audit(engine.backend()).await?;
+    // The migration control schema (the maintenance gate): `spot console` fails closed without it.
+    crate::schema::prepare_migration_control(engine.backend()).await?;
     // Every site starts with the platform app's Administrator (`bootstrap::seed` is idempotent
     // and writes the Administrator, the system roles and the Administrator's assignment).
     let user = users::seed_platform(engine.backend(), &meta).await?;

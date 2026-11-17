@@ -1,6 +1,7 @@
 //! [`LoginService`]: the real `AuthService` for the native API.
 //!
-//! `login` runs the throttle check *before* any hash work, verifies the password in constant time
+//! `login` is admitted through the [`SignInAdmission`] port first (the coordinator throttle in
+//! production, failing closed), then runs the throttle check *before* any hash work, verifies the password in constant time
 //! even for an unknown user (against a fixed dummy hash, so timing and error reveal nothing),
 //! requires and verifies a second factor when the user has one, and starts a session. The
 //! throttle counts the attempt against the account and against the request's source:
@@ -21,7 +22,7 @@ use std::time::Duration;
 use spot_auth::{
     AuthError, HashParams, Password, PasswordPolicy, TotpConfig, verify_recovery_code,
 };
-use spot_core::Clock;
+use spot_core::{Audience, Clock};
 use spot_http::api::service::BoxFuture;
 use spot_http::api::{
     ApiError, AuthService, Code, LoginBody, RequestCtx, Session, SessionInfo, UserInfo,
@@ -36,14 +37,19 @@ use spot_storage_contract::RecordId;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
+use crate::admission::{Admission, SignInAdmission, SignInAttempt};
 use crate::authenticator::{Authenticated, Authenticator, user_key};
 use crate::error::{LoginError, LoginErrorKind, invalid_credentials};
 use crate::events::{IdentityEvent, IdentityEvents, LoginAttempt};
-use crate::model::{SessionSummary, UserState};
+use crate::model::{SessionSummary, UserState, audience_for};
 use crate::ports::{KeyStore, PasswordHasher, UserDirectory};
 
 /// The `Login Attempt` result code for a successful sign-in.
 pub const RESULT_OK: &str = "ok";
+
+/// The `Login Attempt` result code for a successful password sign-in by a break-glass
+/// administrator under `sso_required`.
+pub const RESULT_BREAK_GLASS: &str = "break_glass_ok";
 
 /// The configuration a [`LoginService`] runs with.
 pub struct LoginConfig {
@@ -180,6 +186,8 @@ impl LoginSource {
 pub struct LoginService {
     pub(crate) sessions: SessionManager<Arc<dyn SessionStore>>,
     pub(crate) throttle: LoginThrottle<SharedThrottleStore>,
+    pub(crate) admission: Arc<dyn SignInAdmission>,
+    pub(crate) signin_policy: crate::policy::SharedPolicy,
     pub(crate) users: Arc<dyn UserDirectory>,
     pub(crate) keys: Arc<dyn KeyStore>,
     pub(crate) events: Arc<dyn IdentityEvents>,
@@ -200,6 +208,9 @@ impl LoginService {
     ///
     /// [`LoginErrorKind::StoreFailed`] if the throttle configuration is invalid or the dummy
     /// hash cannot be built.
+    ///
+    /// `admission` is asked before every sign-in looks at a name or a password; there is no
+    /// constructor that leaves it unset.
     pub fn new(
         config: LoginConfig,
         store: Arc<dyn SessionStore>,
@@ -209,6 +220,7 @@ impl LoginService {
         events: Arc<dyn IdentityEvents>,
         clock: Arc<dyn Clock>,
         hasher: Arc<dyn PasswordHasher>,
+        admission: Arc<dyn SignInAdmission>,
     ) -> Result<Self, LoginError> {
         let salt = Arc::new(SaltKey::generate());
         let sessions = SessionManager::new(store.clone(), config.session_policy, salt.clone());
@@ -233,6 +245,8 @@ impl LoginService {
         Ok(Self {
             sessions,
             throttle,
+            admission,
+            signin_policy: Arc::new(crate::policy::AllowLocal),
             users,
             keys,
             events,
@@ -245,6 +259,14 @@ impl LoginService {
             recovery_codes: config.recovery_codes,
             dummy_hash,
         })
+    }
+
+    /// Replaces the tenant sign-in policy port (the default allows local passwords, which is right
+    /// for a site without single sign-on). The password door asks it before it verifies a password.
+    #[must_use]
+    pub fn with_signin_policy(mut self, policy: crate::policy::SharedPolicy) -> Self {
+        self.signin_policy = policy;
+        self
     }
 
     /// Authenticates a request credential: the call every secured service makes.
@@ -299,6 +321,65 @@ impl LoginService {
         let session_source = from.address().unwrap_or("");
         let throttle_source = from.throttle_key(&identifier);
         let source = throttle_source.as_str();
+        // Admission comes first: before the lookup and before any password hashing. An empty
+        // name is counted under a fixed placeholder, so a flood of them is still capped by
+        // source. A name that belongs to nobody goes down exactly this path too.
+        let tenant = ctx.site.to_string();
+        let connection = format!("no-peer/{identifier}");
+        let admitted = self
+            .admission
+            .admit(SignInAttempt {
+                tenant: &tenant,
+                account: if identifier.is_empty() {
+                    "(empty)"
+                } else {
+                    &identifier
+                },
+                peer: from.address(),
+                connection_id: Some(&connection),
+            })
+            .await;
+        match admitted {
+            Ok(Admission::Allowed) => {}
+            Ok(Admission::Denied { retry_after }) => {
+                self.record_attempt(
+                    ctx,
+                    &identifier,
+                    source,
+                    LoginErrorKind::Throttled.code(),
+                    now,
+                )
+                .await?;
+                let wait = retry_after.as_secs() + u64::from(retry_after.subsec_nanos() > 0);
+                let error = LoginError::new(
+                    LoginErrorKind::Throttled,
+                    format!("retry_after={}", wait.max(1)),
+                );
+                return Err(error.to_api_error_traced(ctx.request_id.as_str()));
+            }
+            Err(error) => {
+                // Fail closed. The audit row is best effort so that the answer stays the
+                // distinct, retryable one even when the audit sink is down too.
+                tracing::warn!(
+                    request_id = ctx.request_id.as_str(),
+                    kind = LoginErrorKind::AdmissionUnavailable.code(),
+                    cause = %error,
+                    "sign-in refused: admission unavailable"
+                );
+                let _ = self
+                    .record_attempt(
+                        ctx,
+                        &identifier,
+                        source,
+                        LoginErrorKind::AdmissionUnavailable.code(),
+                        now,
+                    )
+                    .await;
+                return Err(
+                    LoginError::new(LoginErrorKind::AdmissionUnavailable, "").to_api_error()
+                );
+            }
+        }
         if identifier.is_empty() {
             let account = AccountKey::new("(empty)").map_err(|reason| {
                 LoginError::new(LoginErrorKind::StoreFailed, reason)
@@ -366,6 +447,27 @@ impl LoginService {
             .find_by_identifier(&identifier)
             .await
             .map_err(|error| error.to_api_error_traced(ctx.request_id.as_str()))?;
+        // The tenant sign-in policy, before any password is verified. An unreadable policy is
+        // `sso_required` with nobody exempt, never `local`; a name that belongs to nobody is
+        // refused exactly like a known one that is not a break-glass administrator.
+        let tenant_policy = self.signin_policy.policy(&tenant).await.ok();
+        let decision =
+            crate::policy::decide_password(tenant_policy.as_ref(), found.as_ref().map(|u| u.id));
+        if decision == crate::policy::PasswordDecision::Refuse {
+            self.fail(
+                ctx,
+                &account,
+                &identifier,
+                source,
+                found.as_ref().map(|u| u.id),
+                LoginErrorKind::SsoRequired,
+                now,
+            )
+            .await?;
+            return Err(LoginError::new(LoginErrorKind::SsoRequired, "")
+                .to_api_error_traced(ctx.request_id.as_str()));
+        }
+        let break_glass = decision == crate::policy::PasswordDecision::BreakGlass;
         let Some(mut user) = found else {
             // The whole point: an unknown user does exactly the hash work a known one does.
             let _ = self.hasher.verify(&password, &self.dummy_hash);
@@ -465,7 +567,13 @@ impl LoginService {
             .map_err(|error| error.to_api_error_traced(ctx.request_id.as_str()))?;
         let started = self
             .sessions
-            .start(key, session_source, ClientInfo::default(), now)
+            .start(
+                key,
+                audience_for(user.user_type),
+                session_source,
+                ClientInfo::default(),
+                now,
+            )
             .await
             .map_err(|error| {
                 LoginError::from(error).to_api_error_traced(ctx.request_id.as_str())
@@ -474,7 +582,20 @@ impl LoginService {
         let session_id = started.session.id.clone();
         let expires_at = started.session.absolute_expires;
 
-        self.record_attempt(ctx, &identifier, source, RESULT_OK, now)
+        if break_glass {
+            // High priority for the tenant owner: the one password bypass of `sso_required`.
+            tracing::warn!(
+                request_id = ctx.request_id.as_str(),
+                user = %user.id,
+                "break-glass password sign-in under sso_required"
+            );
+        }
+        let result = if break_glass {
+            RESULT_BREAK_GLASS
+        } else {
+            RESULT_OK
+        };
+        self.record_attempt(ctx, &identifier, source, result, now)
             .await?;
         self.emit(
             "identity_session_started",
@@ -542,13 +663,20 @@ impl LoginService {
                 }
             }
             (None, Some(code)) => match verify_recovery_code(code, &user.recovery_digests) {
-                Some(index) => {
-                    self.users
-                        .consume_recovery_digest(user.id, index)
-                        .await
-                        .map_err(|error| error.to_api_error_traced(ctx.request_id.as_str()))?;
-                    Ok(Ok(()))
-                }
+                Some(index) => match self.users.consume_recovery_digest(user.id, index).await {
+                    Ok(()) => Ok(Ok(())),
+                    // Spent already, or spent by a parallel attempt a moment ago: a failed
+                    // sign-in like any other wrong code (counted, audited), never an error page.
+                    Err(error)
+                        if matches!(
+                            error.kind,
+                            LoginErrorKind::RecoveryCodeUsed | LoginErrorKind::RecoveryCodeInvalid
+                        ) =>
+                    {
+                        Ok(Err(error.kind))
+                    }
+                    Err(error) => Err(error.to_api_error_traced(ctx.request_id.as_str())),
+                },
                 None => Ok(Err(LoginErrorKind::RecoveryCodeInvalid)),
             },
             (None, None) => Ok(Err(LoginErrorKind::TotpRequired)),
@@ -692,7 +820,7 @@ impl LoginService {
         }
         let user = self
             .users
-            .find_by_id(principal.user_id)
+            .find_standing_by_id(principal.user_id)
             .await
             .map_err(|error| error.to_api_error_traced(ctx.request_id.as_str()))?
             .ok_or_else(|| ApiError::from(Code::AuthSessionExpired))?;
@@ -871,6 +999,10 @@ impl AuthService for LoginService {
     fn session<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Result<SessionInfo, ApiError>> {
         Box::pin(async move { self.session_inner(ctx).await })
     }
+
+    fn audience_of<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Result<Audience, ApiError>> {
+        Box::pin(async move { self.authenticator.audience_of(ctx).await })
+    }
 }
 
 /// Trims and lower-cases a sign-in name for case-insensitive lookup and throttling.
@@ -905,7 +1037,7 @@ impl LoginErrorKind {
             LoginErrorKind::AccountLocked
             | LoginErrorKind::Throttled
             | LoginErrorKind::ThrottleBurst => "locked",
-            LoginErrorKind::TotpRequired => "policy",
+            LoginErrorKind::TotpRequired | LoginErrorKind::SsoRequired => "policy",
             LoginErrorKind::StoreFailed => "policy",
             _ => "bad_credentials",
         }

@@ -10,11 +10,6 @@ use spot_journal_store::TenantId;
 
 use crate::error::RebuildError;
 
-/// The topic that carries the full state of one record (ADR-061 s3).
-pub const STATE_TOPIC: &str = "doc_state";
-/// The reserved prefix of audit topics (ADR-056, ADR-061 s2).
-pub const AUDIT_PREFIX: &str = "sys_";
-
 /// The class of an event (ADR-061 s2). Telemetry is never in the journal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,23 +22,54 @@ pub enum EventClass {
     Audit,
 }
 
-/// The class of `topic`: `doc_state` is state, the reserved `sys_` prefix is audit, anything else
-/// is domain.
-///
-/// The events contract has no class registry yet (ADR-061 s2 adds one), so the executor derives
-/// the class from the topic the same way the reserved prefixes do. A topic that is new to the
-/// platform and is neither is domain, which is never replayed: a state or audit fact must use its
-/// reserved name.
-#[must_use]
-pub fn classify(topic: &str) -> EventClass {
-    if topic == STATE_TOPIC {
-        EventClass::State
-    } else if topic.starts_with(AUDIT_PREFIX) {
-        EventClass::Audit
-    } else {
-        EventClass::Domain
+impl EventClass {
+    /// The class as the key of [`RebuildOutcome::classes`].
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::State => "state",
+            Self::Domain => "domain",
+            Self::Audit => "audit",
+        }
     }
 }
+
+/// The key of [`RebuildOutcome::classes`] for entries whose topic the classifier did not know.
+pub const UNKNOWN_CLASS: &str = "unknown";
+
+/// The most distinct unknown topics a [`RebuildOutcome`] lists.
+pub const MAX_UNKNOWN_TOPICS: usize = 100;
+
+/// Decides the class of a topic. The rebuild never replays by guessing: a topic the classifier
+/// does not know answers `None`; the executor refuses it unless told otherwise (see
+/// [`RebuildOptions::strict_topics`] and [`RebuildOptions::allow_unregistered`]).
+pub trait EventClassifier: Send + Sync {
+    /// The class of `topic`, or `None` when the classifier does not know the topic.
+    fn class_of(&self, topic: &str) -> Option<EventClass>;
+}
+
+/// The default classifier: the events contract registry (`spot_events_contract::registry`, one
+/// class per platform topic, ADR-061 s2 and amendment A.0.1). A topic the registry does not hold
+/// answers `None`: it is **never guessed** from its name.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RegistryClassifier;
+
+impl EventClassifier for RegistryClassifier {
+    fn class_of(&self, topic: &str) -> Option<EventClass> {
+        use spot_events_contract::registry::{Class, class_of};
+        class_of(topic).map(|class| match class {
+            Class::State => EventClass::State,
+            Class::Domain => EventClass::Domain,
+            Class::Audit => EventClass::Audit,
+        })
+    }
+}
+
+/// The prefix of the identity audit topics: counted separately in [`RebuildOutcome`].
+pub const IDENTITY_PREFIX: &str = "identity_";
+
+/// The outcome warning when `allow_unregistered` applied unregistered topics as state.
+pub const WARN_UNREGISTERED_AS_STATE: &str = "rebuild.unregistered_topics_applied_as_state";
 
 /// What a progress callback is told.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +109,20 @@ pub struct RebuildOptions<'a> {
     /// Checked between items; when set the rebuild aborts the sink and returns
     /// [`RebuildError::Cancelled`].
     pub cancel: Option<&'a AtomicBool>,
+    /// Decides the class of each topic. `None` is [`RegistryClassifier`], the events contract
+    /// registry; tests and apps with their own topics inject a classifier.
+    pub classifier: Option<&'a dyn EventClassifier>,
+    /// Refuses a rebuild that meets a topic the classifier does not know. `true` (the default):
+    /// the prescan stops before anything is applied (`journal_rebuild.unknown_topic`); without
+    /// the prescan the check is made at the entry and the sink is aborted, like any other
+    /// refusal. With `false` an unknown topic is treated as domain (not replayed) and listed in
+    /// [`RebuildOutcome::unknown_topics`].
+    pub strict_topics: bool,
+    /// For a tenant in recovery only: apply an unknown topic as **state** instead of refusing it.
+    /// The entry must then carry a state payload, the topics are listed in
+    /// [`RebuildOutcome::unknown_topics`] and the outcome carries the warning
+    /// [`WARN_UNREGISTERED_AS_STATE`]. Overrides `strict_topics`.
+    pub allow_unregistered: bool,
 }
 
 impl<'a> RebuildOptions<'a> {
@@ -101,7 +141,29 @@ impl<'a> RebuildOptions<'a> {
             progress: None,
             progress_every: 1000,
             cancel: None,
+            classifier: None,
+            strict_topics: true,
+            allow_unregistered: false,
         }
+    }
+
+    /// The class of `topic` and whether the classifier did not know it (an unknown topic is
+    /// treated as domain).
+    pub(crate) fn resolve(&self, topic: &str) -> (EventClass, bool) {
+        let known = match self.classifier {
+            Some(classifier) => classifier.class_of(topic),
+            None => RegistryClassifier.class_of(topic),
+        };
+        match known {
+            Some(class) => (class, false),
+            None if self.allow_unregistered => (EventClass::State, true),
+            None => (EventClass::Domain, true),
+        }
+    }
+
+    /// Whether an unknown topic stops the rebuild.
+    pub(crate) fn refuses_unknown(&self) -> bool {
+        self.strict_topics && !self.allow_unregistered
     }
 
     /// The schema `entity` is upcast to.
@@ -160,4 +222,21 @@ pub struct RebuildOutcome {
     pub duplicates_skipped: u64,
     /// The most stream entries held in memory at once.
     pub peak_buffered_entries: usize,
+    /// Topics the classifier did not know, treated as domain: sorted, at most
+    /// [`MAX_UNKNOWN_TOPICS`] (the smallest names when there are more).
+    #[serde(default)]
+    pub unknown_topics: Vec<String>,
+    /// Whether more unknown topics were met than `unknown_topics` lists.
+    #[serde(default)]
+    pub unknown_topics_truncated: bool,
+    /// Stream entries read per class (`state`, `domain`, `audit`) and `unknown`, so a report can
+    /// show what a rebuild skipped.
+    #[serde(default)]
+    pub classes: BTreeMap<String, u64>,
+    /// Of `audit_applied`, the identity audit entries (`identity_*`), counted separately.
+    #[serde(default)]
+    pub identity_audit_applied: u64,
+    /// Visible warnings, for example [`WARN_UNREGISTERED_AS_STATE`].
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }

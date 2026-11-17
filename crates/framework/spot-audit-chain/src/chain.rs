@@ -104,6 +104,66 @@ impl<S: AuditStore> AuditChain<S> {
         Err(AuditError::HeadConflict)
     }
 
+    /// Appends `records` in order as consecutive entries with one head read and, on a store that
+    /// batches, one write. The result is what [`append`](Self::append) of each record in turn
+    /// would give: the same sequence numbers, links and hashes, and the same checkpoints (one
+    /// after every entry whose `seq` is a multiple of the policy's `every`). If another writer
+    /// extends the head first, the whole batch is retried on the new head.
+    ///
+    /// # Errors
+    /// As [`append`](Self::append); no record is appended when a record fails validation.
+    pub async fn append_many(
+        &self,
+        records: Vec<AuditRecord>,
+    ) -> Result<Vec<ChainEntry>, AuditError> {
+        for record in &records {
+            record.validate()?;
+        }
+        if records.is_empty() {
+            return Ok(Vec::new());
+        }
+        if !self.store.batches_appends() {
+            let mut entries = Vec::with_capacity(records.len());
+            for record in records {
+                entries.push(self.append(record).await?);
+            }
+            return Ok(entries);
+        }
+        for _ in 0..MAX_APPEND_ATTEMPTS {
+            let head = self.store.head(&self.site).await?;
+            let (head_seq, mut prev_hash) = match &head {
+                Some(h) => (h.seq, h.hash),
+                None => (0, genesis_hash(&self.site)),
+            };
+            let mut entries = Vec::with_capacity(records.len());
+            let mut seq = head_seq;
+            for record in &records {
+                seq = seq.saturating_add(1);
+                let entry = ChainEntry::new(seq, prev_hash, record.clone());
+                prev_hash = entry.hash;
+                entries.push(entry);
+            }
+            match self
+                .store
+                .append_many_if_head(&self.site, head_seq, entries.clone())
+                .await?
+            {
+                AppendOutcome::Appended => {
+                    if self.policy.every > 0 {
+                        for entry in &entries {
+                            if entry.seq.is_multiple_of(self.policy.every) {
+                                self.sign_and_store(entry, entry.record.at).await?;
+                            }
+                        }
+                    }
+                    return Ok(entries);
+                }
+                AppendOutcome::HeadMoved => {}
+            }
+        }
+        Err(AuditError::HeadConflict)
+    }
+
     /// The newest entry.
     ///
     /// # Errors

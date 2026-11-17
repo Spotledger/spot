@@ -12,7 +12,10 @@
 //!
 //! # What the caller does, and why that is enough
 //!
-//! The document engine calls [`upsert`] after it has written a document (insert, update, rename,
+//! With a [`SearchHook`](crate::SearchHook) installed on the `spot-postgres` backend
+//! (WP-STO-13.T3) the document engine makes these calls itself, on every insert, update and
+//! delete of a DocType that declares `search`; a host that does not install the hook calls them
+//! by hand, as below. The document engine calls [`upsert`] after it has written a document (insert, update, rename,
 //! restore) and [`remove`] after it has deleted one, on the transaction that performed the write:
 //!
 //! ```text

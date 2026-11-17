@@ -1,0 +1,10 @@
+# hub codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "hub.pin"
+class = "none"
+summary = "The name of the stored hub pin inside the identity directory."
+explanation_key = "error.hub.pin"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

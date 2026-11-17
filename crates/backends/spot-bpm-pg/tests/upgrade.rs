@@ -78,8 +78,11 @@ CREATE INDEX bpm_node_outcome_due_idx
 ";
 
 /// The old names, derived from the new ones the way an earlier version of the crate created them:
-/// every table, constraint and stand-alone index named `spot_bpm_*` loses its `spot_` prefix.
+/// every table, constraint and stand-alone index named `spot_bpm_*` loses its `spot_` prefix. The
+/// three node-run log tables are newer than the prefix, so an old database never had them: they
+/// are dropped first.
 const DOWNGRADE: &str = r"
+DROP TABLE IF EXISTS spot_bpm_node_run_event, spot_bpm_node_run_seq, spot_bpm_node_run_consumer;
 DO $$
 DECLARE r record;
 BEGIN
@@ -248,7 +251,10 @@ async fn every_table_the_crate_creates_is_spot_prefixed_and_passes_the_migrator(
         vec![
             "spot_bpm_case".to_owned(),
             "spot_bpm_case_var".to_owned(),
-            "spot_bpm_node_outcome".to_owned()
+            "spot_bpm_node_outcome".to_owned(),
+            "spot_bpm_node_run_consumer".to_owned(),
+            "spot_bpm_node_run_event".to_owned(),
+            "spot_bpm_node_run_seq".to_owned()
         ]
     );
     for name in object_names(&db).await {
@@ -274,7 +280,7 @@ async fn old_named_tables_are_renamed_with_every_row_kept() {
     store.prepare().await.unwrap();
     // Byte-for-byte the same rows under the new names, the old names gone.
     assert_eq!(dump(&db, "spot_").await, before);
-    assert_eq!(table_names(&db).await.len(), 3);
+    assert_eq!(table_names(&db).await.len(), 6);
     assert!(
         table_names(&db)
             .await
@@ -362,7 +368,7 @@ async fn nodes_preparing_at_once_upgrade_once_and_lose_nothing() {
         task.await.unwrap().unwrap();
     }
     assert_eq!(dump(&db, "spot_").await, new_rows);
-    assert_eq!(table_names(&db).await.len(), 3);
+    assert_eq!(table_names(&db).await.len(), 6);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

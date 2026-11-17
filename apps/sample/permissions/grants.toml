@@ -74,34 +74,34 @@ if_owner = true
 # Member on someone else's row is a plain denial (the `if_owner` row is the only
 # `write` source and does not apply).
 
-# -- Viewer: read only ------------------------------------------------------
+# -- Viewer: read only (a list column needs `report`, so the Viewer reports too) -------
 
 [[entries]]
 role = "Viewer"
 doctype = "project"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]
 
 [[entries]]
 role = "Viewer"
 doctype = "task"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]
 
 [[entries]]
 role = "Viewer"
 doctype = "time_entry"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]
 
 [[entries]]
 role = "Viewer"
 doctype = "label"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]
 
 [[entries]]
 role = "Viewer"
 doctype = "checklist_item"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]
 
 [[entries]]
 role = "Viewer"
 doctype = "label_pick"
-rights = ["read", "select"]
+rights = ["read", "report", "select"]

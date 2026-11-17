@@ -8,7 +8,7 @@ use axum::Router;
 use axum::routing::{get, post};
 use http::Method;
 use spot_cli::services::{
-    OpenPath, RateLimit, RegisterFuture, Registration, SiteCtx, register_all,
+    OpenPath, RateLimit, RegisterFuture, Registration, SiteCtx, register_all_with_roles,
 };
 use spot_cli::{Options, Running};
 use spot_login::LoginConfig;
@@ -20,6 +20,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use support::Env;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// The registry without the host's role conditions: these tests give their own tables, and the
+/// generated conditions name modules those tables do not hold.
+async fn register_all(ctx: &mut SiteCtx<'_>, tables: &[&[Registration]]) -> spot_cli::Result<()> {
+    register_all_with_roles(ctx, tables, &[]).await
+}
 
 /// What the probe's open route answers.
 const FIXED: &str = r#"{"probe":"hook-ran"}"#;
@@ -347,9 +353,20 @@ async fn only_the_declared_open_path_is_reachable_without_a_session() {
     assert_eq!(again.body, FIXED);
 
     // The operator can see the allow-list.
-    assert_eq!(
-        server.open_paths(),
-        ["POST /api/v1/probe/hook/{id} (open_probe)"]
+    // The host's own modules that authenticate themselves (MCP, the process trigger hook) are
+    // listed too.
+    let declared = server.open_paths();
+    assert!(
+        declared
+            .iter()
+            .any(|p| p == "POST /api/v1/probe/hook/{id} (open_probe)"),
+        "{declared:?}"
+    );
+    assert!(
+        declared.iter().all(|p| p.ends_with("(open_probe)")
+            || p.ends_with("(mcp)")
+            || p.ends_with("(process_triggers)")),
+        "{declared:?}"
     );
     let ready = http(addr, &host, None, "GET", "/api/health/ready").await;
     assert_eq!(ready.status, 200, "{}", ready.raw);

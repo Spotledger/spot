@@ -75,6 +75,7 @@ impl Rig {
             mail: config::Mail::default(),
             files: Arc::new(MemoryFileStore::new()),
             sent_log: Some(Arc::clone(&sent_log) as Arc<dyn SentLog>),
+            bounces: None,
             clock,
         });
         let hooks = FinalAttemptHooks::new();
@@ -171,17 +172,17 @@ async fn one_bounce_per_recipient(kill: Kill) {
     rig.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_mail_job_that_times_out_on_its_last_attempt_bounces_every_recipient_once() {
     one_bounce_per_recipient(Kill::Timeout).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_mail_job_that_panics_on_its_last_attempt_bounces_every_recipient_once() {
     one_bounce_per_recipient(Kill::Panic).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn without_the_hook_registered_no_bounce_is_written() {
     // The mutation that shows the other tests depend on the registration.
     let rig = Rig::start(Kill::Timeout, 0, false).await;
@@ -191,7 +192,7 @@ async fn without_the_hook_registered_no_bounce_is_written() {
     rig.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_recipient_the_server_already_answered_gets_no_bounce() {
     let rig = Rig::start(Kill::Timeout, 0, true).await;
     rig.sent_log
@@ -212,7 +213,7 @@ async fn a_recipient_the_server_already_answered_gets_no_bounce() {
     rig.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_panic_before_the_last_attempt_writes_no_bounce() {
     let rig = Rig::start(Kill::Panic, 2, true).await;
     let id = rig.enqueue().await;
@@ -247,7 +248,7 @@ impl FinalAttemptHook for PanicsBuilding {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_panicking_hook_does_not_stop_the_hooks_after_it() {
     let hooks = FinalAttemptHooks::new();
     let (first, second) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));

@@ -95,6 +95,36 @@ pub struct AuditRecord {
     /// `realtime`), never the URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// The channel the record came from, one of [`CHANNELS`] (`api`, `console`, `cli`). Absent on
+    /// records written before this field existed, and on records whose channel is the default
+    /// (the HTTP API); a chain written before it verifies unchanged (the field is skipped when
+    /// absent, so the stored line is byte for byte what it was).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+    /// The operating-system account the process runs as, redacted like `attempted` and at most
+    /// [`ATTEMPT_NAME_MAX`] characters. Read from the operating system, never from `USER` or
+    /// `LOGNAME`; a sign-in name is never put here and an OS account is never put in `attempted`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_user: Option<String>,
+}
+
+/// The channels a record may name.
+pub const CHANNELS: [&str; 3] = ["api", "console", "cli"];
+
+impl AuditRecord {
+    /// Sets the channel and the OS account. `channel` must be one of [`CHANNELS`] (anything else
+    /// leaves the record unchanged and returns `false`); `os_user` is redacted and bounded.
+    pub fn set_channel(&mut self, channel: &str, os_user: Option<&str>) -> bool {
+        if !CHANNELS.contains(&channel) {
+            return false;
+        }
+        self.channel = Some(channel.to_owned());
+        self.os_user = os_user.map(|name| {
+            let redacted = redact_name(name);
+            redacted.chars().take(ATTEMPT_NAME_MAX).collect()
+        });
+        true
+    }
 }
 
 /// An audit write that failed. The text never carries a record's content.
@@ -375,6 +405,8 @@ impl Recorder {
             until: None,
             key_id: None,
             path: None,
+            channel: None,
+            os_user: None,
         }
     }
 
@@ -664,10 +696,13 @@ impl IdentityEvents for AuditingEvents {
 }
 
 pub mod chain;
+pub mod doc;
 mod key_rejection;
 pub use key_rejection::{KEY_ID_MAX, PathClass, RejectionReason, classify, rejected};
 mod throttle;
-pub use throttle::{AuditedThrottleStore, BoundedThrottleStore, THROTTLE_KEY_CAP};
+pub use throttle::{
+    AuditedAdmission, AuditedThrottleStore, BoundedThrottleStore, THROTTLE_KEY_CAP,
+};
 
 #[cfg(test)]
 mod tests;

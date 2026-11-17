@@ -7,6 +7,7 @@ use spot_sync_closure::RecordKey;
 use spot_sync_hub::{HubRelay, MemoryQueue, MemoryStream, RelayConfig, SendQueue};
 use spot_sync_node::{
     DEFAULT_MAX_TENANTS, Delivery, MemoryParking, NodeConfig, NodeIntake, ParkingLimits, Receipt,
+    ServeStamp,
 };
 
 use crate::catalog::{EntityScope, WorldCatalog, hub_source, references, report};
@@ -47,6 +48,8 @@ struct Node {
     generation: u64,
     reported_position: Option<u64>,
     hub_acked: u64,
+    /// The serve sequence the hub last heard acknowledged.
+    serve_acked: u64,
     suppress_ack: bool,
     pending_nack: Option<(u64, String)>,
     /// Frames of responses still arriving, by offer (volatile session state).
@@ -198,6 +201,7 @@ impl World {
                 generation: cfg.generation,
                 reported_position: None,
                 hub_acked: 0,
+                serve_acked: 0,
                 suppress_ack: false,
                 pending_nack: None,
                 inbox: BTreeMap::new(),
@@ -319,6 +323,7 @@ impl World {
         state.generation = generation;
         state.reported_position = reported;
         state.hub_acked = 0;
+        state.serve_acked = 0;
         state.restart()?;
         self.transcript.push(format!(
             "{:04} node-{node} reset generation {generation} reported {reported:?}",
@@ -561,9 +566,9 @@ impl World {
     fn edge_frames(&mut self, node: usize) -> Vec<Frame> {
         let mut out = Vec::new();
         let tenant = self.cfg.tenant.clone();
-        let prefix = self.nodes[node].intake.applied_prefix(&tenant);
+        let prefix = self.nodes[node].intake.served_prefix(&tenant);
         let ack_wanted = prefix
-            .filter(|prefix| *prefix > self.nodes[node].hub_acked)
+            .filter(|prefix| *prefix > self.nodes[node].serve_acked)
             .filter(|_| !self.nodes[node].suppress_ack);
         self.nodes[node].suppress_ack = false;
         if let Some(prefix) = ack_wanted {
@@ -617,19 +622,30 @@ impl World {
                         of,
                         position: item.position,
                         index: item.item.index,
+                        serve_seq: item.item.serve_seq,
+                        serve_after: item.item.serve_after,
                         bundle: Box::new(item.item.bundle),
                     });
                 }
             }
-            Frame::Ack { node, prefix } => {
+            Frame::Ack {
+                node,
+                prefix: through,
+            } => {
                 let id = self.node_id(node).to_owned();
-                let missing = self.missing_through(node, prefix);
-                self.hub
-                    .on_ack_at(&id, prefix, now)
+                // The node names a serve sequence; the hub trims by it and derives the journal
+                // prefix itself, which is the claim the guarantees judge.
+                let acked = self
+                    .hub
+                    .on_ack_served_at(&id, through, now)
                     .map_err(|error| ChaosError::new(seed, format!("ack {id}: {error}")))?;
-                self.nodes[node].hub_acked = prefix;
+                let prefix = acked.applied_prefix;
+                let missing = self.missing_through(node, prefix);
+                let state = &mut self.nodes[node];
+                state.serve_acked = state.serve_acked.max(through);
+                state.hub_acked = state.hub_acked.max(prefix);
                 self.transcript.push(format!(
-                    "{:04} hub acked {id} prefix {prefix} ({} missing)",
+                    "{:04} hub acked {id} serve {through} prefix {prefix} ({} missing)",
                     self.round,
                     missing.len()
                 ));
@@ -668,9 +684,8 @@ impl World {
     /// late or out of order, and the node applies the response only when every frame of it has
     /// arrived, in the order the hub served them. A response that never completes is dropped when
     /// a newer one starts, and the hub serves the same unacknowledged bundles again. The node
-    /// intake's applied prefix is the highest position it has settled and cannot see a bundle it
-    /// never received, so without this ordered session an acknowledgement would leap over a lost
-    /// bundle (`tests/findings.rs` shows it).
+    /// acknowledges the serve sequence of the hub's queue, which names the bundle below each one,
+    /// so an acknowledgement cannot leap over a bundle it was never sent (`tests/findings.rs`).
     fn deliver(&mut self, frame: Frame) -> Result<Delivered, ChaosError> {
         let Frame::Batch {
             node,
@@ -735,6 +750,8 @@ impl World {
             node,
             position,
             index,
+            serve_seq,
+            serve_after,
             bundle,
             ..
         } = frame
@@ -754,9 +771,13 @@ impl World {
             tenant: self.cfg.tenant.clone(),
             bundle: (*bundle).clone(),
         };
+        let stamp = ServeStamp {
+            seq: serve_seq,
+            after: serve_after,
+        };
         let receipt = self.nodes[node]
             .intake
-            .receive(delivery, self.clock.elapsed_ms())
+            .receive_served(delivery, stamp, self.clock.elapsed_ms())
             .map_err(|error| {
                 ChaosError::new(
                     seed,

@@ -37,11 +37,20 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use spot_app_api::context::Invocation;
+use spot_app_api::prelude::RecordId;
+use spot_app_api::{AppError, AppResult, BoxFuture as AppBoxFuture, Document, ErrorClass, Message};
+use spot_committed_delivery::{CommittedStepsHandler, JobStoreMarkers, RunnerFor, StepRunner};
 use spot_coordinator::{Coordinator, Lease};
 use spot_core::{Clock, SiteId};
+use spot_document::engine::{CommittedStep, CommittedSteps, StepOutcome, StepSource};
+use spot_effect_hold::{EffectClass, Gate, HoldSnapshot, QueueGate};
+use spot_http::api::service::{Door, DoorTier};
 use spot_jobs::model::InsertResult;
 use spot_jobs::model::Job;
-use spot_jobs::worker::{BoxFuture, ClaimGate, FinalAttemptHook, JobHandlerRegistry};
+use spot_jobs::worker::{
+    BoxFuture, ClaimGate, FinalAttemptHook, HandlerResult, JobContext, JobHandlerRegistry,
+};
 use spot_jobs::{InMemoryJobStore, JobStore, NewJob, QueuePolicy, Worker};
 use spot_postgres::PgBackend;
 use spot_scheduler::{
@@ -51,7 +60,9 @@ use spot_scheduler::{
 use spot_storage_contract::ChangeFeed;
 use tokio::sync::{mpsc, watch};
 
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::live::SiteLive;
+use crate::services::realtime::{OfflineSlot, finalise_door, refusal_error};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 
 /// The claimed queue-consumer lease of one site.
 pub fn consumer_lease(site: &str) -> String {
@@ -114,8 +125,7 @@ impl FinalAttemptHook for FinalAttemptHooks {
                 let (job, reason) = (job.clone(), reason.to_owned());
                 // A task per hook: a panic (while building the future or while running it)
                 // comes back as a join error instead of unwinding through the worker.
-                let outcome =
-                    tokio::spawn(async move { hook.on_dead(&job, &reason).await }).await;
+                let outcome = tokio::spawn(async move { hook.on_dead(&job, &reason).await }).await;
                 if outcome.is_err() {
                     tracing::error!(
                         code = "jobs.final_attempt_hook_failed",
@@ -142,6 +152,218 @@ pub fn build_worker(
         Arc::new(move || clock.now_utc())
     })
     .with_final_attempt_hook(hooks)
+}
+
+// ---- internal schedules: a service's own schedule and handler ----
+
+/// A service's handler for one of its internal schedules. It gets the job like any handler of the
+/// registry (so the claim gate, the side-effect hold and the metrics apply unchanged) and answers
+/// the worker's verdict.
+pub type InternalHandler =
+    Arc<dyn Fn(JobContext) -> BoxFuture<'static, HandlerResult> + Send + Sync>;
+
+/// What a service registers to run something on a schedule.
+pub struct InternalSchedule {
+    /// The registering service (a storage-style name). It namespaces the schedule: the job is
+    /// called `<service>:<name>`.
+    pub service: String,
+    /// The schedule's name, a storage-style name unique within the service.
+    pub name: String,
+    /// The six-field cron expression, seconds first (`0 * * * * *` is every minute), in UTC.
+    pub cron: String,
+    /// What a run missed while no node led does.
+    pub missed_run_policy: MissedRunPolicy,
+    /// The queue: `default`, `short` or `long`.
+    pub queue: String,
+    /// The longest one run may take.
+    pub budget: Duration,
+    /// The handler, run by the worker.
+    pub handler: InternalHandler,
+}
+
+/// The registration port of the jobs module, provided with
+/// `ctx.provide::<dyn InternalSchedules>(..)` (start order [`ORDER`], 600). A service whose own
+/// `ORDER` is larger fetches it with `ctx.port::<dyn InternalSchedules>()` from its `register`
+/// (build phase) and calls [`InternalSchedules::register`]. The port is absent on a reload build
+/// (the running scheduler keeps what it planned): a module skips quietly when it is `None`.
+///
+/// The scheduler plans an internal schedule exactly like a manifest schedule (the leader lease,
+/// the high-water mark per schedule, `enqueue_scheduled`), and the worker runs its handler
+/// through the registry that holds the manifest handlers.
+pub trait InternalSchedules: Send + Sync {
+    /// Adds `schedule`.
+    ///
+    /// # Errors
+    ///
+    /// A service, schedule or queue name that is malformed, a cron expression that does not
+    /// parse, a schedule of that service and name registered already, or a registration after the
+    /// site's modules were all registered.
+    fn register(&self, schedule: InternalSchedule) -> crate::Result<()>;
+
+    /// The job names (`<service>:<name>`) registered, in registration order. A health text shows
+    /// these and nothing else.
+    fn names(&self) -> Vec<String>;
+}
+
+/// One internal schedule after validation: what the scheduler plans and the worker runs.
+#[derive(Clone)]
+struct PlannedInternal {
+    service: String,
+    job: String,
+    schedule: Arc<Schedule>,
+    policy: MissedRunPolicy,
+    handler: InternalHandler,
+}
+
+/// The internal schedules of one site. Built per site; nothing is shared between sites.
+#[derive(Default)]
+pub struct InternalScheduleRegistry {
+    planned: std::sync::Mutex<Vec<PlannedInternal>>,
+    sealed: std::sync::atomic::AtomicBool,
+}
+
+impl InternalScheduleRegistry {
+    /// An empty, open registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<PlannedInternal>> {
+        self.planned.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Closes the registry (a later registration is refused), checks what it holds against
+    /// `manifest` (the manifest schedules planned) and the handlers already in `handlers`, and
+    /// registers each handler under its job name. Returns what the scheduler plans: the service
+    /// (the app part of the job name), the schedule and its missed-run policy. The jobs module
+    /// calls this once every module registered.
+    ///
+    /// # Errors
+    ///
+    /// A job name that a manifest schedule (its planned name or its step) or an earlier handler
+    /// already uses: the site does not start.
+    pub fn install(
+        &self,
+        manifest: &[(Arc<Schedule>, MissedRunPolicy)],
+        handlers: &mut JobHandlerRegistry,
+    ) -> crate::Result<Vec<(String, Arc<Schedule>, MissedRunPolicy)>> {
+        self.sealed.store(true, Ordering::Release);
+        let planned = self.lock().clone();
+        install_internal(planned, manifest, handlers)
+    }
+}
+
+impl InternalSchedules for InternalScheduleRegistry {
+    fn register(&self, schedule: InternalSchedule) -> crate::Result<()> {
+        use spot_app_api::prelude::Name;
+        let InternalSchedule {
+            service,
+            name,
+            cron,
+            missed_run_policy,
+            queue,
+            budget,
+            handler,
+        } = schedule;
+        let job = format!("{service}:{name}");
+        if self.sealed.load(Ordering::Acquire) {
+            return Err(crate::Error(format!(
+                "the internal schedule `{job}` was registered after every module registered; register from `register`"
+            )));
+        }
+        if Name::new(&service).is_err() || Name::new(&name).is_err() {
+            return Err(crate::Error(format!(
+                "the internal schedule `{job}` needs a storage-style service and schedule name"
+            )));
+        }
+        let queue = match queue.as_str() {
+            "default" => spot_manifest::Queue::Default,
+            "short" => spot_manifest::Queue::Short,
+            "long" => spot_manifest::Queue::Long,
+            other => {
+                return Err(crate::Error(format!(
+                    "the internal schedule `{job}` names the queue `{other}`; queues are default, short and long"
+                )));
+            }
+        };
+        let cron = spot_manifest::Cron::parse(&cron)
+            .map_err(|e| crate::Error(format!("the internal schedule `{job}`: {e}")))?;
+        let step = spot_app_api::StepName::new(&job)
+            .map_err(|e| crate::Error(format!("the internal schedule `{job}`: {e}")))?;
+        let zone = spot_scheduler::TimeZone::parse("UTC")
+            .map_err(|e| crate::Error(format!("the internal schedule `{job}`: {e}")))?;
+        let planned = Schedule::build(name, cron, step, queue, budget, zone)
+            .map_err(|e| crate::Error(format!("the internal schedule `{job}`: {e}")))?;
+        let mut all = self.lock();
+        if all.iter().any(|p| p.job == job) {
+            return Err(crate::Error(format!(
+                "the internal schedule `{job}` is registered twice"
+            )));
+        }
+        all.push(PlannedInternal {
+            service,
+            job,
+            schedule: Arc::new(planned),
+            policy: missed_run_policy,
+            handler,
+        });
+        Ok(())
+    }
+
+    fn names(&self) -> Vec<String> {
+        self.lock().iter().map(|p| p.job.clone()).collect()
+    }
+}
+
+/// Checks the internal schedules against what the manifests declare and what the registry
+/// already holds, and registers their handlers. Returns what the scheduler plans, with the app
+/// part of each job name (the service).
+///
+/// # Errors
+///
+/// A job name that a manifest schedule (its planned name or its step) or an earlier handler
+/// already uses: the site does not start.
+fn install_internal(
+    planned: Vec<PlannedInternal>,
+    manifest: &[(Arc<Schedule>, MissedRunPolicy)],
+    registry: &mut JobHandlerRegistry,
+) -> crate::Result<Vec<(String, Arc<Schedule>, MissedRunPolicy)>> {
+    let mut out = Vec::new();
+    for item in planned {
+        let clash = manifest.iter().any(|(s, _)| {
+            s.step.as_str() == item.job
+                || spot_scheduler::scheduler::schedule_key("", &s.name) == item.job
+        });
+        if clash || registry.get(&item.job).is_some() {
+            return Err(crate::Error(format!(
+                "the internal schedule `{}` of `{}` clashes with a schedule or a job handler that is already declared",
+                item.job, item.service
+            )));
+        }
+        let (handler, service, job) = (
+            Arc::clone(&item.handler),
+            item.service.clone(),
+            item.job.clone(),
+        );
+        registry.register(item.job.clone(), move |ctx: JobContext| {
+            let handler = Arc::clone(&handler);
+            let (service, job) = (service.clone(), job.clone());
+            Box::pin(async move {
+                // Audited by name: who it ran as (the registering service), never a caller.
+                tracing::info!(
+                    target: "spot::audit::internal_schedule",
+                    service = %service,
+                    job = %job,
+                    attempt = ctx.attempt,
+                    "internal schedule run"
+                );
+                Ok(handler(ctx).await)
+            })
+        });
+        out.push((item.service, item.schedule, item.policy));
+    }
+    Ok(out)
 }
 
 /// Settings the job services are built from.
@@ -310,7 +532,12 @@ impl LeaseView {
 
 impl Keeper {
     /// A keeper for the lease `name` that `holder` takes for `ttl` in `coordinator`.
-    pub fn new(coordinator: Arc<dyn Coordinator>, name: String, holder: String, ttl: Duration) -> Self {
+    pub fn new(
+        coordinator: Arc<dyn Coordinator>,
+        name: String,
+        holder: String,
+        ttl: Duration,
+    ) -> Self {
         Self {
             coordinator,
             name,
@@ -473,12 +700,96 @@ impl ClaimGate for LeaseClaimGate {
                     // The generation was read before the call: a loss that lands while the
                     // coordinator answers discards the answer.
                     let answer = self.keeper.still_held().await;
-                    self.view
-                        .finish(generation, answer, self.clock.monotonic())
+                    self.view.finish(generation, answer, self.clock.monotonic())
                 }
             }
         })
     }
+}
+
+/// The side-effect hold's queue gate for this site, when the `effect_hold` module provided its
+/// service (WP-MIG-08.T5). `None` when the hold is disabled: jobs then behave as before. Call it
+/// from the finaliser that builds [`Jobs`] (every module has registered by then) and pass the
+/// result to [`Jobs::hold_queue_gate`].
+pub fn queue_gate_from(ctx: &SiteCtx<'_>) -> Option<Arc<QueueGate>> {
+    ctx.port::<spot_effect_hold::HoldService>()
+        .map(|hold| Arc::new(QueueGate::new(hold.gate())))
+}
+
+/// The claim gate while the side-effect hold may be active (WP-MIG-08.T5): every queue must be
+/// claimable (a held site claims none) **and** the lease must be held.
+///
+/// The hold's own answer is a read of a cached flag, asked first and without a ledger call, so a
+/// held site does not even consult the coordinator. Jobs that are not claimed are not failed and
+/// do not count an attempt: they keep their position and run in order after the release.
+pub struct HoldClaimGate {
+    lease: Arc<dyn ClaimGate>,
+    held: Arc<QueueGate>,
+    queues: Vec<String>,
+}
+
+impl HoldClaimGate {
+    /// A gate over the lease gate, the hold's queue gate and the queues the worker consumes.
+    pub fn new(lease: Arc<dyn ClaimGate>, held: Arc<QueueGate>, queues: Vec<String>) -> Self {
+        Self {
+            lease,
+            held,
+            queues,
+        }
+    }
+}
+
+impl ClaimGate for HoldClaimGate {
+    fn permit<'a>(&'a self) -> BoxFuture<'a, bool> {
+        Box::pin(async move {
+            // Fail closed: a queue the hold does not release keeps the whole worker idle.
+            if !self
+                .queues
+                .iter()
+                .all(|queue| self.held.is_claimable(queue))
+            {
+                return false;
+            }
+            self.lease.permit().await
+        })
+    }
+}
+
+/// Guards the handler registered under `job_name` for an external effect of `class` (mail, a
+/// webhook delivery) against the site being held (WP-MIG-08.T5). Returns `false` when no handler
+/// is registered under that name (nothing is changed).
+///
+/// The queue gate ([`HoldClaimGate`]) is the primary control: a held site claims no job. This is
+/// the second line, for a job claimed in the instant before the hold began: the gate is consulted
+/// **before** the handler (and so before the network call), reads only the gate's cached state
+/// (it records nothing, so a release never has to replay a job), and a held answer or an unknown
+/// state returns a retry: the effect does not leave, and the job tries again after its backoff.
+/// A class the hold never holds (a fiscal transmission) always passes.
+pub fn guard_job_handler(
+    registry: &mut JobHandlerRegistry,
+    job_name: &str,
+    class: EffectClass,
+    gate: Arc<Gate>,
+) -> bool {
+    let Some(inner) = registry.get(job_name) else {
+        return false;
+    };
+    registry.register(job_name.to_owned(), move |ctx: JobContext| {
+        let inner = Arc::clone(&inner);
+        let gate = Arc::clone(&gate);
+        let class = class.clone();
+        Box::pin(async move {
+            let open = gate.policies().is_never_hold(&class)
+                || matches!(gate.snapshot(), HoldSnapshot::Open);
+            if !open {
+                return Ok(HandlerResult::Retry(
+                    "the site's external effects are held".to_owned(),
+                ));
+            }
+            (**inner)(ctx).await
+        })
+    });
+    true
 }
 
 /// The job worker and the outbox intake of one site.
@@ -494,6 +805,8 @@ pub struct Jobs {
     clock: Arc<dyn Clock>,
     keeper: Arc<Keeper>,
     hooks: Arc<FinalAttemptHooks>,
+    /// The side-effect hold's queue gate (WP-MIG-08.T5): while the site is held no queue is claimed.
+    hold: std::sync::Mutex<Option<Arc<QueueGate>>>,
 }
 
 impl Jobs {
@@ -516,7 +829,19 @@ impl Jobs {
                 settings.consumer_ttl,
             )),
             hooks: FinalAttemptHooks::new(),
+            hold: std::sync::Mutex::new(None),
         })
+    }
+
+    /// Attaches the side-effect hold's queue gate (WP-MIG-08.T5). While the site is held the worker
+    /// claims nothing: held jobs stay queued in their original order, are not failed and do not
+    /// count an attempt, and run normally once the hold is released. Without a gate the worker
+    /// behaves as before. Call it before the service starts: the worker is built when the node
+    /// takes the consumer lease.
+    pub fn hold_queue_gate(&self, gate: Arc<QueueGate>) {
+        if let Ok(mut slot) = self.hold.lock() {
+            *slot = Some(gate);
+        }
     }
 
     /// Registers a hook the worker calls once when a job's last attempt ends in a timeout, a
@@ -617,7 +942,16 @@ impl Jobs {
             Arc::clone(&self.keeper),
             Arc::clone(&self.clock),
         ));
-        let worker = worker.with_claim_gate(gate.clone());
+        let held = self.hold.lock().ok().and_then(|slot| slot.clone());
+        let claim: Arc<dyn ClaimGate> = match held {
+            Some(held) => Arc::new(HoldClaimGate {
+                lease: gate.clone(),
+                held,
+                queues: self.queues.clone(),
+            }),
+            None => gate.clone(),
+        };
+        let worker = worker.with_claim_gate(claim);
         let (work_stop, work_rx) = watch::channel(false);
         let worker_id = format!("{}:{}", self.node, self.site);
         let queues = self.queues.clone();
@@ -763,6 +1097,9 @@ pub struct Scheduling {
     store: Arc<dyn JobStore>,
     node: String,
     schedules: Vec<(Arc<Schedule>, MissedRunPolicy)>,
+    /// The internal schedules of services, with the service that registered each (the app part of
+    /// the job name).
+    internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
     tick_interval: Duration,
     lease_ttl: Duration,
     clock: Arc<dyn Clock>,
@@ -772,11 +1109,22 @@ pub struct Scheduling {
 impl Scheduling {
     /// A scheduler service for one site's manifest schedules.
     pub fn new(settings: &Settings) -> Arc<Self> {
+        Self::with_internal(settings, Vec::new())
+    }
+
+    /// As [`Scheduling::new`], also planning the internal schedules of services (`(service,
+    /// schedule, policy)`): each runs under the same leader lease and high-water mark per
+    /// schedule as a manifest schedule, and enqueues the job `<service>:<name>`.
+    pub fn with_internal(
+        settings: &Settings,
+        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             site: settings.site.clone(),
             store: Arc::clone(&settings.store),
             node: settings.node.clone(),
             schedules: settings.schedules.clone(),
+            internal,
             tick_interval: settings.tick_interval,
             lease_ttl: settings.lease_ttl,
             clock: Arc::clone(&settings.clock),
@@ -793,21 +1141,36 @@ impl Scheduling {
     /// lease was lost.
     async fn lead(&self, stop: &mut watch::Receiver<bool>) -> bool {
         // One node per schedule keeps each schedule's high-water mark apart; the coordinator
-        // lease decides which node leads, this local store only serves the planner.
-        let leases = Arc::new(InMemoryLeaseStore::new());
+        // lease decides which node leads, this local store only serves the planner. Each node
+        // has its own store: sharing one lets a node that renewed first after a pause take the
+        // lease under a new token and lock every other node out for good.
         let (sender, mut receiver) = mpsc::unbounded_channel::<RunSlot>();
         let mut nodes = Vec::new();
         let mut sinks: Vec<Arc<dyn SlotSink>> = Vec::new();
-        for (schedule, policy) in &self.schedules {
+        let planned: Vec<(String, Arc<Schedule>, MissedRunPolicy)> = self
+            .schedules
+            .iter()
+            .map(|(schedule, policy)| {
+                // The job is named `<app>:<schedule>`; a manifest step is `<app>:<step>`.
+                let app = schedule
+                    .step
+                    .as_str()
+                    .split_once(':')
+                    .map_or_else(String::new, |(app, _)| app.to_owned());
+                (app, Arc::clone(schedule), *policy)
+            })
+            .chain(self.internal.iter().cloned())
+            .collect();
+        for (app, schedule, policy) in &planned {
             nodes.push(Scheduler::new(
                 SchedulerConfig {
                     site: self.site.to_string(),
                     node: self.node.clone(),
                     ttl: self.lease_ttl,
                     schedules: vec![(Arc::clone(schedule), *policy)],
-                    app: String::new(),
+                    app: app.clone(),
                 },
-                Arc::clone(&leases),
+                Arc::new(InMemoryLeaseStore::new()),
                 InMemoryHighWater::new(),
             ));
             sinks.push(spot_scheduler::scheduler::sink({
@@ -893,8 +1256,17 @@ impl Service for Scheduling {
 
     fn check(&self) -> CheckFuture<'_> {
         Box::pin(async {
-            if self.schedules.is_empty() {
-                tracing::debug!("no manifest schedules; the scheduler ticks and plans nothing");
+            if self.schedules.is_empty() && self.internal.is_empty() {
+                tracing::debug!("no schedules; the scheduler ticks and plans nothing");
+            }
+            // Names only: what a service schedules is its own business.
+            let names: Vec<String> = self
+                .internal
+                .iter()
+                .map(|(service, schedule, _)| format!("{service}:{}", schedule.name))
+                .collect();
+            if !names.is_empty() {
+                tracing::debug!(internal = %names.join(", "), "internal schedules planned");
             }
             Ok(())
         })
@@ -929,4 +1301,303 @@ impl Service for Scheduling {
             Ok(())
         })
     }
+}
+
+/// This module's start order: the one it had in the host's table before it moved here.
+pub const ORDER: u32 = 600;
+
+/// Jobs, intake and schedules. The queue and the coordinator are durable: jobs live in the
+/// site's database (a killed node loses none), and the cluster profile coordinates through
+/// the database too. The single-node profile keeps the in-process coordinator, which
+/// refuses a second node in this process, and may run the memory store when `common.toml`
+/// says so.
+///
+/// The worker needs every handler the other modules contribute (mail adds `send_mail`), so the
+/// services are built in a finaliser that runs after all modules registered, and placed at
+/// this module's order.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    if !ctx.assembling() {
+        return Ok(());
+    }
+    let env = *ctx.env()?;
+    let (root, loaded, site, backend) = (env.root, env.loaded, env.site, env.backend);
+    let clock = Arc::clone(ctx.clock());
+    let services_config = &loaded.common.services;
+    let node = process_node(&site.site);
+    // One coordinator per site: the cluster-redis plugin's, when the host provided it before the
+    // modules registered (WP-PLT-19.T3); otherwise the PostgreSQL or in-process one below.
+    let coordinator: Arc<dyn spot_coordinator::Coordinator> =
+        if let Some(provided) = ctx.port::<dyn spot_coordinator::Coordinator>() {
+            provided
+        } else if services_config.profile == "cluster" {
+            let coordinator = spot_coordinator_pg::PgCoordinator::new(
+                backend.pool(),
+                spot_coordinator_pg::PgCoordinatorConfig::default(),
+            );
+            coordinator.prepare().await.map_err(crate::error)?;
+            Arc::new(coordinator)
+        } else {
+            let node_id = spot_coordinator::NodeId::new(node.clone()).map_err(crate::error)?;
+            spot_coordinator::InProcessCoordinator::start(
+                Arc::new(spot_coordinator::InMemoryPresence::new()),
+                node_id,
+                Arc::clone(&clock),
+            )
+            .await
+            .map_err(crate::error)?
+        };
+    // Lease events and the held gauge on `/metrics`, only when that service is on.
+    let coordinator: Arc<dyn spot_coordinator::Coordinator> = if services_config.metrics.enabled {
+        Arc::new(crate::services::metered_coordinator::MeteredCoordinator::new(coordinator))
+    } else {
+        coordinator
+    };
+    let store: Arc<dyn spot_jobs::JobStore> = if services_config.jobs.store == "postgres" {
+        let store = spot_jobs_pg::PgJobStore::new(backend.pool());
+        store.prepare().await.map_err(crate::error)?;
+        Arc::new(store)
+    } else {
+        Settings::memory_store()
+    };
+    let schedules = manifest_schedules(root, loaded, site)?;
+    // Services that start later (a larger ORDER) register schedules of their own here.
+    let internal = Arc::new(InternalScheduleRegistry::new());
+    ctx.provide::<dyn InternalSchedules>(Arc::clone(&internal) as Arc<dyn InternalSchedules>)?;
+    // The narrow ports later modules take (job submit, outbox lease, system reader); each is
+    // built from this site's own store, coordinator, feed and engine.
+    crate::services::ports::provide(
+        ctx,
+        crate::services::ports::PortParts {
+            site: SiteId::new(&site.site).map_err(crate::error)?,
+            store: Arc::clone(&store),
+            queues: services_config.jobs.queues.clone(),
+            clock: Arc::clone(&clock),
+            coordinator: Arc::clone(&coordinator),
+            feed: backend.clone(),
+            node: node.clone(),
+            ttl: std::time::Duration::from_millis(services_config.jobs.lease_ttl_ms),
+            loader: Arc::new(crate::services::ports::LiveLoader(Arc::clone(env.live))),
+        },
+    )?;
+    // The committed-steps handler keeps its done markers in the same store the worker claims from.
+    let committed_store = Arc::clone(&store);
+    let settings = Settings {
+        site: SiteId::new(&site.site).map_err(crate::error)?,
+        backend: backend.clone(),
+        store,
+        queues: services_config.jobs.queues.clone(),
+        intake_interval: std::time::Duration::from_millis(services_config.jobs.intake_poll_ms),
+        grace: std::time::Duration::from_millis(services_config.jobs.grace_ms),
+        node,
+        clock: Arc::clone(&clock),
+        coordinator,
+        consumer_ttl: std::time::Duration::from_millis(services_config.jobs.lease_ttl_ms),
+        schedules,
+        tick_interval: std::time::Duration::from_millis(services_config.scheduler.tick_ms),
+        lease_ttl: std::time::Duration::from_millis(services_config.scheduler.lease_ttl_ms),
+    };
+    crate::natives::add_job_handlers(ctx.job_handlers());
+    // The committed-steps runner asks the offline decision for the user a step acts as; the slot
+    // is filled once every module has registered (empty: unchanged).
+    let offline = Arc::new(OfflineSlot::default());
+    install_committed_steps(
+        ctx.job_handlers(),
+        Arc::new(LiveRunners::with_offline(
+            SiteId::new(&site.site).map_err(crate::error)?,
+            Arc::clone(env.live),
+            Arc::clone(&offline),
+        )),
+        committed_store,
+    );
+    finalise_door(ctx, "offline_door_jobs", move |admission| {
+        offline.set(admission);
+    });
+    ctx.finally(move |ctx| {
+        let mut registry = ctx.take_job_handlers();
+        let planned = internal.install(&settings.schedules, &mut registry)?;
+        let handlers = Arc::new(registry);
+        let jobs = Jobs::new(&settings, handlers);
+        if let Some(mail) = ctx.port::<crate::services::mail::Mail>() {
+            jobs.register_final_attempt_hook(mail.final_attempt_hook());
+        }
+        ctx.add(jobs);
+        ctx.add(Scheduling::with_internal(&settings, planned));
+        Ok(())
+    });
+    Ok(())
+}
+
+/// This host's identity in leases and worker claims: the site, and a random part chosen at
+/// every start, so a second host on the same site never shares a holder name with this one
+/// (not even inside one process).
+fn process_node(site: &str) -> String {
+    let id = spot_storage_contract::RecordId::new_v7().to_string();
+    let part = id.rsplit('-').next().unwrap_or(&id);
+    format!("node-{site}-{part}")
+}
+
+/// Every manifest schedule of the site's installed apps, with the policy a missed run gets.
+fn manifest_schedules(
+    root: &std::path::Path,
+    loaded: &crate::config::Loaded,
+    site: &crate::config::Site,
+) -> crate::Result<
+    Vec<(
+        Arc<spot_scheduler::Schedule>,
+        spot_scheduler::MissedRunPolicy,
+    )>,
+> {
+    let catalogue = crate::apps::catalogue(root, loaded)?;
+    let mut schedules = Vec::new();
+    for app in &site.apps {
+        let Some(source) = catalogue.iter().find(|source| &source.name == app) else {
+            continue;
+        };
+        let manifest = crate::appdir::manifest(&source.dir)?;
+        let zone = spot_scheduler::TimeZone::parse("UTC")
+            .map_err(|e| crate::Error(format!("{}: {e}", source.dir.display())))?;
+        for sub in &manifest.schedules {
+            let schedule = spot_scheduler::Schedule::new(sub, zone.clone())
+                .map_err(|e| crate::Error(format!("{}: {e}", source.dir.display())))?;
+            // `skip` plans nothing for any firing in a tick's window, the on-time one included,
+            // so it would never fire. `run_once` plans the latest firing of the window: one run
+            // per tick that reaches a firing, and never a burst (the high-water mark is kept in
+            // memory, so a restarted node does not replay what it missed while down).
+            schedules.push((Arc::new(schedule), spot_scheduler::MissedRunPolicy::RunOnce));
+        }
+    }
+    Ok(schedules)
+}
+
+/// The step runner of the site this host serves, resolved when a step runs.
+///
+/// The host builds the document engine after the job service is assembled, so the engine cannot
+/// be held here: the runner reads the site's live handle on every call. While the runtime is
+/// being built or swapped there is no engine, and the answer is a retryable `Unavailable`
+/// error, which the handler turns into `Retry` (no marker, nothing skipped); it never fails the
+/// job for it.
+pub struct LiveRunners {
+    site: SiteId,
+    runner: Arc<LiveRunner>,
+}
+
+/// The offline decision for the user a job's invocation acts as (WP-IAM-09.T5): `None` admits.
+///
+/// A user actor is asked for the user whose rights applied and, when a person acted as that user,
+/// for the person too; a platform component (a system job) needs no user; a consumer is not in the
+/// offline directory. The refusal names no user and carries only its class.
+#[must_use]
+pub fn offline_refusal(slot: &OfflineSlot, invocation: &Invocation) -> Option<AppError> {
+    slot.admit_actor(Door::Jobs, &invocation.actor, DoorTier::Three, None)
+        .err()
+        .map(refusal_error)
+}
+
+impl LiveRunners {
+    /// The runner of `site`, read from its live handle.
+    #[must_use]
+    pub fn new(site: SiteId, live: Arc<SiteLive>) -> Self {
+        Self {
+            site,
+            runner: Arc::new(LiveRunner {
+                live,
+                offline: Arc::new(OfflineSlot::default()),
+            }),
+        }
+    }
+
+    /// The same runner with its steps decided by `slot` before they run (the host passes the slot
+    /// its finaliser fills; an empty slot admits).
+    #[must_use]
+    pub fn with_offline(site: SiteId, live: Arc<SiteLive>, slot: Arc<OfflineSlot>) -> Self {
+        Self {
+            site,
+            runner: Arc::new(LiveRunner {
+                live,
+                offline: slot,
+            }),
+        }
+    }
+}
+
+impl RunnerFor for LiveRunners {
+    fn runner(&self, site: &SiteId) -> Option<Arc<dyn StepRunner>> {
+        (*site == self.site).then(|| Arc::clone(&self.runner) as Arc<dyn StepRunner>)
+    }
+}
+
+/// The engine of the running runtime, as a committed-steps runner.
+struct LiveRunner {
+    live: Arc<SiteLive>,
+    offline: Arc<OfflineSlot>,
+}
+
+fn engine_unavailable() -> AppError {
+    AppError::new(
+        ErrorClass::Unavailable,
+        "committed_delivery.step_unavailable",
+        "The document engine is not running yet.",
+    )
+}
+
+impl CommittedSteps for LiveRunner {
+    fn run<'a>(
+        &'a self,
+        invocation: &'a Invocation,
+        step: CommittedStep,
+    ) -> AppBoxFuture<'a, Vec<Message>> {
+        Box::pin(async move { self.run_checked(invocation, step).await.messages })
+    }
+
+    fn run_checked<'a>(
+        &'a self,
+        invocation: &'a Invocation,
+        step: CommittedStep,
+    ) -> AppBoxFuture<'a, StepOutcome> {
+        Box::pin(async move {
+            // A step acting for a user is decided offline before the engine sees it.
+            if let Some(failure) = offline_refusal(&self.offline, invocation) {
+                return StepOutcome {
+                    messages: Vec::new(),
+                    failure: Some(failure),
+                };
+            }
+            match self.live.engine() {
+                Some(engine) => engine.runner().run_checked(invocation, step).await,
+                None => StepOutcome {
+                    messages: Vec::new(),
+                    failure: Some(engine_unavailable()),
+                },
+            }
+        })
+    }
+}
+
+impl StepSource for LiveRunner {
+    fn current<'a>(
+        &'a self,
+        doctype: &'a str,
+        id: RecordId,
+    ) -> AppBoxFuture<'a, AppResult<Option<Document>>> {
+        Box::pin(async move {
+            match self.live.engine() {
+                Some(engine) => engine.runner().current(doctype, id).await,
+                None => Err(engine_unavailable()),
+            }
+        })
+    }
+}
+
+/// Registers the `sys:committed_steps` handler on `registry`, with its done markers in the job
+/// context row of `store` (the store the worker claims from), so a retry after a crash resumes at
+/// the first unmarked step. `InMemoryMarkers` is never used by the host.
+pub fn install_committed_steps(
+    registry: &mut JobHandlerRegistry,
+    runners: Arc<dyn RunnerFor>,
+    store: Arc<dyn JobStore>,
+) -> Arc<CommittedStepsHandler> {
+    let markers = Arc::new(JobStoreMarkers::new(Arc::clone(&store)));
+    let handler = Arc::new(CommittedStepsHandler::new(runners, markers, store));
+    handler.register(registry);
+    handler
 }

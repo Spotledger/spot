@@ -6,10 +6,17 @@
 //! enabled administrator with a local password and a second factor. Every break-glass use
 //! raises an alert-level event, returned here as data for the caller to journal.
 //!
+//! The policy applies to the **staff** and **partner** audiences only (ADR-083 section 2.3).
+//! A consumer sign-in is not subject to a tenant's `sso_required`: it never needs a break-glass
+//! administrator, is allowed under every mode ([`decide_sso_signin_for`]), and a consumer
+//! provider cannot satisfy the "one healthy provider" requirement of `sso_required`
+//! ([`DirectoryView::provider_audience`]).
+//!
 //! A policy change that would lock the tenant out — switching to required with fewer than two
 //! usable break-glass administrators — is refused (`validate_change`), problems listed.
 
 use serde::{Deserialize, Serialize};
+use spot_core::Audience;
 use spot_iam_directory::UserType;
 use spot_storage_contract::RecordId;
 use time::OffsetDateTime;
@@ -69,6 +76,12 @@ pub trait DirectoryView {
     fn enabled_break_glass_admins(&self) -> usize;
     /// Whether a provider is configured and currently healthy.
     fn provider_healthy(&self, provider: &ProviderId) -> bool;
+    /// The audience a configured provider signs in for. The default is `staff`, so a view
+    /// that predates audiences keeps its meaning; a view backed by provider configuration
+    /// returns [`crate::ProviderConfig::audience`].
+    fn provider_audience(&self, _provider: &ProviderId) -> Audience {
+        Audience::Staff
+    }
     /// The user whose sign-in name is `email`, when one exists (case-insensitive).
     fn user_for_email(&self, email: &str) -> Option<RecordId>;
     /// The user a `(issuer, subject)` linked identity belongs to.
@@ -296,11 +309,11 @@ pub fn check_policy(policy: &SignInPolicy, view: &impl DirectoryView) -> Vec<Sso
                 }
             }
         }
-        if !policy
-            .providers
-            .iter()
-            .any(|provider| view.provider_healthy(provider))
-        {
+        // A consumer provider is not subject to this policy and cannot satisfy it.
+        if !policy.providers.iter().any(|provider| {
+            view.provider_audience(provider) != Audience::Consumer
+                && view.provider_healthy(provider)
+        }) {
             problems.push(SsoError::new(
                 e::codes::NO_PROVIDER,
                 "The tenant's sign-in policy is not safe.",
@@ -384,6 +397,33 @@ pub fn decide_local_signin(
         "Local sign-in is not available for this tenant.",
         "Sign in with single sign-on, or use a break-glass administrator account.",
     ))
+}
+
+impl SignInPolicy {
+    /// Whether the tenant sign-in policy governs sign-ins of `audience`: staff and partner
+    /// yes, consumer no.
+    #[must_use]
+    pub fn applies_to(audience: Audience) -> bool {
+        matches!(audience, Audience::Staff | Audience::Partner)
+    }
+}
+
+/// Like [`decide_sso_signin`], for a provider of a stated audience: a consumer sign-in is not
+/// subject to the staff policy (any mode, any trusted-provider list), so it is allowed;
+/// staff and partner sign-ins follow [`decide_sso_signin`].
+///
+/// # Errors
+///
+/// As [`decide_sso_signin`], for staff and partner audiences only.
+pub fn decide_sso_signin_for(
+    policy: &SignInPolicy,
+    provider: &ProviderId,
+    audience: Audience,
+) -> Result<()> {
+    if !SignInPolicy::applies_to(audience) {
+        return Ok(());
+    }
+    decide_sso_signin(policy, provider)
 }
 
 /// Whether single sign-on with `provider` is allowed at all under `policy`.

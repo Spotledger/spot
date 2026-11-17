@@ -162,3 +162,12 @@ explanation_key = "error.bpm_engine.work_failed"
 params = ["message"]
 remedy = "Fix the caller's document change and retry the same transition."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_engine.node_failed"
+class = "none"
+summary = "The stable code recorded for a failure whose text carries no machine code."
+explanation_key = "error.bpm_engine.node_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

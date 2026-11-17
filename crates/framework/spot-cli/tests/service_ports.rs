@@ -127,7 +127,7 @@ fn spec(key: &str) -> JobSpec {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_later_module_takes_each_port_and_an_earlier_one_gets_the_missing_port_error() {
     let mut s = site("acme", Arc::new(Docs::default()), "n1").await;
     s.ctx.as_module("webhooks", 700);
@@ -147,7 +147,7 @@ async fn a_later_module_takes_each_port_and_an_earlier_one_gets_the_missing_port
     assert!(err.0.contains("module `early` requires the port"), "{err}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_same_idempotency_key_creates_one_job() {
     let s = site("acme", Arc::new(Docs::default()), "n1").await;
     let submit = s.ctx.require_port::<dyn JobSubmit>().unwrap();
@@ -162,7 +162,7 @@ async fn the_same_idempotency_key_creates_one_job() {
     assert_eq!(listed.len(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn submit_refuses_a_bad_request_without_echoing_it() {
     let s = site("acme", Arc::new(Docs::default()), "n1").await;
     let submit = s.ctx.require_port::<dyn JobSubmit>().unwrap();
@@ -182,7 +182,7 @@ async fn submit_refuses_a_bad_request_without_echoing_it() {
     assert!(!err.to_string().contains("secret-key-123"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_outbox_lease_is_exclusive_and_reads_from_a_position() {
     let s = site("acme", Arc::new(Docs::default()), "n1").await;
     let outbox = s.ctx.require_port::<dyn OutboxLease>().unwrap();
@@ -210,7 +210,7 @@ async fn the_outbox_lease_is_exclusive_and_reads_from_a_position() {
     ));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_lease_of_another_site_is_not_accepted() {
     let a = site("acme", Arc::new(Docs::default()), "n1").await;
     let b = site("globex", Arc::new(Docs::default()), "n1").await;
@@ -228,7 +228,7 @@ async fn a_lease_of_another_site_is_not_accepted() {
     ));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_sites_system_readers_are_independent() {
     let docs = Arc::new(Docs::default());
     let id = RecordId::new_v7();
@@ -248,7 +248,7 @@ async fn two_sites_system_readers_are_independent() {
     ));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ports_answer_stopped_after_the_stop_signal() {
     let s = site("acme", Arc::new(Docs::default()), "n1").await;
     let submit = s.ctx.require_port::<dyn JobSubmit>().unwrap();

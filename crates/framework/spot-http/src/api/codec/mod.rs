@@ -198,7 +198,7 @@ fn decode_field_value(
     field: &MetaField,
     meta_of: MetaLookup,
 ) -> Result<FieldValue, ApiError> {
-    if field.field_type == FieldType::Table {
+    if field.field_type.is_table() {
         let child = field
             .child_doctype
             .as_ref()
@@ -300,7 +300,14 @@ pub fn decode_scalar(value: &Json, field: &MetaField, path: &str) -> Result<Valu
                 .map_err(|_| invalid_value(path, "standard base64 with padding")),
             _ => Err(invalid_value(path, "a base64 string")),
         },
-        FieldType::Table => Err(invalid_value(path, "an array of row objects (child table)")),
+        FieldType::Table | FieldType::TableMultiselect => {
+            Err(invalid_value(path, "an array of row objects (child table)"))
+        }
+        // A secret is written only through the secret path, never in a document body.
+        FieldType::Secret => Err(invalid_value(
+            path,
+            "no value: a secret is written through its own route",
+        )),
         // An `attach` field encodes as a file-record id (WP-PLT-10); v0.1 write bodies carry
         // no attachment values, so only the string form arrives here.
         FieldType::Attach => match value {
@@ -458,7 +465,9 @@ pub fn encode_scalar(value: &Value, field: &MetaField) -> Result<Json, ApiError>
     };
     // A stored value that contradicts its declared type is a server bug, not a client error.
     match &field.field_type {
-        FieldType::Table => return Err(ApiError::from_code(Code::HttpInternal)),
+        FieldType::Table | FieldType::TableMultiselect | FieldType::Secret => {
+            return Err(ApiError::from_code(Code::HttpInternal));
+        }
         ft if !value.is_null() && !value_fits(ft, value) => {
             return Err(ApiError::from_code(Code::HttpInternal));
         }

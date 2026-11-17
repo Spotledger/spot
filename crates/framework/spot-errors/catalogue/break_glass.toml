@@ -290,3 +290,165 @@ explanation_key = "error.break_glass.allow"
 params = []
 remedy = "No action needed; this is a decision code the customer view records."
 since = "0.1.0"
+
+[[entry]]
+code = "break_glass.already_over"
+class = "none"
+summary = "The operation was refused: already over."
+explanation_key = "error.break_glass.already_over"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.approve"
+class = "none"
+summary = "The operation was refused: approve."
+explanation_key = "error.break_glass.approve"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.closed"
+class = "none"
+summary = "The operation was refused: closed."
+explanation_key = "error.break_glass.closed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.digest_changed"
+class = "none"
+summary = "The operation was refused: digest changed."
+explanation_key = "error.break_glass.digest_changed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.dispatch_unavailable"
+class = "none"
+summary = "The operation was refused: dispatch unavailable."
+explanation_key = "error.break_glass.dispatch_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.expire"
+class = "none"
+summary = "The operation was refused: expire."
+explanation_key = "error.break_glass.expire"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.not_approved"
+class = "none"
+summary = "The operation was refused: not approved."
+explanation_key = "error.break_glass.not_approved"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.not_closed"
+class = "none"
+summary = "The operation was refused: not closed."
+explanation_key = "error.break_glass.not_closed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.not_waiting"
+class = "none"
+summary = "The operation was refused: not waiting."
+explanation_key = "error.break_glass.not_waiting"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.open"
+class = "none"
+summary = "The operation was refused: open."
+explanation_key = "error.break_glass.open"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.repeat_approver"
+class = "none"
+summary = "The operation was refused: repeat approver."
+explanation_key = "error.break_glass.repeat_approver"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.repeat_key"
+class = "none"
+summary = "The operation was refused: repeat key."
+explanation_key = "error.break_glass.repeat_key"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.request"
+class = "none"
+summary = "The operation was refused: request."
+explanation_key = "error.break_glass.request"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.retention_unavailable"
+class = "none"
+summary = "The operation was refused: retention unavailable."
+explanation_key = "error.break_glass.retention_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.revoke"
+class = "none"
+summary = "The operation was refused: revoke."
+explanation_key = "error.break_glass.revoke"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.self_approval"
+class = "none"
+summary = "The operation was refused: self approval."
+explanation_key = "error.break_glass.self_approval"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.upload"
+class = "none"
+summary = "The operation was refused: upload."
+explanation_key = "error.break_glass.upload"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass.window_over"
+class = "none"
+summary = "The operation was refused: window over."
+explanation_key = "error.break_glass.window_over"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

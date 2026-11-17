@@ -37,8 +37,35 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
+/// The key file of `site` under `<root>/keys` (every site has its own, by `{site}`), made once.
+pub fn ensure_key(root: &std::path::Path, site: &str) {
+    let keys = root.join("keys");
+    std::fs::create_dir_all(&keys).unwrap();
+    let path = keys.join(format!("{site}.json"));
+    if path.exists() {
+        return;
+    }
+    let site = site.to_owned();
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(spot_cli::services::secrets::init_key_file(&path, &site))
+                    .unwrap();
+            })
+            .join()
+            .unwrap();
+    });
+}
+
 fn run(root: &Path, args: &[&str], stdin: Option<&str>) -> Output {
     use std::io::Write;
+    if let ["new-site", name, ..] = args {
+        ensure_key(root, name);
+    }
     let mut child = Command::new(env!("CARGO_BIN_EXE_spot"))
         .arg("--root")
         .arg(root)
@@ -110,8 +137,9 @@ impl Env {
         std::fs::write(
             root.0.join("common.toml"),
             format!(
-                "apps = [{:?}, 'sample']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\n[trust]\nrequire_signed = false\n",
-                repo().join("apps/platform").display().to_string()
+                "apps = [{:?}, 'sample']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\n[services.secrets]\nkek_file = {:?}\n[trust]\nrequire_signed = false\n",
+                repo().join("apps/platform").display().to_string(),
+                format!("{}/keys/{{site}}.json", root.0.display()),
             ),
         )
         .unwrap();
@@ -873,8 +901,8 @@ async fn a_reload_swaps_the_permission_snapshot() {
     expect(&project, 200);
     let grant = env.root.0.join("sample/permissions/grants.toml");
     let text = std::fs::read_to_string(&grant).unwrap().replace(
-        "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"select\"]",
-        "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"select\", \"create\"]",
+        "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"report\", \"select\"]",
+        "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"report\", \"select\", \"create\"]",
     );
     std::fs::write(&grant, text).unwrap();
     ok(&env.root.0, &["reload", "--site", &env.site]);
@@ -962,7 +990,8 @@ async fn a_site_with_a_bad_snapshot_answers_503_while_others_serve() {
         response.body["error"]["details"]["reason"],
         "site_unavailable"
     );
-    assert!(response.body["request_id"].is_string());
+    assert!(response.body["error"]["request_id"].is_string());
+    assert!(response.body.get("request_id").is_none());
     // The other site still serves.
     expect(
         &http(addr, &good, None, "GET", "/api/v1/meta/task", &[], None).await,

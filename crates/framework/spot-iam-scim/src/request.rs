@@ -20,13 +20,12 @@ use std::collections::BTreeMap;
 use serde_json::{Value as Json, json};
 use spot_events_contract::Actor;
 use spot_iam_access::KeyScope;
-use spot_iam_assign::plan_idp;
 use spot_iam_directory::{LeaverAction, User, UserType};
 use spot_storage_contract::RecordId;
 use time::OffsetDateTime;
 
 use crate::TenantId;
-use crate::error::{ScimError, ScimResult};
+use crate::error::{ScimError, ScimResult, shape};
 use crate::filter::{Filter, Target};
 use crate::mapping::{GroupMapping, build_group_role_map};
 use crate::patch::PatchRequest;
@@ -506,7 +505,7 @@ fn list_users(request: &ScimRequest, ctx: &mut ScimContext<'_>) -> ScimResult<Sc
 fn create_user(request: &ScimRequest, ctx: &mut ScimContext<'_>) -> ScimResult<ScimResponse> {
     let body = require_body(request)?;
     let input: ScimUser = serde_json::from_value(body.clone())
-        .map_err(|e| ScimError::invalid_syntax(format!("the body is not a user: {e}")))?;
+        .map_err(|e| ScimError::invalid_syntax(shape("the body is not a user", &e)))?;
     if input.user_name.trim().is_empty() {
         return Err(ScimError::invalid_value("`userName` is required"));
     }
@@ -582,7 +581,7 @@ fn replace_user(
     check_if_match(request, existing.version)?;
     let body = require_body(request)?;
     let input: ScimUser = serde_json::from_value(body.clone())
-        .map_err(|e| ScimError::invalid_syntax(format!("the body is not a user: {e}")))?;
+        .map_err(|e| ScimError::invalid_syntax(shape("the body is not a user", &e)))?;
     if let Some(other) = ctx
         .store
         .find_user_by_name(&ctx.tenant, input.user_name.trim())

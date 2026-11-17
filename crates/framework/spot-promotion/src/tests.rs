@@ -1516,3 +1516,5 @@ fn an_unwritable_approval_audit_records_nothing() {
     assert_eq!(error.code(), "promotion.audit_failed");
     assert!(harness.approvals.all().unwrap().is_empty());
 }
+
+mod snapshot_tests;

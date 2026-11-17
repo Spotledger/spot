@@ -390,6 +390,23 @@ fn search_with_declared_typo_tolerance_adds_trigram_similarity() {
 }
 
 #[test]
+fn search_folds_the_bound_text_with_unaccent_and_never_splices_it() {
+    const FOLD: &str = "unaccent('unaccent'::regdictionary, $";
+    let text = "caf\u{e9} \"o'brien\\ & | !";
+    for mode in [SearchMode::Web, SearchMode::Phrase, SearchMode::Plain] {
+        let q = listing(Some(Expr::Search(term(mode, text))));
+        let c = ok(&q, &search_cat());
+        assert!(c.sql.contains(FOLD), "{}", c.sql);
+        assert!(!c.sql.contains("o'brien"), "the term is spliced: {}", c.sql);
+        assert!(!c.sql.contains('\u{e9}'), "the term is spliced: {}", c.sql);
+    }
+    // The typo branch folds its trigram parameter too: two folded parameters.
+    let q = listing(Some(Expr::Search(term(SearchMode::Web, "harbur"))));
+    let c = ok(&q, &wide_catalog());
+    assert_eq!(c.sql.matches(FOLD).count(), 2, "{}", c.sql);
+}
+
+#[test]
 fn search_rank_orders_and_is_never_selected() {
     let mut q = listing(Some(Expr::Search(term(SearchMode::Web, "harbour"))));
     q.order_by = vec![Order {
@@ -403,6 +420,14 @@ fn search_rank_orders_and_is_never_selected() {
     let select = c.sql.split(" FROM ").next().unwrap_or_default();
     assert!(order.contains("ts_rank"), "{}", c.sql);
     assert!(!select.contains("ts_rank"), "{}", c.sql);
+    // The rank folds the bound text as the filter does.
+    assert!(
+        order.contains(
+            "websearch_to_tsquery('simple'::regconfig, unaccent('unaccent'::regdictionary, $4))"
+        ),
+        "{}",
+        c.sql
+    );
     // The contract's id tie-break follows the rank.
     assert!(order.ends_with("\"x\".\"id\" ASC OFFSET $5"), "{}", c.sql);
 }

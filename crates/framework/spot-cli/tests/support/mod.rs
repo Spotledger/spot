@@ -35,6 +35,10 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 pub fn run(root: &Path, args: &[&str], stdin: Option<&str>) -> Output {
+    // Every site a test makes needs its own key file (a second site: controllers, mcp_service).
+    if let ["new-site", name, ..] = args {
+        ensure_key(root, name);
+    }
     let mut child = Command::new(env!("CARGO_BIN_EXE_spot"))
         .arg("--root")
         .arg(root)
@@ -52,6 +56,30 @@ pub fn run(root: &Path, args: &[&str], stdin: Option<&str>) -> Output {
         }
     }
     child.wait_with_output().unwrap()
+}
+
+/// The key file of `site` under `<root>/keys` (every site has its own, by `{site}`), made once.
+pub fn ensure_key(root: &std::path::Path, site: &str) {
+    let keys = root.join("keys");
+    std::fs::create_dir_all(&keys).unwrap();
+    let path = keys.join(format!("{site}.json"));
+    if path.exists() {
+        return;
+    }
+    let site = site.to_owned();
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(spot_cli::services::secrets::init_key_file(&path, &site))
+                    .unwrap();
+            })
+            .join()
+            .unwrap();
+    });
 }
 
 pub fn text(output: &Output) -> String {
@@ -74,8 +102,9 @@ impl Env {
         std::fs::write(
             root.join("common.toml"),
             format!(
-                "apps = [{:?}, 'sample']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\n[trust]\nrequire_signed = false\n",
-                repo().join("apps/platform").display().to_string()
+                "apps = [{:?}, 'sample']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\npool_max_size = 8\n[services.secrets]\nkek_file = {:?}\n[services.signin_throttle]\nper_account = {{ capacity = 100000, per_seconds = 900 }}\nper_source = {{ capacity = 100000, per_seconds = 900 }}\nper_tenant = {{ capacity = 10000000, per_seconds = 900 }}\n[trust]\nrequire_signed = false\n",
+                repo().join("apps/platform").display().to_string(),
+                format!("{}/keys/{{site}}.json", root.display()),
             ),
         )
         .unwrap();
@@ -83,6 +112,7 @@ impl Env {
             "spot-test-{}",
             RecordId::new_v7().to_string().replace('-', "")
         );
+        ensure_key(&root, &site);
         Some(Env {
             root,
             site,

@@ -202,6 +202,7 @@ async fn retention_deletes_only_what_the_policy_allows() {
         keep_weekly: 1,
         keep_monthly: 1,
         protect_newer_than_days: 0,
+        keep_last: 0,
     };
     let first = runner
         .run(&job, datetime!(2026-01-01 02:00:00 UTC))

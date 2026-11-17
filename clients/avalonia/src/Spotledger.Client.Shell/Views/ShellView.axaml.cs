@@ -76,6 +76,7 @@ public sealed partial class ShellView : UserControl
         SetGeometry(scope, "ConnectionGlyph", "connection");
 
         scope.Get<Button>("NewButton")!.Click += (_, _) => Fire("shell.new", CommandRoute.ContextMenu);
+        ConnectNotifications(scope);
         scope.Get<Button>("SidebarToggle")!.Click += (_, _) => Fire("view.sidebar", CommandRoute.ContextMenu);
         scope.Get<Button>("SidebarRestoreButton")!.Click += (_, _) =>
         {
@@ -170,6 +171,7 @@ public sealed partial class ShellView : UserControl
         RebuildTabs();
         RebuildLauncherRows();
         UpdateHeader();
+        ApplyNotificationSurface();
         UpdateStatusBar();
         UpdateSessionOverlays();
         if (shell.Sidebar != SidebarMode.Expanded)
@@ -201,6 +203,12 @@ public sealed partial class ShellView : UserControl
                  or nameof(ShellViewModel.SiteName)
                  or nameof(ShellViewModel.NotificationCount):
                 UpdateHeader();
+                break;
+            case nameof(ShellViewModel.NotificationBellName) or nameof(ShellViewModel.Notifications):
+                ApplyNotificationSurface();
+                break;
+            case nameof(ShellViewModel.IsNotificationsOpen):
+                SyncNotificationsFlyout(_shell!);
                 break;
             case nameof(ShellViewModel.StatusMessage) or nameof(ShellViewModel.Keymap):
                 UpdateStatusBar();

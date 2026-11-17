@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+# remove keeps the state directory (identity key, trust anchor, audit log), so a
+# reinstall resumes. purge is the explicit "delete everything" request and
+# removes that directory; the path is a literal, no value from the environment
+# reaches the command. The service account is left behind on purpose: nothing
+# deletes an account that may still own files. The sudoers drop-in is not a
+# conffile, so dpkg removes it with the package on both remove and purge.
+if [ "$1" = "purge" ]; then
+	rm -rf /var/lib/spot-agent
+fi
+
+#DEBHELPER#
+
+exit 0

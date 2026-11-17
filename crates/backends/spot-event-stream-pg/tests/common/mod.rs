@@ -52,6 +52,8 @@ pub fn spec(name: &str, partitions: u32) -> ConsumerSpec {
         topics: vec![TopicSelector::Prefix("doc".to_owned())],
         filter: None,
         partitions,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::Fields,
         start: Start::FromBeginning,
     }

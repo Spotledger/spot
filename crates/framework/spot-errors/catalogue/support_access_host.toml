@@ -1,0 +1,32 @@
+# support_access_host codes: the refusals of the customer-side support-access service hosted by spot-cli (WP-SEC-07.T2) that are not already registry codes of the native API (`security.*`, `permission.denied`). They ride on the in-process intake port, not on an HTTP route. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "support_access_host.not_approved"
+class = "none"
+summary = "Access cannot be issued: the request is not approved by the customer."
+explanation_key = "error.support_access_host.not_approved"
+params = []
+remedy = "Wait for the tenant's security administrators to approve the request with their signed consent (two administrators for a request that may write)."
+since = "0.1.0"
+retired = true
+
+[[entry]]
+code = "support_access_host.intake_refused"
+class = "none"
+summary = "The support request was refused at the tenant: {reason}."
+explanation_key = "error.support_access_host.intake_refused"
+params = ["reason"]
+remedy = "Send a well-formed request for this tenant with a window that has not ended and an id not used before."
+since = "0.1.0"
+retired = true
+
+[[entry]]
+code = "support_access_host.unavailable"
+class = "none"
+summary = "Support access cannot decide: the audit chain, the database or a required port is not available, so nothing was done."
+explanation_key = "error.support_access_host.unavailable"
+params = []
+remedy = "Check readiness: the support_access service shows why (no audit port hosted, or the database is down). Nothing is decided without an audit record."
+since = "0.1.0"
+retired = true
+

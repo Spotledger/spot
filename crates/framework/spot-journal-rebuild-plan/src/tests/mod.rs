@@ -54,11 +54,20 @@ pub(crate) fn fork(generation: u64, from_position: u64) -> ForkInfo {
 }
 
 pub(crate) fn backup(position: u64) -> Backup {
-    Backup { position }
+    Backup::new(position)
 }
 
+/// A position of the current generation.
 pub(crate) fn at(position: u64) -> Target {
     Target::At(position)
+}
+
+/// A position of a named generation.
+pub(crate) fn in_gen(generation: u64, position: u64) -> Target {
+    Target::In {
+        generation,
+        position,
+    }
 }
 
 /// What a case expects: a plan (base position, steps, end) or a refusal.

@@ -88,6 +88,59 @@ impl<Tx: Transaction> ParticipantRole for Placed<Tx> {
     }
 }
 
+/// Whether a DocType name means "every DocType": empty or `*`.
+fn is_wildcard(doctype: &str) -> bool {
+    doctype.is_empty() || doctype == "*"
+}
+
+/// Refuses when an [`AuditStep`](crate::AuditStep) in `registry` audits a DocType the
+/// participant audits too. Fails closed: a participant that names no DocType (or `*`) covers
+/// every DocType, and a step on an empty or `*` DocType covers every DocType, so either refuses as
+/// soon as the registry holds an audit step (the first in app, DocType order is named).
+fn refuse_double_audit(
+    participant: &AuditParticipant,
+    registry: &ControllerRegistry,
+) -> Result<(), DocAuditError> {
+    let named = participant.doctypes();
+    let participant_covers_all = named.is_empty() || named.iter().any(|d| is_wildcard(d));
+    // `doctypes()` is sorted by (app, DocType), so the first hit is the first in sorted order.
+    for (app, doctype) in registry.doctypes() {
+        let has_audit_step = registry
+            .controllers_for(&doctype)
+            .iter()
+            .filter(|registered| registered.app == app)
+            .any(|registered| {
+                registered
+                    .controller
+                    .steps()
+                    .iter()
+                    .any(|decl| is_audit_step_name(decl.name.as_str()))
+            });
+        if !has_audit_step {
+            continue;
+        }
+        let step_covers_all = is_wildcard(&doctype);
+        if participant_covers_all || step_covers_all || named.contains(&doctype) {
+            // Name a concrete DocType where there is one: the step's own, else the first the
+            // participant names. Identifiers only, never a value.
+            let named_doctype = if step_covers_all {
+                named
+                    .iter()
+                    .find(|d| !is_wildcard(d))
+                    .cloned()
+                    .unwrap_or(doctype)
+            } else {
+                doctype
+            };
+            return Err(DocAuditError::DoubleRegistration {
+                app,
+                doctype: named_doctype,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The participant list for an engine, checked and ordered: **audit, then the owner checks, then
 /// the rest, edge sync last**; each group keeps its relative order. The host hands the result to
 /// `Engine::set_participants` and calls nothing else.
@@ -101,10 +154,12 @@ impl<Tx: Transaction> ParticipantRole for Placed<Tx> {
 /// # What it refuses
 ///
 /// - `docaudit.double_registration` when a controller in `registry` is an [`AuditStep`] on one
-///   of the DocTypes the participant was told it audits
-///   ([`AuditParticipant::with_doctypes`]). The registry cannot list its DocTypes, so the host
-///   names them; a participant told none checks none. The step is recognised by its declared
-///   step name (`platform:doc_audit_*`), which needs no change outside this crate.
+///   of the DocTypes the participant audits ([`AuditParticipant::with_doctypes`]). The check asks
+///   the registry for every (app, DocType) it holds ([`ControllerRegistry::doctypes`]) and
+///   **fails closed**: a participant told no DocType (or `*`) audits every DocType, and an audit
+///   step on an empty or `*` DocType covers every DocType, so either refuses as soon as the
+///   registry holds any audit step. A registry with no audit step always passes. The step is
+///   recognised by its declared step name (`platform:doc_audit_*`).
 /// - the same code when `others` holds a second audit participant.
 ///
 /// # Errors
@@ -114,21 +169,7 @@ pub fn checked_participants<Tx: Transaction + 'static>(
     others: Vec<Placed<Tx>>,
     registry: &ControllerRegistry,
 ) -> Result<Vec<Arc<dyn TxParticipant<Tx>>>, DocAuditError> {
-    for doctype in participant.doctypes() {
-        for registered in registry.controllers_for(doctype) {
-            let is_audit_step = registered
-                .controller
-                .steps()
-                .iter()
-                .any(|decl| is_audit_step_name(decl.name.as_str()));
-            if is_audit_step {
-                return Err(DocAuditError::DoubleRegistration {
-                    app: registered.app,
-                    doctype: doctype.clone(),
-                });
-            }
-        }
-    }
+    refuse_double_audit(&participant, registry)?;
     if others.iter().any(|p| p.role() == Role::Audit) {
         return Err(DocAuditError::DoubleRegistration {
             app: String::new(),

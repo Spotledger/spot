@@ -13,6 +13,7 @@ spot-app-api = { path = "../../../contracts/app-api" }
 spot-meta = { path = "../spot-meta" }
 spot-document = { path = "../spot-document" }
 spot-permissions = { path = "../spot-permissions" }
+spot-field-guard = { path = "../spot-field-guard" }
 spot-core = { path = "../spot-core" }
 spot-storage-contract = { path = "../../../contracts/storage" }
 spot-events-contract = { path = "../../../contracts/events" }

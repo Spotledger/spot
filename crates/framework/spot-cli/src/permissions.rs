@@ -180,6 +180,8 @@ impl StoragePrincipals {
                 })
                 .collect();
             let mut assignments = Vec::new();
+            let mut role_names: std::collections::HashMap<RecordId, Option<String>> =
+                std::collections::HashMap::new();
             for id in ids {
                 let Some(loaded) = tx
                     .load(&entity, id, RowLock::None)
@@ -194,18 +196,24 @@ impl StoragePrincipals {
                 let Some(role_id) = link(&loaded.data.fields, "role") else {
                     continue;
                 };
-                let Some(role) = tx
-                    .load(
-                        &name("role").map_err(|e| e.to_string())?,
-                        role_id,
-                        RowLock::None,
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?
-                else {
-                    continue;
+                // Several assignments often name the same role: read each role once.
+                let role_name = match role_names.get(&role_id) {
+                    Some(known) => known.clone(),
+                    None => {
+                        let found = tx
+                            .load(
+                                &name("role").map_err(|e| e.to_string())?,
+                                role_id,
+                                RowLock::None,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?
+                            .and_then(|role| text(&role.data.fields, "role_name"));
+                        role_names.insert(role_id, found.clone());
+                        found
+                    }
                 };
-                let Some(role_name) = text(&role.data.fields, "role_name") else {
+                let Some(role_name) = role_name else {
                     continue;
                 };
                 let scope = loaded
@@ -234,7 +242,14 @@ impl StoragePrincipals {
 impl PrincipalSource for StoragePrincipals {
     fn resolve<'a>(&'a self, user: &'a RecordId) -> BoxFuture<'a, Principal> {
         Box::pin(async move {
-            let assignments = self.assignments(user).await.unwrap_or_default();
+            let assignments = match self.assignments(user).await {
+                Ok(assignments) => assignments,
+                Err(reason) => {
+                    // No roles is the safe answer; the operator still needs to see why.
+                    tracing::warn!(%reason, "the role assignments of a user could not be read");
+                    Vec::new()
+                }
+            };
             Principal::user(&user.to_string(), assignments)
         })
     }
@@ -494,6 +509,16 @@ impl QueryService for GuardedEngine {
             apply_masks(&mut rows, &masks);
             Ok(rows)
         })
+    }
+
+    fn load_many<'a>(
+        &'a self,
+        inv: &'a Invocation,
+        doctype: &'a str,
+        ids: &'a [RecordId],
+    ) -> BoxFuture<'a, Vec<AppResult<Outcome<Document>>>> {
+        self.touched();
+        Box::pin(self.engine.load_many(inv, doctype, ids))
     }
 }
 

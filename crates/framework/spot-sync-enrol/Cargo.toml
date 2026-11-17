@@ -1,0 +1,42 @@
+[package]
+name = "spot-sync-enrol"
+description = "Sync node identity (WP-RTB-02.T3, ADR-062 section 3): enrolment by one-time code, certificate pinning by fingerprint with overlapping rotation, immediate revocation and suspension, the durable NodeDirectory the hub authenticates against, the certificate-expiry condition, and the node-side identity (key pair, self-signed certificate, proof of possession); in-memory and PostgreSQL stores"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `NodeDirectory`, `ClientCertificate`, `AuthenticatedNode` and the identity errors this crate's directory returns.
+spot-sync-http = { path = "../spot-sync-http" }
+# `NodeId`.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The shared blocking bridge the PostgreSQL store goes through (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+# The driver types the bridge hands to the closures.
+tokio-postgres = "0.7"
+# `Handle::try_current`: the PostgreSQL store refuses to be built inside an async runtime.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# SHA-256 of the one-time code (salted) and of certificates.
+sha2 = "0.10"
+# Certificate parsing: validity, public key.
+x509-parser = "0.18"
+# The node's key pair and self-signed certificate. Already in the lockfile through the dev
+# dependencies of `spot-sync-http`; shipped here because the node generates its own identity.
+rcgen = "0.14"
+# ECDSA P-256 signing and verification for the proof of possession.
+ring = "0.17"
+# RFC 3339 formatting of the audit record's instants, and the certificate validity.
+time = { version = "0.3", features = ["formatting"] }
+# The audit record's JSON payload.
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+# Scratch directory for the key-file tests.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

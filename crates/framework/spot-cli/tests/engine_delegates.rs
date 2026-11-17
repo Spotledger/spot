@@ -16,7 +16,7 @@ use std::time::Duration;
 use serde_json::{Value as Json, json};
 use spot_api_services::{FunctionDelegate, ReportDelegate};
 use spot_cli::Options;
-use spot_cli::services::{RegisterFuture, Registration, SiteCtx, register_all};
+use spot_cli::services::{RegisterFuture, Registration, SiteCtx, register_all_with_roles};
 use spot_core::ManualClock;
 use spot_http::api::meta::FieldType;
 use spot_http::api::service::{
@@ -26,6 +26,12 @@ use spot_login::LoginConfig;
 use support::Env;
 use time::macros::datetime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// The registry without the host's role conditions: these tests give their own tables, and the
+/// generated conditions name modules those tables do not hold.
+async fn register_all(ctx: &mut SiteCtx<'_>, tables: &[&[Registration]]) -> spot_cli::Result<()> {
+    register_all_with_roles(ctx, tables, &[]).await
+}
 
 /// 0: the probe provides nothing; 1: it provides both delegates; 2: its twin also provides the
 /// function delegate again.

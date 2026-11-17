@@ -1,0 +1,47 @@
+# assignment_rules_host codes: the host of assignment rules on a running site (spot-cli
+# services/assignment_rules.rs, WP-IAM-04.T3). Readiness reasons and logs only, never an API answer.
+
+[[entry]]
+code = "assignment_rules_host.no_store"
+class = "none"
+summary = "No module of this site provides the rule store, so assignment rules are not reconciled."
+explanation_key = "error.assignment_rules_host.no_store"
+params = []
+remedy = "Enable the module that provides the RuleStore port, or set services.assignment_rules.enabled to false."
+since = "0.1.0"
+
+[[entry]]
+code = "assignment_rules_host.rule_refused"
+class = "none"
+summary = "An assignment rule failed validation and was refused; the other rules keep running."
+explanation_key = "error.assignment_rules_host.rule_refused"
+params = []
+remedy = "Fix the rule named in the log (unknown role, a condition that is not boolean, a duplicate id)."
+since = "0.1.0"
+
+[[entry]]
+code = "assignment_rules_host.grant_blocked"
+class = "none"
+summary = "A rule grant was not applied because the segregation-of-duties gate blocked it or could not decide."
+explanation_key = "error.assignment_rules_host.grant_blocked"
+params = []
+remedy = "Resolve the conflict named by the governance records, or change the rule; the next reconciliation retries."
+since = "0.1.0"
+
+[[entry]]
+code = "assignment_rules_host.plan_held"
+class = "none"
+summary = "A rule change would end more than the configured share of one role's assignments and is held for confirmation."
+explanation_key = "error.assignment_rules_host.plan_held"
+params = []
+remedy = "Preview the rules and run them with the previewed digest to confirm, or correct the rule."
+since = "0.1.0"
+
+[[entry]]
+code = "assignment_rules_host.store_unavailable"
+class = "none"
+summary = "The stored rules, assignments or facts could not be read, or the plan could not be applied."
+explanation_key = "error.assignment_rules_host.store_unavailable"
+params = []
+remedy = "Check the site's database; the next reconciliation retries."
+since = "0.1.0"

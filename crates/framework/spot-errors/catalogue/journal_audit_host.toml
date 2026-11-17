@@ -1,0 +1,80 @@
+[[entry]]
+code = "journal_audit_host.worker_failed"
+class = "none"
+summary = "The audit's database worker thread is not running or could not start."
+explanation_key = "error.journal_audit_host.worker_failed"
+params = []
+remedy = "Check the database connection and restart the site."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.db_failed"
+class = "none"
+summary = "A statement of the audit's providers was refused by the database (the SQLSTATE is the detail)."
+explanation_key = "error.journal_audit_host.db_failed"
+params = []
+remedy = "Check the database connection, the grants of the site's role and that spot migrate has run."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.role_too_powerful"
+class = "none"
+summary = "The scratch role holds a privilege beyond CREATEDB (superuser, createrole, replication or bypassrls), so the audit refuses to start."
+explanation_key = "error.journal_audit_host.role_too_powerful"
+params = []
+remedy = "Give the scratch role CREATEDB and nothing else; the installer creates it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.role_unusable"
+class = "none"
+summary = "The scratch role does not exist or cannot create databases."
+explanation_key = "error.journal_audit_host.role_unusable"
+params = []
+remedy = "Have the installer create the role with CREATEDB and set its password in the environment variable the settings name."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.scratch_name_invalid"
+class = "none"
+summary = "A tenant id or run id cannot name a scratch database: it must be lowercase letters, digits and underscores, starting with a letter, and the name at most 63 bytes."
+explanation_key = "error.journal_audit_host.scratch_name_invalid"
+params = []
+remedy = "Use a tenant id and run id of that form."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.scratch_failed"
+class = "none"
+summary = "The scratch database could not be created, secured, connected or dropped."
+explanation_key = "error.journal_audit_host.scratch_failed"
+params = []
+remedy = "Check the scratch role's rights and the server; a leaked scratch database is swept a day later."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.tenant_mismatch"
+class = "none"
+summary = "The inputs or the report asked for belong to another tenant than this site's."
+explanation_key = "error.journal_audit_host.tenant_mismatch"
+params = []
+remedy = "Ask for this site's own tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.source_unavailable"
+class = "none"
+summary = "The journal source of the tenant (store, keys, options) could not be opened for the audit."
+explanation_key = "error.journal_audit_host.source_unavailable"
+params = []
+remedy = "Check that the journal service is running and its store is reachable."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_host.result_invalid"
+class = "none"
+summary = "A stored audit result row does not decode."
+explanation_key = "error.journal_audit_host.result_invalid"
+params = []
+remedy = "Check the result table; contact support if it was edited by hand."
+since = "0.1.0"

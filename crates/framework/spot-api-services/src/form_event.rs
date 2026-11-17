@@ -1131,6 +1131,7 @@ fn stable_error(
         _ => Code::HttpInternal,
     };
     let mut stable = ApiError::from_code(code);
+    crate::conversion::keep_wait(&mut stable, error);
     stable.fields = error
         .fields
         .iter()
@@ -1146,10 +1147,13 @@ fn stable_error(
 /// The error the caller sees when any part of it must not be shown: its registry code with the
 /// contract's default message and nothing else.
 fn redacted(error: &ApiError) -> ApiError {
-    match error.code {
+    let mut out = match error.code {
         ErrorCode::Registry(code) => ApiError::from_code(code),
         _ => ApiError::from_code(Code::HttpInternal),
-    }
+    };
+    // The wait of a storage unavailability is a number, not a string a step wrote.
+    crate::conversion::keep_wait(&mut out, error);
+    out
 }
 
 /// A step's error, safe to show: when a field issue names a field the caller cannot read, when

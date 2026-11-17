@@ -192,7 +192,7 @@ async fn attempt(
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_limit_locks_the_route_before_the_password_is_verified() {
     let rig = rig(1000);
     let verified = Cell::new(0);
@@ -222,7 +222,7 @@ async fn the_limit_locks_the_route_before_the_password_is_verified() {
     assert_eq!(rig.sink.of("lockout_started").len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn after_the_lockout_the_right_password_works_and_resets_the_counter() {
     let rig = rig(1000);
     let verified = Cell::new(0);
@@ -250,7 +250,7 @@ async fn after_the_lockout_the_right_password_works_and_resets_the_counter() {
     attempt(&rig, USER, true, &verified).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_counter_is_independent_of_sign_in_and_of_other_users() {
     let rig = rig(1000);
     let verified = Cell::new(0);
@@ -315,7 +315,7 @@ async fn the_counter_is_independent_of_sign_in_and_of_other_users() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn keys_are_the_user_id_under_a_prefix_and_never_a_name_or_token() {
     let rig = rig(1000);
     let verified = Cell::new(0);
@@ -330,7 +330,7 @@ async fn keys_are_the_user_id_under_a_prefix_and_never_a_name_or_token() {
     assert_eq!(rig.store.len(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_key_cap_evicts_instead_of_growing_and_a_table_of_lockouts_fails_closed() {
     let rig = rig(6);
     let verified = Cell::new(0);

@@ -63,9 +63,9 @@ pub(crate) mod testmeta;
 pub mod xlsx;
 
 pub use apply::{
-    ApplyMode, ApplyOptions, ApplyOutcome, ApplySummary, CancelToken, CreatedDocument, KeyIndex,
-    MemorySpool, NoProgress, PermissionProbe, ProgressSink, RollbackOutcome, Spool, SpoolEntry,
-    SpoolFull, StopReason, apply_import, rollback_created,
+    ApplyMode, ApplyOptions, ApplyOutcome, ApplySummary, BatchCreate, CancelToken, CreatedDocument,
+    KeyIndex, MemorySpool, NoProgress, PermissionProbe, ProgressSink, RollbackOutcome, Spool,
+    SpoolEntry, SpoolFull, StopReason, apply_import, rollback_created,
 };
 pub use csv::CsvSource;
 pub use error::ImportError;

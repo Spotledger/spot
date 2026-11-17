@@ -81,6 +81,13 @@
 //! the contract trait has no room for one. The `receipt` module says where a receipt is stored
 //! and what it never holds; [`Engine::get_receipt`] reads one back later.
 //!
+//! # The command ledger
+//!
+//! An engine given a [`RetentionPolicy`] ([`Engine::with_command_ledger`]) records every top-level
+//! write that carries a command id in the transaction's own ledger row, and answers a repeat of
+//! the command with the original outcome instead of running it again (WP-DOC-04.T8). The `ledger`
+//! module says how.
+//!
 //! # Not here
 //!
 //! Step time budgets (EXT-04) are not part of this task.
@@ -105,6 +112,7 @@ mod capture;
 mod committed;
 mod ctx;
 mod durable;
+mod ledger;
 mod links;
 mod naming;
 mod ops;
@@ -113,6 +121,7 @@ mod participant;
 mod receipt;
 mod secrets;
 mod work;
+mod write_transform;
 
 pub use authz::{
     AllowAllAuthorizer, AppPermissionCheck, Authorizer, DenyAllAppPermissions,
@@ -129,6 +138,7 @@ pub use durable::{
     ARGS_SCHEMA, CommittedJobArgs, DurableDelivery, EngineRunner, JOB_COMMITTED_STEPS,
     committed_point, operation_named,
 };
+pub use ledger::{Classed, DEFAULT_MAX_RETENTION, DEFAULT_RETENTION, RetentionPolicy};
 pub use naming::{BusinessZone, FixedZone, UtcZone};
 pub use outbox::{TOPIC_JOB, TOPIC_NOTICE, TOPIC_SECRET_AUDIT, job_from_event, notice_from_event};
 pub use participant::{
@@ -138,6 +148,7 @@ pub use receipt::{
     MAX_EFFECTS_PER_RECEIPT, MAX_REFS_PER_RECEIPT, ReceiptRecord, Receipted, TOPIC_RECEIPT,
     TOPIC_RECEIPT_EFFECT, UndeclaredEffect, rows_digest,
 };
+pub use write_transform::{IdentityTransform, WriteTransform, WriteView};
 
 use ops::Req;
 use participant::Participants;
@@ -267,6 +278,9 @@ pub struct Engine<B: StorageBackend> {
     controllers: RwLock<Arc<Vec<Arc<dyn Controller>>>>,
     /// The transaction participants run around every document write (WP-DOC-04.T3).
     participants: RwLock<Participants<B::Tx>>,
+    /// Rewrites each document just before it is stored; the identity unless a host installs one
+    /// (WP-SEC-10.T7).
+    write_transform: RwLock<Arc<dyn WriteTransform>>,
     /// Told about each refused operation, after its rollback (WP-DOC-04.T5).
     denial_sink: RwLock<Option<Arc<dyn DenialSink>>>,
     /// How long the denial sink may take; a longer call is dropped and logged.
@@ -313,6 +327,8 @@ pub struct Engine<B: StorageBackend> {
     pub(crate) strict_effects: bool,
     /// Effects reported without a declaration (the last 256), for [`Engine::undeclared_effects`].
     undeclared: Mutex<Vec<UndeclaredEffect>>,
+    /// The command ledger's retention policy (WP-DOC-04.T8); `None`: the engine keeps no ledger.
+    pub(crate) ledger: Option<RetentionPolicy>,
 }
 
 /// How long a [`DenialSink`] may take by default.
@@ -376,6 +392,7 @@ impl<B: StorageBackend> Engine<B> {
             })),
             controllers: RwLock::new(Arc::new(Vec::new())),
             participants: RwLock::new(Arc::new(Vec::new())),
+            write_transform: RwLock::new(Arc::new(IdentityTransform)),
             denial_sink: RwLock::new(None),
             denial_timeout: DEFAULT_DENIAL_TIMEOUT,
             node: None,
@@ -399,6 +416,7 @@ impl<B: StorageBackend> Engine<B> {
             rewrap_sweeps: Mutex::new(std::collections::BTreeMap::new()),
             strict_effects: cfg!(test),
             undeclared: Mutex::new(Vec::new()),
+            ledger: None,
         })
     }
 
@@ -700,6 +718,20 @@ impl<B: StorageBackend> Engine<B> {
     pub async fn peek(&self, doctype: &str, id: RecordId) -> AppResult<Option<Document>> {
         let snap = self.snapshot();
         self.read_document(&snap, doctype, id).await
+    }
+}
+
+impl<B: StorageBackend> Engine<B> {
+    /// Loads a page of documents of one DocType as the invocation's principal, one answer per
+    /// id in order. The same as calling [`DocumentService::load`] for each id, but the principal
+    /// is resolved once and the rows are read in one transaction (the list path's N+1).
+    pub async fn load_many(
+        &self,
+        inv: &Invocation,
+        doctype: &str,
+        ids: &[RecordId],
+    ) -> Vec<AppResult<Outcome<Document>>> {
+        self.load_documents(inv, doctype, ids).await
     }
 }
 

@@ -99,6 +99,10 @@ Rotation is audited in two places: the identity audit chain gets `secrets_kek_ro
 `_finished`, `_failed` or `_refused` (a count and a reason class only), and the engine journals
 each rewrap batch (and each value that could not be moved) in the same transaction as the batch.
 
+The engine's journal rows (`sys_secret_audit`) name the caller of each rewrap batch. A rotation
+now appears with caller `operator`; rotations run before this change appear with caller `seed`,
+and those rows are not rewritten.
+
 Back the key file up again when it ends: the new copy holds the new version.
 
 ## Retiring an old version

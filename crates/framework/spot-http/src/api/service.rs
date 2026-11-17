@@ -14,7 +14,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use serde_json::Value as Json;
-use spot_core::SiteId;
+use spot_core::{Audience, SiteId};
 use spot_storage_contract::{Name, RecordId, Value, Version};
 
 use crate::request::RequestId;
@@ -657,6 +657,17 @@ pub trait AuthService: Send + Sync + 'static {
 
     /// The current session and its user.
     fn session<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Result<SessionInfo, ApiError>>;
+
+    /// The audience of the credential in `ctx` (ADR-083 Barrier 1): which kind of caller the
+    /// session, or the API key, was issued to. The router asks before any handler runs and
+    /// refuses a credential whose audience the route's mark does not list.
+    ///
+    /// A missing, invalid, expired or revoked credential is the service's usual 401 error,
+    /// never an audience. The request's site comes from `ctx` (a lookup is site-scoped).
+    ///
+    /// **No default implementation, on purpose:** a default that answered `Staff` would fail
+    /// open for every service that forgot to write this method.
+    fn audience_of<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Result<Audience, ApiError>>;
 }
 
 /// The decoded `POST /api/v1/auth/login` body.
@@ -670,4 +681,662 @@ pub struct LoginBody {
     pub totp: Option<String>,
     /// A recovery code instead of a TOTP.
     pub recovery_code: Option<String>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Offline identity at the doors (WP-IAM-09.T5)
+// ---------------------------------------------------------------------------------------------
+
+/// Every way a request reaches data on a node: one entry per row of the offline identity coverage
+/// table (`spot-cli` `services::offline_identity::ENTRY_POINTS`). A door names itself when it asks
+/// for admission, so a decision is never taken without saying where the request came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Door {
+    /// The HTTP API (this module's [`OfflineGuarded`]).
+    Api,
+    /// Realtime sockets and room joins.
+    Realtime,
+    /// Background jobs acting for a user.
+    Jobs,
+    /// Server Scripts.
+    Scripts,
+    /// App controllers and their whitelisted methods.
+    Controllers,
+    /// The management API.
+    Management,
+}
+
+impl Door {
+    /// Every door, in the order of the coverage table.
+    pub const ALL: [Door; 6] = [
+        Door::Api,
+        Door::Realtime,
+        Door::Jobs,
+        Door::Scripts,
+        Door::Controllers,
+        Door::Management,
+    ];
+
+    /// The stable lower-case name (a metric or log value, never a user value).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Door::Api => "api",
+            Door::Realtime => "realtime",
+            Door::Jobs => "jobs",
+            Door::Scripts => "scripts",
+            Door::Controllers => "controllers",
+            Door::Management => "management",
+        }
+    }
+}
+
+/// The risk tier an action is decided at (ADR-070 rule 12.13 d). Tier one is the most sensitive
+/// (posting, approvals, administrator actions); tier three is ordinary work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DoorTier {
+    /// Payment posting, approvals, administrator actions.
+    One,
+    /// Reads of protected groups.
+    Two,
+    /// Ordinary work.
+    Three,
+}
+
+/// Why a door refused. Neither value carries the user, a permission name or a reason text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OfflineRefusal {
+    /// The offline decision is "no" (revoked, lapsed, unknown user, no valid lease).
+    Denied,
+    /// The decision cannot be taken: a provider (node registry, user directory, snapshot) is
+    /// missing. Refused, never allowed.
+    NotReady,
+}
+
+impl OfflineRefusal {
+    /// The API error for this refusal: `permission.denied`, or `server.unavailable` when the
+    /// decision could not be taken at all.
+    #[must_use]
+    pub fn api_error(self) -> ApiError {
+        match self {
+            OfflineRefusal::Denied => ApiError::from_code(Code::PermissionDenied),
+            OfflineRefusal::NotReady => ApiError::from_code(Code::ServerUnavailable),
+        }
+    }
+}
+
+/// The one offline decision every door asks. Implemented over the node's signed snapshot by
+/// `spot-cli` (`GateAdmission`); a test supplies its own. A missing fact is a refusal.
+pub trait OfflineAdmission: Send + Sync + 'static {
+    /// Whether `user` may act at `tier` through `door` (with `permission`, when the call names
+    /// one) right now.
+    ///
+    /// # Errors
+    /// [`OfflineRefusal::Denied`] when the decision is no; [`OfflineRefusal::NotReady`] when it
+    /// cannot be taken.
+    fn admit(
+        &self,
+        door: Door,
+        user: &str,
+        tier: DoorTier,
+        permission: Option<&str>,
+    ) -> Result<(), OfflineRefusal>;
+
+    /// Whether the node itself holds a valid lease for `tier`: the question of a door with no user
+    /// (the management API, where the caller is an operator certificate, not a person in the
+    /// offline directory).
+    ///
+    /// # Errors
+    /// As [`OfflineAdmission::admit`].
+    fn node_admitted(&self, door: Door, tier: DoorTier) -> Result<(), OfflineRefusal>;
+}
+
+/// Who a request's credential belongs to, as the site's sign-in service resolved it. `None` is an
+/// unresolvable credential, which the guard refuses.
+pub trait RequestUser: Send + Sync + 'static {
+    /// The user id behind `ctx`'s credential.
+    fn user_of<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Option<String>>;
+}
+
+/// The API door's check: resolves the caller, then asks the offline decision.
+#[derive(Clone)]
+pub struct OfflineGuard {
+    admission: std::sync::Arc<dyn OfflineAdmission>,
+    users: std::sync::Arc<dyn RequestUser>,
+}
+
+impl OfflineGuard {
+    /// A guard over the decision and the credential resolver.
+    #[must_use]
+    pub fn new(
+        admission: std::sync::Arc<dyn OfflineAdmission>,
+        users: std::sync::Arc<dyn RequestUser>,
+    ) -> Self {
+        Self { admission, users }
+    }
+
+    /// Checks one request.
+    ///
+    /// # Errors
+    /// `permission.denied` for a refusal or an unresolvable credential; `server.unavailable`
+    /// when the decision cannot be taken.
+    pub async fn check(
+        &self,
+        ctx: &RequestCtx,
+        tier: DoorTier,
+        permission: Option<&str>,
+    ) -> Result<(), ApiError> {
+        let Some(user) = self.users.user_of(ctx).await else {
+            return Err(OfflineRefusal::Denied.api_error());
+        };
+        self.admission
+            .admit(Door::Api, &user, tier, permission)
+            .map_err(OfflineRefusal::api_error)
+    }
+}
+
+/// The tier each [`ResourceService`] operation is decided at: posting, cancelling and correcting
+/// (the actions that move money and books) at tier one, everything else at tier three.
+#[must_use]
+pub fn resource_tier(posting_action: bool) -> DoorTier {
+    if posting_action {
+        DoorTier::One
+    } else {
+        DoorTier::Three
+    }
+}
+
+/// A [`ResourceService`] that asks the offline decision before every operation. The default (no
+/// wrapper) is the service itself, so a site without offline identity is unchanged.
+pub struct OfflineGuarded<S> {
+    inner: S,
+    guard: OfflineGuard,
+}
+
+impl<S: ResourceService> OfflineGuarded<S> {
+    /// Wraps `inner`.
+    #[must_use]
+    pub fn new(inner: S, guard: OfflineGuard) -> Self {
+        Self { inner, guard }
+    }
+}
+
+impl<S: ResourceService> ResourceService for OfflineGuarded<S> {
+    fn get<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.get(ctx, doctype, id).await
+        })
+    }
+
+    fn list<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        spec: &'a QuerySpec,
+    ) -> BoxFuture<'a, Result<Page, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.list(ctx, doctype, spec).await
+        })
+    }
+
+    fn query<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        spec: &'a QuerySpec,
+    ) -> BoxFuture<'a, Result<Page, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.query(ctx, doctype, spec).await
+        })
+    }
+
+    fn create<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        document: &'a ApiDocument,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.create(ctx, doctype, document).await
+        })
+    }
+
+    fn update<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        patch: &'a DocumentPatchApi,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.update(ctx, doctype, id, patch, expected).await
+        })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<Vec<Message>, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.delete(ctx, doctype, id, expected).await
+        })
+    }
+
+    fn post<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(true), None).await?;
+            self.inner.post(ctx, doctype, id, expected).await
+        })
+    }
+
+    fn cancel<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(true), None).await?;
+            self.inner.cancel(ctx, doctype, id, expected).await
+        })
+    }
+
+    fn correct<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(true), None).await?;
+            self.inner.correct(ctx, doctype, id, expected).await
+        })
+    }
+
+    fn rename<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        new_name: &'a str,
+        expected: Version,
+    ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner
+                .rename(ctx, doctype, id, new_name, expected)
+                .await
+        })
+    }
+
+    fn call_method<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        doctype: &'a str,
+        id: RecordId,
+        method: &'a str,
+        args: Json,
+        expected: Option<Version>,
+    ) -> BoxFuture<'a, Result<(MethodOutcome, Vec<Message>), ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner
+                .call_method(ctx, doctype, id, method, args, expected)
+                .await
+        })
+    }
+
+    fn call_function<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        app: &'a str,
+        module: &'a str,
+        function: &'a str,
+        args: Json,
+        via_get: bool,
+    ) -> BoxFuture<'a, Result<(Json, Vec<Message>), ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner
+                .call_function(ctx, app, module, function, args, via_get)
+                .await
+        })
+    }
+
+    fn run_report<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+        report: &'a str,
+        filters: Json,
+        limit: Option<u64>,
+    ) -> BoxFuture<'a, Result<(ReportResult, Vec<Message>), ApiError>> {
+        Box::pin(async move {
+            self.guard.check(ctx, resource_tier(false), None).await?;
+            self.inner.run_report(ctx, report, filters, limit).await
+        })
+    }
+}
+
+#[cfg(test)]
+mod offline_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+
+    /// Admits every user except `revoked`; refuses everything when `ready` is false.
+    struct Admission {
+        revoked: &'static str,
+        ready: bool,
+        seen: std::sync::Mutex<Vec<(Door, DoorTier)>>,
+    }
+
+    impl OfflineAdmission for Admission {
+        fn admit(
+            &self,
+            door: Door,
+            user: &str,
+            tier: DoorTier,
+            _permission: Option<&str>,
+        ) -> Result<(), OfflineRefusal> {
+            self.seen.lock().unwrap().push((door, tier));
+            if !self.ready {
+                return Err(OfflineRefusal::NotReady);
+            }
+            if user == self.revoked {
+                return Err(OfflineRefusal::Denied);
+            }
+            Ok(())
+        }
+
+        fn node_admitted(&self, door: Door, tier: DoorTier) -> Result<(), OfflineRefusal> {
+            self.seen.lock().unwrap().push((door, tier));
+            if self.ready {
+                Ok(())
+            } else {
+                Err(OfflineRefusal::NotReady)
+            }
+        }
+    }
+
+    /// The token is the user; `anon` resolves to nobody.
+    struct TokenUsers;
+
+    impl RequestUser for TokenUsers {
+        fn user_of<'a>(&'a self, ctx: &'a RequestCtx) -> BoxFuture<'a, Option<String>> {
+            Box::pin(async move {
+                ctx.credential
+                    .as_ref()
+                    .map(|c| c.token.clone())
+                    .filter(|t| t != "anon")
+            })
+        }
+    }
+
+    /// Counts calls; every operation answers `server.unavailable` so no document is needed.
+    #[derive(Default)]
+    struct Counting(Arc<AtomicUsize>);
+
+    macro_rules! counted {
+        ($self:ident, $ret:ty) => {{
+            $self.0.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Err::<$ret, ApiError>(ApiError::from_code(Code::ServerUnavailable)) })
+        }};
+    }
+
+    impl ResourceService for Counting {
+        fn get<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn list<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: &'a QuerySpec,
+        ) -> BoxFuture<'a, Result<Page, ApiError>> {
+            counted!(self, Page)
+        }
+        fn query<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: &'a QuerySpec,
+        ) -> BoxFuture<'a, Result<Page, ApiError>> {
+            counted!(self, Page)
+        }
+        fn create<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: &'a ApiDocument,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn update<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: &'a DocumentPatchApi,
+            _: Version,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn delete<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: Version,
+        ) -> BoxFuture<'a, Result<Vec<Message>, ApiError>> {
+            counted!(self, Vec<Message>)
+        }
+        fn post<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: Version,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn cancel<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: Version,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn correct<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: Version,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn rename<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: &'a str,
+            _: Version,
+        ) -> BoxFuture<'a, Result<WriteResult, ApiError>> {
+            counted!(self, WriteResult)
+        }
+        fn call_method<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: RecordId,
+            _: &'a str,
+            _: Json,
+            _: Option<Version>,
+        ) -> BoxFuture<'a, Result<(MethodOutcome, Vec<Message>), ApiError>> {
+            counted!(self, (MethodOutcome, Vec<Message>))
+        }
+        fn call_function<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: &'a str,
+            _: &'a str,
+            _: Json,
+            _: bool,
+        ) -> BoxFuture<'a, Result<(Json, Vec<Message>), ApiError>> {
+            counted!(self, (Json, Vec<Message>))
+        }
+        fn run_report<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a str,
+            _: Json,
+            _: Option<u64>,
+        ) -> BoxFuture<'a, Result<(ReportResult, Vec<Message>), ApiError>> {
+            counted!(self, (ReportResult, Vec<Message>))
+        }
+    }
+
+    fn ctx(token: &str) -> RequestCtx {
+        RequestCtx {
+            site: SiteId::new("acme").unwrap(),
+            credential: Some(Credential::new(token)),
+            idempotency_key: None,
+            language: None,
+            request_id: RequestId::generate(),
+            peer: None,
+        }
+    }
+
+    fn guarded(ready: bool) -> (OfflineGuarded<Counting>, Arc<Admission>, Arc<AtomicUsize>) {
+        let admission = Arc::new(Admission {
+            revoked: "gone",
+            ready,
+            seen: std::sync::Mutex::new(Vec::new()),
+        });
+        let inner = Counting::default();
+        let calls = Arc::clone(&inner.0);
+        let guard = OfflineGuard::new(admission.clone(), Arc::new(TokenUsers));
+        (OfflineGuarded::new(inner, guard), admission, calls)
+    }
+
+    #[tokio::test]
+    async fn an_identity_revoked_offline_is_refused_before_the_service_runs() {
+        let (service, _, calls) = guarded(true);
+        let spec = QuerySpec {
+            fields: Vec::new(),
+            filter: None,
+            order: Vec::new(),
+            limit: 10,
+            cursor: None,
+            with_total: false,
+        };
+        let err = service.list(&ctx("gone"), "task", &spec).await.unwrap_err();
+        assert_eq!(err.code.as_str(), Code::PermissionDenied.as_str());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn an_unrevoked_identity_reaches_the_service() {
+        let (service, admission, calls) = guarded(true);
+        let spec = QuerySpec {
+            fields: Vec::new(),
+            filter: None,
+            order: Vec::new(),
+            limit: 10,
+            cursor: None,
+            with_total: false,
+        };
+        // The counting service answers `server.unavailable`: the call got through.
+        let err = service
+            .list(&ctx("clerk"), "task", &spec)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code.as_str(), Code::ServerUnavailable.as_str());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            admission.seen.lock().unwrap().as_slice(),
+            &[(Door::Api, DoorTier::Three)]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_provider_is_not_ready_and_an_unknown_credential_is_refused() {
+        let (service, _, calls) = guarded(false);
+        let err = service
+            .get(&ctx("clerk"), "task", RecordId::new_v7())
+            .await
+            .unwrap_err();
+        assert_eq!(err.code.as_str(), Code::ServerUnavailable.as_str());
+        let (service, _, calls_ready) = guarded(true);
+        let err = service
+            .get(&ctx("anon"), "task", RecordId::new_v7())
+            .await
+            .unwrap_err();
+        assert_eq!(err.code.as_str(), Code::PermissionDenied.as_str());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(calls_ready.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn posting_actions_are_decided_at_tier_one() {
+        let (service, admission, _) = guarded(true);
+        let _ = service
+            .post(&ctx("clerk"), "invoice", RecordId::new_v7(), Version(1))
+            .await;
+        assert_eq!(
+            admission.seen.lock().unwrap().as_slice(),
+            &[(Door::Api, DoorTier::One)]
+        );
+    }
+
+    #[test]
+    fn the_door_list_matches_the_coverage_table_order() {
+        let names: Vec<&str> = Door::ALL.iter().map(|d| d.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "api",
+                "realtime",
+                "jobs",
+                "scripts",
+                "controllers",
+                "management"
+            ]
+        );
+    }
 }

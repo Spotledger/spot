@@ -47,7 +47,7 @@ use tokio::sync::watch;
 use crate::Result;
 use crate::live::{Admin, SiteLive};
 use crate::services::metadata::LiveMetadata;
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 
 /// Whether `roles` may customise the site: a `Tenant Administrator` or a `System Manager`.
 ///
@@ -549,4 +549,34 @@ impl Admin for Customise {
             Ok(json!({ "version": applied.version.get() }))
         })
     }
+}
+
+/// This module's start order: after metadata (300), whose port it requires.
+pub const ORDER: u32 = 400;
+
+/// Runtime customisation: DocTypes, custom fields and property overrides made while the
+/// site runs, served at once and followed by the other nodes. Its check recovers a change a
+/// crash left half done, before the site accepts a request.
+///
+/// # Errors
+///
+/// A site environment that is missing, the `LiveMetadata` port not provided, or a service
+/// that cannot be built.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
+    if !ctx.assembling() {
+        return Ok(());
+    }
+    let env = *ctx.env()?;
+    let metadata = ctx.require_port::<LiveMetadata>()?;
+    let service = Customise::new(Settings {
+        live: env.live.clone(),
+        metadata,
+        backend: env.backend.clone(),
+        catalog: env.permission.catalog.clone(),
+        principals: env.permission.principals.clone(),
+        site: env.site.site.clone(),
+        poll: Duration::from_millis(env.loaded.common.services.metadata.poll_ms),
+    })?;
+    ctx.add(service);
+    Ok(())
 }

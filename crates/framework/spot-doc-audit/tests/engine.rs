@@ -25,10 +25,10 @@ use spot_audit_chain::{
 };
 use spot_core::ManualClock;
 use spot_doc_audit::{
-    AUDIT_TOPIC, AuditDenialSink, AuditParticipant, AuditWriter, DenialStats, DocAudit,
-    DocAuditError, DocAuditEvent, DocOperation, FailingWriter, GuardMasker, InMemoryAppenderStore,
-    LaneConfig, Placed, Role, checked_participants, decode_outbox, enqueue_audit,
-    is_recordable_method, lane_of, operation_for, record_of, with_audit_participant,
+    AUDIT_TOPIC, AuditDenialSink, AuditParticipant, AuditWriter, DenialStats, DenialWriter,
+    DocAudit, DocAuditError, DocAuditEvent, DocOperation, FailingWriter, GuardMasker,
+    InMemoryAppenderStore, LaneConfig, Placed, Role, checked_participants, decode_outbox,
+    enqueue_audit, is_recordable_method, lane_of, operation_for, record_of, with_audit_participant,
 };
 use spot_document::engine::{
     AllowAllAuthorizer, Authorizer, Engine, NodeId, TxParticipant, V7Ids, WriteCause, WriteRecord,
@@ -1542,4 +1542,414 @@ fn a_second_audit_participant_is_refused() {
     .err()
     .unwrap();
     assert_eq!(err.code(), "docaudit.double_registration");
+}
+
+// ------------------------------------------------ install-time checks fail closed (SEC-06.T4)
+
+fn audit_step_on(doctype: &str) -> spot_doc_audit::AuditStep {
+    use spot_doc_audit::NoBeforeImages;
+    spot_doc_audit::AuditStep::new(
+        doctype,
+        Arc::new(FailingWriter),
+        masker(true),
+        Arc::new(NoBeforeImages),
+        Arc::new(ManualClock::new(now())),
+    )
+}
+
+#[test]
+fn a_participant_naming_no_doctypes_is_refused_when_the_registry_holds_an_audit_step() {
+    use spot_controllers::{ControllerRegistry, ControllerSource};
+    let mut registry = ControllerRegistry::new();
+    registry.register(
+        "books",
+        Arc::new(audit_step_on("customer")),
+        ControllerSource::Native,
+    );
+    // Before the fix this passed: a participant that names nothing checked nothing.
+    let err =
+        checked_participants::<Tx>(AuditParticipant::new(masker(true)), Vec::new(), &registry)
+            .err()
+            .unwrap();
+    assert_eq!(
+        err,
+        DocAuditError::DoubleRegistration {
+            app: "books".into(),
+            doctype: "customer".into()
+        }
+    );
+    assert_eq!(err.code(), "docaudit.double_registration");
+    // A wildcard participant is the same as one that names nothing.
+    let err = checked_participants::<Tx>(
+        AuditParticipant::new(masker(true)).with_doctypes(["*"]),
+        Vec::new(),
+        &registry,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(err.code(), "docaudit.double_registration");
+}
+
+#[test]
+fn a_participant_naming_no_doctypes_passes_a_registry_without_an_audit_step() {
+    use spot_controllers::{ControllerRegistry, ControllerSource};
+    assert!(
+        checked_participants::<Tx>(
+            AuditParticipant::new(masker(true)),
+            Vec::new(),
+            &ControllerRegistry::new()
+        )
+        .is_ok()
+    );
+    let mut plain = ControllerRegistry::new();
+    plain.register("books", Arc::new(Probe), ControllerSource::Native);
+    assert!(
+        checked_participants::<Tx>(AuditParticipant::new(masker(true)), Vec::new(), &plain).is_ok()
+    );
+}
+
+#[test]
+fn a_wildcard_audit_step_is_refused_whatever_the_participant_names() {
+    use spot_controllers::{ControllerRegistry, ControllerSource};
+    for scope in ["", "*"] {
+        let mut registry = ControllerRegistry::new();
+        registry.register(
+            "books",
+            Arc::new(audit_step_on(scope)),
+            ControllerSource::Native,
+        );
+        let err = checked_participants::<Tx>(
+            AuditParticipant::new(masker(true)).with_doctypes(["sales_invoice"]),
+            Vec::new(),
+            &registry,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            err,
+            DocAuditError::DoubleRegistration {
+                app: "books".into(),
+                doctype: "sales_invoice".into()
+            }
+        );
+    }
+}
+
+#[test]
+fn the_first_audit_step_in_app_then_doctype_order_is_named() {
+    use spot_controllers::{ControllerRegistry, ControllerSource};
+    let mut registry = ControllerRegistry::new();
+    registry.register(
+        "zeta",
+        Arc::new(audit_step_on("a")),
+        ControllerSource::Native,
+    );
+    registry.register(
+        "alpha",
+        Arc::new(audit_step_on("z")),
+        ControllerSource::Native,
+    );
+    registry.register(
+        "alpha",
+        Arc::new(audit_step_on("m")),
+        ControllerSource::Native,
+    );
+    let err =
+        checked_participants::<Tx>(AuditParticipant::new(masker(true)), Vec::new(), &registry)
+            .err()
+            .unwrap();
+    assert_eq!(
+        err,
+        DocAuditError::DoubleRegistration {
+            app: "alpha".into(),
+            doctype: "m".into()
+        }
+    );
+}
+
+#[test]
+fn the_refusal_names_identifiers_only() {
+    use spot_controllers::{ControllerRegistry, ControllerSource};
+    let mut registry = ControllerRegistry::new();
+    registry.register(
+        "books",
+        Arc::new(audit_step_on("customer")),
+        ControllerSource::Native,
+    );
+    let err =
+        checked_participants::<Tx>(AuditParticipant::new(masker(true)), Vec::new(), &registry)
+            .err()
+            .unwrap();
+    assert_eq!(
+        err.to_string(),
+        "the audit participant and the audit step of app `books` for DocType `customer` are both registered"
+    );
+}
+
+// ------------------------------------------------ the async denial writer (SEC-06.T5)
+
+/// An async denial writer that opens its own transaction on the engine's backend, optionally
+/// after a delay, and records how many writes were inside at once.
+struct AsyncDenialWriter {
+    backend: FakeBackend,
+    delay: std::time::Duration,
+    inside: std::sync::atomic::AtomicUsize,
+    peak: std::sync::atomic::AtomicUsize,
+    events: Mutex<Vec<DocAuditEvent>>,
+}
+
+impl AsyncDenialWriter {
+    fn new(backend: FakeBackend, delay: std::time::Duration) -> Arc<Self> {
+        Arc::new(Self {
+            backend,
+            delay,
+            inside: std::sync::atomic::AtomicUsize::new(0),
+            peak: std::sync::atomic::AtomicUsize::new(0),
+            events: Mutex::new(Vec::new()),
+        })
+    }
+}
+
+impl DenialWriter for AsyncDenialWriter {
+    fn write<'a>(&'a self, event: &'a DocAuditEvent) -> BoxFuture<'a, Result<(), DocAuditError>> {
+        use std::sync::atomic::Ordering::SeqCst;
+        Box::pin(async move {
+            let now = self.inside.fetch_add(1, SeqCst) + 1;
+            self.peak.fetch_max(now, SeqCst);
+            self.events.lock().unwrap().push(event.clone());
+            tokio::time::sleep(self.delay).await;
+            let catalog = Arc::new(contract_tests::catalog().unwrap());
+            let result = async {
+                let mut tx = self
+                    .backend
+                    .begin(
+                        catalog,
+                        TxOptions::new(n("docaudit_denial"), Isolation::ReadCommitted),
+                    )
+                    .await
+                    .map_err(|e| DocAuditError::OutboxWrite(e.explanation))?;
+                enqueue_audit(&mut tx, event).await?;
+                tx.commit()
+                    .await
+                    .map_err(|e| DocAuditError::OutboxWrite(e.explanation))
+            }
+            .await;
+            self.inside.fetch_sub(1, SeqCst);
+            result
+        })
+    }
+}
+
+/// A denial writer that always fails, with a message that names a value.
+struct FailingDenialWriter;
+
+impl DenialWriter for FailingDenialWriter {
+    fn write<'a>(&'a self, _event: &'a DocAuditEvent) -> BoxFuture<'a, Result<(), DocAuditError>> {
+        Box::pin(async { Err(DocAuditError::OutboxWrite(DENIED_VALUE.to_owned())) })
+    }
+}
+
+/// A denial writer that panics.
+struct PanickingDenialWriter;
+
+impl DenialWriter for PanickingDenialWriter {
+    fn write<'a>(&'a self, _event: &'a DocAuditEvent) -> BoxFuture<'a, Result<(), DocAuditError>> {
+        Box::pin(async { panic!("the denial writer panicked") })
+    }
+}
+
+/// An engine whose denials go to an [`AuditDenialSink`] over the async `writer`.
+async fn async_denial_fx(
+    make_writer: impl FnOnce(FakeBackend) -> Arc<dyn DenialWriter>,
+    max_in_flight: usize,
+    authorizer: Option<Arc<dyn Authorizer>>,
+) -> (Fx, Arc<DenialStats>) {
+    let backend = FakeBackend::new();
+    let writer = make_writer(backend.clone());
+    let f = engine_on(audit_participants(), backend, None, authorizer).await;
+    let stats = DenialStats::new();
+    f.engine.set_denial_sink(Arc::new(
+        AuditDenialSink::with_denial_writer(writer, Arc::clone(&stats))
+            .with_max_in_flight(max_in_flight),
+    ));
+    (f, stats)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_async_denial_writer_records_the_denial_with_class_and_code_only() {
+    let (f, stats) = async_denial_fx(
+        |b| AsyncDenialWriter::new(b, std::time::Duration::ZERO),
+        8,
+        Some(Arc::new(NoUpdates)),
+    )
+    .await;
+    let actor = user();
+    let created = f.customer(actor, "Acme").await;
+    let mut patch = DocumentPatch::default();
+    patch.fields.insert(n("tax_id"), DENIED_VALUE.into());
+    let err = f
+        .engine
+        .update(
+            &inv(actor),
+            "customer",
+            created.id(),
+            patch,
+            created.version().unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "permission.denied");
+
+    let audits = f.audits().await;
+    let events = denied(&audits);
+    assert_eq!(events.len(), 1);
+    let e = events[0];
+    // Every field of the event: class and code only, no message, no value, no diff.
+    assert_eq!(e.outcome.as_deref(), Some("denied"));
+    assert_eq!(e.doctype, "customer");
+    assert_eq!(e.id, created.id().to_string());
+    assert_eq!(e.operation, DocOperation::Update);
+    assert_eq!(e.version, 0);
+    assert_eq!(e.error_code.as_deref(), Some("permission.denied"));
+    assert_eq!(e.error_class.as_deref(), Some(err.class.api_code()));
+    assert!(e.changed_fields.is_empty() && e.diff.is_empty());
+    assert!(!e.hidden_changes && !e.truncated && e.diff_digest.is_none());
+    assert!(e.method.is_none() && e.correction_half.is_none() && e.via.is_none());
+    assert_eq!(stats.recorded(), 1);
+    assert_eq!(stats.not_recorded(), 0);
+    assert_clean(
+        &f,
+        &f.outbox().await,
+        &[DENIED_VALUE, "may not write", SECRET_VALUE],
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sleeping_async_writer_is_bounded_by_max_in_flight_and_nothing_queues() {
+    let writer = Arc::new(std::sync::OnceLock::new());
+    let held = Arc::clone(&writer);
+    let (f, stats) = async_denial_fx(
+        move |b| {
+            let w = AsyncDenialWriter::new(b, std::time::Duration::from_millis(400));
+            held.set(Arc::clone(&w)).ok();
+            w
+        },
+        2,
+        Some(Arc::new(NoUpdates)),
+    )
+    .await;
+    let writer = writer.get().unwrap().clone();
+    let f = Arc::new(f);
+    let actor = user();
+    let created = f.customer(actor, "Acme").await;
+    let id = created.id();
+    let version = created.version().unwrap();
+
+    // Ten refusals at once: the engine answers each at its own pace; at most two denial writes
+    // are ever inside the writer and the rest are dropped, not queued.
+    let mut calls = Vec::new();
+    for _ in 0..10 {
+        let f = Arc::clone(&f);
+        calls.push(tokio::spawn(async move {
+            f.engine
+                .update(
+                    &inv(actor),
+                    "customer",
+                    id,
+                    DocumentPatch::default(),
+                    version,
+                )
+                .await
+                .unwrap_err()
+                .code
+                .clone()
+        }));
+    }
+    for call in calls {
+        assert_eq!(call.await.unwrap(), "permission.denied");
+    }
+    // Let the in-flight writes finish.
+    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+    assert!(writer.peak.load(std::sync::atomic::Ordering::SeqCst) <= 2);
+    assert_eq!(
+        stats.recorded() + stats.dropped() + stats.not_recorded(),
+        10,
+        "every denial is counted once"
+    );
+    assert!(
+        stats.dropped() >= 1,
+        "the excess is dropped: {}",
+        stats.dropped()
+    );
+    assert_eq!(denied(&f.audits().await).len() as u64, stats.recorded());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_failing_async_writer_counts_not_recorded_and_the_error_is_unchanged() {
+    let (f, stats) = async_denial_fx(
+        |_| Arc::new(FailingDenialWriter),
+        8,
+        Some(Arc::new(NoUpdates)),
+    )
+    .await;
+    let actor = user();
+    let created = f.customer(actor, "Acme").await;
+    let err = f
+        .engine
+        .update(
+            &inv(actor),
+            "customer",
+            created.id(),
+            DocumentPatch::default(),
+            created.version().unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "permission.denied");
+    assert_eq!(stats.not_recorded(), 1);
+    assert_eq!(stats.recorded(), 0);
+    assert!(denied(&f.audits().await).is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_panicking_async_writer_releases_the_slot_and_counts_not_recorded() {
+    let (f, stats) = async_denial_fx(
+        |_| Arc::new(PanickingDenialWriter),
+        1,
+        Some(Arc::new(NoUpdates)),
+    )
+    .await;
+    let actor = user();
+    let created = f.customer(actor, "Acme").await;
+    for _ in 0..3 {
+        let err = f
+            .engine
+            .update(
+                &inv(actor),
+                "customer",
+                created.id(),
+                DocumentPatch::default(),
+                created.version().unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, "permission.denied");
+    }
+    // With `max_in_flight = 1`, a slot that leaked on the first panic would drop the others.
+    assert_eq!(stats.not_recorded(), 3);
+    assert_eq!(stats.dropped(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_async_writer_writes_nothing_for_an_audit_off_doctype() {
+    let (f, stats) = async_denial_fx(
+        |b| AsyncDenialWriter::new(b, std::time::Duration::ZERO),
+        8,
+        None,
+    )
+    .await;
+    let doc = Document::new(n("audit_chain"), RecordId::new_v7());
+    f.engine.create(&inv(user()), doc).await.unwrap_err();
+    assert!(f.audits().await.is_empty());
+    assert_eq!(stats.recorded() + stats.dropped() + stats.not_recorded(), 0);
 }

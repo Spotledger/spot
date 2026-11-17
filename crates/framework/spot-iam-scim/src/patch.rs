@@ -13,7 +13,7 @@
 use serde::{Deserialize, Deserializer};
 use serde_json::Value as Json;
 
-use crate::error::{ScimError, ScimResult};
+use crate::error::{ScimError, ScimResult, shape};
 use crate::filter::{AttrPath, CompareOp, Filter, ScimValue, path_parts};
 use crate::resource::{Email, Member, Name, PATCH_SCHEMA, ScimGroup, ScimUser};
 
@@ -87,9 +87,8 @@ pub struct PatchRequest {
 impl PatchRequest {
     /// Parses a PATCH body, refusing a document with no operations or a bad schema list.
     pub fn parse(json: &Json) -> ScimResult<PatchRequest> {
-        let request: PatchRequest = serde_json::from_value(json.clone()).map_err(|e| {
-            ScimError::invalid_syntax(format!("the PATCH body is not a PatchOp: {e}"))
-        })?;
+        let request: PatchRequest = serde_json::from_value(json.clone())
+            .map_err(|e| ScimError::invalid_syntax(shape("the PATCH body is not a PatchOp", &e)))?;
         if request.operations.is_empty() {
             return Err(ScimError::invalid_syntax(
                 "a PATCH has at least one operation",
@@ -296,7 +295,7 @@ fn apply_name(
     }
     if sub.is_none() {
         let parsed: Name = serde_json::from_value(required(value, "name")?.clone())
-            .map_err(|e| ScimError::invalid_value(format!("`name` is not a name object: {e}")))?;
+            .map_err(|e| ScimError::invalid_value(shape("`name` is not a name object", &e)))?;
         *name = parsed;
         return Ok(());
     }
@@ -379,9 +378,7 @@ fn apply_emails(
                         required(value, "emails")?.clone(),
                     )
                     .map_err(|e| {
-                        ScimError::invalid_value(format!(
-                            "`emails` is not a list of addresses: {e}"
-                        ))
+                        ScimError::invalid_value(shape("`emails` is not a list of addresses", &e))
                     })?;
                     if op == PatchOpKind::Add {
                         user.emails.extend(parsed);
@@ -486,7 +483,7 @@ fn apply_members(
             PatchOpKind::Add | PatchOpKind::Replace => {
                 let parsed: Vec<Member> =
                     serde_json::from_value(required(value, "members")?.clone()).map_err(|e| {
-                        ScimError::invalid_value(format!("`members` is not a list of members: {e}"))
+                        ScimError::invalid_value(shape("`members` is not a list of members", &e))
                     })?;
                 if op == PatchOpKind::Replace {
                     group.members = parsed;

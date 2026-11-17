@@ -1,0 +1,10 @@
+# ledger codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "ledger.lock"
+class = "none"
+summary = "The lock file's name inside the ledger directory."
+explanation_key = "error.ledger.lock"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

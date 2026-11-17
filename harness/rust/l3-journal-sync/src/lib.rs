@@ -37,5 +37,7 @@ pub use client::{Client, Reply};
 pub use cluster::Cluster;
 pub use flaky_store::FlakyStore;
 pub use helpers::{Row, fingerprint, read_audit, read_conditions, wait_until};
-pub use node::{Node, NodeSpec, Role, role_fragment};
+pub use node::{
+    Node, NodeSpec, Role, drop_secrets_table, hub_is_wired, role_fragment, write_hub_tls,
+};
 pub use proxy::Proxy;

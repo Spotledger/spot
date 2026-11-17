@@ -1,0 +1,42 @@
+[package]
+name = "spot-edge-offline-host"
+description = "Offline operation of an edge, hosted (WP-RTB-03.T2, T7): leased series refill planning and exhaustion, the fail-closed identity lease clock, the shared-balance policy gate, the typed carrier messages and the carrier loop, durable leased ranges, the offline identity snapshot keeper, and the readiness line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `HighWaterStore`, `BranchSeries`, `RangeLease`, `LowWater`: the leased-range types the book holds.
+spot-partition = { path = "../spot-partition" }
+# `LeasedSequences`: the offline `Sequences` over the held ranges.
+spot-leased-sequences = { path = "../spot-leased-sequences" }
+# `Sequences`, `SeriesKey`, `StorageError`: the contract the switched allocator implements.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `NodeId` of the partition crate (the node a range is leased to).
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The snapshot store, its persistence trait, the signed messages and the node report.
+spot-offline-identity = { path = "../spot-offline-identity" }
+# `SealedStateStore`, `Slot` and `AdapterError`: the state the snapshot store keeps, sealed.
+spot-offline-identity-adapters = { path = "../spot-offline-identity-adapters" }
+# `NodeView`, `Millis`, `BalanceId`, `HubReply`: the edge's view of the shared balances.
+spot-shared-balance = { path = "../spot-shared-balance" }
+# The durable range store and the snapshot state store go through the shared blocking bridge.
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+tokio-postgres = "0.7"
+# `Handle::try_current`: the stores refuse to be built inside an async runtime.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
+[dev-dependencies]
+# Per-test scratch databases for the real-PostgreSQL tests (skipped without SPOT_TEST_PG_URL).
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+# The signed messages the snapshot tests build.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time"] }
+
+[lints]
+workspace = true

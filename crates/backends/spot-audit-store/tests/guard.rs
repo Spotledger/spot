@@ -5,8 +5,8 @@
 mod common;
 
 use spot_audit_store::{
-    CHAIN_TABLE, PROTECTION_INCOMPLETE, PgAuditStore, TABLE_DDL, TABLES_MISSING, install_guard,
-    prepare, verify,
+    APPENDER_TABLE_DDL, CHAIN_TABLE, PROTECTION_INCOMPLETE, PgAuditStore, TABLE_DDL,
+    TABLES_MISSING, install_guard, prepare, verify,
 };
 use spot_pg_migrate::{ApplyOptions, ExtraTable, PlanOptions, apply, dry_run};
 use spot_postgres::PgBackend;
@@ -18,6 +18,7 @@ fn options() -> PlanOptions {
     PlanOptions {
         extra_tables: TABLE_DDL
             .iter()
+            .chain(APPENDER_TABLE_DDL.iter())
             .map(|(table, statement)| {
                 ExtraTable::new(*table, vec![(*statement).to_owned()]).unwrap()
             })
@@ -78,14 +79,26 @@ async fn shape(client: &Client) -> Vec<String> {
 async fn the_migrator_plans_the_tables_once_and_prepare_changes_nothing_after() {
     let Some(db) = common::db().await else { return };
     let first = migrate(&db).await;
+    // The two chain tables and the four appender tables (WP-AI-11.T7: the guard needs all six),
+    // then the finalising step, in whatever order the planner lists the tables.
+    let mut tables: Vec<String> = first
+        .iter()
+        .filter(|k| k.starts_with("extra_table:"))
+        .cloned()
+        .collect();
+    tables.sort();
     assert_eq!(
-        first,
+        tables,
         [
+            "extra_table:spot_audit_bookmark",
             "extra_table:spot_audit_chain",
             "extra_table:spot_audit_checkpoint",
-            "finalise"
+            "extra_table:spot_audit_doc_index",
+            "extra_table:spot_audit_event_index",
+            "extra_table:spot_audit_site_checkpoint",
         ]
     );
+    assert!(first.iter().any(|k| k == "finalise"), "{first:?}");
     let client = common::raw(&db).await;
     let planned = shape(&client).await;
     assert!(!planned.is_empty());

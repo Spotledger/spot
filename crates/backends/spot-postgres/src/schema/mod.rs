@@ -26,11 +26,13 @@ mod ddl;
 pub(crate) mod names;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use spot_storage_contract::schema::system;
 use spot_storage_contract::{
-    Catalog, EntityDef, EntityKind, ErrorKind, FieldType, IndexDef, IndexMethod, LinkCheck,
-    LinkTarget, Name, OpClass, StorageError, StorageResult,
+    Catalog, EntityDef, EntityKind, ErrorKind, FieldType, IndexDef, IndexMethod, Isolation,
+    LinkCheck, LinkTarget, Name, OpClass, StorageBackend, StorageError, StorageResult,
+    Transaction as _, TxOptions,
 };
 use tokio_postgres::Transaction;
 
@@ -40,6 +42,7 @@ use self::names::{
     parent_index_name, quote,
 };
 use crate::PgBackend;
+use crate::PgTransaction;
 use crate::error::map_pg_error;
 
 /// Held for the transaction's duration so concurrent `prepare` calls queue instead of racing on
@@ -63,25 +66,62 @@ pub(crate) async fn prepare(backend: &PgBackend, catalog: &Catalog) -> StorageRe
             "`{META_TABLE}` is reserved for the schema's own bookkeeping and cannot be an entity"
         )));
     }
-    refuse_search(catalog)?;
+    prepare_search(backend, catalog).await?;
     let mut conn = backend.checkout().await?;
     let tx = conn.transaction().await.map_err(db)?;
     apply(&tx, catalog).await?;
     tx.commit().await.map_err(db)
 }
 
-/// ADR-087 section 7: the search projection (generated `tsvector` column, GIN index, rank) is
-/// built by WP-STO-13.T1. Until then a catalog with a `search` declaration is refused with
-/// `Unsupported` (what [`Capabilities::search`](spot_storage_contract::Capabilities) says), never
-/// prepared without its projection.
+/// ADR-087 section 7: the search projection of every entity with a `search` declaration.
+///
+/// With a search maintenance hook installed (WP-STO-13.T3), its `prepare_entity` runs for each such
+/// entity in one transaction **before** any other change, so a missing extension refuses the
+/// whole `prepare` and leaves the entity tables as they were; everything the hook creates is
+/// additive and idempotent, and the same advisory lock serialises it with concurrent `prepare`
+/// calls. Without a hook a catalog with a `search` declaration is refused with `Unsupported`
+/// (what `Capabilities::search` says), never prepared without its projection. A catalog with no
+/// search declaration costs nothing here.
+async fn prepare_search(backend: &PgBackend, catalog: &Catalog) -> StorageResult<()> {
+    let searchable: Vec<&EntityDef> = catalog
+        .entities()
+        .filter(|entity| entity.search.is_some())
+        .collect();
+    if searchable.is_empty() {
+        return Ok(());
+    }
+    let Some(hook) = backend.search_hook().cloned() else {
+        return refuse_search(catalog);
+    };
+    let options = TxOptions::new(Name::new("prepare_search")?, Isolation::ReadCommitted);
+    let mut tx = backend.begin(Arc::new(catalog.clone()), options).await?;
+    tx.raw_execute_with(
+        PgTransaction::READ,
+        "SELECT set_config('lock_timeout', $1, true)",
+        &[&LOCK_TIMEOUT],
+    )
+    .await?;
+    tx.raw_execute_with(
+        PgTransaction::READ,
+        "SELECT pg_advisory_xact_lock($1)",
+        &[&ADVISORY_KEY],
+    )
+    .await?;
+    for entity in searchable {
+        hook.prepare_entity(&mut tx, catalog, entity).await?;
+    }
+    tx.commit().await
+}
+
+/// Refuses a catalog with a `search` declaration when no search maintenance is installed.
 fn refuse_search(catalog: &Catalog) -> StorageResult<()> {
     for e in catalog.entities() {
         if e.search.is_some() {
             return Err(StorageError::new(
                 ErrorKind::Unsupported,
                 format!(
-                    "the search declaration on `{}` is not supported by this backend yet: the \
-                     search projection arrives with WP-STO-13.T1 (ADR-087)",
+                    "the search declaration on `{}` is not supported by this backend: no search \
+                     maintenance is installed on it",
                     e.name
                 ),
             )
@@ -218,6 +258,8 @@ async fn apply(tx: &Transaction<'_>, catalog: &Catalog) -> StorageResult<()> {
     }
     // The outbox, the change feed and the capture trigger on every document table.
     crate::feed::install(tx, catalog).await?;
+    // The command ledger table (storage contract 0.3.0).
+    crate::ledger::install(tx, catalog).await?;
     record_meta(tx, catalog).await
 }
 

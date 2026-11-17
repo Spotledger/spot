@@ -26,6 +26,12 @@ pub enum CommitError {
         /// The relay's own stable error code.
         cause: &'static str,
     },
+    /// A setting is outside its allowed range.
+    #[error("the setting {name} is invalid: it must be at least the acknowledgement deadline")]
+    InvalidSetting {
+        /// The setting's name.
+        name: &'static str,
+    },
 }
 
 impl CommitError {
@@ -36,6 +42,7 @@ impl CommitError {
             Self::SeqOutOfOrder { .. } => "journal_commit.seq_out_of_order",
             Self::UnknownSeq { .. } => "journal_commit.unknown_seq",
             Self::RelayStopped { .. } => "journal_commit.relay_stopped",
+            Self::InvalidSetting { .. } => "journal_commit.invalid_setting",
         }
     }
 }

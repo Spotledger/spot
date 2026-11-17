@@ -53,6 +53,13 @@ impl ManifestSigner for FixedSigner {
     }
 }
 
+fn tail_keys() -> spot_journal_relay::TailKeys {
+    let provider =
+        spot_secrets::EnvKey::from_base64("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
+            .expect("a 32 byte test key");
+    spot_journal_relay::TailKeys::new(std::sync::Arc::new(provider))
+}
+
 fn manifest_keys() -> VerifyingKeys {
     let mut keys = VerifyingKeys::new();
     keys.add_key(KEY_ID, signing_key().verifying_key(), 1, u64::MAX)
@@ -449,7 +456,8 @@ fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
         let keys = tenant_keys(10, &["p1"]);
         let nonces = nonces();
         let transform = transform(&keys, &nonces);
-        let config = RelayConfig::new(TENANT, SOURCE, Durability::RemoteSync);
+        let config =
+            RelayConfig::new(TENANT, SOURCE, Durability::RemoteSync).with_tail_keys(tail_keys());
         let mut relay = Relay::open(
             MemoryStore::new(),
             Box::new(FixedSigner),
@@ -513,17 +521,23 @@ fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
             }
         }
         assert!(chunk_bytes > 0);
-        // The control: written without the transform, the same chunk holds the value in clear.
+        // The control: without the transform the line holds the value in clear, so the scan
+        // can see one. Since version 2 the relay seals every tail chunk itself (AEAD), so even
+        // the untransformed batch is not readable in the object.
+        let line = state_line("contact", 1, "insert", 1, &contact_body("p1", "alice"), 1);
+        assert!(
+            contains(line.as_bytes(), "alice@mail.example"),
+            "the raw scan sees a clear value in an unprotected line"
+        );
         let mut control = Relay::open(
             MemoryStore::new(),
             Box::new(FixedSigner),
             manifest_keys(),
-            RelayConfig::new(TENANT, SOURCE, Durability::RemoteSync),
+            RelayConfig::new(TENANT, SOURCE, Durability::RemoteSync).with_tail_keys(tail_keys()),
             1_000,
         )
         .await
         .unwrap();
-        let line = state_line("contact", 1, "insert", 1, &contact_body("p1", "alice"), 1);
         control
             .append_batch(
                 Batch {
@@ -534,14 +548,12 @@ fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
             )
             .await
             .unwrap();
-        let mut found = false;
         for entry in control.store().list("", None, 100).await.unwrap() {
             let object = control.store().get(&entry.key).await.unwrap().unwrap();
-            found |= contains(&object.bytes, "alice@mail.example");
+            assert!(
+                !contains(&object.bytes, "alice@mail.example"),
+                "a sealed tail chunk holds no clear line"
+            );
         }
-        assert!(
-            found,
-            "the raw scan sees a clear value in an unprotected tail chunk"
-        );
     });
 }

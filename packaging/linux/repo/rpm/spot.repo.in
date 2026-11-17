@@ -1,0 +1,11 @@
+# Spotledger package repository (installed by spot-repo-keys). Every check is on:
+# package signatures, repository metadata signature, and local files. Do not
+# turn them off; a key rotation adds a key to gpgkey, it never disables a check.
+[spot-@CHANNEL@]
+name=Spotledger @CHANNEL@
+baseurl=@BASEURL@/rpm/@CHANNEL@/
+enabled=@ENABLED@
+gpgcheck=1
+repo_gpgcheck=1
+localpkg_gpgcheck=1
+gpgkey=@GPGKEYS@

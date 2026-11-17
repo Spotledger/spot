@@ -1,0 +1,131 @@
+# sync_enrol codes: sync node identity and enrolment (WP-RTB-02.T3). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# No message carries a code, a key, a certificate, a hash or a salt. The unknown, expired and used
+# cases of a one-time code share one code on purpose: a caller must not learn which codes exist.
+
+[[entry]]
+code = "sync_enrol.code_invalid"
+class = "none"
+summary = "The enrolment code was not accepted."
+explanation_key = "error.sync_enrol.code_invalid"
+params = []
+remedy = "Check the code and the node name, or create a new enrolment; a code works once and expires."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.locked_out"
+class = "none"
+summary = "Too many failed attempts from this source, so enrolment is paused for a while."
+explanation_key = "error.sync_enrol.locked_out"
+params = []
+remedy = "Wait an hour, then try again with the correct code."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.node_exists"
+class = "none"
+summary = "The node already has an identity."
+explanation_key = "error.sync_enrol.node_exists"
+params = []
+remedy = "Revoke the existing node first, then enrol it again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.node_unknown"
+class = "none"
+summary = "The node is not known to this tenant."
+explanation_key = "error.sync_enrol.node_unknown"
+params = []
+remedy = "Check the node name, or create an enrolment for it."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.node_revoked"
+class = "none"
+summary = "The node is revoked and cannot change."
+explanation_key = "error.sync_enrol.node_revoked"
+params = []
+remedy = "Enrol the node again with a new code if it should return."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.cert_invalid"
+class = "none"
+summary = "The certificate is not acceptable."
+explanation_key = "error.sync_enrol.cert_invalid"
+params = []
+remedy = "Present a valid ECDSA P-256 certificate that is not already pinned and whose dates include now."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.cert_revoked"
+class = "none"
+summary = "The certificate was revoked and cannot be used again."
+explanation_key = "error.sync_enrol.cert_revoked"
+params = []
+remedy = "Generate a new key pair and certificate on the node."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.proof_invalid"
+class = "none"
+summary = "The proof that the node holds its current key does not verify."
+explanation_key = "error.sync_enrol.proof_invalid"
+params = []
+remedy = "Sign the rotation with the node's current key, with the node's clock within five minutes of the hub's."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.directory_stale"
+class = "none"
+summary = "The node directory is too old to trust, so no node is authenticated."
+explanation_key = "error.sync_enrol.directory_stale"
+params = []
+remedy = "Restore the database connection of the hub so that the directory can refresh."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.key_file_permissions"
+class = "none"
+summary = "The node's private key file can be read by other users, so the node does not start."
+explanation_key = "error.sync_enrol.key_file_permissions"
+params = []
+remedy = "Make the key file readable by its owner only (mode 0600), or replace the key if it may have been exposed."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.invalid_argument"
+class = "none"
+summary = "A value is malformed."
+explanation_key = "error.sync_enrol.invalid_argument"
+params = []
+remedy = "Correct the role, partitions, template, lifetime or identifier and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.store_failed"
+class = "none"
+summary = "The enrolment store failed, and nothing was changed."
+explanation_key = "error.sync_enrol.store_failed"
+params = []
+remedy = "Check the database and the connection bridge, then retry; a timed-out write may or may not have been applied."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.unsupported_context"
+class = "none"
+summary = "The enrolment store cannot be built here."
+explanation_key = "error.sync_enrol.unsupported_context"
+params = []
+remedy = "Build it on a plain thread of the control-plane process, with a bridge no wider than its pool and a valid tenant name."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_enrol.prepare_failed"
+class = "none"
+summary = "The enrolment tables could not be created."
+explanation_key = "error.sync_enrol.prepare_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes, then retry prepare."
+since = "0.1.0"

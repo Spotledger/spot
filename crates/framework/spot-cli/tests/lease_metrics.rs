@@ -19,7 +19,7 @@ fn value(key: &str) -> f64 {
         .unwrap_or(0.0)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lease_lifecycle_is_counted() {
     spot_telemetry::metrics::install().unwrap();
     let clock = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));

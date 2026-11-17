@@ -50,6 +50,7 @@ fn entry(position: u64, id: &str) -> StreamEntry {
         topic: "price_list".into(),
         major: 1,
         lane: Lane::Bulk,
+        deleted: false,
     }
 }
 

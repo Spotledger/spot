@@ -111,12 +111,18 @@ impl PlanIssue {
 /// A bundle promotion, planned as a release plan.
 #[derive(Clone, Debug)]
 pub struct PromotionPlan {
-    release: ReleasePlan,
-    digest: PlanDigest,
-    apply: ApplyPlan,
-    bundle_digest: Digest,
-    issues: Vec<PlanIssue>,
-    warnings: Vec<String>,
+    // `pub(crate)` for the snapshot module's restore constructor only.
+    pub(crate) release: ReleasePlan,
+    pub(crate) digest: PlanDigest,
+    /// The live bundle apply plan; `None` on a plan restored from a snapshot until the service
+    /// re-derives it against the target ([`PromotionPlan::with_apply_plan`]).
+    pub(crate) apply: Option<ApplyPlan>,
+    /// The apply plan's hash and size, kept so a restored plan still answers for them.
+    pub(crate) apply_hash: String,
+    pub(crate) apply_len: usize,
+    pub(crate) bundle_digest: Digest,
+    pub(crate) issues: Vec<PlanIssue>,
+    pub(crate) warnings: Vec<String>,
 }
 
 impl PromotionPlan {
@@ -173,7 +179,9 @@ impl PromotionPlan {
             .collect();
         Ok(PromotionPlan {
             bundle_digest: bundle.digest(),
-            apply: apply.clone(),
+            apply_hash: apply.hash().to_owned(),
+            apply_len: apply.changes().len(),
+            apply: Some(apply.clone()),
             release,
             digest,
             issues,
@@ -193,16 +201,36 @@ impl PromotionPlan {
         &self.digest
     }
 
-    /// The bundle apply plan itself: the exact changes apply writes.
+    /// The bundle apply plan itself: the exact changes apply writes. `None` on a plan restored
+    /// from a snapshot (the typed changes are not persisted); the service re-derives it against
+    /// the target before a rehearsal, so a runner always receives `Some`.
     #[must_use]
-    pub fn apply_plan(&self) -> &ApplyPlan {
-        &self.apply
+    pub fn apply_plan(&self) -> Option<&ApplyPlan> {
+        self.apply.as_ref()
     }
 
     /// The bundle apply plan's deterministic hash. Apply re-plans and refuses a different one.
     #[must_use]
     pub fn apply_hash(&self) -> &str {
-        self.apply.hash()
+        &self.apply_hash
+    }
+
+    /// Attaches a freshly derived apply plan to a restored plan.
+    ///
+    /// # Errors
+    /// [`PromotionError::PlanChanged`] when the plan's hash is not the approved one.
+    pub(crate) fn with_apply_plan(
+        mut self,
+        apply: ApplyPlan,
+    ) -> Result<PromotionPlan, PromotionError> {
+        if apply.hash() != self.apply_hash {
+            return Err(PromotionError::PlanChanged {
+                expected: self.apply_hash.clone(),
+                found: apply.hash().to_owned(),
+            });
+        }
+        self.apply = Some(apply);
+        Ok(self)
     }
 
     /// The digest of the bundle this plan was built from.
@@ -214,7 +242,7 @@ impl PromotionPlan {
     /// How many items the apply plan writes.
     #[must_use]
     pub fn apply_changes(&self) -> usize {
-        self.apply.changes().len()
+        self.apply_len
     }
 
     /// Every blocking or warning conflict folded into the plan.

@@ -2,8 +2,8 @@
 //! values they round-trip, the exclusion constraint and its error, and the extension checks.
 //!
 //! Range and exclusion tests need `btree_gist`; geo tests need `postgis`. A server that does not
-//! offer an extension skips the tests that need it, printing `SKIPPED:` (the CI image that
-//! installs `postgis` is WP-STO-10.T4's). The refusal tests need no extension at all: they run
+//! offer an extension skips the tests that need it, printing `SKIPPED:`, unless `SPOT_REQUIRE_PG=1`
+//! is set (CI, whose image installs the extensions): then a missing extension fails the test. The refusal tests need no extension at all: they run
 //! on a database where the extension is deliberately not created.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
@@ -25,10 +25,10 @@ use time::{Date, Month, OffsetDateTime, Time};
 use tokio_postgres::Client;
 
 /// A scratch database with `extensions` created, or `None` (printing why) when there is no
-/// server or the server does not offer one of them.
+/// server or the server does not offer one of them. Under `SPOT_REQUIRE_PG=1` either is a panic.
 async fn env_with_extensions(extensions: &[&str]) -> Option<Env> {
     let env = common::env().await?;
-    let missing = env.db.create_extensions(extensions).await;
+    let missing = env.db.require_extensions(extensions).await;
     if missing.is_empty() {
         Some(env)
     } else {

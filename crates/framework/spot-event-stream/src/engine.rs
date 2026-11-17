@@ -25,7 +25,7 @@
 //! holder that lost its lease cannot ack. A consumer that stops acking is **parked per
 //! partition** (it stops consuming engine capacity) without touching any other consumer.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -34,6 +34,7 @@ use spot_coordinator::error::LEASE_HELD;
 use spot_core::Clock;
 use spot_events_contract::envelope::{EventEnvelope, Position};
 use spot_events_contract::names::SourceId;
+use spot_events_contract::registry;
 use spot_expr::{DateTime, Expr, MapContext, Value as ExprValue, parse as parse_expr};
 use spot_permissions::{Principal, TENANT_ADMINISTRATOR};
 use spot_storage_contract::{ChangeFeed, ErrorKind, FeedPosition};
@@ -41,7 +42,7 @@ use spot_storage_contract::{ChangeFeed, ErrorKind, FeedPosition};
 use crate::audit::{AuditRecord, AuditSink};
 use crate::error::StreamError;
 use crate::position::{position_from_feed, position_to_feed};
-use crate::spec::{ConsumerSpec, PayloadMode, Start};
+use crate::spec::{ConsumerSpec, PayloadMode, Start, StreamClass};
 use crate::store::{ConsumerRecord, ConsumerStore, RegisterOutcome};
 use crate::visibility::Visibility;
 
@@ -197,6 +198,14 @@ impl<F: ChangeFeed> StreamEngine<F> {
             {
                 return Err(StreamError::spec(format!(
                     "the owner holds no stream right for the reserved class {class}"
+                )));
+            }
+        }
+        for class in spec.named_reserved_classes() {
+            if !self.holds_class_right(&spec.owner, class) {
+                return Err(StreamError::spec(format!(
+                    "the owner holds no stream right for the reserved event class {}",
+                    class.as_str()
                 )));
             }
         }
@@ -495,8 +504,12 @@ impl<F: ChangeFeed> StreamEngine<F> {
             .min(self.policy.max_events)
             .min(window_remaining);
         let filter = self.filter_for(&record.spec);
+        // The owner's right to the reserved classes is read on every pull, so a consumer that
+        // lost it stops receiving those classes at once, whatever its stored definition says.
+        let selected = self.selected_classes(&record.spec);
         let mut events: Vec<EventEnvelope> = Vec::new();
         let mut skipped = 0u64;
+        let mut unclassified = 0u64;
         let mut scanned = from;
         let mut bytes = 0usize;
 
@@ -519,6 +532,17 @@ impl<F: ChangeFeed> StreamEngine<F> {
                 scanned = rec.position;
                 continue;
             }
+            // The class and entity selectors run before the filter, the read filter and the field
+            // guard: an event they drop reaches none of them and is not counted as skipped.
+            let Some(class) = class_of_topic(envelope.topic.as_str()) else {
+                unclassified += 1;
+                scanned = rec.position;
+                continue;
+            };
+            if !selected.contains(&class) || !entity_selected(&record.spec, class, &envelope) {
+                scanned = rec.position;
+                continue;
+            }
             if let Some(expr) = &filter
                 && !self.filter_matches(expr, &envelope)
             {
@@ -534,7 +558,7 @@ impl<F: ChangeFeed> StreamEngine<F> {
                 scanned = rec.position;
                 continue;
             }
-            self.apply_mode(&record.spec, &mut envelope)?;
+            self.apply_mode(&record.spec, class, &mut envelope)?;
             let size = serde_json::to_string(&envelope).map_or(0, |text| text.len());
             if !events.is_empty() && bytes.saturating_add(size) > self.policy.max_bytes {
                 break;
@@ -566,6 +590,7 @@ impl<F: ChangeFeed> StreamEngine<F> {
             events,
             next_position,
             skipped,
+            unclassified,
             window_full: false,
             parked: false,
         })
@@ -783,9 +808,27 @@ impl<F: ChangeFeed> StreamEngine<F> {
         }
     }
 
+    /// The classes this pull may deliver: the consumer's own set, minus each reserved class the
+    /// owner does not hold the stream right for at this moment.
+    fn selected_classes(&self, spec: &ConsumerSpec) -> BTreeSet<StreamClass> {
+        spec.effective_classes()
+            .into_iter()
+            .filter(|class| self.holds_class_right(&spec.owner, *class))
+            .collect()
+    }
+
+    /// Whether `owner` holds the stream right behind `class`: always for `domain`, otherwise
+    /// the right of the reserved topic class it lives in ([`StreamClass::right_name`]).
+    fn holds_class_right(&self, owner: &str, class: StreamClass) -> bool {
+        class
+            .right_name()
+            .is_none_or(|right| self.rights.may_stream_class(owner, right))
+    }
+
     fn apply_mode(
         &self,
         spec: &ConsumerSpec,
+        class: StreamClass,
         envelope: &mut EventEnvelope,
     ) -> Result<(), StreamError> {
         match spec.payload_mode {
@@ -794,6 +837,12 @@ impl<F: ChangeFeed> StreamEngine<F> {
                 Ok(())
             }
             PayloadMode::Fields => {
+                if class == StreamClass::State {
+                    // A `state` payload is `{entity_schema, image, op}`, not a flat field map:
+                    // the guard runs on the image, and nothing else is let through.
+                    self.project_image(spec, envelope);
+                    return Ok(());
+                }
                 let mut map = envelope
                     .data
                     .as_object()
@@ -805,6 +854,65 @@ impl<F: ChangeFeed> StreamEngine<F> {
                 Ok(())
             }
         }
+    }
+}
+
+impl<F: ChangeFeed> StreamEngine<F> {
+    /// Applies the field guard to a `state` event's `image`, the whole record image, so a field
+    /// the owner may not see never travels inside it. An image the guard cannot filter (it
+    /// refuses, or the image is not an object) is dropped from the event rather than passed
+    /// through; the rest of the event (the operation, the schema version) is delivered.
+    fn project_image(&self, spec: &ConsumerSpec, envelope: &mut EventEnvelope) {
+        let Some(object) = envelope.data.as_object_mut() else {
+            envelope.data = serde_json::json!({});
+            return;
+        };
+        // Whitelist: a key the `state` payload does not define is dropped, never passed on.
+        object.retain(|key, _| matches!(key.as_str(), "entity_schema" | "op" | "image"));
+        let Some(image) = object.remove("image") else {
+            return;
+        };
+        match image {
+            // A delete's tombstone: nothing to filter.
+            serde_json::Value::Null => {
+                object.insert("image".to_owned(), serde_json::Value::Null);
+            }
+            serde_json::Value::Object(mut fields) => {
+                // On a guard failure the visibility empties `fields`, and the image is not put
+                // back: it is dropped from the event, not passed through.
+                if self
+                    .visibility
+                    .project(&spec.owner, &envelope.subject, &mut fields)
+                    .is_ok()
+                {
+                    object.insert("image".to_owned(), serde_json::Value::Object(fields));
+                }
+            }
+            // Anything else cannot be filtered: dropped.
+            _ => {}
+        }
+    }
+}
+
+/// The class of a topic: the registry's, `domain` for an app topic with no entry, and `None`
+/// for a platform topic with no entry (it is never delivered by guess).
+fn class_of_topic(topic: &str) -> Option<StreamClass> {
+    match registry::class_of(topic) {
+        Some(class) => Some(StreamClass::from_registry(class)),
+        None => match spot_events_contract::Topic::any(topic) {
+            Ok(parsed) if parsed.is_platform() => None,
+            _ => Some(StreamClass::Domain),
+        },
+    }
+}
+
+/// Whether the consumer's entity selector admits the event: it applies to `state` events only.
+fn entity_selected(spec: &ConsumerSpec, class: StreamClass, envelope: &EventEnvelope) -> bool {
+    match (&spec.entities, class) {
+        (Some(entities), StreamClass::State) => entities
+            .iter()
+            .any(|entity| entity.as_str() == envelope.subject.entity),
+        _ => true,
     }
 }
 

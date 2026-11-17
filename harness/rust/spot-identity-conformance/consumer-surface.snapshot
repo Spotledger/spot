@@ -1,0 +1,2 @@
+# The routes marked for the consumer audience, one `METHOD /path` per line, sorted (ADR-083 B2).
+# Empty: no route is marked consumer yet. A consumer route needs a visible diff of this file.

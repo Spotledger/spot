@@ -1,0 +1,64 @@
+# rollouts codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "rollouts.control_schema"
+class = "none"
+summary = "The operation was refused: control schema."
+explanation_key = "error.rollouts.control_schema"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.rollouts.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.node_id"
+class = "none"
+summary = "The operation was refused: node id."
+explanation_key = "error.rollouts.node_id"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.not_configured"
+class = "none"
+summary = "The operation was refused: not configured."
+explanation_key = "error.rollouts.not_configured"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.one_at_a_time"
+class = "none"
+summary = "The operation was refused: one at a time."
+explanation_key = "error.rollouts.one_at_a_time"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.worker"
+class = "none"
+summary = "The operation was refused: worker."
+explanation_key = "error.rollouts.worker"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "rollouts.wrong_state"
+class = "none"
+summary = "The operation was refused: wrong state."
+explanation_key = "error.rollouts.wrong_state"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

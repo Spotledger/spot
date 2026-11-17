@@ -13,6 +13,7 @@ deliberately not an ERP module: no accounting, no stock.
 | `doctypes/*.toml` | `project`, `task`, `time_entry`, `label`, `checklist_item` |
 | `permissions/*.toml` | Role grants (`Project Manager`, `Team Member`, `Viewer`), field grants, the `confidential` protection group |
 | `reports/*.toml` | `hours_by_task`: hours per Task since a date (`from_date`), for Project Managers and Team Members |
+| `app.toml` `[[functions]]` | `profile/whoami` (GET, the caller's user id), `profile/greet` (POST, argument schema, rate limited) and `public/ping` (GET, guest), served at `/api/v1/method/sample/<module>/<name>` |
 | `seed.toml` | Demo data: 2 projects, 6 tasks, 8 labels, 5 time entries (drafts) |
 
 The controller code that walks the ADR-51 lifecycle lives in
@@ -65,6 +66,14 @@ bind = ["127.0.0.1:8000"]
 [postgres]
 admin_url = "postgres://spot@127.0.0.1:5432/postgres"
 EOF
+# The sealed sign-in stores (passwords, sessions) need the secrets vault: a key file per site,
+# at an absolute path.
+mkdir -m 700 runtime/keys
+cat >> runtime/common.toml <<EOF
+
+[services.secrets]
+kek_file = "$PWD/runtime/keys/{site}.json"
+EOF
 chmod 600 runtime/common.toml
 export SPOT_ROOT="$PWD/runtime"
 spot check || echo "no site yet, as expected"
@@ -76,6 +85,7 @@ printed once; only its digest is stored:
 <!-- test -->
 ```bash
 ADMIN_KEY=$(spot new-site demo --bare | sed 's/.*: //')
+spot secrets init --site demo --apply
 spot list-apps
 ```
 

@@ -7,6 +7,11 @@ license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 
+[features]
+# `AllowAll`, an admission that admits everything, for tests of this crate and of crates that
+# build a `LoginService` without a coordinator. Never enabled by a production build.
+testing = []
+
 [dependencies]
 # Credential primitives: hash/verify, TOTP, recovery codes, opaque tokens, API keys.
 spot-auth = { path = "../spot-auth" }
@@ -20,6 +25,9 @@ spot-storage-contract = { path = "../../../contracts/storage" }
 spot-http = { path = "../spot-http" }
 # Clock and SiteId.
 spot-core = { path = "../spot-core" }
+spot-iam-directory = { path = "../spot-iam-directory" }
+# The sign-in method ladder (`AuthMethod`, `MethodGuard`): the one place a session may move.
+spot-iam-access = { path = "../spot-iam-access" }
 # The document engine: the one secret path (`SecretAccess`, `set_secret`, `open_secret`,
 # `find_by_secret`) a credential may travel, and the lifecycle every sealed write runs in.
 spot-document = { path = "../spot-document" }
@@ -29,6 +37,9 @@ spot-secrets = { path = "../spot-secrets" }
 spot-app-api = { path = "../../../contracts/app-api" }
 # The platform app's DocType names and record shapes the stores read and write.
 spot-platform-app = { path = "../spot-platform-app" }
+# `CoordinatorThrottle::admit`: the shared, restart-proof throttle every sign-in is admitted
+# through before the name or the password is looked at (WP-IAM-11.T11).
+spot-throttle-coordinator = { path = "../spot-throttle-coordinator" }
 # The warn-level event a store failure writes, with the request id.
 tracing = "0.1"
 # JSON payloads for identity events and login attempts.
@@ -52,6 +63,12 @@ spot-sessions = { path = "../spot-sessions", features = ["testing"] }
 # `SecretCaller::Test`: a test may seed a credential through the engine's own capability, the
 # way the engine's secret-path suite does.
 spot-document = { path = "../spot-document", features = ["testing"] }
+
+# `InProcessCoordinator`, `RateLimit` and the contract's `Coordinator`: the real counters the
+# admission tests run against, and a coordinator that can be made to fail.
+spot-coordinator = { path = "../spot-coordinator", features = ["testing"] }
+# `AllowAll`: the test-only admission the existing rigs construct the service with.
+spot-login = { path = ".", features = ["testing"] }
 
 # A capturing subscriber for the log tests.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }

@@ -344,9 +344,10 @@ pub fn decide(settings: &Settings, ctx: &Context) -> std::result::Result<Plan, N
         Role::Edge if settings.listen.is_some() => {
             return Err(NodeRoleError {
                 code: codes::ROLE_CONFLICT,
-                message: "services.node_role.listen: hub-only setting; an edge must not bind a hub \
+                message:
+                    "services.node_role.listen: hub-only setting; an edge must not bind a hub \
                           listener"
-                    .to_owned(),
+                        .to_owned(),
             });
         }
         Role::Hub | Role::Standalone if edge_only_set => {
@@ -422,11 +423,10 @@ pub fn decide(settings: &Settings, ctx: &Context) -> std::result::Result<Plan, N
                         .to_owned(),
                 });
             }
-            let fingerprint = settings.hub_fingerprint.clone().or_else(|| {
-                ctx.stored
-                    .as_ref()
-                    .and_then(|s| s.hub_fingerprint.clone())
-            });
+            let fingerprint = settings
+                .hub_fingerprint
+                .clone()
+                .or_else(|| ctx.stored.as_ref().and_then(|s| s.hub_fingerprint.clone()));
             (
                 Some(node.to_owned()),
                 fingerprint,
@@ -480,15 +480,48 @@ pub struct ModuleRoles {
 /// Rows for modules that do not exist in the tree yet (the services of WP-RTB-02) are data: the
 /// registry test asserts that an **existing** module's `ROLES` equals its row, and that a row
 /// whose module appears without a matching `ROLES` fails the build's tests. Hub-only rows are
-/// `sync_hub` (the sync listener), `enrolment_admin` and `journal_access`; edge-only rows are
-/// `sync_node` and `sync_loops`. The audit job's scratch rebuild is not a module: see
+/// `sync_hub` (the sync listener), `sync_hub_parts` (the directory, relay, sinks and enrolment
+/// endpoint the listener is handed, WP-RTB-02.T13), `sync_hub_loops` (the hub-side steps of the
+/// sync loops: obligations and liveness, WP-RTB-02.T11), `enrolment_admin` and `journal_access`;
+/// edge-only rows are `sync_node` and `sync_loops`. The audit job's scratch rebuild is not a module: see
 /// [`audit_scratch_rebuild_enabled`].
 pub const SERVICE_SETS: &[ModuleRoles] = &[
-    ModuleRoles { module: "sync_hub", roles: &["hub"] },
-    ModuleRoles { module: "enrolment_admin", roles: &["hub"] },
-    ModuleRoles { module: "journal_access", roles: &["hub"] },
-    ModuleRoles { module: "sync_node", roles: &["edge"] },
-    ModuleRoles { module: "sync_loops", roles: &["edge"] },
+    ModuleRoles {
+        module: "sync_hub",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "sync_hub_assembly",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "sync_hub_parts",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "sync_hub_loops",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "enrolment_admin",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "journal_access",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "sync_catchup",
+        roles: &["hub"],
+    },
+    ModuleRoles {
+        module: "sync_node",
+        roles: &["edge"],
+    },
+    ModuleRoles {
+        module: "sync_loops",
+        roles: &["edge"],
+    },
 ];
 
 /// The conditioned modules that run in `role`, in table order. Every other module runs too.
@@ -577,7 +610,10 @@ fn not_configured() -> axum::response::Response {
     use axum::response::IntoResponse;
     (
         axum::http::StatusCode::NOT_IMPLEMENTED,
-        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        [
+            (axum::http::header::CONTENT_TYPE, "application/json"),
+            (axum::http::header::CACHE_CONTROL, "private, no-store"),
+        ],
         r#"{"error":{"code":"service.not_configured"}}"#,
     )
         .into_response()
@@ -614,7 +650,10 @@ fn store_error(action: &str, e: &spot_node_role_pg::NodeRoleStoreError) -> Error
             codes::TABLE_MISSING
         ))
     } else {
-        Error(format!("node_role: could not {action} the role record ({})", e.code()))
+        Error(format!(
+            "node_role: could not {action} the role record ({})",
+            e.code()
+        ))
     }
 }
 
@@ -627,7 +666,11 @@ async fn read_stored(
     store: &spot_node_role_pg::PgNodeRoleStore,
     site: &str,
 ) -> Result<Option<StoredRole>> {
-    let Some(row) = store.read(site).await.map_err(|e| store_error("read", &e))? else {
+    let Some(row) = store
+        .read(site)
+        .await
+        .map_err(|e| store_error("read", &e))?
+    else {
         return Ok(None);
     };
     let role = Role::parse(&row.role)
@@ -1020,7 +1063,10 @@ mod tests {
         assert!(roles.agrees(Role::Standalone));
         assert!(roles.agrees(Role::Hub));
         assert!(!roles.agrees(Role::Edge), "fail-closed for an edge");
-        assert!(!roles.contains("branch-edge"), "unknown holds no literal set");
+        assert!(
+            !roles.contains("branch-edge"),
+            "unknown holds no literal set"
+        );
     }
 
     #[test]
@@ -1078,12 +1124,28 @@ mod tests {
         assert!(service_set(Role::Standalone).is_empty());
         assert_eq!(
             service_set(Role::Hub),
-            ["sync_hub", "enrolment_admin", "journal_access"]
+            [
+                "sync_hub",
+                "sync_hub_assembly",
+                "sync_hub_parts",
+                "sync_hub_loops",
+                "enrolment_admin",
+                "journal_access",
+                "sync_catchup"
+            ]
         );
         assert_eq!(service_set(Role::Edge), ["sync_node", "sync_loops"]);
         assert_eq!(
             hub_only_modules(),
-            ["sync_hub", "enrolment_admin", "journal_access"]
+            [
+                "sync_hub",
+                "sync_hub_assembly",
+                "sync_hub_parts",
+                "sync_hub_loops",
+                "enrolment_admin",
+                "journal_access",
+                "sync_catchup"
+            ]
         );
         for row in SERVICE_SETS {
             for role in row.roles {
@@ -1129,7 +1191,10 @@ mod tests {
             offline_detail(now - time::Duration::hours(72), now),
             "sync_node: offline 3d"
         );
-        assert_eq!(offline_detail(now + time::Duration::hours(1), now), "sync_node: offline 0m");
+        assert_eq!(
+            offline_detail(now + time::Duration::hours(1), now),
+            "sync_node: offline 0m"
+        );
     }
 
     #[test]

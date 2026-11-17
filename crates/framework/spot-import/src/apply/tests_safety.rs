@@ -302,7 +302,7 @@ fn a_real_run_needs_a_unique_label() {
 #[test]
 fn a_refused_command_id_is_an_error() {
     let inv = invocation();
-    let too_long = "x".repeat(200);
+    let too_long = "x".repeat(400);
     assert!(super::write::invocation_with_id(&inv, &too_long).is_err());
     let ok = super::write::invocation_with_id(&inv, "impc-ok-1").unwrap();
     assert_eq!(ok.command_id.unwrap().as_str(), "impc-ok-1");

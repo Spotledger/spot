@@ -33,8 +33,10 @@ pub fn catalog(meta: &EffectiveMeta) -> Result<Catalog> {
 
 /// A pooled backend on the site's database. Nothing is created or changed by connecting.
 pub async fn backend(loaded: &Loaded, site: &Site) -> Result<PgBackend> {
-    let mut pg = loaded.admin.clone().with_dbname(&site.database);
-    pg.pool_max_size = loaded.common.postgres.pool_max_size;
+    let pg = loaded
+        .common
+        .postgres
+        .apply_pool(loaded.admin.clone().with_dbname(&site.database));
     PgBackend::connect(pg).await.map_err(error)
 }
 
@@ -87,6 +89,15 @@ pub fn extra_tables() -> Result<Vec<ExtraTable>> {
                 .map_err(|e| Error(e.reason.clone()))?,
         );
     }
+    // The document audit's four appender tables (WP-PRD-01.T22): bookmarks, the event index, the
+    // document index and the site checkpoint of the lane appenders. Same shape as the chain
+    // tables; their grants are installed by `protect_audit` with the guard.
+    for (table, statement) in spot_audit_store::APPENDER_TABLE_DDL {
+        tables.push(
+            ExtraTable::new(table, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
     // The condition store's two tables (WP-RTB-01.T2): the host refuses to start the conditions
     // service with one missing and says to run `spot migrate`; it never creates one itself.
     for statement in statements(spot_conditions_pg::schema::DDL) {
@@ -102,6 +113,57 @@ pub fn extra_tables() -> Result<Vec<ExtraTable>> {
             ExtraTable::new(object, vec![statement.to_owned()])
                 .map_err(|e| Error(e.reason.clone()))?,
         );
+    }
+    // The sync hub's durable state (WP-RTB-02.T1, hosted by WP-RTB-02.T4): the send queues, the
+    // relay state, the node registry and the acknowledgement book. The host refuses to start the
+    // hub with one missing and says to run `spot migrate`; it never creates one itself.
+    for statement in statements(spot_sync_hub_pg::schema::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-sync-hub-pg: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
+    // The edge sync service's two stores (WP-RTB-02.T5): its cursor table, and the durable
+    // receiving state of WP-RTB-02.T2. The host refuses to run the service with one missing.
+    for (crate_name, ddl) in [
+        ("spot-sync-node-host", spot_sync_node_host::pg::DDL),
+        ("spot-sync-node-pg", spot_sync_node_pg::schema::DDL),
+        // The offline edge (WP-RTB-03.T7, T8): leased ranges, identity state, the hub's grant log.
+        (
+            "spot-edge-offline-host",
+            spot_edge_offline_host::store_pg::DDL,
+        ),
+        (
+            "spot-edge-offline-host",
+            spot_edge_offline_host::identity_pg::DDL,
+        ),
+        ("spot-sync-hub-host", spot_sync_hub_host::grants::DDL),
+        // The hub's enrolment and node-certificate tables (WP-RTB-02.T3): the directory refuses
+        // everyone while they are missing.
+        ("spot-sync-enrol", spot_sync_enrol::pg::DDL),
+    ] {
+        for statement in statements(ddl) {
+            let object = created_object(statement).ok_or_else(|| {
+                Error(format!(
+                    "{crate_name}: the published DDL holds a statement that is not a \
+                     create-table or create-index statement with an if-not-exists guard, so the \
+                     schema plan cannot carry it: {}",
+                    first_line(statement)
+                ))
+            })?;
+            tables.push(
+                ExtraTable::new(object, vec![statement.to_owned()])
+                    .map_err(|e| Error(e.reason.clone()))?,
+            );
+        }
     }
     // The node role store's table (WP-RTB-03.T1, stored by WP-RTB-03.T5): one row per site, the
     // role recorded on first start; the host refuses to start with it missing.
@@ -135,6 +197,80 @@ pub fn extra_tables() -> Result<Vec<ExtraTable>> {
                 .map_err(|e| Error(e.reason.clone()))?,
         );
     }
+    // The journal shipper's watermark table (WP-RTB-01.T3): the host starts the journal service
+    // degraded with it missing and says to run `spot migrate`; it never creates one itself. Its
+    // existence also switches the outbox barrier on (`feed::cleanup` never prunes above it).
+    for statement in statements(spot_journal_ship::pg::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-journal-ship: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
+    // The journal audit's result table (WP-RTB-01.T7): the audit service starts degraded with it
+    // missing and says to run `spot migrate`; it never creates one itself.
+    for statement in statements(spot_journal_audit_host_pg::schema::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-journal-audit-host-pg: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
+    // The journal access grant table (WP-JRN-09.T4): the host refuses to start the journal access
+    // service with it missing and says to run `spot migrate`; it never creates one itself.
+    for statement in statements(spot_journal_access::pg::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-journal-access: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
+    // The migration lifecycle's four tables (WP-MIG-07.T1): plans, authors, approvals and
+    // rehearsals. `spot migrate-plan` and `spot migrate-apply` check them and say to run
+    // `spot migrate` when one is missing; they never create one.
+    tables.extend(
+        spot_migration_ops_pg::schema::extra_tables().map_err(|e| Error(e.reason.clone()))?,
+    );
+    // The wrapped subject-key table (WP-JRN-08.T7, hosted by WP-RTB-01.T8): the host checks it
+    // exists at start-up and says to run `spot migrate`; it never creates it itself.
+    tables.push(spot_journal_pii_secrets_pg::extra_table().map_err(|e| Error(e.reason.clone()))?);
+    // The catch-up director's progress table (WP-RTB-02.T7): the hub host starts degraded with it
+    // missing and says to run `spot migrate`; it never creates one itself.
+    for statement in statements(spot_sync_catchup_host::pg::DDL) {
+        let object = created_object(statement).ok_or_else(|| {
+            Error(format!(
+                "spot-sync-catchup-host: the published DDL holds a statement that is not a \
+                 create-table or create-index statement with an if-not-exists guard, so the \
+                 schema plan cannot carry it: {}",
+                first_line(statement)
+            ))
+        })?;
+        tables.push(
+            ExtraTable::new(object, vec![statement.to_owned()])
+                .map_err(|e| Error(e.reason.clone()))?,
+        );
+    }
     Ok(tables)
 }
 
@@ -149,12 +285,42 @@ pub fn extra_tables() -> Result<Vec<ExtraTable>> {
 pub async fn protect_audit(backend: &PgBackend) -> Result<()> {
     let pool = backend.pool();
     let state = spot_audit_store::verify(&pool).await.map_err(error)?;
-    if state.chain_table && state.checkpoint_table {
+    // The guard covers the chain tables and the appender tables together (a host that runs the
+    // audit chain always runs the appender): install it only when the plan created all of them.
+    let appender = spot_audit_store::verify_appender(&pool)
+        .await
+        .map_err(error)?;
+    if state.chain_table && state.checkpoint_table && appender.is_complete() {
         spot_audit_store::install_guard(&pool)
             .await
             .map_err(error)?;
     }
     Ok(())
+}
+
+/// Creates the migration control schema (`spot_migration_control`: the maintenance gate, the apply
+/// journal and the timings; `PgApplySchema::prepare`) if it is missing. Idempotent and safe from several
+/// nodes. Called where provisioning and `migrate --apply` call [`protect_audit`], so every real site has
+/// a readable gate: without the schema `spot console` refuses every write (it fails closed when it cannot
+/// read the gate) and the gate `spot serve` honours has nothing to read.
+///
+/// A site with the schema and no gate row is **open** (`PgAdmissionGate` reads an absent row as open).
+///
+/// # Errors
+///
+/// [`Error`] with a fixed message (no SQL, no connection string) when the schema cannot be created.
+/// Never skipped: a site without the gate silently makes the console refuse everything.
+pub async fn prepare_migration_control(backend: &PgBackend) -> Result<()> {
+    spot_migration_apply_pg::PgApplySchema::new(backend.pool())
+        .prepare()
+        .await
+        .map_err(|_| {
+            Error(
+                "the migration control schema could not be created; the database refused it \
+                 (check the administrative role); nothing else was changed"
+                    .to_owned(),
+            )
+        })
 }
 
 /// Why a serving site must refuse: the audit store's tables exist but are not fully guarded.
@@ -165,13 +331,27 @@ pub async fn protect_audit(backend: &PgBackend) -> Result<()> {
 ///
 /// [`Error`] when the database cannot be asked.
 pub async fn audit_protection_gap(backend: &PgBackend) -> Result<Option<String>> {
-    let state = spot_audit_store::verify(&backend.pool())
+    let pool = backend.pool();
+    let state = spot_audit_store::verify(&pool).await.map_err(error)?;
+    let appender = spot_audit_store::verify_appender(&pool)
         .await
         .map_err(error)?;
-    if !(state.chain_table && state.checkpoint_table) || state.is_complete() {
+    // A database the plan has not reached yet (no chain tables) is the pending-tables refusal's
+    // business, not this one's. Chain tables that exist without the full guard, or without the
+    // appender tables, are an unprotected trail: the site does not start.
+    if !(state.chain_table && state.checkpoint_table) {
         return Ok(None);
     }
-    Ok(Some(state.missing().join(", ")))
+    let mut missing: Vec<String> = Vec::new();
+    if !state.is_complete() {
+        missing.extend(state.missing().iter().map(|m| (*m).to_owned()));
+    }
+    missing.extend(appender.missing().iter().map(|m| (*m).to_owned()));
+    if missing.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(missing.join(", ")))
+    }
 }
 
 /// The statements of a published DDL string, trimmed and without the empty tail.
@@ -295,8 +475,14 @@ pub fn refusals(plan: &MigrationPlan) -> Result<()> {
     if plan.refused.is_empty() {
         Ok(())
     } else {
+        let why = plan
+            .refused
+            .iter()
+            .map(|r| format!("{}: {}", r.entity, r.reason))
+            .collect::<Vec<_>>()
+            .join("; ");
         Err(Error(format!(
-            "{} change(s) refused; nothing was applied. Destructive changes belong to the \
+            "{} change(s) refused; nothing was applied ({why}). Destructive changes belong to the \
              expand and contract migration path",
             plan.refused.len()
         )))

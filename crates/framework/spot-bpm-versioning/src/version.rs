@@ -114,28 +114,24 @@ pub struct PublishCheck<'a> {
     pub author: &'a ProcessAuthor,
 }
 
-/// Publishes a process version through the publish guard and reports the pins the running Cases
-/// kept.
+/// Compiles a process version and runs the publish guard over it, without registering it.
 ///
-/// The version is compiled once (without registering it) and the guard
-/// ([`validate_process_version`]) runs over the compiled DAG. Only when it finds no violation is
-/// the compiled definition registered, so a refused version is never partially published. A guard
-/// that cannot answer is a violation, never a pass.
+/// This is the validate half of [`publish_guarded`], which calls it and then registers the
+/// returned definition, so the two cannot drift. A host that must store the version first (and
+/// only then make it live) calls this, stores, then registers the definition it got back: a lost
+/// publish race then never leaves a phantom version in memory. It takes no engine and never
+/// writes a Case or the registry.
 ///
-/// Publishing is additive: the function never writes a Case record and never re-points one at
-/// the new version. A host that wants running Cases on the new version calls
-/// [`crate::migration::plan_migration`] for each of them.
+/// A guard that cannot answer is a violation, never a pass.
 ///
 /// # Errors
-/// [`VersioningError::Engine`] when the model does not compile or the registry refuses the
-/// version; [`VersioningError::PublishRefused`] with every violation (node and rule only) when
-/// the guard refuses it, in which case nothing is registered.
-pub fn publish_guarded<S: CaseStore + 'static, T: TimerPort + 'static>(
-    engine: &Engine<S, T>,
+/// [`VersioningError::Engine`] when the model does not compile;
+/// [`VersioningError::PublishRefused`] with every violation (node and rule only) when the guard
+/// refuses it.
+pub fn validate_guarded(
     version: &ProcessVersion,
-    running: &[CaseRecord],
     check: &PublishCheck<'_>,
-) -> Result<PublishReport> {
+) -> Result<ProcessDefinition> {
     let definition =
         ProcessDefinition::compile(version).map_err(|problems| EngineError::ProcessInvalid {
             detail: problems
@@ -161,6 +157,31 @@ pub fn publish_guarded<S: CaseStore + 'static, T: TimerPort + 'static>(
                 .collect(),
         });
     }
+    Ok(definition)
+}
+
+/// Publishes a process version through the publish guard and reports the pins the running Cases
+/// kept.
+///
+/// The version is compiled once and the guard runs over the compiled DAG
+/// ([`validate_guarded`]). Only when it finds no violation is the compiled definition registered, so a refused version is never partially published. A guard
+/// that cannot answer is a violation, never a pass.
+///
+/// Publishing is additive: the function never writes a Case record and never re-points one at
+/// the new version. A host that wants running Cases on the new version calls
+/// [`crate::migration::plan_migration`] for each of them.
+///
+/// # Errors
+/// [`VersioningError::Engine`] when the model does not compile or the registry refuses the
+/// version; [`VersioningError::PublishRefused`] with every violation (node and rule only) when
+/// the guard refuses it, in which case nothing is registered.
+pub fn publish_guarded<S: CaseStore + 'static, T: TimerPort + 'static>(
+    engine: &Engine<S, T>,
+    version: &ProcessVersion,
+    running: &[CaseRecord],
+    check: &PublishCheck<'_>,
+) -> Result<PublishReport> {
+    let definition = validate_guarded(version, check)?;
     let registered = engine.processes().publish(definition);
     Ok(report(&registered, running))
 }

@@ -6,3 +6,10 @@ role = "System Manager"
 doctype = "login_attempt"
 target = { group = "login_source" }
 access = ["read", "report"]
+
+# The source digest of a session: system managers audit it, user managers do not.
+[[entries]]
+role = "System Manager"
+doctype = "session"
+target = { group = "login_source" }
+access = ["read", "report"]

@@ -35,3 +35,30 @@ explanation_key = "error.journal_durability.config_invalid"
 params = []
 remedy = "Configure a journal target before choosing remote-sync, or choose local or replica-sync."
 since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.stale_generation"
+class = "none"
+summary = "A commit carries a generation lower than one the gate has already seen: it comes from a stale writer and is refused, never acknowledged."
+explanation_key = "error.journal_durability.stale_generation"
+params = []
+remedy = "Stop the stale writer and resume from the current generation; the commit was not made durable."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.out_of_order"
+class = "none"
+summary = "A commit's position is not above the last position the gate accepted in its generation, so it is refused instead of being dropped."
+explanation_key = "error.journal_durability.out_of_order"
+params = []
+remedy = "Report local commits in position order, each position once."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_durability.duplicate_command"
+class = "none"
+summary = "A commit reuses a command id the gate already holds as committed, pending or unknown, so it is refused."
+explanation_key = "error.journal_durability.duplicate_command"
+params = []
+remedy = "Retry with the same command id through admit, which answers from the earlier outcome instead of committing a second time."
+since = "0.1.0"

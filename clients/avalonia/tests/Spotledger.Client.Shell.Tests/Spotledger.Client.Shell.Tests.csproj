@@ -19,8 +19,15 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <!-- The notification fakes (a room source, events, a manual clock), shared as source so the shell
+         tests drive the same fakes the notification tests do (WP-UI-02.T6). -->
+    <Compile Include="../Spotledger.Client.Notifications.Tests/Fakes.cs" Link="Fakes/NotificationFakes.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
     <ProjectReference Include="../../src/Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Notifications/Spotledger.Client.Notifications.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Forms/Spotledger.Client.Forms.csproj" />
     <ProjectReference Include="../../src/Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
     <!-- The shell right-to-left pixel matrix (WP-UI-15.T8) compares through ScreenshotAssert. -->
     <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />

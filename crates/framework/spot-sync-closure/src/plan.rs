@@ -7,9 +7,24 @@ use crate::model::{
 };
 use crate::split::{components, pack};
 use crate::traits::{DestinationKnows, ImageSource, Redactor, References};
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 fn record(role: Role, src: &SourceImage, redactor: &dyn Redactor) -> (BundleRecord, usize) {
+    if src.deleted {
+        // A tombstone has nothing to redact and no bytes: it carries only the key and the
+        // position of the delete.
+        return (
+            BundleRecord {
+                role,
+                key: src.key.clone(),
+                position: src.position,
+                image: Value::Null,
+                deleted: true,
+            },
+            0,
+        );
+    }
     let mut image = src.image.clone();
     redactor.redact_down(&src.key.entity, &mut image);
     let bytes = image.to_string().len();
@@ -19,6 +34,7 @@ fn record(role: Role, src: &SourceImage, redactor: &dyn Redactor) -> (BundleReco
             key: src.key.clone(),
             position: src.position,
             image,
+            deleted: false,
         },
         bytes,
     )
@@ -52,6 +68,11 @@ fn push(bundles: &mut Vec<Bundle>, kind: BundleKind, parts: Vec<(BundleRecord, u
 /// become prerequisite bundles in dependency order (a cycle stays in one bundle) followed by the
 /// root bundle holding the roots and satellites; a source transaction is never split. Each bundle is
 /// complete in itself given the ones before it.
+///
+/// A deleted record (`SourceImage::deleted`) travels as a tombstone in the role it has as a root
+/// or satellite: no image, 0 bytes, no references followed. A target that is deleted is never
+/// added as an extra (the destination has nothing to apply for it: the referring record is the
+/// node's business, see `spot-sync-node`).
 ///
 /// A target the destination holds is never an extra (ADR-066 section 5). A root, satellite or
 /// extra whose closure needs such a record cannot be applied by the destination, so it is

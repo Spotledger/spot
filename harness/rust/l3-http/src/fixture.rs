@@ -95,6 +95,25 @@ impl Fixture {
     /// PostgreSQL is configured (`SKIPPED` is printed, and `SPOT_REQUIRE_PG=1` turns that into a
     /// panic inside `TestDb::create` instead).
     pub async fn start() -> Option<Fixture> {
+        Self::start_with_pool(36, "").await
+    }
+
+    /// [`Fixture::start`] for a case that runs a fixture of its own beside the suite's: a small
+    /// pool, because the database server has 100 connections and two big pools starve the
+    /// storage health check of the second host (below about 30 a host with every service saturates
+    /// its own pool, which readiness reports as degraded storage).
+    pub async fn start_secondary() -> Option<Fixture> {
+        Self::start_with_pool(32, "").await
+    }
+
+    /// [`Fixture::start_secondary`] with extra `common.toml` tables from the first start, for a
+    /// service a reload cannot turn on: the job worker, the outbox pumps and the other services
+    /// that run once per process read their settings when the host starts.
+    pub async fn start_secondary_with(extra_toml: &str) -> Option<Fixture> {
+        Self::start_with_pool(32, extra_toml).await
+    }
+
+    async fn start_with_pool(pool: usize, extra_toml: &str) -> Option<Fixture> {
         let db = TestDb::create().await?;
         let run = db.name().trim_start_matches("spot_test_").to_owned();
         sweep_roots();
@@ -113,6 +132,7 @@ impl Fixture {
         // site without touching the repository's copy.
         copy_dir(&repo.join("apps/sample"), &root.join("sample"));
         patch_sample_gaps(&root.join("sample"));
+        grant_process_permissions(&root.join("sample"));
         // The catalogue lists the platform app from the repository and the fixture's own copy of
         // the sample app — the same shape `apps/sample/README.md` documents. The platform app
         // *must* come from the catalogue: the copy embedded in the binary carries 11 DocTypes and
@@ -129,15 +149,31 @@ impl Fixture {
                  shutdown_grace = 5\n\
                  [postgres]\n\
                  admin_url = {url:?}\n\
-                 pool_max_size = 48\n\
+                 pool_max_size = {pool}\n\
                  [services.events]\n\
                  enabled = true\n\
+                 [services.process]\n\
+                 resume_interval_secs = 5\n\
+                 [services.secrets]\n\
+                 kek_file = {:?}\n\
+                 [services.signin_throttle]\n\
+                 per_account = {{ capacity = 100000, per_seconds = 900 }}\n\
+                 per_source = {{ capacity = 100000, per_seconds = 900 }}\n\
+                 per_tenant = {{ capacity = 10000000, per_seconds = 900 }}\n\
                  [trust]\n\
-                 require_signed = false\n",
-                repo.join("apps/platform").display().to_string()
+                 require_signed = false\n\
+                 {extra_toml}\n",
+                repo.join("apps/platform").display().to_string(),
+                format!("{}/keys/{{site}}.json", root.display()),
             ),
         )
         .expect("cannot write common.toml");
+        // The sign-in stores seal their credentials through the vault: the site needs its key
+        // file before it exists.
+        std::fs::create_dir_all(root.join("keys")).expect("cannot create the key directory");
+        spot_cli::services::secrets::init_key_file(&root.join(format!("keys/{site}.json")), &site)
+            .await
+            .unwrap_or_else(|e| panic!("the key file of `{site}`: {e}"));
         let log = root.join("l3-http.log");
 
         // 1. The site, host-wide: the platform app plus every app in the catalogue.
@@ -246,19 +282,23 @@ impl Fixture {
         Some(fixture)
     }
 
-    /// Polls `/api/health/ready` until the site answers 200 (30 s budget).
+    /// Polls `/api/health/ready` until the site answers 200 (120 s budget: a case that starts a
+    /// second fixture does so while the first one is under the whole suite's load).
     async fn wait_ready(&self) {
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + Duration::from_secs(120);
+        let mut last;
         loop {
-            if let Ok(reply) = self.client.health("ready").await
-                && reply.status == 200
-            {
-                self.note("host is ready");
-                return;
+            match self.client.health("ready").await {
+                Ok(reply) if reply.status == 200 => {
+                    self.note("host is ready");
+                    return;
+                }
+                Ok(reply) => last = format!("HTTP {}: {}", reply.status, reply.text()),
+                Err(e) => last = format!("{e}"),
             }
             if Instant::now() > deadline {
                 panic!(
-                    "the host did not become ready within 30 s; log: {}",
+                    "the host did not become ready within 120 s (last answer: {last}); log: {}",
                     self.log.display()
                 );
             }
@@ -532,9 +572,33 @@ impl Fixture {
         }
         let running = self.running.lock().expect("fixture mutex").take();
         if let Some(running) = running {
-            let _ = tokio::time::timeout(Duration::from_secs(15), running.join()).await;
+            let _ = tokio::time::timeout(Duration::from_secs(120), running.join()).await;
         }
         self.note("host stopped");
+        if !keep() {
+            // The site's own database is not the scratch one: nothing drops it, and the stopped
+            // host's pools keep their idle connections to it, so a suite of many fixtures ends
+            // at the server's connection limit. Dropping it with FORCE closes them.
+            if let Some(db) = self.db.as_ref() {
+                let admin = db.admin_client().await;
+                let name = self.site.replace('-', "_");
+                // The site's own database and those of the sites a case added to its host
+                // (`<site>-b`).
+                let names: Vec<String> = admin
+                    .query(
+                        "SELECT datname::text FROM pg_database WHERE datname LIKE $1",
+                        &[&format!("{name}%")],
+                    )
+                    .await
+                    .map(|rows| rows.iter().map(|r| r.get(0)).collect())
+                    .unwrap_or_default();
+                for name in names {
+                    let _ = admin
+                        .batch_execute(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+                        .await;
+                }
+            }
+        }
         if keep() {
             let name = self.db.as_ref().map(|db| db.name().to_owned());
             println!(
@@ -550,6 +614,26 @@ impl Fixture {
         self.preserve_log();
         self.db.take();
         let _ = std::fs::remove_dir_all(&self.root);
+    }
+
+    /// Closes the connections a stopped host left on the site's database (its services keep
+    /// their pools after a stop): a later case that starts hosts of its own needs them back, the
+    /// server allows 100. Does nothing while the host is serving.
+    pub async fn release_connections(&self) {
+        if self.is_running() {
+            return;
+        }
+        if let Some(db) = self.db.as_ref() {
+            let admin = db.admin_client().await;
+            let name = self.site.replace('-', "_");
+            let _ = admin
+                .execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+                     WHERE datname = $1 AND pid <> pg_backend_pid()",
+                    &[&name],
+                )
+                .await;
+        }
     }
 
     /// Whether the fixture is still serving (the shutdown case stops it).
@@ -568,6 +652,26 @@ impl Fixture {
         let target = directory.join(format!("{name}.log"));
         std::fs::copy(&self.log, &target).ok().map(|_| target)
     }
+}
+
+/// `text` without the named TOML tables (each table runs to the next table header). The fixture's
+/// `common.toml` carries `[services.secrets]` and `[services.signin_throttle]`; a case that sets
+/// its own copy of one removes the fixture's first, because a table may be written once.
+pub fn strip_tables(text: &str, tables: &[&str]) -> String {
+    let mut skipping = false;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            skipping = tables.iter().any(|t| trimmed == format!("[{t}]"));
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    let mut joined = out.join("\n");
+    joined.push('\n');
+    joined
 }
 
 impl Drop for Fixture {
@@ -614,6 +718,13 @@ const ROOT_SWEEP_AFTER: Duration = Duration::from_secs(60 * 60);
 /// Removes roots an earlier run left behind when it was killed before its drop guard ran
 /// (SIGKILL, a CI timeout), so `/tmp/l3_http_<run>` does not accumulate forever.
 fn sweep_roots() {
+    // One sweep at a time per process: two threads removing the same leaked root race (the first
+    // removes `inner`, the second's `remove_dir_all` then fails on it and gives up), which could
+    // leave the root behind and made `a_root_an_earlier_run_leaked_is_swept` fail intermittently.
+    static SWEEP: Mutex<()> = Mutex::new(());
+    let _one_at_a_time = SWEEP
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
         return;
     };
@@ -701,6 +812,33 @@ fn copy_dir(from: &Path, to: &Path) {
             std::fs::copy(entry.path(), target).expect("cannot copy an app file");
         }
     }
+}
+
+/// The platform's process permissions are held by no role by default (a grant is a site
+/// decision): the fixture's site grants them to the `Tenant Administrator` reference role, so the
+/// Administrator can publish and read versions over HTTP (`permissions/app_permissions.toml`).
+fn grant_process_permissions(sample: &Path) {
+    let mut text = String::new();
+    for permission in [
+        "process_publish",
+        "process_read_versions",
+        "process_migrate",
+        "process_supervise",
+    ] {
+        text.push_str(&format!(
+            "[[entries]]\nrole = \"Tenant Administrator\"\npermission = \"{permission}\"\n\n"
+        ));
+    }
+    std::fs::write(sample.join("permissions/app_permissions.toml"), text)
+        .expect("cannot write app_permissions.toml");
+    // The process cases' Document node creates a Label as the person who started the run (a Team
+    // Member): the sample app lets only Project Managers create labels, so the site grants it.
+    let grants = sample.join("permissions/grants.toml");
+    let mut text = std::fs::read_to_string(&grants).expect("grants.toml");
+    text.push_str(
+        "\n[[entries]]\nrole = \"Team Member\"\ndoctype = \"label\"\nrights = [\"read\", \"create\", \"select\"]\n",
+    );
+    std::fs::write(&grants, text).expect("cannot write grants.toml");
 }
 
 /// Fills the two gaps the shipped sample app leaves in its own declared permission model, on the

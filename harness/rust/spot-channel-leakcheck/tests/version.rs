@@ -132,7 +132,7 @@ fn actor() -> ActorRef {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn version_history_never_leaks() {
     let core = core();
     let corpus = corpus();

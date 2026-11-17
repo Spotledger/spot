@@ -45,14 +45,47 @@
 //! server fails. They run the `spot-sso` replay contract suite against the store, plus restart
 //! persistence, a two-pool race and the prune batches.
 
+//! # The pending-authorisation and provider stores (WP-IAM-05.T9)
+//!
+//! [`PgPendingStore`] keeps the sign-in flows in progress (`spot_sso_pending`): the browser
+//! binding as a keyed digest, the record sealed ([`Sealer`], [`AesGcmSealer`]), the tenant in
+//! every predicate, `take` one atomic `DELETE … RETURNING`. [`PgProviderStore`] keeps the
+//! tenant's provider configurations (`spot_sso_provider`), the client secret only as the name of a
+//! `spot-secrets` entry. Each has its own idempotent `prepare` and its own DDL constant
+//! ([`PENDING_DDL`], [`PROVIDER_DDL`]); neither touches the replay table.
+//!
+//! Their tests run the `spot-sso` contract suites ([`spot_sso::contract_stores`]).
+//!
+//! # The host's sign-in tables (WP-IAM-05.T18)
+//!
+//! The SQL the host used to carry moved here (the G5 lint allows no SQL and no database driver
+//! outside the storage crates): [`PgSamlRows`] (`spot_sso_saml_provider`, versioned, the
+//! configuration as opaque text), [`PgPolicyStore`] (`spot_sso_policy`, one row per tenant,
+//! compare-and-set), [`PgHandoverTables`] (`spot_sso_handover`, redeemed by one
+//! `DELETE ... RETURNING`, and `spot_sso_session_index`). Each names the tenant in every statement and
+//! has its own idempotent `prepare`. The host keeps only the adaptation to its ports.
+
 #![warn(missing_docs)]
 
 mod error;
+mod handover;
+mod pending;
+mod policy;
+mod provider;
+mod saml;
 pub mod schema;
+mod seal;
 mod sql;
 mod store;
 
+pub use deadpool_postgres::Pool;
 pub use error::MIGRATION_FAILED;
+pub use handover::{HANDOVER_DDL, HandoverUnavailable, PgHandoverTables};
+pub use pending::{PENDING_DDL, PgPendingStore};
+pub use policy::{POLICY_DDL, PgPolicyStore, PolicyStoreError};
+pub use provider::{PROVIDER_DDL, PgProviderStore};
+pub use saml::{MAX_SAML_CONFIG, PgSamlRows, SAML_DDL, SamlRow, SamlRowError};
+pub use seal::{AesGcmSealer, KEY_LEN, NonceSource, Sealer};
 pub use store::PgReplayStore;
 
 /// The name of this crate.

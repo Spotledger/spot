@@ -87,6 +87,16 @@ process version with a service-principal Document node will require the platform
 `process.publish_service_principal` and every named principal's allow-list to cover the
 version's author, checked **at publish**, not only at run time.
 
+**The publisher needs the permission through a role assignment.** The guard looks the publishing
+user up exactly as the rest of the host does: it reads the user's active, unexpired role
+assignments from the site's storage and asks the permission engine whether one of the assigned
+roles grants `process.publish_service_principal` (asked as `process_publish_service_principal`).
+A permission granted any other way does not count. Grant it to a role, then assign that role to
+the user; an assignment that is revoked or has expired stops counting on the next check, with no
+restart. The guard fails closed: a user whose assignments cannot be read, an author id that is
+not a user record id, an author from another site, and a process author all hold nothing and are
+refused. The platform author is allowed. A refusal names the node and the rule only.
+
 ## Health and metrics
 
 The hosted service (`process_documents`) is `Level::Optional`: a Document node that cannot run

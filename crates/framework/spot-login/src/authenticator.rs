@@ -10,13 +10,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use spot_auth::{ApiKey, OpaqueToken};
-use spot_core::Clock;
+use spot_core::{Audience, Clock};
 use spot_http::api::{ApiError, Code, RequestCtx};
+use spot_iam_directory::UserType;
 use spot_sessions::{SaltKey, SessionManager, SessionPolicy, SessionStore, UserKey};
 use spot_storage_contract::RecordId;
 
 use crate::error::{LoginError, invalid_credentials};
-use crate::model::UserState;
+use crate::model::{UserState, audience_for};
 use crate::ports::{KeyStore, UserDirectory};
 
 /// How the caller proved who they are.
@@ -37,12 +38,21 @@ pub struct Authenticated {
     pub user_name: String,
     /// How the caller proved identity.
     pub via: Via,
+    /// What kind of principal the user is, read live from the user directory at this lookup
+    /// (never stored on the session: it is immutable, and a copy only invites a mismatch).
+    pub user_type: UserType,
+    /// Who the credential is for (ADR-083 Barrier 1): the session's audience for a session
+    /// credential, `Staff` for an API key (keys are held only by staff-audience owners).
+    pub audience: Audience,
     /// The session's id, for a session credential; `None` for an API key.
     pub session_id: Option<String>,
     /// Unix seconds the credential stops working.
     pub expires_at: i64,
     /// A rotated session token the caller must deliver, when rotation fell due. Never cached.
     pub renewed_token: Option<String>,
+    /// The credential is an API key scoped for SCIM only: the SCIM endpoint accepts it, no other
+    /// route does.
+    pub scim_only: bool,
 }
 
 impl Authenticated {
@@ -155,6 +165,13 @@ impl Authenticator {
         }
     }
 
+    /// The audience of the request's credential, or the same error `authenticate` gives.
+    pub async fn audience_of(&self, ctx: &RequestCtx) -> Result<Audience, ApiError> {
+        self.authenticate(ctx)
+            .await
+            .map(|principal| principal.audience)
+    }
+
     async fn authenticate_session(
         &self,
         token: &str,
@@ -182,11 +199,26 @@ impl Authenticator {
             record_id_from_text(validated.session.user.as_str()).ok_or_else(session_expired)?;
         let user = self
             .users
-            .find_by_id(user_id)
+            .find_standing_by_id(user_id)
             .await
             .map_err(|error| error.to_api_error_traced(request_id))?
             .ok_or_else(session_expired)?;
         if !user.state.is_signable() {
+            return Err(session_expired());
+        }
+        // Fail closed on a mismatch: the session's audience must be the one the user's type
+        // implies. A mismatched session is refused as invalid and its cache entry dropped, so it
+        // is never served from the cache either. The warning names the session and the two
+        // audiences, never the token or its digest.
+        let expected = audience_for(user.user_type);
+        if validated.session.audience != expected {
+            self.lock().remove(&key);
+            tracing::warn!(
+                session = validated.session.id.as_str(),
+                session_audience = validated.session.audience.as_str(),
+                expected_audience = expected.as_str(),
+                "session audience does not match the user's type; refusing the session"
+            );
             return Err(session_expired());
         }
 
@@ -194,11 +226,14 @@ impl Authenticator {
             user_id,
             user_name: user.user_name,
             via: Via::Password,
+            user_type: user.user_type,
+            audience: validated.session.audience,
             session_id: Some(validated.session.id.clone()),
             expires_at: validated.session.absolute_expires,
             renewed_token: validated
                 .renewed_token
                 .map(|token| token.as_str().to_owned()),
+            scim_only: false,
         };
         self.remember(*validated.session.token_digest.as_bytes(), &principal);
         Ok(principal)
@@ -229,11 +264,16 @@ impl Authenticator {
 
         let user = self
             .users
-            .find_by_id(record.owner)
+            .find_standing_by_id(record.owner)
             .await
             .map_err(|error| error.to_api_error_traced(request_id))?
             .ok_or_else(key_rejected)?;
         if user.state != UserState::Active {
+            return Err(key_rejected());
+        }
+        // Keys are held only by service and internal owners (and agents): a key whose owner's
+        // type is not a staff-audience type is refused, never given the staff audience.
+        if audience_for(user.user_type) != Audience::Staff {
             return Err(key_rejected());
         }
 
@@ -241,11 +281,14 @@ impl Authenticator {
             user_id: record.owner,
             user_name: user.user_name,
             via: Via::ApiKey,
+            user_type: user.user_type,
+            audience: Audience::Staff,
             session_id: None,
             expires_at: record
                 .expires_at
                 .map_or(i64::MAX, |instant| instant.unix_timestamp()),
             renewed_token: None,
+            scim_only: record.scim_only,
         })
     }
 }

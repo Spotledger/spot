@@ -153,6 +153,11 @@ impl Snapshot {
     }
 }
 
+/// What a database snapshot records as its catalogue version when the live database has none
+/// (a site whose `spot_meta` was never given one): an honest word, because an empty version
+/// is refused (only an offline copy may leave it empty).
+pub const UNRECORDED_CATALOGUE: &str = "unrecorded";
+
 impl SnapshotManifest {
     /// Validates the canonical rules without touching the files.
     ///

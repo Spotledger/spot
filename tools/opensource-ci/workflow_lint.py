@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Workflow safety lint for the public repository (WP-OSS-03.T1).
 
-Usage: workflow_lint.py <dir-or-file>... [--allow-unpinned]
+Usage: workflow_lint.py <dir-or-file>... [--allow-unpinned] [--exclude NAME]...
 
 Reads every ``*.yml`` / ``*.yaml`` file under the given paths with ``yaml.safe_load`` and
 reports every finding at once (exit 1 when there is any). Rules:
@@ -23,6 +23,13 @@ reports every finding at once (exit 1 when there is any). Rules:
   postgres-service     a job declares a ``services:`` container whose image is a PostgreSQL
                        image (it lacks PostGIS and pgvector)
   require-pg-off       ``SPOT_REQUIRE_PG`` is set to anything but 1
+  exclude              ``--exclude`` names a file that is not one of OPS_PUBLIC_WORKFLOWS or that
+                       is not among the files linted
+
+``--exclude NAME`` (WP-OSS-07.T5) skips one file by exact name, for the two public ops workflows
+(``spot-pr.yml``, ``spot-verdict.yml``) that ops_workflow_lint.py lints with its stricter rules
+instead. No other name is accepted, there are no globs, and a name that is not among the linted
+files is a finding, so the option cannot hide any other workflow.
 """
 
 from __future__ import annotations
@@ -46,6 +53,10 @@ TEST_CMD_RE = re.compile(
 )
 START_PG = "tools/ci/start-postgres.sh"
 SAFE_TRIGGERS = {"push", "schedule", "workflow_dispatch"}
+# The two public ops workflows (opensource/ops/workflows): a pull_request / issue_comment workflow
+# with one secret, linted by ops_workflow_lint.py. The only names --exclude accepts; the single
+# place they are fixed (ops_workflow_lint.py imports this).
+OPS_PUBLIC_WORKFLOWS = ("spot-pr.yml", "spot-verdict.yml")
 POSTGRES_IMAGE_RE = re.compile(r"postgres|postgis|pgvector", re.IGNORECASE)
 
 
@@ -218,7 +229,9 @@ def lint_text(text: str, name: str, allow_unpinned: bool = False) -> list[str]:
     return findings
 
 
-def lint_paths(paths: list[Path], allow_unpinned: bool = False) -> list[str]:
+def lint_paths(
+    paths: list[Path], allow_unpinned: bool = False, exclude: Iterable[str] = ()
+) -> list[str]:
     files: list[Path] = []
     for path in paths:
         if path.is_dir():
@@ -226,6 +239,15 @@ def lint_paths(paths: list[Path], allow_unpinned: bool = False) -> list[str]:
         else:
             files.append(path)
     findings: list[str] = []
+    excluded = set(exclude)
+    for name in sorted(excluded):
+        if name not in OPS_PUBLIC_WORKFLOWS:
+            findings.append(
+                f"{name}: [exclude] only {', '.join(OPS_PUBLIC_WORKFLOWS)} may be excluded"
+            )
+        elif not any(f.name == name for f in files):
+            findings.append(f"{name}: [exclude] excluded file is not among the files linted")
+    files = [f for f in files if not (f.name in excluded and f.name in OPS_PUBLIC_WORKFLOWS)]
     if not files:
         findings.append("no workflow files found")
     for file in files:
@@ -241,8 +263,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="interim: accept version tags in uses: (off by default)",
     )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=f"skip one exact file name; only {', '.join(OPS_PUBLIC_WORKFLOWS)} are accepted "
+        "(ops_workflow_lint.py lints them); repeatable",
+    )
     args = parser.parse_args(argv)
-    findings = lint_paths(args.paths, args.allow_unpinned)
+    findings = lint_paths(args.paths, args.allow_unpinned, args.exclude)
     for finding in findings:
         print(finding)
     if findings:

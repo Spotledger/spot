@@ -1,0 +1,52 @@
+[package]
+name = "spot-migration-ops"
+description = "The migration lifecycle as operations (WP-MIG-04.T5): the context, the stable error codes and the management operation catalogue entries for plan, show, approve, reject, rehearse, apply, hold, release, rescue and audit, shared by `spot migrate`, the management API and the console; every verb is a fail-closed stub until its own task fills its module"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The in-memory PlanStore and the fixed clock for tests of this crate and of its verbs.
+testing = []
+
+[dependencies]
+# `SiteId`: the one site a context serves (ADR-34).
+spot-core = { path = "../spot-core" }
+# `Principal`: the actor the permission check is evaluated over.
+spot-permissions = { path = "../spot-permissions" }
+# The operation catalogue types the entries are built from.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# `AuditRecord`: the type an `AuditSink` takes.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# `ApprovalService`, `ApprovalStore`, `AuditSink`, `PlanDigest`.
+spot-migration-approval = { path = "../spot-migration-approval" }
+# `RunStore`, `RunAccess`, `permit`, `RUN_PERMISSION`.
+spot-migration-audit = { path = "../spot-migration-audit" }
+# `AdmissionGate` (maintenance), `SideEffectHold`, `Faults`, `BoxFuture`.
+spot-migration-apply = { path = "../spot-migration-apply" }
+# `SnapshotProvider`.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# `ReleasePlan` and its risk, estimate and digest: what `plan`, `show`, `approve` and `rehearse` store and read (WP-MIG-04.T7).
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The expand/contract gate and the customisation-conflict findings `plan` applies (WP-MIG-04.T7).
+spot-expand-contract = { path = "../spot-expand-contract" }
+spot-migration-conflicts = { path = "../spot-migration-conflicts" }
+# The rehearsal engine and its report (WP-MIG-06.T5).
+spot-rehearsal = { path = "../spot-rehearsal" }
+# A stored plan is canonical JSON of a `ReleasePlan`; it is parsed back on `show`, `approve` and `rehearse`.
+serde_json = "1"
+# The rehearsal's wall-clock budget (`tokio::time::timeout`): the time is measured by the runtime, never read as a date.
+tokio = { version = "1", default-features = false, features = ["time"] }
+# Typed errors with stable `migration.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+spot-migration-ops = { path = ".", features = ["testing"] }
+# The rehearsal tests run the budget timeout on a real runtime.
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time"] }
+
+[lints]
+workspace = true

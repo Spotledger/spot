@@ -623,7 +623,7 @@ async fn metrics_carry_counts_but_the_module_never_builds_a_labelled_one() {
     // place a run or Case identity reaches a number.
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_handler_builder_is_reachable_through_the_public_module_path() {
     // A smoke test that the port other node-kind modules depend on (`HandlerBuilder`) is a
     // public item of `process.rs`, with the shape the brief names.

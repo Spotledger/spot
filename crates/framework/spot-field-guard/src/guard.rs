@@ -137,6 +137,15 @@ impl FieldGuard {
         &self.engine
     }
 
+    /// The table fields of a DocType (the names whose values are rows of a child DocType), so a
+    /// caller that holds a document as JSON knows which keys to give the guard as child rows.
+    ///
+    /// # Errors
+    /// The DocType is unknown to the protection source.
+    pub fn table_fields(&self, doctype: &str) -> Result<BTreeSet<String>, GuardError> {
+        Ok(self.protection(doctype)?.tables.keys().cloned().collect())
+    }
+
     pub(crate) fn protection(&self, doctype: &str) -> Result<Arc<DocProtection>, GuardError> {
         self.source
             .protection(doctype)

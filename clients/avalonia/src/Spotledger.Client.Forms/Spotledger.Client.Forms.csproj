@@ -15,6 +15,7 @@
     <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
     <ProjectReference Include="../Spotledger.Client.ChildTable/Spotledger.Client.ChildTable.csproj" />
     <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Notifications/Spotledger.Client.Notifications.csproj" />
     <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
     <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
   </ItemGroup>

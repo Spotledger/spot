@@ -19,6 +19,13 @@
 //! process. `tests/concurrency.rs` calls the store from many threads at once and from inside a
 //! current-thread and a multi-thread runtime.
 //!
+//! # The async twin
+//!
+//! [`AsyncPgTaskStore`] implements `spot_bpm_tasks::AsyncTaskStore` over the pool directly, for
+//! a caller on a tokio runtime thread (an HTTP handler), where the sync store is refused. It
+//! shares the tables, statements and row decoding, and carries a per-call deadline. See
+//! [`async_store`].
+//!
 //! # What the store keeps
 //!
 //! * One row per task, keyed `(tenant, task_id)`, unique on `(tenant, case_id, node)`: a
@@ -48,12 +55,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod async_store;
 mod codec;
 pub mod error;
 pub mod schema;
 pub mod sql;
 mod store;
 
+pub use async_store::AsyncPgTaskStore;
 pub use error::{BAD_SETUP, MIGRATION_FAILED, SetupError};
 pub use store::{PREPARE_DEADLINE, PgTaskStore, READ_DEADLINE, WRITE_DEADLINE};
 

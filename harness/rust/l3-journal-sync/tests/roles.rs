@@ -199,9 +199,10 @@ async fn standalone_hub_and_edge_start_the_role_s_own_service_set() {
         .expect("PostgreSQL was available for the first node");
     let fragment = role_fragment(cluster.node("hub-a").spec());
     assert!(fragment.contains("role = \"hub\""), "{fragment}");
+    let tls = l3_journal_sync::write_hub_tls(cluster.node("hub-a").root());
     set_role_and_restart(
         cluster.node_mut("hub-a"),
-        "\n[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:0\"\n",
+        &format!("\n[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:0\"\n{tls}"),
     )
     .await;
     assert!(

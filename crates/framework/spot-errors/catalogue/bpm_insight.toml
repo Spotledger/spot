@@ -36,3 +36,12 @@ explanation_key = "error.bpm_insight.state_corrupt"
 params = ["detail"]
 remedy = "Discard the stored state and rebuild the insight from the start of the event feed; the message names what is inconsistent."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_insight.cancelled"
+class = "none"
+summary = "The attempt was closed because its Case was cancelled."
+explanation_key = "error.bpm_insight.cancelled"
+params = []
+remedy = "None needed; the Case was cancelled on purpose."
+since = "0.1.0"

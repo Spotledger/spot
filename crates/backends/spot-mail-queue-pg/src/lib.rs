@@ -72,17 +72,25 @@
 //! a new pool, two concurrent writers of one message, site isolation, the receipt round trip,
 //! retention, and the failure mapping on a pool that cannot connect.
 //!
+//! # The bounce log
+//!
+//! [`PgBounceSink`] is the durable [`BounceSink`](spot_mail_queue::BounceSink) in the same
+//! database: one table, `spot_mail_bounce_log`, unique on `(site, job_id, recipient, class)` with
+//! `ON CONFLICT DO NOTHING` (see the `bounce` module's docs).
+//!
 //! [`MailSender`]: spot_mail_queue::MailSender
 //! [`SiteId`]: spot_core::SiteId
 
 #![warn(missing_docs)]
 
+mod bounce;
 mod convert;
 pub mod error;
 pub mod schema;
 mod sql;
 mod store;
 
+pub use bounce::{BOUNCE_DDL, MAX_LISTED, PgBounceSink, StoredBounce};
 pub use error::MIGRATION_FAILED;
 pub use store::PgSentLog;
 

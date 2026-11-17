@@ -120,7 +120,10 @@ async fn ten_thousand_documents_chain_in_order() {
     assert_eq!(chained, docs);
     // Per-document order: the index of a document is strictly increasing.
     for id in [1u64, 2, 500, 9_999] {
-        let entries = state.document_entries(DOCTYPE, &id_of(id + 1));
+        let entries = state
+            .document_entries(DOCTYPE, &id_of(id + 1))
+            .await
+            .unwrap();
         assert_eq!(entries.len(), 1, "one entry per document");
     }
 }
@@ -198,7 +201,7 @@ async fn redelivery_appends_once() {
     assert_eq!(head_after_first, 1);
 
     // Simulate the crash: the bookmark is lost, the same event is read again.
-    state.set_bookmark(0, FeedPosition::START);
+    state.set_bookmark(0, FeedPosition::START).await.unwrap();
     let report = appender.drain(feed, 100).await.unwrap();
     assert_eq!(report.appended, 0, "the event was already chained");
     let head_after_second = store.head(&lane_site(SITE, 0)).await.unwrap().unwrap().seq;

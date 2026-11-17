@@ -164,3 +164,39 @@ explanation_key = "error.cli.directory_unsigned"
 params = []
 remedy = "Install a signed bundle, or on a development site set `require_signed = false` under [trust] in common.toml."
 since = "0.1.0"
+
+[[entry]]
+code = "cli.invitation_role_refused"
+class = "none"
+summary = "An invitation or its acceptance would give a portal user the role {role}, whose duty {duty} is not marked outside-exposed."
+explanation_key = "error.cli.invitation_role_refused"
+params = ["duty", "role"]
+remedy = "Give the portal user a portal role whose duties are all outside-exposed, or invite the person as an internal user; then repeat the command."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.doc_audit_lanes_invalid"
+class = "none"
+summary = "Refused at start: the lane setting is out of range."
+explanation_key = "error.cli.doc_audit_lanes_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.doc_audit_masker_unavailable"
+class = "none"
+summary = "Refused at start: the masker of a metadata generation could not be built."
+explanation_key = "error.cli.doc_audit_masker_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cli.doc_audit_state_unavailable"
+class = "none"
+summary = "Refused at start: the audit state cannot be read."
+explanation_key = "error.cli.doc_audit_state_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

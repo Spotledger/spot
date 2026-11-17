@@ -64,6 +64,7 @@ pub struct EdgeRepair {
     backend: PgBackend,
     catalog: Arc<Catalog>,
     batch_size: usize,
+    pause: std::time::Duration,
 }
 
 impl EdgeRepair {
@@ -74,7 +75,16 @@ impl EdgeRepair {
             backend,
             catalog,
             batch_size: DEFAULT_BATCH_SIZE,
+            pause: std::time::Duration::ZERO,
         }
+    }
+
+    /// The same repair pausing this long between two batches, so a repair of a large report
+    /// leaves the pool and the database to the requests being served (default: no pause).
+    #[must_use]
+    pub fn with_pause(mut self, pause: std::time::Duration) -> Self {
+        self.pause = pause;
+        self
     }
 
     /// The same repair with a different batch size (at least one).
@@ -132,6 +142,7 @@ impl EdgeRepair {
             out.added += u64::from(added);
             out.removed += u64::from(removed);
             out.updated += u64::from(updated);
+            tokio::time::sleep(self.pause).await;
         }
         Ok(out)
     }

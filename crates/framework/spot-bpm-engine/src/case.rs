@@ -215,7 +215,9 @@ pub struct CaseUpdate {
     pub child: Option<ChildLink>,
     /// The Case's variables, replacing the stored ones when present.
     pub variables: Option<Json>,
-    /// The instant this update is committed at; a store that logs an attempt or a timer reads it.
+    /// The commit instant the caller stamps on the update (an argument; no store reads a
+    /// clock). A store refuses an attempt or a timer without one, so the node-run log never
+    /// holds a guessed time. A transition keeps its own instant.
     pub at: Option<Instant>,
 }
 

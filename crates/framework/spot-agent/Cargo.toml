@@ -1,0 +1,98 @@
+[package]
+name = "spot-agent"
+description = "The Spotledger host agent executable (WP-ADM-02.T2, blueprint WS22, ADR-44, ADR-099): configuration, key store, enrolment, the local hash-chained command audit log, structured redacted logging; the outbound channel (T3), handlers and privilege helper (WP-ADM-03.T2) plug into the seams declared here"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "spot_agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-agent"
+path = "src/main.rs"
+
+# The privileged helper (WP-ADM-03.T2 replaces the stub in src/privilege/main.rs).
+[[bin]]
+name = "spot-agent-priv"
+path = "src/privilege/main.rs"
+
+[features]
+default = []
+# Windows SCM dispatcher (WP-ADM-05.T6); off by default, pulls `windows-service`.
+scm = ["dep:windows-service"]
+
+[dependencies]
+spot-break-glass = { path = "../spot-break-glass" }
+# The decision core: Agent, HandlerRegistry, ResultLog, TrustStore, Policy.
+spot-agent-core = { path = "../spot-agent-core" }
+# Identity, Ed25519 key store (file), the persisted agent identity.
+spot-agent-enroll = { path = "../spot-agent-enroll" }
+# The operation catalogue the agent verifies commands against.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The signed-command envelope, nonce store contract.
+spot-signed-command = { path = "../spot-signed-command" }
+# The hash chain entry the local audit log persists.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Redaction of every log line and every reported output.
+spot-redact = { path = "../spot-redact" }
+# SecretString, to register the enrolment token with the redactor.
+spot-secrets = { path = "../spot-secrets" }
+# The module crates the handler registry wires (WP-ADM-03.T2, WP-ADM-06.T2, WP-ADM-10.T2).
+spot-agent-linux = { path = "../spot-agent-linux" }
+spot-agent-linux-sys = { path = "../spot-agent-linux-sys" }
+spot-agent-windows = { path = "../spot-agent-windows" }
+spot-agent-windows-sys = { path = "../spot-agent-windows-sys" }
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+spot-hardening = { path = "../spot-hardening" }
+# Types in the runtime ports' signatures (WP-ADM-06.T2): the report of a backup verification
+# and the upgrade engine's plan/outcome types, for the unavailable upgrade ports.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+spot-migration-plan = { path = "../spot-migration-plan" }
+spot-migration-apply = { path = "../spot-migration-apply" }
+spot-settings = { path = "../spot-settings" }
+# `Clock` / `SystemClock` for the handlers that take an injected clock.
+spot-core = { path = "../spot-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+rand = { version = "0.9", features = ["os_rng"] }
+thiserror = "2"
+# Async runtime for the decision core (its nonce store is async) and SIGTERM handling.
+tokio = { version = "1.47", default-features = false, features = ["rt", "macros", "time", "sync", "signal"] }
+# Outbound-only TLS 1.3 client, pinned to the gateway trust anchor (T3). `ring` chosen
+# explicitly, as in spot-egress and spot-sync-http.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+# The updater engine, trust anchor and archive guards the agent's self-update runs on (WP-ADM-03.T3).
+spot-updater = { path = "../spot-updater" }
+# Versions of the installed and offered agent (the engine's types).
+semver = "1"
+# Safe process-group kill for timed-out children (WP-ADM-03.T2).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["std", "process"] }
+[dependencies.windows-service]
+version = "0.8"
+optional = true
+
+[dev-dependencies]
+tempfile = "3"
+# Fake runner / filesystem for the handler wiring tests.
+spot-agent-linux = { path = "../spot-agent-linux" }
+spot-agent-linux-sys = { path = "../spot-agent-linux-sys", features = ["testing"] }
+# Throwaway CA and server certificates for the loopback TLS tests (T3). Test-only.
+rcgen = "0.14"
+# Fake filesystem, service and hooks for the self-update tests, and a ZIP writer for payloads.
+spot-updater = { path = "../spot-updater", features = ["testing"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# The instant the manual clock of the network revert tests is seeded with (the version the
+# workspace pins, as in spot-agent-linux-sys).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

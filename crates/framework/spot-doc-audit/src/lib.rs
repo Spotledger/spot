@@ -64,11 +64,12 @@ pub mod service;
 pub mod step;
 
 pub use appender::{
-    AppendResult, AppenderStore, DrainReport, InMemoryAppenderStore, LaneAppender, OutboxFeed,
-    SharedStore, decode_outbox, event_of, record_of,
+    AppendResult, AppenderStore, DocumentEntry, DrainReport, EVENT_ID_KEY, InMemoryAppenderStore,
+    LaneAppender, OutboxFeed, RECOVERY_WINDOW, SharedStore, StateFuture, decode_outbox, event_of,
+    record_of, record_of_with_id,
 };
-pub use denial::{AuditDenialSink, DEFAULT_MAX_IN_FLIGHT, DenialStats, UNKNOWN_ID};
-pub use error::DocAuditError;
+pub use denial::{AuditDenialSink, DEFAULT_MAX_IN_FLIGHT, DenialStats, DenialWriter, UNKNOWN_ID};
+pub use error::{APPENDER_STATE, DocAuditError};
 pub use event::{
     ActorRef, AuditSource, DiffChange, DiffValue, DocAuditEvent, DocOperation, DocumentImage,
     EventExtra, EventSizePolicy, LONG_VALUE_BYTES, MAX_CHANGES, MAX_EVENT_BYTES, MAX_METHOD_BYTES,
@@ -85,7 +86,7 @@ pub use participant::{AuditParticipant, operation_for};
 pub use secret::{
     SECRET_AUDIT_TOPIC, SECRET_EVENT_KEYS, SECRET_KIND_PREFIX, SecretAuditEvent,
     decode_secret_outbox, encode_secret_event, is_secret_audit, is_secret_entry, secret_event_of,
-    secret_record_of,
+    secret_record_of, secret_record_of_with_id,
 };
 pub use service::{
     AuditLag, AuditPolicy, AuditStatus, DocAudit, HistoryEntry, LaneFailure, SiteVerifyReport,

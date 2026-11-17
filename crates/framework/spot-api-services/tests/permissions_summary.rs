@@ -300,6 +300,14 @@ impl AuthService for Unused {
     fn session<'a>(&'a self, _: &'a RequestCtx) -> BoxFuture<'a, Result<SessionInfo, ApiError>> {
         Box::pin(async { panic!("auth out of scope") })
     }
+
+    fn audience_of<'a>(
+        &'a self,
+        _: &'a RequestCtx,
+    ) -> BoxFuture<'a, Result<spot_core::Audience, ApiError>> {
+        // Explicit, test-only: every credential is a staff one unless a test says otherwise.
+        Box::pin(async { Ok(spot_core::Audience::Staff) })
+    }
 }
 
 async fn app() -> axum::Router {

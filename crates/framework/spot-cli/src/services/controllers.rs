@@ -23,14 +23,21 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use spot_app_api::{Controller, MethodRight};
-use spot_controllers::{ControllerFactory, ControllerRef, ControllerRegistry};
+use serde_json::Value as Json;
+use spot_app_api::context::{HookContext, MethodContext};
+use spot_app_api::{
+    AppResult, BoxFuture, Controller, MethodDecl, MethodRight, StepDecl, StepEffects, StepName,
+};
+use spot_controllers::{ControllerFactory, ControllerRef, ControllerRegistry, ControllerSource};
+use spot_http::api::service::{Door, DoorTier};
 use spot_meta::EffectiveMeta;
 use spot_permissions::{AppPermissionName, AppReason};
 
 use crate::appdir::{self, AppSource};
 use crate::config::{Loaded, Site};
 use crate::permissions::AppPerms;
+use crate::services::realtime::{OfflineSlot, door_slot, refusal_error};
+use crate::services::scripts::{self, ScriptSlot};
 use crate::{Error, Result, apps, natives};
 
 /// The file of an app's directory that grants named permissions to roles.
@@ -241,23 +248,241 @@ pub fn install_strict(set: &spot_controllers::ControllerSet) -> Result<Arc<spot_
         .map_err(|conflicts| Error(format!("conflict: {conflicts:?}")))
 }
 
-/// Registers the native controllers of the installed apps and installs them.
+/// `[services.scripts]` of the host configuration (the defaults when the table is absent), read
+/// the way the scripts module reads it, so the hubs and the module agree on one set of ceilings.
 ///
 /// # Errors
 ///
-/// A controller the binary does not contain, two controllers for one DocType, a step or method
-/// conflict: all of them, so one start-up reports the whole problem.
-pub fn build(
-    root: &Path,
-    loaded: &Loaded,
-    site: &Site,
-    meta: &EffectiveMeta,
-    perms: &AppPerms,
-) -> Result<Installed> {
-    let factory = natives::table();
-    let mut registry = ControllerRegistry::new();
+/// An unknown key, a value of the wrong type or a value out of range: the error names the key and
+/// never a value.
+pub fn scripts_settings(loaded: &Loaded) -> Result<scripts::Settings> {
+    scripts_settings_from(loaded.common.services.services_extra.get("scripts"))
+}
+
+/// [`scripts_settings`] over the `[services.scripts]` table itself (`None` when it is absent).
+///
+/// # Errors
+///
+/// As [`scripts_settings`].
+pub fn scripts_settings_from(table: Option<&toml::Value>) -> Result<scripts::Settings> {
+    let Some(table) = table else {
+        return Ok(scripts::Settings::default());
+    };
+    let settings = match table.clone().try_into::<scripts::Settings>() {
+        Ok(settings) => settings,
+        Err(e) => {
+            let message = e.message();
+            // `unknown field` quotes a key name only; any other message can quote a value.
+            let why = if message.starts_with("unknown field") {
+                message.to_owned()
+            } else {
+                "a value has the wrong type".to_owned()
+            };
+            return Err(Error(format!("services.scripts: {why}")));
+        }
+    };
+    match settings.invalid_key() {
+        Some(key) => Err(Error(format!("services.scripts.{key}: out of range"))),
+        None => Ok(settings),
+    }
+}
+
+/// A controller that asks the offline decision before every step and every whitelisted method
+/// (WP-IAM-09.T5): the caller's tier-three decision for a step, and for a method the method's own
+/// named permission when its right is one. A platform actor decides nothing; a controller of a
+/// site with no offline identity is unchanged (the slot is empty).
+struct OfflineController {
+    inner: Arc<dyn Controller>,
+    offline: Arc<OfflineSlot>,
+}
+
+impl Controller for OfflineController {
+    fn doctype(&self) -> &str {
+        self.inner.doctype()
+    }
+
+    fn steps(&self) -> Vec<StepDecl> {
+        self.inner.steps()
+    }
+
+    fn step_effects(&self) -> Vec<StepEffects> {
+        self.inner.step_effects()
+    }
+
+    fn methods(&self) -> Vec<MethodDecl> {
+        self.inner.methods()
+    }
+
+    fn run_step<'a>(
+        &'a self,
+        step: &'a StepName,
+        ctx: &'a mut dyn HookContext,
+    ) -> BoxFuture<'a, AppResult<()>> {
+        Box::pin(async move {
+            self.offline
+                .admit_actor(
+                    Door::Controllers,
+                    &ctx.invocation().actor,
+                    DoorTier::Three,
+                    None,
+                )
+                .map_err(refusal_error)?;
+            self.inner.run_step(step, ctx).await
+        })
+    }
+
+    fn call_method<'a>(
+        &'a self,
+        method: &'a str,
+        args: Json,
+        ctx: &'a mut dyn MethodContext,
+    ) -> BoxFuture<'a, AppResult<Json>> {
+        Box::pin(async move {
+            let declared = self.inner.methods();
+            let permission = declared
+                .iter()
+                .find(|decl| decl.name.as_str() == method)
+                .and_then(|decl| match &decl.right {
+                    MethodRight::Permission(name) => Some(name.as_str()),
+                    _ => None,
+                });
+            self.offline
+                .admit_actor(
+                    Door::Controllers,
+                    &ctx.invocation().actor,
+                    DoorTier::Three,
+                    permission,
+                )
+                .map_err(refusal_error)?;
+            self.inner.call_method(method, args, ctx).await
+        })
+    }
+}
+
+/// `inner`, decided through `offline` before every step and method (an empty slot admits).
+#[must_use]
+pub fn offline_controller(
+    inner: Arc<dyn Controller>,
+    offline: Arc<OfflineSlot>,
+) -> Arc<dyn Controller> {
+    Arc::new(OfflineController { inner, offline })
+}
+
+/// A factory whose controllers are [`OfflineController`]s.
+struct OfflineFactory<'f> {
+    inner: &'f dyn ControllerFactory,
+    offline: Arc<OfflineSlot>,
+}
+
+impl ControllerFactory for OfflineFactory<'_> {
+    fn create(&self, reference: &ControllerRef) -> AppResult<Arc<dyn Controller>> {
+        let inner = self.inner.create(reference)?;
+        Ok(Arc::new(OfflineController {
+            inner,
+            offline: Arc::clone(&self.offline),
+        }))
+    }
+
+    fn companions(&self, app: &str) -> Vec<ControllerRef> {
+        self.inner.companions(app)
+    }
+}
+
+/// The offline slot of the controllers door of `site`: filled by the scripts module's finaliser
+/// (it owns the site's other offline slot), empty until then and on a site with no offline
+/// identity.
+#[must_use]
+pub fn offline_slot(site: &str) -> Arc<OfflineSlot> {
+    door_slot(site, Door::Controllers)
+}
+
+/// Registers the controller of one installed app from its `[app] controller` reference.
+///
+/// A `ts:` reference is built by the TypeScript factory over the app's own directory, running on
+/// the site's script engine under the `[services.scripts]` ceilings; every other reference goes to
+/// `native`, with the app's companions as before. The two never mix: a native app is not given the
+/// TypeScript factory and a TypeScript app is not looked up in the native table.
+///
+/// # Errors
+///
+/// The reason, in words, without the app name (the caller adds it).
+pub fn register_app(
+    registry: &mut ControllerRegistry,
+    source: &AppSource,
+    reference: &str,
+    native: &dyn ControllerFactory,
+    slot: &Arc<ScriptSlot>,
+    settings: &scripts::Settings,
+) -> std::result::Result<(), String> {
+    register_app_offline(
+        registry,
+        source,
+        reference,
+        native,
+        slot,
+        settings,
+        &Arc::new(OfflineSlot::default()),
+    )
+}
+
+/// [`register_app`] with the controllers decided through `offline` before every step and method
+/// (an empty slot admits).
+///
+/// # Errors
+///
+/// As [`register_app`].
+pub fn register_app_offline(
+    registry: &mut ControllerRegistry,
+    source: &AppSource,
+    reference: &str,
+    native: &dyn ControllerFactory,
+    slot: &Arc<ScriptSlot>,
+    settings: &scripts::Settings,
+    offline: &Arc<OfflineSlot>,
+) -> std::result::Result<(), String> {
+    let manifest = appdir::manifest(&source.dir).map_err(|e| e.to_string())?;
+    let parsed = ControllerRef::parse(reference).map_err(|e| e.to_string())?;
+    if parsed.source() == ControllerSource::TypeScript {
+        let factory = scripts::typescript_factory(
+            slot,
+            &source.name,
+            source.dir.clone(),
+            settings.ts_limits(),
+        );
+        let factory = OfflineFactory {
+            inner: &factory,
+            offline: Arc::clone(offline),
+        };
+        return registry
+            .register_from_manifest_refs(&manifest, &[parsed], &factory)
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
+    let mut references = vec![parsed];
+    references.extend(native.companions(&source.name));
+    let native = OfflineFactory {
+        inner: native,
+        offline: Arc::clone(offline),
+    };
+    registry
+        .register_from_manifest_refs(&manifest, &references, &native)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Registers the controllers of every app of `sources` and returns every problem, so one start-up
+/// reports the whole list. An app without a controller reference is skipped.
+pub fn register_apps(
+    registry: &mut ControllerRegistry,
+    site: &str,
+    sources: &[AppSource],
+    native: &dyn ControllerFactory,
+    settings: &scripts::Settings,
+) -> Vec<String> {
+    let slot = scripts::slot(site);
+    let offline = offline_slot(site);
     let mut errors = Vec::new();
-    for source in installed(root, loaded, site)? {
+    for source in sources {
         let reference = match appdir::controller_reference(&source.dir) {
             Ok(Some(reference)) => reference,
             Ok(None) => continue,
@@ -266,19 +491,56 @@ pub fn build(
                 continue;
             }
         };
-        let registered = (|| -> std::result::Result<(), String> {
-            let manifest = appdir::manifest(&source.dir).map_err(|e| e.to_string())?;
-            let mut references = vec![ControllerRef::parse(&reference).map_err(|e| e.to_string())?];
-            references.extend(factory.companions(&source.name));
-            registry
-                .register_from_manifest_refs(&manifest, &references, &factory)
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-        })();
-        if let Err(e) = registered {
+        if let Err(e) = register_app_offline(
+            registry, source, &reference, native, &slot, settings, &offline,
+        ) {
             errors.push(format!("app `{}`: {e}", source.name));
         }
     }
+    errors
+}
+
+/// Registers the Server Script controllers of the site: the administration controller of the
+/// `server_script` DocType and one hub per scriptable DocType of `doctypes`. With
+/// `[services.scripts] enabled = false` nothing is registered, so no write is ever refused as
+/// "scripts are not loaded". A DocType created at run time gets no hub until the next build.
+pub fn register_scripts<'a>(
+    registry: &mut ControllerRegistry,
+    site: &str,
+    settings: &scripts::Settings,
+    doctypes: impl IntoIterator<Item = &'a str>,
+) {
+    if settings.enabled {
+        scripts::register_controllers(registry, site, settings, doctypes);
+    }
+}
+
+/// Registers the controllers of the installed apps (native and TypeScript) and the Server Script
+/// hubs, and installs them.
+///
+/// # Errors
+///
+/// A controller the binary does not contain, a TypeScript module that does not load, two
+/// controllers for one DocType, a step or method conflict: all of them, so one start-up reports the
+/// whole problem.
+pub fn build(
+    root: &Path,
+    loaded: &Loaded,
+    site: &Site,
+    meta: &EffectiveMeta,
+    perms: &AppPerms,
+) -> Result<Installed> {
+    let factory = natives::table();
+    let settings = scripts_settings(loaded)?;
+    let mut registry = ControllerRegistry::new();
+    let sources = installed(root, loaded, site)?;
+    let errors = register_apps(&mut registry, &site.site, &sources, &factory, &settings);
+    register_scripts(
+        &mut registry,
+        &site.site,
+        &settings,
+        meta.doctypes().map(|view| view.name.as_str()),
+    );
     if !errors.is_empty() {
         return Err(Error(errors.join("\n")));
     }

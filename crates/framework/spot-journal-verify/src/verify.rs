@@ -262,7 +262,14 @@ impl<S: JournalStore + ?Sized> Run<'_, S> {
             return Ok(self.stopped(generation, FindingKind::ForeignManifest));
         }
 
-        // What the store holds under the tenant's segment prefix, all generations.
+        // What the store holds under the tenant's segment prefix, all generations. When a newer
+        // manifest exists, the segments of the newer generations are its business (its fork
+        // record explains them, and the pinned pass reports the newer generation below), not
+        // evidence against this older manifest.
+        let newer_manifest = self
+            .newest_listed()
+            .await?
+            .is_some_and(|newest| newest > generation);
         let listing = self
             .list_all(&format!("{tenant}/{SEGMENTS_PREFIX}/"))
             .await?;
@@ -274,7 +281,7 @@ impl<S: JournalStore + ?Sized> Run<'_, S> {
             {
                 if key.generation == generation {
                     current.insert((key.first_seq, key.last_seq), entry.size);
-                } else {
+                } else if !(newer_manifest && key.generation > generation) {
                     observed.push(implied(
                         key.generation,
                         key.first_seq,

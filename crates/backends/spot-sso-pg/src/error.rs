@@ -59,3 +59,13 @@ pub(crate) fn migration_pool(_error: &PoolError) -> AppError {
 pub(crate) fn migration_refused(message: String) -> AppError {
     AppError::new(ErrorClass::Internal, MIGRATION_FAILED, message)
 }
+
+/// A sign-in table (SAML provider, policy, hand-over, session index) could not be created. A fixed
+/// sentence: the caller maps it to its own code, and nothing from the driver is carried.
+pub(crate) fn tables_failed() -> AppError {
+    AppError::new(
+        ErrorClass::Internal,
+        MIGRATION_FAILED,
+        "the single sign-on tables could not be created",
+    )
+}

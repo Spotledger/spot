@@ -1,0 +1,118 @@
+# process process publishing and webhook codes of the native API. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "process.definition_invalid"
+class = "none"
+summary = "The process definition is not valid."
+explanation_key = "error.process.definition_invalid"
+params = []
+remedy = "Fix the problems the answer lists and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "process.migration_invalid"
+class = "none"
+summary = "The Case migration mapping is not valid."
+explanation_key = "error.process.migration_invalid"
+params = []
+remedy = "Fix the mapping and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "process.not_found"
+class = "none"
+summary = "The process or version does not exist."
+explanation_key = "error.process.not_found"
+params = []
+remedy = "Check the process name and version."
+since = "0.1.0"
+
+[[entry]]
+code = "process.publish_denied"
+class = "none"
+summary = "The caller may not publish this process."
+explanation_key = "error.process.publish_denied"
+params = []
+remedy = "Use an account that may publish processes."
+since = "0.1.0"
+
+[[entry]]
+code = "process.version_conflict"
+class = "none"
+summary = "The process changed since it was read."
+explanation_key = "error.process.version_conflict"
+params = []
+remedy = "Read the latest version and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "process.version_not_published"
+class = "none"
+summary = "The process version is not published."
+explanation_key = "error.process.version_not_published"
+params = []
+remedy = "Publish the version first."
+since = "0.1.0"
+
+[[entry]]
+code = "process.webhook_rejected"
+class = "none"
+summary = "The webhook call was rejected."
+explanation_key = "error.process.webhook_rejected"
+params = []
+remedy = "Check the trigger name and the signature."
+since = "0.1.0"
+
+[[entry]]
+code = "process.input_invalid"
+class = "none"
+summary = "The operation was refused: input invalid."
+explanation_key = "error.process.input_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process.input_required"
+class = "none"
+summary = "The operation was refused: input required."
+explanation_key = "error.process.input_required"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process.input_unknown_field"
+class = "none"
+summary = "The operation was refused: input unknown field."
+explanation_key = "error.process.input_unknown_field"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process.migration_not_found"
+class = "none"
+summary = "The operation was refused: migration not found."
+explanation_key = "error.process.migration_not_found"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process.run_not_active"
+class = "none"
+summary = "The operation was refused: run not active."
+explanation_key = "error.process.run_not_active"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process.run_not_found"
+class = "none"
+summary = "The operation was refused: run not found."
+explanation_key = "error.process.run_not_found"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

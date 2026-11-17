@@ -12,6 +12,7 @@
 //! about a document the principal cannot see.
 
 use serde::Serialize;
+use spot_field_guard::{Channel, FieldGuard};
 use spot_permissions::Principal;
 use spot_storage_contract::{RecordId, Version};
 
@@ -135,6 +136,7 @@ pub struct Retriever {
     store: std::sync::Arc<dyn VectorStore>,
     read_check: std::sync::Arc<dyn ReadCheck>,
     config: RetrieverConfig,
+    guard: Option<std::sync::Arc<FieldGuard>>,
 }
 
 impl Retriever {
@@ -151,7 +153,19 @@ impl Retriever {
             store,
             read_check,
             config,
+            guard: None,
         }
+    }
+
+    /// Makes the field guard authoritative for every hit (WP-SEC-04.T7): a chunk is returned
+    /// only if [`Channel::Search`] (the `report` right) lets the caller see every field it
+    /// carries unmasked. A guard error, an unknown DocType or a masked field drops the chunk,
+    /// silently, like any other refusal. The snippet is built from the chunk's single field, so
+    /// a hit that matched only because of a field the caller may not report never appears.
+    #[must_use]
+    pub fn with_search_guard(mut self, guard: std::sync::Arc<FieldGuard>) -> Self {
+        self.guard = Some(guard);
+        self
     }
 
     /// Searches for `query`, returning at most `query.k` hits the principal may read now.
@@ -203,6 +217,11 @@ impl Retriever {
                 if chunk.fields.iter().any(|field| !view.allows(field)) {
                     continue;
                 }
+                if let Some(guard) = &self.guard
+                    && !guard_allows(guard, principal, &chunk.doctype, &chunk.fields)
+                {
+                    continue;
+                }
                 hits.push(Hit {
                     doctype: chunk.doctype.clone(),
                     id: chunk.id,
@@ -236,4 +255,21 @@ fn snippet(text: &str, chars: usize) -> String {
         .collect::<String>()
         .trim_end()
         .to_owned()
+}
+
+/// Whether the guard shows the caller every one of `fields` unmasked on the search channel.
+fn guard_allows(
+    guard: &FieldGuard,
+    principal: &Principal,
+    doctype: &str,
+    fields: &[String],
+) -> bool {
+    match guard.columns(Channel::Search, principal, doctype, fields) {
+        Ok(columns) => {
+            columns.refused.is_empty()
+                && columns.masked.is_empty()
+                && columns.allowed.len() == fields.len()
+        }
+        Err(_) => false,
+    }
 }

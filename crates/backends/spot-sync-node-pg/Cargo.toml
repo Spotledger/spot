@@ -1,0 +1,43 @@
+[package]
+name = "spot-sync-node-pg"
+description = "The edge's durable receiving state on PostgreSQL (WP-RTB-02.T2, ADR-062, ADR-064, ADR-082 class C): the applied-record ledger, the parking store, the repair list, checkpoints and the freshness and hold state, and the real BundleApply over the replication apply path, one transaction per bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The seams implemented here (`BundleApply`, `ParkingStore`, `NodeCatalog`) and the intake types.
+spot-sync-node = { path = "../../framework/spot-sync-node" }
+# `CheckpointStore`, `Checkpoint`, `RecordName`, `SourceId` and the protocol error.
+spot-sync-protocol = { path = "../../framework/spot-sync-protocol" }
+# `Bundle`, `BundleRecord`, `RecordKey`, `References`.
+spot-sync-closure = { path = "../../framework/spot-sync-closure" }
+# `HoldSet` (the WP-SYN-08.T4 golden form), `Incoming`, `RecordRef`.
+spot-sync-skew = { path = "../../framework/spot-sync-skew" }
+# The one apply path: `apply_quarantining`, `ReceivedRecord`, the ownership, audit and quarantine ports.
+spot-replica-apply = { path = "../../framework/spot-replica-apply" }
+# The storage contract: `Catalog`, `Transaction` and the types of a document write.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `PgBackend` and `PgTransaction`: the bundle transaction, with the ledger written through its raw-SQL seam.
+spot-postgres = { path = "../spot-postgres" }
+# The shared blocking bridge every call goes through (ADR-082 addendum 1); no private `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The driver types the bridge hands to the closures.
+tokio-postgres = "0.7"
+# `Handle::try_current`: the constructors refuse a thread that is inside an async runtime.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# The stored JSON forms (bundles, missing keys, hold sets, horizons).
+serde_json = "1"
+# A tombstone names its record by id text; parsed here as the apply path parses it.
+uuid = { version = "1.26", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The runtime the scratch database needs.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

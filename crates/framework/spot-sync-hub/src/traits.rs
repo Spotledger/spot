@@ -48,7 +48,7 @@ pub trait GapSource {
 /// tenants keeps their obligations apart: the ledger keys everything by `(node, tenant)`
 /// (WP-SYN-05.T5). The relay passes the head from its own tenant stream; the book never learns a
 /// head from a node.
-pub trait AckBook {
+pub trait AckBook: Send {
     /// Record that `node` applied `tenant`'s stream through `applied_prefix`, heard at hub time
     /// `at`, with `head` the newest position the hub holds for `tenant`.
     ///
@@ -109,8 +109,9 @@ pub trait AckBook {
 }
 
 /// A ledger as the relay's [`AckBook`]. It holds no tenant: the relay supplies its own on every
-/// call. To share one ledger between the relays of several tenants, implement [`AckBook`] over a
-/// shared handle to it (the book is a seam; the sharing mechanism is the host's).
+/// call. To share one ledger between the relays of several tenants, wrap the book in a
+/// [`SharedBook`](crate::SharedBook) and give each relay a clone; the tenant stays the relay's
+/// configuration and never a node value.
 pub struct LedgerBook<S: NodeStateStore, A: AuditSink> {
     ledger: AckLedger<S, A>,
 }
@@ -134,7 +135,7 @@ impl<S: NodeStateStore, A: AuditSink> LedgerBook<S, A> {
     }
 }
 
-impl<S: NodeStateStore, A: AuditSink> AckBook for LedgerBook<S, A> {
+impl<S: NodeStateStore + Send, A: AuditSink + Send> AckBook for LedgerBook<S, A> {
     fn on_ack(
         &mut self,
         node: &str,
@@ -149,19 +150,7 @@ impl<S: NodeStateStore, A: AuditSink> AckBook for LedgerBook<S, A> {
     }
 
     fn on_checkin(&mut self, node: &str, tenant: &str, at: i64) -> Result<(), AckError> {
-        // The ledger's own check-in names no tenant and would bump the node's contact in every
-        // tenant. A same-prefix ack is the per-tenant check-in: it touches this pair only and
-        // takes no node-supplied position (the prefix is the ledger's own record).
-        let Some(record) = self.ledger.store().load(node, tenant) else {
-            return Err(AckError::UnknownNode {
-                node: node.to_owned(),
-                tenant: tenant.to_owned(),
-            });
-        };
-        let prefix = record.applied_prefix;
-        self.ledger
-            .on_ack(node, tenant, prefix, StreamHead::new(prefix), at)
-            .map(|_| ())
+        self.ledger.on_checkin(node, tenant, at).map(|_| ())
     }
 
     fn set_holds(
@@ -211,7 +200,7 @@ impl<S: NodeStateStore, A: AuditSink> AckBook for LedgerBook<S, A> {
 }
 
 /// Receives the audit note for a stamp the hub refused. Notes carry node id and amounts only.
-pub trait HubAudit {
+pub trait HubAudit: Send {
     /// One refused stamp.
     fn stamp_rejected(&mut self, note: RejectNote);
 }
@@ -233,8 +222,20 @@ impl HubAudit for NoAudit {
 ///   restart replays pushes, so this is what keeps the queue free of duplicates.
 /// * `peek` returns at most `n` items in serving order: lane first (mandatory before bulk), then
 ///   position, then bundle index. Peeking removes nothing.
+/// * `push` of a new identity assigns the item's **serve sequence**: the destination's last
+///   assigned number plus one, durable with the item. The first item gets 1, there is never a gap
+///   and a number is never reused; a duplicate push keeps the number it has. The relay pushes
+///   `serve_seq: 0` and the queue overwrites it.
+/// * `peek` also fills `serve_after` on each returned item: the serve sequence of the greatest
+///   item still queued below it, or 0. It is computed over the whole queue, not over the `n`
+///   items returned.
+/// * `ack_served` removes every item with `serve_seq <= through`, redeliveries included, and
+///   returns how many it removed. This is how a node's acknowledgement trims the queue.
 /// * `ack` removes every item with `position <= up_to` that is **not** a redelivery, and returns
-///   how many it removed. A redelivery leaves only through `remove_redelivered`.
+///   how many it removed. A redelivery leaves only through `remove_redelivered`. It trusts a
+///   journal position (the end of a bootstrap, a host that has no serve sequences); a node's own
+///   claim must never reach it, because a node that settled a high position before a lower one
+///   was sent would make the queue drop unserved items.
 /// * `queued_bytes` is the sum of `bundle.bytes` of the items queued for `dest`.
 /// * A pushed item is durable before `push` returns.
 pub trait SendQueue {
@@ -256,6 +257,27 @@ pub trait SendQueue {
     /// `QueueFailed` when the adapter fails.
     fn ack(&mut self, dest: &str, up_to: u64) -> Result<usize, HubError>;
 
+    /// The newest serve sequence ever assigned for `dest` (0 when none). It does not fall when
+    /// items are removed: it bounds what a node may claim to have applied.
+    ///
+    /// # Errors
+    /// `QueueFailed` when the adapter fails.
+    fn last_serve_seq(&self, dest: &str) -> Result<u64, HubError>;
+
+    /// The lowest journal `position` among the queued items of `dest` that are not redeliveries
+    /// and whose `serve_seq` is above `through` (so: what would remain after
+    /// [`ack_served`](Self::ack_served) of `through`). `None` when no such item exists. Read-only.
+    ///
+    /// # Errors
+    /// `QueueFailed` when the adapter fails.
+    fn lowest_position_after(&self, dest: &str, through: u64) -> Result<Option<u64>, HubError>;
+
+    /// Remove every item of `dest` with `serve_seq <= through`. See the trait contract.
+    ///
+    /// # Errors
+    /// `QueueFailed` when the adapter fails.
+    fn ack_served(&mut self, dest: &str, through: u64) -> Result<usize, HubError>;
+
     /// Remove the redelivered items at `position`.
     ///
     /// # Errors
@@ -272,7 +294,7 @@ pub trait SendQueue {
 /// What the hub knows of one destination's entitlement. Scope filtering is the access control of
 /// sync: an implementation answers from the hub's registry (never from anything the node sent),
 /// and answers `false` when in doubt about an *entry*.
-pub trait DestinationScope {
+pub trait DestinationScope: Send {
     /// Whether the destination's subscription covers this entry (entity, scope keys, direction).
     fn covers(&self, entry: &StreamEntry) -> bool;
     /// Whether the record is inside the destination's scope (used by the closure to tell an
@@ -284,7 +306,7 @@ pub trait DestinationScope {
 
 /// Told when a destination's applied prefix advances. The obligation ledger update is
 /// WP-SYN-05.T2; this is its seam.
-pub trait AckObserver {
+pub trait AckObserver: Send {
     /// The destination applied the stream through `applied_prefix`.
     fn on_ack(&mut self, dest: &str, applied_prefix: u64);
 }

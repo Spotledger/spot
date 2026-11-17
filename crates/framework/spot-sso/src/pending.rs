@@ -5,15 +5,19 @@
 //! it expires. It is serialisable so the caller can store it server-side, keyed by a hash of
 //! the browser's cookie, and single use.
 //!
-//! This crate never stores it: the caller supplies a [`PendingStore`]. The only implementation
-//! here is an in-memory fake for tests and single-node development.
+//! This crate never stores it: the caller supplies a [`PendingStore`], which is asynchronous,
+//! fallible and fails closed (an error refuses the callback), and whose `take` is atomic so a
+//! `state` is consumed once even across nodes. The only implementation here is an in-memory
+//! fake for tests and single-node development; the PostgreSQL one is in `spot-sso-pg`.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{self as e, Result, SsoError};
 use crate::provider::ProviderId;
+use crate::replay::StoreFuture;
 
 /// How long a pending authorization is valid, in seconds.
 pub const PENDING_TTL_SECONDS: i64 = 600;
@@ -98,50 +102,192 @@ impl PendingAuth {
     }
 }
 
-/// Stores pending authorizations server-side, keyed by the browser binding.
+/// The pending store could not answer. The caller must refuse the callback (fail closed).
 ///
-/// `take` removes the entry, which is what makes a single use enforceable even if a caller
-/// ignores the `used` flag: a second callback finds nothing.
-pub trait PendingStore {
-    /// Stores `pending` under `binding` (a hash of the browser cookie), replacing any entry.
-    fn put(&mut self, binding: &str, pending: PendingAuth);
-    /// Removes and returns the entry for `binding`.
-    fn take(&mut self, binding: &str) -> Option<PendingAuth>;
+/// It carries no binding, state, nonce or verifier, so it is safe to log and to return.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingError {
+    _private: (),
 }
 
-/// An in-memory [`PendingStore`] for tests and single-node development.
-#[derive(Debug, Default)]
+impl PendingError {
+    /// The store is unreachable, or in a state it cannot vouch for.
+    #[must_use]
+    pub fn unavailable() -> Self {
+        Self { _private: () }
+    }
+
+    /// The stable machine-readable code, `sso.pending_store_unavailable`.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        e::codes::PENDING_STORE_UNAVAILABLE
+    }
+}
+
+impl std::fmt::Display for PendingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("The pending sign-in store could not be reached; the sign-in was refused.")
+    }
+}
+
+impl std::error::Error for PendingError {}
+
+impl From<PendingError> for SsoError {
+    /// A refusal: the callback is turned away, with the stable code and no detail.
+    fn from(_: PendingError) -> Self {
+        SsoError::new(
+            e::codes::PENDING_STORE_UNAVAILABLE,
+            "The sign-in could not be checked and was refused.",
+            "The pending-authorisation store is unavailable; restore it and the user may start again.",
+        )
+    }
+}
+
+/// Stores pending authorizations server-side, keyed by the browser binding.
+///
+/// A store serves **one tenant** (the tenant is fixed when the store is built), so a binding
+/// of tenant A is invisible to tenant B: `take` answers exactly as for a missing one.
+///
+/// The port is asynchronous, takes `&self` (a shared store behind an `Arc`, shared between
+/// nodes in production) and is fallible: an error is a refusal of the callback, never a pass.
+/// `take` removes the entry **atomically**, which is what makes a single use enforceable even
+/// when two nodes race for one `state`: of any number of concurrent takes, exactly one gets the
+/// entry.
+pub trait PendingStore: Send + Sync {
+    /// Stores `pending` under `binding` (a hash of the browser cookie), replacing any entry.
+    ///
+    /// # Errors
+    ///
+    /// [`PendingError`] when the store cannot record it; the sign-in must not start.
+    fn put<'a>(
+        &'a self,
+        binding: &'a str,
+        pending: &'a PendingAuth,
+    ) -> StoreFuture<'a, core::result::Result<(), PendingError>>;
+
+    /// Removes and returns the live entry for `binding`: `None` when there is none, when it was
+    /// taken already, or when it had expired at `now` (an expired entry is removed too).
+    ///
+    /// # Errors
+    ///
+    /// [`PendingError`] when the store cannot give a trustworthy answer; the callback is
+    /// refused, and the entry is **not** consumed unless the store removed it.
+    fn take<'a>(
+        &'a self,
+        binding: &'a str,
+        now: i64,
+    ) -> StoreFuture<'a, core::result::Result<Option<PendingAuth>, PendingError>>;
+}
+
+impl<T: PendingStore + ?Sized> PendingStore for std::sync::Arc<T> {
+    fn put<'a>(
+        &'a self,
+        binding: &'a str,
+        pending: &'a PendingAuth,
+    ) -> StoreFuture<'a, core::result::Result<(), PendingError>> {
+        (**self).put(binding, pending)
+    }
+
+    fn take<'a>(
+        &'a self,
+        binding: &'a str,
+        now: i64,
+    ) -> StoreFuture<'a, core::result::Result<Option<PendingAuth>, PendingError>> {
+        (**self).take(binding, now)
+    }
+}
+
+/// The entries of every tenant of one in-memory backend, keyed `(tenant, binding)`.
+type Entries = Arc<Mutex<HashMap<(String, String), PendingAuth>>>;
+
+/// An in-memory [`PendingStore`] for **tests and single-node development only**.
+///
+/// It is per process: it shares nothing with another node and forgets everything on restart.
+/// [`MemoryPendingStore::for_tenant`] gives another tenant's view of the same backend, which is
+/// how the tenant-isolation case of the contract suite is run.
+#[derive(Clone, Debug)]
 pub struct MemoryPendingStore {
-    entries: HashMap<String, PendingAuth>,
+    tenant: String,
+    entries: Entries,
+}
+
+impl Default for MemoryPendingStore {
+    /// An empty store for the tenant named `default`.
+    fn default() -> Self {
+        Self {
+            tenant: "default".to_owned(),
+            entries: Entries::default(),
+        }
+    }
 }
 
 impl MemoryPendingStore {
-    /// An empty store.
+    /// An empty store for the tenant named `default`.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// How many entries are held.
+    /// Another tenant's view of the same backend.
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.entries.len()
+    pub fn for_tenant(&self, tenant: impl Into<String>) -> Self {
+        Self {
+            tenant: tenant.into(),
+            entries: Arc::clone(&self.entries),
+        }
     }
 
-    /// Whether the store is empty.
+    /// How many entries this tenant holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.lock().map_or(0, |entries| {
+            entries
+                .keys()
+                .filter(|(tenant, _)| *tenant == self.tenant)
+                .count()
+        })
+    }
+
+    /// Whether this tenant holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.len() == 0
+    }
+
+    fn key(&self, binding: &str) -> (String, String) {
+        (self.tenant.clone(), binding.to_owned())
     }
 }
 
 impl PendingStore for MemoryPendingStore {
-    fn put(&mut self, binding: &str, pending: PendingAuth) {
-        self.entries.insert(binding.to_owned(), pending);
+    fn put<'a>(
+        &'a self,
+        binding: &'a str,
+        pending: &'a PendingAuth,
+    ) -> StoreFuture<'a, core::result::Result<(), PendingError>> {
+        let outcome = match self.entries.lock() {
+            Ok(mut entries) => {
+                entries.insert(self.key(binding), pending.clone());
+                Ok(())
+            }
+            // A poisoned lock means an operation panicked mid-update: fail closed.
+            Err(_) => Err(PendingError::unavailable()),
+        };
+        Box::pin(std::future::ready(outcome))
     }
 
-    fn take(&mut self, binding: &str) -> Option<PendingAuth> {
-        self.entries.remove(binding)
+    fn take<'a>(
+        &'a self,
+        binding: &'a str,
+        now: i64,
+    ) -> StoreFuture<'a, core::result::Result<Option<PendingAuth>, PendingError>> {
+        let outcome = match self.entries.lock() {
+            Ok(mut entries) => Ok(entries
+                .remove(&self.key(binding))
+                .filter(|pending| !pending.is_expired(now))),
+            Err(_) => Err(PendingError::unavailable()),
+        };
+        Box::pin(std::future::ready(outcome))
     }
 }
 

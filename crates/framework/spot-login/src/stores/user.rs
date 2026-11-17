@@ -20,17 +20,16 @@
 //! secret written by an older version, say) is reported as a store failure, never as "no second
 //! factor": the sign-in fails closed.
 //!
-//! # What this store refuses, on purpose
+//! # Recovery codes and clearing the factor
 //!
-//! - **Recovery-code digests.** They live in `user_recovery_digest`, a *child* DocType, and the
-//!   secret path refuses a child row (`secretfield.unsupported_doctype`): there is nowhere to put
-//!   a digest that is not an ordinary column. Storing one in a plain column would put a
-//!   credential in a readable place, so [`UserDirectory::set_second_factor`] and
-//!   [`UserDirectory::consume_recovery_digest`] refuse with `login.store_failed`. Recovery codes
-//!   are therefore unavailable until the platform app gives them a secret-capable home; the
-//!   report records it.
-//! - **Clearing a second factor.** The secret path has no "unset a secret" call yet, so
-//!   `set_second_factor(id, None, ..)` refuses rather than silently leaving the factor in place.
+//! A user's recovery codes are `recovery_code` records (see the `recovery` module): one row per
+//! code, the digest a sealed lookup secret. [`UserDirectory::set_second_factor`] replaces the
+//! whole batch, [`UserDirectory::consume_recovery_digest`] spends one exactly once.
+//!
+//! The secret path has no "unset a secret", so a removed second factor is a sealed tombstone
+//! ([`TOTP_DISABLED`]) that reads back as "no second factor"; removing the factor also deletes
+//! the user's recovery codes. A sealed value that is neither the tombstone nor `<base32>/<step>`
+//! is still a store failure (the sign-in fails closed), never "no second factor".
 
 use std::sync::Arc;
 
@@ -50,6 +49,14 @@ use super::{LoginStores, failed_at, name, record, store_failed, text};
 
 /// The separator between the TOTP secret and its last accepted step in the sealed value.
 pub const TOTP_STEP_SEPARATOR: char = '/';
+
+/// The sealed value that stands for "the second factor was removed" (the secret path cannot
+/// unset a secret).
+pub const TOTP_DISABLED: &str = "disabled";
+
+/// The prefix of a sealed value that is a **pending** enrolment (`pending:<base32>`): the secret
+/// was issued but no code has confirmed it, so it is not a second factor.
+pub const TOTP_PENDING_PREFIX: &str = "pending:";
 
 /// How many times a TOTP step write retries after losing a version race.
 const TOTP_CAS_ATTEMPTS: u32 = 5;
@@ -89,6 +96,24 @@ impl<B: StorageBackend> StorageUserDirectory<B> {
 
     /// The full credential record of a user, or `None` when no such user exists.
     async fn record_of(&self, id: RecordId) -> Result<Option<UserRecord>, LoginError> {
+        let Some(mut record) = self.standing_of(id).await? else {
+            return Ok(None);
+        };
+        record.password_hash = self.password_hash(id).await?;
+        let (totp_secret, totp_last_step) = self.second_factor(id).await?;
+        record.totp_secret = totp_secret;
+        record.totp_last_step = totp_last_step;
+        // Codes matter only to a user with a second factor: skip the reads for everyone else.
+        if record.totp_secret.is_some() {
+            // Every code of the user, used ones included, in a stable order (see `recovery`).
+            record.recovery_digests = super::recovery::digests_for(&self.stores, id).await?;
+        }
+        Ok(Some(record))
+    }
+
+    /// The user's standing (name, state, type) with no credential material: no secret is
+    /// opened, so no `sys_secret_audit` event is written for it.
+    async fn standing_of(&self, id: RecordId) -> Result<Option<UserRecord>, LoginError> {
         let data = self.load(id).await?;
         let Some(data) = data else {
             return Ok(None);
@@ -98,19 +123,21 @@ impl<B: StorageBackend> StorageUserDirectory<B> {
         let state = Self::text_at(&data.fields, "state")
             .and_then(|value| UserState::parse(&value))
             .ok_or_else(|| store_failed("user: unreadable state"))?;
-        let password_hash = self.password_hash(id).await?;
-        let (totp_secret, totp_last_step) = self.second_factor(id).await?;
+        // A type that cannot be read refuses the user (fail closed): there is no default type.
+        let user_type = Self::text_at(&data.fields, "user_type")
+            .and_then(|value| crate::model::parse_user_type(&value))
+            .ok_or_else(|| store_failed("user: unreadable user_type"))?;
         Ok(Some(UserRecord {
             id,
             user_name,
             email: Self::text_at(&data.fields, "email"),
             full_name: Self::text_at(&data.fields, "full_name").unwrap_or_default(),
             state,
-            password_hash,
-            totp_secret,
-            // Recovery digests have no secret-capable home yet (see the module docs).
+            user_type,
+            password_hash: None,
+            totp_secret: None,
             recovery_digests: Vec::new(),
-            totp_last_step,
+            totp_last_step: None,
         }))
     }
 
@@ -153,6 +180,10 @@ impl<B: StorageBackend> StorageUserDirectory<B> {
             .map_err(|error| failed_at("open totp_secret", &error))?;
         match opened {
             None => Ok((None, None)),
+            // A removed factor (the tombstone): no second factor and no replay counter.
+            Some(secret) if secret.expose() == TOTP_DISABLED => Ok((None, None)),
+            // A pending enrolment is not a factor: a sign-in does not ask for it.
+            Some(secret) if secret.expose().starts_with(TOTP_PENDING_PREFIX) => Ok((None, None)),
             Some(secret) => {
                 decode_second_factor(secret.expose()).map(|(secret, step)| (Some(secret), step))
             }
@@ -214,6 +245,13 @@ impl<B: StorageBackend> UserDirectory for StorageUserDirectory<B> {
         id: RecordId,
     ) -> BoxFuture<'a, Result<Option<UserRecord>, LoginError>> {
         Box::pin(async move { self.record_of(id).await })
+    }
+
+    fn find_standing_by_id<'a>(
+        &'a self,
+        id: RecordId,
+    ) -> BoxFuture<'a, Result<Option<UserRecord>, LoginError>> {
+        Box::pin(async move { self.standing_of(id).await })
     }
 
     fn set_password_hash<'a>(
@@ -279,16 +317,47 @@ impl<B: StorageBackend> UserDirectory for StorageUserDirectory<B> {
         })
     }
 
+    fn begin_totp_enrolment<'a>(
+        &'a self,
+        id: RecordId,
+        secret: TotpSecret,
+    ) -> BoxFuture<'a, Result<(), LoginError>> {
+        Box::pin(async move {
+            let sealed = format!("{TOTP_PENDING_PREFIX}{}", secret.to_base32());
+            self.write_secret(id, "totp_secret", SecretString::new(sealed))
+                .await
+        })
+    }
+
+    fn pending_totp<'a>(
+        &'a self,
+        id: RecordId,
+    ) -> BoxFuture<'a, Result<Option<TotpSecret>, LoginError>> {
+        Box::pin(async move {
+            let opened = self
+                .stores
+                .engine()
+                .open_secret(self.stores.access(), USER, id, "totp_secret")
+                .await
+                .map_err(|error| failed_at("open totp_secret", &error))?;
+            let Some(secret) = opened else {
+                return Ok(None);
+            };
+            match secret.expose().strip_prefix(TOTP_PENDING_PREFIX) {
+                None => Ok(None),
+                Some(base32) => TotpSecret::from_base32(base32)
+                    .map(Some)
+                    .map_err(|_| store_failed("totp_secret: unreadable pending secret")),
+            }
+        })
+    }
+
     fn consume_recovery_digest<'a>(
         &'a self,
-        _id: RecordId,
-        _index: usize,
+        id: RecordId,
+        index: usize,
     ) -> BoxFuture<'a, Result<(), LoginError>> {
-        Box::pin(async {
-            // No secret-capable home for a recovery digest yet: refuse instead of writing a
-            // credential into a plain column.
-            Err(recovery_unavailable())
-        })
+        Box::pin(async move { super::recovery::consume(&self.stores, id, index).await })
     }
 
     fn set_second_factor<'a>(
@@ -298,20 +367,20 @@ impl<B: StorageBackend> UserDirectory for StorageUserDirectory<B> {
         recovery: Vec<StoredDigest>,
     ) -> BoxFuture<'a, Result<(), LoginError>> {
         Box::pin(async move {
-            if !recovery.is_empty() {
-                return Err(recovery_unavailable());
+            if recovery.len() > super::recovery::MAX_CODES {
+                return Err(store_failed("set_second_factor: too many recovery codes"));
             }
-            let Some(totp) = totp else {
-                return Err(store_failed(
-                    "set_second_factor: the secret path cannot unset a secret yet",
-                ));
+            // The factor first, then the batch: a crash in between leaves a factor with no
+            // codes (fail closed), never codes with no factor.
+            let sealed = match &totp {
+                Some(totp) => encode_second_factor(totp, 0),
+                None => TOTP_DISABLED.to_owned(),
             };
-            self.write_secret(
-                id,
-                "totp_secret",
-                SecretString::new(encode_second_factor(&totp, 0)),
-            )
-            .await
+            self.write_secret(id, "totp_secret", SecretString::new(sealed))
+                .await?;
+            // A removed factor takes its codes with it, whatever the caller passed.
+            let batch = if totp.is_some() { recovery } else { Vec::new() };
+            super::recovery::replace_batch(&self.stores, id, &batch).await
         })
     }
 }
@@ -353,15 +422,6 @@ pub(crate) async fn find_user_id<B: StorageBackend>(
         .into_iter()
         .flatten()
         .find_map(|value| record(&value)))
-}
-
-/// The one refusal for a recovery-code operation that has no storage.
-fn recovery_unavailable() -> LoginError {
-    LoginError::new(
-        LoginErrorKind::StoreFailed,
-        "recovery digests have no secret-capable record: `user_recovery_digest` is a child \
-         DocType and the secret path refuses child rows (secretfield.unsupported_doctype)",
-    )
 }
 
 /// The sealed text of a TOTP secret and its last accepted step.

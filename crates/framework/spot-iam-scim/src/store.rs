@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use serde_json::Value as Json;
 use spot_events_contract::Actor;
 use spot_iam_assign::RoleDirectory;
-use spot_iam_roles::{Assignment, Role};
+use spot_iam_roles::{Assignment, Registry, Role};
 use spot_storage_contract::RecordId;
 use time::OffsetDateTime;
 
@@ -142,6 +142,8 @@ struct TenantData {
 pub struct MemoryStore {
     tenants: BTreeMap<TenantId, TenantData>,
     roles: Vec<Role>,
+    /// The role registry (roles with their duties), when the store was built from one.
+    registry: Option<Registry>,
     events: Vec<ScimEvent>,
     audit: Vec<AuditEntry>,
     rate: BTreeMap<String, (i64, u32)>,
@@ -157,6 +159,17 @@ impl MemoryStore {
     pub fn with_roles(roles: Vec<Role>) -> Self {
         Self {
             roles,
+            ..Self::default()
+        }
+    }
+
+    /// A store whose roles and duties come from `registry`: [`MappingStore::registry`] answers
+    /// `Some`, so a group edit uses the precise portal guard (a portal user may receive a
+    /// portal role whose duties are all outside-exposed).
+    pub fn with_registry(registry: Registry) -> Self {
+        Self {
+            roles: registry.roles().cloned().collect(),
+            registry: Some(registry),
             ..Self::default()
         }
     }
@@ -288,6 +301,10 @@ impl MappingStore for MemoryStore {
 
     fn role_records(&self) -> Vec<Role> {
         self.roles.clone()
+    }
+
+    fn registry(&self) -> Option<&Registry> {
+        self.registry.as_ref()
     }
 }
 

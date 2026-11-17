@@ -27,6 +27,10 @@ pub enum CommitAnswer {
         /// The commit's sequence number.
         seq: Seq,
     },
+    /// The caller reported the database commit failed (or it expired unreported): the commit
+    /// is withdrawn and never acknowledged. The sequence number is consumed or released by the
+    /// driver; retry the command with the next sequence number the driver expects.
+    Withdrawn(Seq),
 }
 
 /// One future per commit.

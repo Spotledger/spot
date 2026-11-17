@@ -25,6 +25,7 @@ pub fn body_digest(body: &Value) -> [u8; 32] {
 /// One change the in-memory live side has seen.
 #[derive(Clone, Debug)]
 struct LiveChange {
+    generation: u64,
     seq: u64,
     entity: String,
     id: String,
@@ -55,9 +56,24 @@ impl MemoryLive {
         }
     }
 
-    /// Records an insert or update at `seq`; the head moves to `seq` when it is ahead.
+    /// Records an insert or update at `seq` of the head's current generation; the head moves to
+    /// it when it is ahead.
     pub fn put(&mut self, seq: u64, entity: &str, id: &str, version: u64, body: &Value) {
+        self.put_in(self.head.generation, seq, entity, id, version, body);
+    }
+
+    /// Records an insert or update at `(generation, seq)`; the head moves to it when it is ahead.
+    pub fn put_in(
+        &mut self,
+        generation: u64,
+        seq: u64,
+        entity: &str,
+        id: &str,
+        version: u64,
+        body: &Value,
+    ) {
         self.push(LiveChange {
+            generation,
             seq,
             entity: entity.to_owned(),
             id: id.to_owned(),
@@ -66,9 +82,16 @@ impl MemoryLive {
         });
     }
 
-    /// Records a delete at `seq`; the head moves to `seq` when it is ahead.
+    /// Records a delete at `seq` of the head's current generation; the head moves to it when it
+    /// is ahead.
     pub fn remove(&mut self, seq: u64, entity: &str, id: &str, version: u64) {
+        self.remove_in(self.head.generation, seq, entity, id, version);
+    }
+
+    /// Records a delete at `(generation, seq)`; the head moves to it when it is ahead.
+    pub fn remove_in(&mut self, generation: u64, seq: u64, entity: &str, id: &str, version: u64) {
         self.push(LiveChange {
+            generation,
             seq,
             entity: entity.to_owned(),
             id: id.to_owned(),
@@ -78,8 +101,9 @@ impl MemoryLive {
     }
 
     fn push(&mut self, change: LiveChange) {
-        if change.seq > self.head.seq {
-            self.head = Position::new(self.head.generation, change.seq);
+        let at = Position::new(change.generation, change.seq);
+        if at > self.head {
+            self.head = at;
         }
         self.changes.push(change);
     }
@@ -109,9 +133,9 @@ impl LiveSide for MemoryLive {
         let mut ordered: Vec<&LiveChange> = self
             .changes
             .iter()
-            .filter(|change| change.seq <= as_of.seq)
+            .filter(|change| (change.generation, change.seq) <= (as_of.generation, as_of.seq))
             .collect();
-        ordered.sort_by_key(|change| change.seq);
+        ordered.sort_by_key(|change| (change.generation, change.seq));
         for change in ordered {
             let key = (change.entity.as_str(), change.id.as_str());
             match change.digest {

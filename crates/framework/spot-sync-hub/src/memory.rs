@@ -50,10 +50,17 @@ impl HubStream for MemoryStream {
 
 type ItemId = (u64, u32, bool);
 
+/// One destination's queue: its items and the newest serve sequence it ever assigned.
+#[derive(Debug, Clone, Default)]
+struct DestQueue {
+    items: BTreeMap<ItemId, Pending<QueuedBundle>>,
+    last_seq: u64,
+}
+
 /// A queue held in maps, one per destination.
 #[derive(Debug, Clone, Default)]
 pub struct MemoryQueue {
-    items: BTreeMap<String, BTreeMap<ItemId, Pending<QueuedBundle>>>,
+    dests: BTreeMap<String, DestQueue>,
     /// Destinations whose pushes fail, for tests of failure isolation.
     failing: std::collections::BTreeSet<String>,
 }
@@ -82,53 +89,111 @@ impl MemoryQueue {
 }
 
 impl SendQueue for MemoryQueue {
-    fn push(&mut self, dest: &str, item: Pending<QueuedBundle>) -> Result<PushOutcome, HubError> {
+    fn push(
+        &mut self,
+        dest: &str,
+        mut item: Pending<QueuedBundle>,
+    ) -> Result<PushOutcome, HubError> {
         if self.failing.contains(dest) {
             return Err(HubError::QueueFailed {
                 reason: "push refused by the test double".to_owned(),
             });
         }
         let id = (item.position, item.item.index, item.item.redelivery);
-        let map = self.items.entry(dest.to_owned()).or_default();
-        if map.contains_key(&id) {
+        let queue = self.dests.entry(dest.to_owned()).or_default();
+        if queue.items.contains_key(&id) {
             return Ok(PushOutcome::Duplicate);
         }
-        map.insert(id, item);
+        queue.last_seq += 1;
+        item.item.serve_seq = queue.last_seq;
+        item.item.serve_after = 0;
+        queue.items.insert(id, item);
         Ok(PushOutcome::Queued)
     }
 
     fn peek(&self, dest: &str, n: usize) -> Result<Vec<Pending<QueuedBundle>>, HubError> {
-        let mut all: Vec<&Pending<QueuedBundle>> = self
-            .items
-            .get(dest)
-            .map(|m| m.values().collect())
-            .unwrap_or_default();
+        let Some(queue) = self.dests.get(dest) else {
+            return Ok(Vec::new());
+        };
+        let mut seqs: Vec<u64> = queue.items.values().map(|p| p.item.serve_seq).collect();
+        seqs.sort_unstable();
+        let mut all: Vec<&Pending<QueuedBundle>> = queue.items.values().collect();
         all.sort_by_key(|p| (p.lane, p.position, p.item.index));
-        Ok(all.into_iter().take(n).cloned().collect())
+        // The item with the lowest serve sequence is always in the window. The node's
+        // acknowledgement is a prefix of the serve sequence, so an item it settled out of order
+        // (a mandatory-lane one served first) stays queued until the lower ones are applied; if
+        // those never got a place in the window, the window would be re-served for ever.
+        let head = queue.items.values().map(|p| p.item.serve_seq).min();
+        let mut window: Vec<&Pending<QueuedBundle>> = all.iter().copied().take(n).collect();
+        if let Some(head) = head
+            && n > 1
+            && !window.iter().any(|p| p.item.serve_seq == head)
+            && let Some(first) = all.iter().copied().find(|p| p.item.serve_seq == head)
+        {
+            window.pop();
+            window.push(first);
+            window.sort_by_key(|p| (p.lane, p.position, p.item.index));
+        }
+        Ok(window
+            .into_iter()
+            .map(|p| {
+                let mut out = p.clone();
+                let below = seqs.partition_point(|s| *s < p.item.serve_seq);
+                out.item.serve_after = below.checked_sub(1).map_or(0, |i| seqs[i]);
+                out
+            })
+            .collect())
     }
 
     fn ack(&mut self, dest: &str, up_to: u64) -> Result<usize, HubError> {
-        let Some(map) = self.items.get_mut(dest) else {
+        let Some(queue) = self.dests.get_mut(dest) else {
             return Ok(0);
         };
-        let before = map.len();
-        map.retain(|(position, _, redelivery), _| *redelivery || *position > up_to);
-        Ok(before - map.len())
+        let before = queue.items.len();
+        queue
+            .items
+            .retain(|(position, _, redelivery), _| *redelivery || *position > up_to);
+        Ok(before - queue.items.len())
+    }
+
+    fn last_serve_seq(&self, dest: &str) -> Result<u64, HubError> {
+        Ok(self.dests.get(dest).map_or(0, |q| q.last_seq))
+    }
+
+    fn lowest_position_after(&self, dest: &str, through: u64) -> Result<Option<u64>, HubError> {
+        Ok(self.dests.get(dest).and_then(|q| {
+            q.items
+                .values()
+                .filter(|p| !p.item.redelivery && p.item.serve_seq > through)
+                .map(|p| p.position)
+                .min()
+        }))
+    }
+
+    fn ack_served(&mut self, dest: &str, through: u64) -> Result<usize, HubError> {
+        let Some(queue) = self.dests.get_mut(dest) else {
+            return Ok(0);
+        };
+        let before = queue.items.len();
+        queue.items.retain(|_, p| p.item.serve_seq > through);
+        Ok(before - queue.items.len())
     }
 
     fn remove_redelivered(&mut self, dest: &str, position: u64) -> Result<usize, HubError> {
-        let Some(map) = self.items.get_mut(dest) else {
+        let Some(queue) = self.dests.get_mut(dest) else {
             return Ok(0);
         };
-        let before = map.len();
-        map.retain(|(p, _, redelivery), _| !(*redelivery && *p == position));
-        Ok(before - map.len())
+        let before = queue.items.len();
+        queue
+            .items
+            .retain(|(p, _, redelivery), _| !(*redelivery && *p == position));
+        Ok(before - queue.items.len())
     }
 
     fn queued_bytes(&self, dest: &str) -> Result<usize, HubError> {
         Ok(self
-            .items
+            .dests
             .get(dest)
-            .map_or(0, |m| m.values().map(|p| p.item.bundle.bytes).sum()))
+            .map_or(0, |q| q.items.values().map(|p| p.item.bundle.bytes).sum()))
     }
 }

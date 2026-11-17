@@ -23,6 +23,19 @@
 //!   deleted: a posted document is a business fact. [`rollback_created`] reports it as needing
 //!   a cancel instead ([`RollbackOutcome::needs_cancel`]).
 //!
+//! # Batched creates (an optional seam)
+//!
+//! A host that can create many documents in one transaction supplies a [`BatchCreate`] through
+//! [`ApplyOptions::batch`]. For the plain insert mode ([`ApplyMode::Insert`]) the writer then
+//! hands the host up to [`ApplyOptions::batch_rows`] validated documents at a time instead of
+//! one call each. Everything else is unchanged: each document keeps its own deterministic
+//! command id, its own result (a refused document is that document's row error and the rest of
+//! the batch is still written), the same idempotency check, and the same stop rules (the first
+//! refused write stops the run; the documents the host committed in the same batch before and
+//! after it are real and are reported as created, so [`rollback_created`] covers them). The
+//! cancel flag and the error limit are checked between batches, not between documents of one
+//! batch. Without a [`BatchCreate`] the writer makes one `create` call per document, as above.
+//!
 //! # Idempotency
 //!
 //! Each call gets an [`Invocation`] copy whose `command_id` is derived deterministically from
@@ -110,7 +123,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use spot_app_api::context::{DocumentService, Invocation};
+use spot_app_api::context::{DocumentService, Invocation, Outcome};
 use spot_app_api::document::Document;
 use spot_app_api::error::AppError;
 use spot_app_api::prelude::{RecordId, Value, Version};
@@ -178,6 +191,20 @@ impl ApplyMode {
 pub trait KeyIndex: Send + Sync {
     /// The id of the document of `doctype` whose `key_field` holds `value`, if any.
     fn find(&self, doctype: &str, key_field: &str, value: &Value) -> Option<RecordId>;
+}
+
+/// Creates many documents in one transaction, for a host that can (see the module docs).
+///
+/// `calls` pairs each document with the [`Invocation`] to create it under (its own command id
+/// included); the answer holds exactly one result per call, in order. A document the host
+/// refuses is that call's `Err` and must not stop the others, and a result is the same a lone
+/// `create` returns for that call (including a replay of an already committed command id).
+pub trait BatchCreate: Send + Sync {
+    /// Creates the documents; one result per call, in order.
+    fn create_many<'a>(
+        &'a self,
+        calls: Vec<(Invocation, Document)>,
+    ) -> spot_app_api::BoxFuture<'a, Vec<Result<Outcome<Document>, AppError>>>;
 }
 
 /// Answers whether the caller may create or update, before any write.
@@ -324,7 +351,7 @@ impl Spool for MemorySpool {
 ///
 /// Called once per [`ApplyOptions::progress_every`] documents and again when the run ends. Must
 /// be quick: long work belongs to the caller.
-pub trait ProgressSink {
+pub trait ProgressSink: Send {
     /// `done` documents have been seen; `total` is known only in the all-or-nothing write pass,
     /// where the validated parents are already counted.
     fn progress(&mut self, done: u64, total: Option<u64>);
@@ -370,6 +397,12 @@ pub struct ApplyOptions {
     /// The target metadata, at the version the stream validated against: the writer builds the
     /// defaulted, validated [`Document`] out of each [`ImportDocument`] with it.
     pub meta: Arc<EffectiveMeta>,
+    /// A host that creates many documents in one transaction; see [`BatchCreate`]. `None` (the
+    /// default): one `create` call per document.
+    pub batch: Option<Arc<dyn BatchCreate>>,
+    /// The most documents one [`BatchCreate`] call carries. Default 100; `0` and `1` mean no
+    /// batching.
+    pub batch_rows: usize,
 }
 
 impl ApplyOptions {
@@ -418,6 +451,8 @@ impl ApplyOptions {
             spool: Box::new(MemorySpool::new(DEFAULT_SPOOL_CAPACITY)),
             permissions,
             meta,
+            batch: None,
+            batch_rows: 100,
         }
     }
 
@@ -425,6 +460,12 @@ impl ApplyOptions {
     fn bad_label(&self) -> bool {
         let label = self.batch_label.trim();
         !self.mode.is_dry_run() && (label.is_empty() || label == "import")
+    }
+
+    /// The batch writer and its size, when this run creates documents in batches.
+    fn batcher(&self) -> Option<(&dyn BatchCreate, usize)> {
+        let batch = self.batch.as_deref()?;
+        (self.batch_rows > 1 && self.mode == ApplyMode::Insert).then_some((batch, self.batch_rows))
     }
 
     /// Whether a keyed mode is missing the index it cannot work without.
@@ -641,6 +682,8 @@ mod scale_tests;
 mod testkit;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_batch;
 #[cfg(test)]
 mod tests_policy;
 #[cfg(test)]

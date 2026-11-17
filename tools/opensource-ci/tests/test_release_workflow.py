@@ -42,6 +42,7 @@ def load():
 
 
 @unittest.skipIf(workflow_lint.yaml is None, "PyYAML is not installed")
+@unittest.skipUnless(WORKFLOW.exists(), "opensource/workflows/release.yml is private-only: it is not part of the public export")
 class ReleaseWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

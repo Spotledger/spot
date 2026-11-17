@@ -129,14 +129,14 @@ async fn names_for(role: &str) -> Vec<&'static str> {
     assembly.services().iter().map(|s| s.name()).collect()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn each_role_lists_exactly_its_set() {
     assert_eq!(names_for("standalone").await, ["local_stack"]);
     assert_eq!(names_for("hub").await, ["local_stack", "hub_only"]);
     assert_eq!(names_for("edge").await, ["local_stack", "sync_node"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_skipped_module_never_registers() {
     let before = HUB_CALLS.with(Cell::get);
     names_for("standalone").await;
@@ -150,7 +150,7 @@ async fn a_skipped_module_never_registers() {
     assert_eq!(HUB_CALLS.with(Cell::get), before + 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_edge_with_an_unreachable_hub_is_ready_and_says_offline() {
     let mut c = ctx("edge", clock());
     register_all_with_roles(&mut c, &[TABLE], CONDITIONS)
@@ -169,7 +169,7 @@ async fn an_edge_with_an_unreachable_hub_is_ready_and_says_offline() {
     assembly.shutdown().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_hub_and_a_standalone_are_ready_with_no_degradation() {
     for role in ["standalone", "hub"] {
         let mut c = ctx(role, clock());
@@ -188,7 +188,7 @@ async fn a_hub_and_a_standalone_are_ready_with_no_degradation() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unknown_role_starts_nothing() {
     let mut c = ctx("branch", clock());
     let err = register_all_with_roles(&mut c, &[TABLE], CONDITIONS)
@@ -205,7 +205,7 @@ async fn an_unknown_role_starts_nothing() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_conditioned_module_before_the_role_is_known_is_an_error() {
     let early: &[Registration] = &[
         Registration {
@@ -230,7 +230,7 @@ async fn a_conditioned_module_before_the_role_is_known_is_an_error() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_condition_naming_no_role_or_no_module_is_an_error() {
     let bogus = [RoleCondition {
         name: "hub_only",

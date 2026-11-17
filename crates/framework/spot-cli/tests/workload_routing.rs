@@ -104,7 +104,7 @@ fn queue_affinity_is_visible_per_role() {
     assert_eq!(port.queues_for_local(), vec!["reports", "exports"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_report_request_on_the_interactive_node_is_redirected_to_the_report_node() {
     let mut site = ctx(TWO_NODES);
     workload_routing::register(&mut site).unwrap();
@@ -116,7 +116,7 @@ async fn a_report_request_on_the_interactive_node_is_redirected_to_the_report_no
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_report_node_serves_its_own_report_requests_locally() {
     let report_nodes = TWO_NODES.replace("local_node = \"a\"", "local_node = \"c\"");
     let mut site = ctx(&report_nodes);
@@ -147,7 +147,7 @@ id = "c"
 roles = ["report"]
 "#;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unavailable_target_falls_back_to_local_only_when_the_setting_allows_it() {
     let allowed = NO_HOST_REPORT_NODE.replace("{fallback}", "true");
     let mut site = ctx(&allowed);
@@ -187,7 +187,7 @@ report = "sales"
 max_lag_ms = 5000
 "#;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_allow_listed_report_within_the_staleness_bound_reads_the_replica() {
     let mut site = ctx(REPLICA_SETTINGS);
     workload_routing::register(&mut site).unwrap();
@@ -200,7 +200,7 @@ async fn an_allow_listed_report_within_the_staleness_bound_reads_the_replica() {
     assert_eq!(json["replica"], json!(true));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_lagging_replica_falls_back_to_the_primary_with_a_fake_lag() {
     // The replica's lag (9000ms) is well past the report's own bound (5000ms).
     let lagging = REPLICA_SETTINGS.replace("\nlag_ms = 50\n", "\nlag_ms = 9000\n");
@@ -215,7 +215,7 @@ async fn a_lagging_replica_falls_back_to_the_primary_with_a_fake_lag() {
     assert_eq!(json["replica"], json!(false), "falls back to the primary");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_report_not_on_the_allow_list_never_reads_the_replica() {
     let mut site = ctx(REPLICA_SETTINGS);
     workload_routing::register(&mut site).unwrap();

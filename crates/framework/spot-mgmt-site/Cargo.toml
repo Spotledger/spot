@@ -1,0 +1,28 @@
+[package]
+name = "spot-mgmt-site"
+description = "Site operation handlers for the management API (WP-ADM-01.T6): status, backup run/list/verify, restore preflight/apply, maintenance enter/leave and the migration verbs, every one running the same command as the CLI through a port, with the site check, the typed parameters, capped and redacted output and the equivalent CLI line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The operation catalogue types the entries are built from and the validated parameters handlers read.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The handler seam of the management API server (`Handler`, `HandlerContext`, `HandlerError`).
+spot-mgmt-api = { path = "../spot-mgmt-api" }
+# The migration verbs: their catalogue entries and handlers (`LifecycleContext`, `Actor`) are used, not re-implemented.
+spot-migration-ops = { path = "../spot-migration-ops" }
+# `Principal`: the actor of a migration verb is the operator of the command.
+spot-permissions = { path = "../spot-permissions" }
+# The result of a handler is redacted JSON.
+serde_json = "1"
+# `select!` between the command and the cancel request.
+tokio = { version = "1.47", features = ["macros", "rt", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

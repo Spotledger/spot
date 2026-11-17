@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use spot_iam_assign::{GroupRole, GroupRoleMap, RoleDirectory, StaticRestriction};
 use spot_iam_directory::UserType;
-use spot_iam_roles::{OutsideGuard, Role, RoleName};
+use spot_iam_roles::{OutsideGuard, Registry, Role, RoleName};
 
 use crate::TenantId;
 use crate::error::{ScimError, ScimResult};
@@ -61,6 +61,14 @@ pub trait MappingStore {
     /// The tenant's role records. SCIM **reads** these to validate a mapping and never writes
     /// them; a test asserts a group edit leaves them unchanged.
     fn role_records(&self) -> Vec<Role>;
+    /// The tenant's role registry: the roles **with their duties**, so the portal guard can see
+    /// which duties are outside-exposed (ADR-083 Barrier 3). `Some` when the store can give
+    /// them; `None` (the default) when it holds role records only, in which case a group edit
+    /// uses the blind guard, which fails closed: a portal user gets only a portal role with no
+    /// duties and no direct rights.
+    fn registry(&self) -> Option<&Registry> {
+        None
+    }
 }
 
 /// Validates a row against the roles that exist, reporting the first problem as a SCIM `400`.

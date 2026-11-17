@@ -13,7 +13,10 @@ use spot_journal_verify::{Expected, Mode, verify_tenant};
 
 use crate::entry::{Entry, Op};
 use crate::error::RebuildError;
-use crate::options::{EventClass, Progress, RebuildOptions, RebuildOutcome};
+use crate::options::{
+    EventClass, IDENTITY_PREFIX, MAX_UNKNOWN_TOPICS, Progress, RebuildOptions, RebuildOutcome,
+    UNKNOWN_CLASS, WARN_UNREGISTERED_AS_STATE,
+};
 use crate::sink::{AppliedAudit, AppliedDelete, AppliedImage, ApplySink, PlanSummary, SinkError};
 use crate::stream::{Feed, Manifests, position};
 
@@ -79,15 +82,29 @@ fn sink_failed(error: SinkError) -> RebuildError {
 /// The consistency of the plan with itself: the parts a reader of the plan alone can check. Gaps
 /// between the base and the first step, and between steps, are position gaps found while reading.
 fn check_plan(plan: &RebuildPlan) -> Result<(), RebuildError> {
-    let mut previous_last = 0_u64;
-    for (index, step) in plan.steps.iter().enumerate() {
+    // Positions start again at 1 in every generation: steps are ordered by `(generation, seq)`,
+    // and a step that enters a later generation starts at its first position.
+    let mut previous: Option<(u64, u64)> = None;
+    for step in &plan.steps {
         if step.first_seq() == 0 || step.first_seq() > step.last_seq() {
             return Err(RebuildError::PlanInvalid("a step holds no position"));
         }
-        if index > 0 && step.first_seq() <= previous_last {
-            return Err(RebuildError::PlanInvalid("steps are not in position order"));
+        if let Some((generation, last)) = previous {
+            if step.generation() < generation {
+                return Err(RebuildError::PlanInvalid(
+                    "steps are not in generation order",
+                ));
+            }
+            if step.generation() == generation && step.first_seq() <= last {
+                return Err(RebuildError::PlanInvalid("steps are not in position order"));
+            }
+            if step.generation() > generation && step.first_seq() != 1 {
+                return Err(RebuildError::PlanInvalid(
+                    "a later generation starts at its first position",
+                ));
+            }
         }
-        previous_last = step.last_seq();
+        previous = Some((step.generation(), step.last_seq()));
     }
     let last = plan
         .steps
@@ -242,6 +259,10 @@ pub async fn execute(
         return Err(error);
     }
     let c = run.counters;
+    let mut warnings = Vec::new();
+    if options.allow_unregistered && !c.unknown_topics.is_empty() {
+        warnings.push(WARN_UNREGISTERED_AS_STATE.to_owned());
+    }
     Ok(RebuildOutcome {
         tenant: summary.tenant,
         base: plan.base,
@@ -258,6 +279,11 @@ pub async fn execute(
         domain_skipped: c.domain_skipped,
         duplicates_skipped: c.duplicates_skipped,
         peak_buffered_entries: peak,
+        unknown_topics: c.unknown_topics.into_iter().collect(),
+        unknown_topics_truncated: c.unknown_truncated,
+        classes: c.classes,
+        identity_audit_applied: c.identity_audit_applied,
+        warnings,
     })
 }
 
@@ -345,16 +371,26 @@ async fn prescan(
     options: &RebuildOptions<'_>,
 ) -> Result<(), RebuildError> {
     let mut seen: BTreeSet<(String, u64)> = BTreeSet::new();
+    let resolve = |topic: &str| options.resolve(topic);
     let mut feed = Feed::new(
         store,
         &options.tenant,
         &options.source,
         manifests,
         &plan.steps,
+        plan.base.generation(),
         first_seq,
+        &resolve,
     );
     while let Some(batch) = feed.next_batch().await? {
         for entry in batch {
+            if entry.unknown && options.refuses_unknown() {
+                return Err(RebuildError::UnknownTopic {
+                    generation: entry.position.generation,
+                    seq: entry.position.seq,
+                    topic: entry.topic,
+                });
+            }
             if let Some(state) = entry.state
                 && state.op != Op::Delete
                 && seen.insert((entry.entity.clone(), state.entity_schema))
@@ -379,8 +415,12 @@ struct Counters {
     deletes_applied: u64,
     audit_applied: u64,
     audit_skipped: u64,
+    identity_audit_applied: u64,
     domain_skipped: u64,
     duplicates_skipped: u64,
+    classes: BTreeMap<String, u64>,
+    unknown_topics: BTreeSet<String>,
+    unknown_truncated: bool,
 }
 
 struct Run<'r, 'o> {
@@ -428,13 +468,17 @@ impl Run<'_, '_> {
         if let Some((reader, at)) = snapshot {
             self.apply_snapshot(&reader, at, sink).await?;
         }
+        let options = self.options;
+        let resolve = |topic: &str| options.resolve(topic);
         let mut feed = Feed::new(
             store,
-            &self.options.tenant,
-            &self.options.source,
+            &options.tenant,
+            &options.source,
             manifests,
             &plan.steps,
+            plan.base.generation(),
             first_seq,
+            &resolve,
         );
         while let Some(batch) = feed.next_batch().await? {
             for entry in batch {
@@ -489,12 +533,37 @@ impl Run<'_, '_> {
     ) -> Result<(), RebuildError> {
         self.tick(entry.position)?;
         self.counters.entries_read += 1;
+        let class_name = if entry.unknown {
+            UNKNOWN_CLASS
+        } else {
+            entry.class.name()
+        };
+        *self
+            .counters
+            .classes
+            .entry(class_name.to_owned())
+            .or_insert(0) += 1;
+        if entry.unknown {
+            if self.options.refuses_unknown() {
+                return Err(RebuildError::UnknownTopic {
+                    generation: entry.position.generation,
+                    seq: entry.position.seq,
+                    topic: entry.topic,
+                });
+            }
+            self.counters.unknown_topics.insert(entry.topic.clone());
+            if self.counters.unknown_topics.len() > MAX_UNKNOWN_TOPICS {
+                self.counters.unknown_topics.pop_last();
+                self.counters.unknown_truncated = true;
+            }
+        }
         match entry.class {
             EventClass::Domain => {
                 self.counters.domain_skipped += 1;
                 Ok(())
             }
             EventClass::Audit => {
+                let is_identity = entry.topic.starts_with(IDENTITY_PREFIX);
                 if !self.options.replay_audit {
                     self.counters.audit_skipped += 1;
                     return Ok(());
@@ -510,6 +579,9 @@ impl Run<'_, '_> {
                 .await
                 .map_err(sink_failed)?;
                 self.counters.audit_applied += 1;
+                if is_identity {
+                    self.counters.identity_audit_applied += 1;
+                }
                 Ok(())
             }
             EventClass::State => self.apply_state(entry, sink).await,

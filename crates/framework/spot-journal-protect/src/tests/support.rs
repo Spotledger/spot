@@ -163,13 +163,13 @@ pub(crate) fn state_line(
 
 /// A domain event line.
 pub(crate) fn domain_line(n: u64, data: &Value, seq: u64) -> String {
-    envelope("contact_emailed", "contact", n, None, data.clone(), seq)
+    envelope("doc_posted", "contact", n, None, data.clone(), seq)
 }
 
 /// An audit event line.
 pub(crate) fn audit_line(seq: u64) -> String {
     envelope(
-        "sys_role_changed",
+        "sys_doc_audit",
         "role",
         8_000,
         None,

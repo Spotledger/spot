@@ -103,6 +103,53 @@ pub enum BackupError {
         /// The provider's reason.
         reason: String,
     },
+    /// Encryption was requested but cannot be done (no key provider, the provider
+    /// refused, the key version is retired or unknown). Code
+    /// `backup.encryption_unavailable`.
+    #[error("backup encryption is unavailable: {reason}")]
+    EncryptionUnavailable {
+        /// Plain-language reason; never key material.
+        reason: String,
+    },
+    /// A payload failed authentication, was cut short, reordered or extended, or was
+    /// sealed under another key. Code `backup.decrypt_failed`.
+    #[error("the backup could not be decrypted: {reason}")]
+    DecryptFailed {
+        /// What failed (a chunk index or a fixed sentence); never key material.
+        reason: String,
+    },
+    /// The encryption header is malformed or exceeds its caps. Code
+    /// `backup.encryption_header_invalid`.
+    #[error("the backup's encryption header is not valid: {reason}")]
+    EncryptionHeaderInvalid {
+        /// Which rule the header broke.
+        reason: String,
+    },
+    /// The ledger file cannot be trusted; it is never treated as empty. Code
+    /// `backup.ledger_corrupt`.
+    #[error("the backup ledger {path} is not usable: {reason}")]
+    LedgerCorrupt {
+        /// The ledger file.
+        path: String,
+        /// What is wrong.
+        reason: String,
+    },
+    /// Another run holds the ledger lock. Code `backup.ledger_locked`.
+    #[error("the backup ledger lock {path} is held by another run{}", owner_suffix(.owner))]
+    LedgerLocked {
+        /// The lock file.
+        path: String,
+        /// The owning process id, when the lock file names one.
+        owner: Option<u32>,
+    },
+    /// The ledger could not be written. Code `backup.ledger_write_failed`.
+    #[error("the backup ledger {path} could not be written: {reason}")]
+    LedgerWriteFailed {
+        /// The file or directory involved.
+        path: String,
+        /// The underlying reason.
+        reason: String,
+    },
     /// An underlying I/O operation failed. Code `backup.io`.
     #[error("a backup operation failed underneath the request: {source}")]
     Io {
@@ -127,6 +174,12 @@ impl BackupError {
             BackupError::RestoreFailed { .. } => "backup.restore_failed",
             BackupError::Unsupported { .. } => "backup.unsupported",
             BackupError::Snapshot { .. } => "backup.snapshot",
+            BackupError::EncryptionUnavailable { .. } => "backup.encryption_unavailable",
+            BackupError::DecryptFailed { .. } => "backup.decrypt_failed",
+            BackupError::EncryptionHeaderInvalid { .. } => "backup.encryption_header_invalid",
+            BackupError::LedgerCorrupt { .. } => "backup.ledger_corrupt",
+            BackupError::LedgerLocked { .. } => "backup.ledger_locked",
+            BackupError::LedgerWriteFailed { .. } => "backup.ledger_write_failed",
             BackupError::Io { .. } => "backup.io",
         }
     }
@@ -141,6 +194,9 @@ impl BackupError {
                 format!("{target} shares the live data's physical disk {disk}")
             }
             BackupError::ManifestInvalid { reason }
+            | BackupError::EncryptionUnavailable { reason }
+            | BackupError::DecryptFailed { reason }
+            | BackupError::EncryptionHeaderInvalid { reason }
             | BackupError::VerifyFailed { reason }
             | BackupError::RestoreRefused { reason } => reason.clone(),
             BackupError::RetentionRefused { id, reason } => format!("{id}: {reason}"),
@@ -155,6 +211,11 @@ impl BackupError {
             BackupError::RestoreFailed { stage, reason } => format!("{stage}: {reason}"),
             BackupError::Unsupported { feature } => feature.clone(),
             BackupError::Snapshot { reason } => reason.clone(),
+            BackupError::LedgerCorrupt { path, reason }
+            | BackupError::LedgerWriteFailed { path, reason } => format!("{path}: {reason}"),
+            BackupError::LedgerLocked { path, owner } => {
+                format!("{path} is locked{}", owner_suffix(owner))
+            }
             BackupError::Io { source } => source.to_string(),
         }
     }
@@ -187,6 +248,11 @@ impl From<spot_jobs::Error> for BackupError {
     fn from(source: spot_jobs::Error) -> Self {
         BackupError::io(format!("the job engine failed: {source}"))
     }
+}
+
+/// ` (process N)` when the lock file names its owner, else nothing.
+fn owner_suffix(owner: &Option<u32>) -> String {
+    owner.map_or_else(String::new, |pid| format!(" (process {pid})"))
 }
 
 /// The crate's result alias.
@@ -242,6 +308,27 @@ mod tests {
                 feature: "cloud".into(),
             },
             BackupError::Snapshot {
+                reason: "bad".into(),
+            },
+            BackupError::EncryptionUnavailable {
+                reason: "bad".into(),
+            },
+            BackupError::DecryptFailed {
+                reason: "bad".into(),
+            },
+            BackupError::EncryptionHeaderInvalid {
+                reason: "bad".into(),
+            },
+            BackupError::LedgerCorrupt {
+                path: "p".into(),
+                reason: "bad".into(),
+            },
+            BackupError::LedgerLocked {
+                path: "p".into(),
+                owner: Some(1),
+            },
+            BackupError::LedgerWriteFailed {
+                path: "p".into(),
                 reason: "bad".into(),
             },
             BackupError::Io {

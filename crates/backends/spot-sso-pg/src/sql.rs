@@ -28,3 +28,25 @@ pub(crate) const CLAIM: &str = "INSERT INTO spot_sso_replay (namespace, id, expi
 pub(crate) const PRUNE: &str = "DELETE FROM spot_sso_replay \
     WHERE expires_at <= $1 AND (namespace, id) IN ( \
         SELECT namespace, id FROM spot_sso_replay WHERE expires_at <= $1 LIMIT $2)";
+
+/// Runs `ddl` once under the advisory lock `lock`, in one transaction (the shared `prepare` of the
+/// sign-in tables of WP-IAM-05.T18: SAML providers, tenant policy, hand-over and session index).
+/// Every statement of `ddl` is idempotent, so running it again, or from several nodes at once, is
+/// safe.
+///
+/// # Errors
+/// `sso_pg.migration_failed` with a fixed sentence: no driver text, no SQLSTATE, no value.
+pub(crate) async fn run_ddl(
+    pool: &deadpool_postgres::Pool,
+    lock: i64,
+    ddl: &str,
+) -> spot_app_api::AppResult<()> {
+    let fail = crate::error::tables_failed;
+    let mut conn = pool.get().await.map_err(|_| fail())?;
+    let tx = conn.transaction().await.map_err(|_| fail())?;
+    tx.execute("SELECT pg_advisory_xact_lock($1)", &[&lock])
+        .await
+        .map_err(|_| fail())?;
+    tx.batch_execute(ddl).await.map_err(|_| fail())?;
+    tx.commit().await.map_err(|_| fail())
+}

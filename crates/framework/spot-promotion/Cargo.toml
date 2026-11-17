@@ -27,6 +27,8 @@ spot-migration-conflicts = { path = "../spot-migration-conflicts" }
 spot-rehearsal = { path = "../spot-rehearsal" }
 # The environment roles (`dev`, `test`, `prod`) the approval and rehearsal policy is keyed by.
 spot-environments = { path = "../spot-environments" }
+# An environment address carries its tenant id, which the snapshot stores.
+spot-tenancy = { path = "../spot-tenancy" }
 # The promotion record and its journal derive serde for a durable store and a report.
 serde = { version = "1", features = ["derive"] }
 # The plan document and the evidence artefacts are JSON text.
@@ -41,8 +43,6 @@ thiserror = "2"
 [dev-dependencies]
 # `FakeSite` takes installed app versions, and script apps are compared as semver.
 semver = "1"
-# An environment address carries its tenant id; the tests build `EnvRef`s directly.
-spot-tenancy = { path = "../spot-tenancy" }
 
 [lints]
 workspace = true

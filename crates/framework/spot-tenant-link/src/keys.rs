@@ -138,7 +138,7 @@ impl From<SignatureBytes> for String {
 /// The handshake asks this for a public key and a signature and never for private material.
 /// An adapter over the host agent's key store implements it; [`SeedSigner`] is the software
 /// implementation used by tests and by non-agent hosts.
-pub trait IdentitySigner {
+pub trait IdentitySigner: Send + Sync {
     /// The party this key belongs to.
     fn party(&self) -> Party;
 

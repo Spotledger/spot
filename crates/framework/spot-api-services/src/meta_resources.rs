@@ -158,7 +158,7 @@ pub(crate) fn metas_with_children(
     let mut map = BTreeMap::new();
     map.insert(parent.doctype.as_str().to_owned(), parent.clone());
     for field in &parent.fields {
-        if field.field_type == spot_http::api::meta::FieldType::Table
+        if field.field_type.is_table()
             && let Some(child) = &field.child_doctype
             && !map.contains_key(child.as_str())
         {
@@ -211,9 +211,10 @@ fn meta_field(
         spot_app_api::meta::FieldKind::Json { .. } => FieldType::Json,
         spot_app_api::meta::FieldKind::Bytes => FieldType::Bytes,
         spot_app_api::meta::FieldKind::Attach { .. } => FieldType::Attach,
-        spot_app_api::meta::FieldKind::Secret => FieldType::Bytes,
+        // The contract names a secret `secret` (WP-PLT-05.T12); no default or value is sent.
+        spot_app_api::meta::FieldKind::Secret => FieldType::Secret,
         spot_app_api::meta::FieldKind::Table { .. } => FieldType::Table,
-        spot_app_api::meta::FieldKind::TableMultiselect { .. } => FieldType::Table,
+        spot_app_api::meta::FieldKind::TableMultiselect { .. } => FieldType::TableMultiselect,
         _ => {
             return Err(ApiError::new(
                 Code::HttpInternal,
@@ -297,11 +298,15 @@ fn meta_field(
         has_hints,
         multiple: f.multiple,
     };
-    field.default = f
-        .default
-        .as_ref()
-        .map(|v| spot_http::api::codec::encode_scalar(v, &field))
-        .transpose()?;
+    // A secret never has a default in a reply, whatever the definition holds.
+    field.default = if field.field_type == FieldType::Secret {
+        None
+    } else {
+        f.default
+            .as_ref()
+            .map(|v| spot_http::api::codec::encode_scalar(v, &field))
+            .transpose()?
+    };
     Ok(field)
 }
 

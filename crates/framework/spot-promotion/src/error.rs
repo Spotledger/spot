@@ -150,6 +150,33 @@ pub enum PromotionError {
         /// What the store reported.
         message: String,
     },
+    /// A stored snapshot is of a schema version this build does not read.
+    #[error(
+        "{}: snapshot version {found}; this build reads version {supported}",
+        codes::SNAPSHOT_VERSION
+    )]
+    SnapshotVersion {
+        /// The version the snapshot names.
+        found: u32,
+        /// The version this build reads.
+        supported: u32,
+    },
+    /// A stored snapshot is not a valid promotion.
+    #[error("{}: {message}", codes::SNAPSHOT_INVALID)]
+    SnapshotInvalid {
+        /// What is wrong, in a sentence (never content or a secret).
+        message: String,
+    },
+    /// The save was made against a revision the store no longer holds: another writer saved
+    /// first, so nothing was written.
+    #[error(
+        "{}: promotion {id} was saved by someone else since it was read",
+        codes::STALE_SAVE
+    )]
+    StaleSave {
+        /// The promotion.
+        id: String,
+    },
     /// The environment approval or rehearsal policy is not usable.
     #[error("{}: {message}", codes::POLICY_INVALID)]
     PolicyInvalid {
@@ -203,6 +230,9 @@ impl PromotionError {
             Self::RestoreFailed { .. } => codes::RESTORE_FAILED,
             Self::AuditFailed { .. } => codes::AUDIT_FAILED,
             Self::StoreFailed { .. } => codes::STORE_FAILED,
+            Self::SnapshotVersion { .. } => codes::SNAPSHOT_VERSION,
+            Self::SnapshotInvalid { .. } => codes::SNAPSHOT_INVALID,
+            Self::StaleSave { .. } => codes::STALE_SAVE,
             Self::PolicyInvalid { .. } => codes::POLICY_INVALID,
             Self::BadRoute { .. } => codes::BAD_ROUTE,
             Self::EnvironmentMismatch { .. } => codes::ENVIRONMENT_MISMATCH,

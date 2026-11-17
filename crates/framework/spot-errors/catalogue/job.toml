@@ -80,3 +80,21 @@ explanation_key = "error.job.context_too_large"
 params = []
 remedy = "Record less progress in the job context, or keep bulky data in the app's own tables and store only a reference."
 since = "0.1.0"
+
+[[entry]]
+code = "job.operation_refused"
+class = "none"
+summary = "The webhook job port refuses this operation."
+explanation_key = "error.job.operation_refused"
+params = []
+remedy = "Use the webhook delivery path instead."
+since = "0.1.0"
+
+[[entry]]
+code = "job.submit_failed"
+class = "none"
+summary = "A webhook delivery job could not be submitted."
+explanation_key = "error.job.submit_failed"
+params = []
+remedy = "Check the job store and retry."
+since = "0.1.0"

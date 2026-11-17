@@ -64,6 +64,7 @@ impl World {
                     topic: TOPIC.to_owned(),
                     major: MAJOR,
                     lane: lane_of(&key, self.cfg.mandatory_customers),
+                    deleted: false,
                 };
                 self.hub.stream_mut().append(entry);
                 self.entries.push(Entry {
@@ -91,6 +92,7 @@ impl World {
                     topic: TOPIC.to_owned(),
                     major: MAJOR,
                     lane: Lane::Bulk,
+                    deleted: false,
                 });
                 self.entries.push(Entry {
                     position,

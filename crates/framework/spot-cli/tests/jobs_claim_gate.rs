@@ -220,7 +220,7 @@ async fn wait_for(runs: &AtomicU32, want: u32) -> bool {
 }
 
 /// (a) The holder claims and runs its jobs.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_lease_holder_claims_and_runs_jobs() {
     let f = fixture().await;
     let store: Arc<dyn JobStore> = Arc::new(InMemoryJobStore::new());
@@ -237,7 +237,7 @@ async fn the_lease_holder_claims_and_runs_jobs() {
 
 /// (b) Once another node holds the lease, no further job is claimed within one cache period,
 /// although pending jobs exist; the first node's gate stays closed afterwards.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_deposed_node_claims_nothing_more() {
     let f = fixture().await;
     let store: Arc<dyn JobStore> = Arc::new(InMemoryJobStore::new());
@@ -276,7 +276,7 @@ async fn a_deposed_node_claims_nothing_more() {
 }
 
 /// (c) Many claim ticks make at most one `check_fence` per cache period.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_cache_bounds_coordinator_calls() {
     let f = fixture().await;
     assert_eq!(f.gate.period(), Duration::from_millis(300));
@@ -299,7 +299,7 @@ async fn the_cache_bounds_coordinator_calls() {
 }
 
 /// A released lease closes the gate at once, whatever the cache holds; a renewal refreshes it.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn release_closes_the_gate_and_renewal_refreshes_it() {
     let f = fixture().await;
     assert!(f.gate.permit().await);
@@ -324,7 +324,7 @@ async fn depose(f: &Fixture) {
 
 /// A failed renewal closes the gate at once, inside the cache window, with no coordinator call
 /// and no clock movement.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_failed_renewal_closes_the_gate_inside_the_cache_window() {
     let f = fixture().await;
     assert!(f.gate.permit().await);
@@ -343,7 +343,7 @@ async fn a_failed_renewal_closes_the_gate_inside_the_cache_window() {
 }
 
 /// A stale fence check made by someone else (the intake) closes the gate inside the window.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_stale_fence_check_elsewhere_closes_the_gate() {
     let f = fixture().await;
     assert!(f.gate.permit().await);
@@ -356,7 +356,7 @@ async fn a_stale_fence_check_elsewhere_closes_the_gate() {
 
 /// Loss landing during the gate's own fence check discards its `true`, and the discarded
 /// answer is not cached for later.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_loss_during_the_check_discards_the_answer() {
     let f = fixture().await;
     let entered = Arc::new(Notify::new());
@@ -382,7 +382,7 @@ async fn a_loss_during_the_check_discards_the_answer() {
 
 /// A gate refusal is sticky until the keeper takes the lease again, however long the clock
 /// runs, and then permits again.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_refusal_lasts_until_the_lease_is_taken_again() {
     let f = fixture().await;
     depose(&f).await;

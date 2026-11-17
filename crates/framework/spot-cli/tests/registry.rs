@@ -13,10 +13,16 @@ use axum::routing::{get, post};
 use serde::Deserialize;
 use spot_cli::services::{
     Idle, Level, MemoryOpenAudit, OpenOutcome, OpenPath, OpenPaths, RateLimit, RegisterFuture,
-    Registration, SiteCtx, State, register_all,
+    Registration, SiteCtx, State, register_all_with_roles,
 };
 use spot_core::ManualClock;
 use time::macros::datetime;
+
+/// The registry without the host's role conditions: these tests give their own tables, and the
+/// generated conditions name modules those tables do not hold.
+async fn register_all(ctx: &mut SiteCtx<'_>, tables: &[&[Registration]]) -> spot_cli::Result<()> {
+    register_all_with_roles(ctx, tables, &[]).await
+}
 
 /// The build script's scanner, tested without a build.
 #[path = "../build.rs"]
@@ -66,7 +72,7 @@ fn reg_c<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
     })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn modules_start_by_order_then_name() {
     let table = [
         Registration {
@@ -93,7 +99,7 @@ async fn modules_start_by_order_then_name() {
     assert_eq!(names, ["b", "c", "a"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_duplicate_module_name_is_refused() {
     let table = [
         Registration {
@@ -113,7 +119,7 @@ async fn a_duplicate_module_name_is_refused() {
     assert!(err.0.contains("`a` is registered twice"), "{err}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_failing_register_stops_the_site_and_names_the_module() {
     fn bad<'a, 'b>(_: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
         Box::pin(async { Err(spot_cli::Error("boom".into())) })
@@ -165,7 +171,7 @@ fn consumer<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
     })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_port_reaches_a_later_module() {
     let table = [
         Registration {
@@ -182,7 +188,7 @@ async fn a_port_reaches_a_later_module() {
     register_all(&mut ctx(clock()), &[&table]).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn providing_a_port_twice_names_both_modules() {
     let table = [
         Registration {
@@ -205,7 +211,7 @@ async fn providing_a_port_twice_names_both_modules() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_missing_required_port_names_the_module_and_the_port() {
     // The consumer starts before the provider: the provider's ORDER must be smaller.
     let table = [
@@ -229,7 +235,7 @@ async fn a_missing_required_port_names_the_module_and_the_port() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_finaliser_runs_after_every_module_and_keeps_its_own_order() {
     fn early<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
         Box::pin(async move {
@@ -356,7 +362,7 @@ async fn open_site(
     (assembled.open, assembled.router)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn only_the_declared_method_and_pattern_are_open() {
     let audit = Arc::new(MemoryOpenAudit::default());
     let (open, router) = open_site(clock(), audit).await;
@@ -384,7 +390,7 @@ async fn only_the_declared_method_and_pattern_are_open() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_rate_limit_refuses_with_429_and_resets_each_minute() {
     let clock = clock();
     let audit = Arc::new(MemoryOpenAudit::default());
@@ -422,7 +428,7 @@ async fn the_rate_limit_refuses_with_429_and_resets_each_minute() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_duplicate_declaration_fails_the_start_and_names_both_modules() {
     let table = [
         Registration {
@@ -458,7 +464,7 @@ fn malformed_reserved_and_unlimited_declarations_are_refused() {
     assert!(ctx.open_paths(&[bad("/api/v1/realtime", 5)]).is_err());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn open_paths_are_listed_in_health() {
     let table = [Registration {
         name: "hooks",
@@ -485,7 +491,7 @@ fn idle_fails<'a, 'b>(ctx: &'a mut SiteCtx<'b>) -> RegisterFuture<'a> {
     })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_registered_idle_service_check_lands_in_health() {
     let table = [Registration {
         name: "probe",
@@ -506,7 +512,7 @@ async fn a_registered_idle_service_check_lands_in_health() {
 
 // --- a reload keeps the running services ------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_reload_build_adds_no_service_but_keeps_routes_and_open_paths() {
     let table = [Registration {
         name: "hooks",

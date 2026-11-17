@@ -29,7 +29,8 @@ pub struct TestDb {
 }
 
 impl TestDb {
-    /// Creates `spot_test_<uuidv7>` with ICU as its collation provider and returns it, or `None`
+    /// Creates `spot_test_<uuidv7>` with ICU as its collation provider and a `C.UTF-8` ctype (as
+    /// `create_database` does) and returns it, or `None`
     /// (after printing `SKIPPED: set SPOT_TEST_PG_URL`) when no server is configured. Also drops
     /// test databases older than one hour left behind by earlier runs.
     ///
@@ -54,9 +55,11 @@ impl TestDb {
         sweep(&client).await;
         let name = format!("{NAME_PREFIX}{}", Uuid::now_v7().simple());
         // The name is generated here from hex digits; identifiers cannot be bound parameters.
-        let create = format!(
-            "CREATE DATABASE \"{name}\" TEMPLATE template0 ENCODING 'UTF8' \
-             LOCALE 'C' LOCALE_PROVIDER icu ICU_LOCALE 'und'"
+        // The same ctype as `create_database`, so `pg_trgm` builds trigrams for Urdu here too.
+        let create = crate::admin::create_database_sql(
+            &format!("\"{name}\""),
+            "und",
+            crate::admin::DEFAULT_CTYPE,
         );
         client
             .batch_execute(&create)
@@ -114,6 +117,27 @@ impl TestDb {
                 .unwrap_or_else(|e| panic!("cannot create the extension {name}: {e}"));
         }
         missing
+    }
+
+    /// Like [`TestDb::create_extensions`], but honours `SPOT_REQUIRE_PG`: it returns the names
+    /// the server does not offer only when the flag is unset, and panics, naming the extension
+    /// and the OS package, when it is set (ADR-087: PostGIS is required on every tier).
+    ///
+    /// # Panics
+    ///
+    /// When `SPOT_REQUIRE_PG=1` and the server does not offer one of `names`.
+    pub async fn require_extensions(&self, names: &[&str]) -> Vec<String> {
+        let missing = self.create_extensions(names).await;
+        missing_or_panic(missing, require_pg())
+    }
+
+    /// A plain driver client on another database of this server (`config` from this scratch
+    /// database's [`PgConfig::with_dbname`]), for creating an extension in a database a test
+    /// made with `create_database`.
+    pub async fn raw_client_on(&self, config: &PgConfig) -> Client {
+        connect_raw(config, &tls_for(config))
+            .await
+            .unwrap_or_else(|e| panic!("cannot connect to the database: {e}"))
     }
 
     /// A plain driver client on the admin database, for `pg_terminate_backend` and the like.
@@ -201,10 +225,62 @@ fn created_at(name: &str) -> Option<Duration> {
     Some(Duration::new(secs, nanos))
 }
 
+/// Whether `SPOT_REQUIRE_PG=1` is set: a missing server or extension is a failure.
+#[must_use]
+pub fn require_pg() -> bool {
+    std::env::var("SPOT_REQUIRE_PG").as_deref() == Ok("1")
+}
+
+/// The OS package that provides `extension`, for the failure message.
+fn package_for(extension: &str) -> &'static str {
+    if extension == "postgis" {
+        "postgresql-18-postgis-3"
+    } else {
+        "postgresql-contrib"
+    }
+}
+
+/// The pure decision of [`TestDb::require_extensions`]: given the names the server does not
+/// offer and the require flag, returns them (flag unset) or panics (flag set) when any.
+fn missing_or_panic(missing: Vec<String>, require: bool) -> Vec<String> {
+    if require && let Some(first) = missing.first() {
+        panic!(
+            "SPOT_REQUIRE_PG=1 but the server does not offer {missing:?}; install the OS package \
+             (for `{first}`: {})",
+            package_for(first)
+        );
+    }
+    missing
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_extensions_are_returned_when_not_required() {
+        let missing = vec!["postgis".to_owned()];
+        assert_eq!(missing_or_panic(missing.clone(), false), missing);
+        assert!(missing_or_panic(Vec::new(), false).is_empty());
+    }
+
+    #[test]
+    fn nothing_missing_passes_when_required() {
+        assert!(missing_or_panic(Vec::new(), true).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "postgresql-18-postgis-3")]
+    fn a_missing_extension_panics_when_required() {
+        missing_or_panic(vec!["postgis".to_owned()], true);
+    }
+
+    #[test]
+    #[should_panic(expected = "postgresql-contrib")]
+    fn a_missing_contrib_extension_names_contrib() {
+        missing_or_panic(vec!["btree_gist".to_owned()], true);
+    }
 
     #[test]
     fn names_carry_their_creation_time() {

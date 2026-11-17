@@ -64,10 +64,25 @@ never stand in for the build.
 `run.sh --quick|--full` passes `--signed-in` by default when `CI` is set (and `--signed-out` skips it):
 the driver starts the loopback stub in `stub-backend/` (see its README for the test credential and its
 safety rules), types the stub's URL into the shell's server picker, signs in on the login screen with the
-keyboard, and only then measures. Startup, download and memory stay signed-out (memory runs before the
-sign-in). A failed sign-in records the same error on the three signed-in ids and saves
+keyboard (or the build's hook, see "Sign-in paths"), and only then measures. Startup and download stay
+signed-out. A failed sign-in records the same error on the three signed-in ids (and on memory) and saves
 `sign-in-failure-run-N.png` next to the raw samples. Against the fixture page (`--fixture`) the sign-in
 screens do not exist, so the stub is started and exercised over HTTP only.
+
+### Sign-in paths
+
+The driver loads the page with `?testSignIn=1` in stub mode and, when `window.spotBrowser.signIn` is a
+function (WP-UI-09.T8), calls it with the stub's URL and the stub's test pair (imported from
+`stub-backend/server.mjs`, never copied). On `false` or a missing function it falls back to the keyboard
+sign-in. The raw run JSON records the path as `signInMethod: "hook" | "keyboard"`, so a silent regression
+to the fallback is visible.
+
+Order of the measures in one run: startup (cold, warm) and download, signed-out; sign-in; `browser.form.open`,
+`browser.list.scroll.frame`, `browser.child-edit.key`; last `browser.tabs.memory`, which needs a session
+to open its tabs. It fails with `memory: opened N of M tabs` if any tab did not open, instead of reporting
+the memory of an emptier shell. With `--signed-out` against a real build the memory result is missing (the
+budget gate fails a missing result), so CI uses `--signed-in`. The fixture page is always signed in, so it
+measures memory in either mode.
 
 ## Read a result
 

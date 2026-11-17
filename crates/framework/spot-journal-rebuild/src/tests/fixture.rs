@@ -49,6 +49,9 @@ pub(crate) enum Ev {
     },
     Domain,
     Audit,
+    /// An entry of an arbitrary topic; it carries a well-formed state payload for record 9500,
+    /// which is read only when a classifier says the topic is state.
+    Topic(&'static str),
 }
 
 pub(crate) fn insert(n: u64, version: u64) -> Ev {
@@ -122,12 +125,13 @@ pub(crate) fn line(event: &Ev, position: Position, source: &str) -> String {
             None,
             json!({"note": "posted"}),
         ),
-        Ev::Audit => (
-            "sys_role_changed",
-            "role",
-            8_000,
-            None,
-            json!({"role": "r1"}),
+        Ev::Audit => ("sys_doc_audit", "role", 8_000, None, json!({"role": "r1"})),
+        Ev::Topic(topic) => (
+            *topic,
+            "account",
+            9_500,
+            Some(1),
+            json!({"op": "insert", "entity_schema": 1, "image": {"name": "from-topic"}}),
         ),
     };
     let mut envelope = json!({
@@ -178,7 +182,7 @@ pub(crate) fn model(events: &[Ev], upto: usize) -> Model {
             Ev::Delete { entity, n, .. } => {
                 out.remove(&(entity.to_string(), uuid(*n)));
             }
-            Ev::Domain | Ev::Audit => {}
+            Ev::Domain | Ev::Audit | Ev::Topic(_) => {}
         }
     }
     out

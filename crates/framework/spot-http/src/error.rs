@@ -14,6 +14,27 @@ pub enum ServerError {
     /// `bind` was configured without any address.
     #[error("server bind list must not be empty")]
     EmptyBind,
+    /// Two listeners would bind overlapping addresses (the same address, or a wildcard address
+    /// and another address on the same port), whatever their audiences. Names only the clashing
+    /// address.
+    #[error("listener address {addr} overlaps another listener")]
+    AddressClash {
+        /// The address that clashes with an earlier one.
+        addr: SocketAddr,
+    },
+    /// A configuration value is outside its documented bounds. Names the key and the rule, never
+    /// the value.
+    #[error("setting `{key}` is invalid: {reason}")]
+    InvalidSetting {
+        /// The configuration key.
+        key: &'static str,
+        /// The rule it breaks.
+        reason: &'static str,
+    },
+    /// A consumer listener is configured but no consumer router was supplied
+    /// (`ServerBuilder::consumer_routes`).
+    #[error("a consumer listener is configured without a consumer router")]
+    NoConsumerRouter,
     /// The configured address could not be bound.
     #[error("failed to bind {addr}")]
     BindFailed {

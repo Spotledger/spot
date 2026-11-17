@@ -39,7 +39,7 @@ use spot_postgres::PgBackend;
 use spot_storage_contract::{Catalog, EntityDef};
 use tokio::sync::watch;
 
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result, apps, config, error, schema};
 
 /// One runtime change to a site's metadata, as it is written to `metadata.json`.
@@ -248,6 +248,9 @@ pub struct LiveMetadata {
     settings: Settings,
     live: Arc<LiveMeta>,
     bus: Arc<dyn InvalidationBus>,
+    /// The Redis-backed bus of the cluster-redis plugin when the host provided one (WP-PLT-19.T3):
+    /// an accelerator published to after the durable version store, never instead of it.
+    accelerator: Mutex<Option<Arc<dyn InvalidationBus>>>,
     store: Store,
     /// The last version this node reconciled with, so an idle poll costs one read.
     seen: Mutex<Version>,
@@ -340,6 +343,7 @@ impl LiveMetadata {
             settings,
             live,
             bus,
+            accelerator: Mutex::new(None),
             store,
             seen,
             applied,
@@ -362,6 +366,20 @@ impl LiveMetadata {
     /// The site identity.
     pub fn site(&self) -> &SiteId {
         &self.site
+    }
+
+    /// Adds the cluster-redis bus (`FallbackBus`): every change is published to it after the
+    /// durable version store. With none, nothing changes.
+    pub fn set_accelerator(&self, bus: Arc<dyn InvalidationBus>) {
+        *self.accelerator.lock().unwrap_or_else(|p| p.into_inner()) = Some(bus);
+    }
+
+    /// The accelerator bus, when the host provided one.
+    pub fn accelerator(&self) -> Option<Arc<dyn InvalidationBus>> {
+        self.accelerator
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// The bus the site's metadata changes are announced on.
@@ -443,6 +461,18 @@ impl LiveMetadata {
             )
             .await
             .map_err(|e| error(e.to_string()))?;
+        // The accelerator is best effort: the durable store above is the truth other nodes poll,
+        // and a Redis bus that cannot publish says so in its own status (it falls back to the
+        // per-node bus); a metadata change never fails because of it.
+        let accelerator = self.accelerator();
+        if let Some(accelerator) = accelerator {
+            let _ = accelerator
+                .publish(
+                    &self.site,
+                    Invalidation::meta(version, snapshot.hash().clone()),
+                )
+                .await;
+        }
         (self.settings.notify)();
         Ok(version)
     }
@@ -622,4 +652,49 @@ impl Service for LiveMetadata {
             }
         })
     }
+}
+
+/// This module's start order: after storage (100) and auth (200), before customise (400).
+pub const ORDER: u32 = 300;
+
+/// Metadata: the live snapshot, its version store and the additive schema plan. Adopting a
+/// new version rebuilds the site runtime through this marker, which is the same path
+/// `spot reload` takes. Provides the `LiveMetadata` port.
+///
+/// # Errors
+///
+/// A site environment that is missing, a catalogue that does not build, or a store that
+/// cannot start.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
+    if !ctx.assembling() {
+        return Ok(());
+    }
+    let env = *ctx.env()?;
+    let catalog = crate::schema::catalog(&env.permission.meta)?;
+    let notify: Arc<dyn Fn() + Send + Sync> = {
+        let root = env.root.to_path_buf();
+        let name = env.site.site.clone();
+        Arc::new(move || {
+            if let Err(e) = crate::request_reload(&root, &name) {
+                eprintln!("metadata reload refused for site `{name}`: {e}");
+            }
+        })
+    };
+    let metadata = LiveMetadata::new(Settings {
+        root: env.root.to_path_buf(),
+        loaded: env.loaded.clone(),
+        site: env.site.clone(),
+        backend: Some(env.backend.clone()),
+        catalog: Some(catalog),
+        notify,
+        clock: Arc::clone(ctx.clock()),
+    })
+    .await?;
+    // The cluster-redis bus, when the host built the plugin before the modules (profile `cluster`
+    // with `[services.cluster_redis] enabled`): published to after the durable store.
+    if let Some(bus) = ctx.port::<dyn InvalidationBus>() {
+        metadata.set_accelerator(bus);
+    }
+    ctx.add(metadata.clone());
+    ctx.provide(metadata)
 }

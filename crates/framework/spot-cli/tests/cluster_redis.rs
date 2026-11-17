@@ -274,7 +274,7 @@ fn ctx(table: Option<&str>, assembling: bool) -> SiteCtx<'static> {
     )
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_disabled_or_absent_table_registers_nothing() {
     for table in [None, Some("enabled = false\nurl = \"redis://127.0.0.1:1\"")] {
         let mut ctx = ctx(table, true);
@@ -284,7 +284,7 @@ async fn a_disabled_or_absent_table_registers_nothing() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_enabled_table_with_a_bad_setting_stops_the_start() {
     let mut ctx = ctx(
         Some("enabled = true\nurl = \"redis://10.9.9.9:6379\"\nallow_plaintext = true"),
@@ -303,7 +303,7 @@ fn ctx_with_unknown_key() -> SiteCtx<'static> {
     )
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unreachable_server_stops_the_start_and_never_falls_back() {
     // Nothing listens on port 1: the site that asked for Redis must not start without it.
     let settings = enabled("redis://127.0.0.1:1", &unique_prefix("down"));
@@ -347,7 +347,7 @@ fn futures_pending() -> impl futures_core::Stream<Item = BusEvent> + Send {
     Pending
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_refused_publish_falls_back_to_the_per_node_bus_and_says_so() {
     let status = status();
     let bus = FallbackBus::new(Arc::new(Refusing), Arc::clone(&status), system());
@@ -360,7 +360,7 @@ async fn a_refused_publish_falls_back_to_the_per_node_bus_and_says_so() {
     assert!(status.degraded_reason().unwrap().contains("per-node bus"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_working_primary_delivers_each_change_once() {
     let status = status();
     let primary: Arc<dyn InvalidationBus> = Arc::new(InProcessBus::new(16));
@@ -384,7 +384,7 @@ fn status() -> Arc<Status> {
 
 // ---- against a server --------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_hosts_share_leases_and_a_stale_holder_is_refused() {
     let Some(url) = base() else { return };
     let prefix = unique_prefix("lease");
@@ -422,7 +422,7 @@ async fn two_hosts_share_leases_and_a_stale_holder_is_refused() {
     b.coordinator.release(&second).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_invalidation_reaches_both_hosts() {
     let Some(url) = base() else { return };
     let prefix = unique_prefix("bus");
@@ -452,7 +452,7 @@ async fn an_invalidation_reaches_both_hosts() {
     assert!(!a.status.bus_degraded());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tenants_never_share_a_cache_key() {
     let Some(url) = base() else { return };
     let prefix = unique_prefix("tenant");
@@ -479,7 +479,7 @@ async fn tenants_never_share_a_cache_key() {
     host.cache.clear_site(&globex).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn losing_the_server_stops_claims_and_recovery_never_double_runs() {
     let Some(url) = base() else { return };
     let target = url.trim_start_matches("redis://").to_owned();
@@ -593,7 +593,7 @@ impl Proxy {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_clock_far_from_the_server_stops_the_start() {
     let Some(url) = base() else { return };
     let skewed: Arc<dyn Clock> = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));
@@ -609,7 +609,7 @@ async fn a_clock_far_from_the_server_stops_the_start() {
     assert!(error.contains("clock differs"), "{error}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_start_up_check_reports_the_version_and_the_acl() {
     let Some(url) = base() else { return };
     let host = build(
@@ -638,7 +638,7 @@ async fn the_start_up_check_reports_the_version_and_the_acl() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_restricted_user_starts_and_a_wrong_password_never_leaks() {
     use std::os::unix::fs::PermissionsExt;
     let Ok(url) = std::env::var("SPOT_TEST_REDIS_ACL_URL") else {

@@ -1,0 +1,12 @@
+# key_admin_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "key_admin_host.settings_invalid"
+class = "none"
+summary = "The [services.key_admin] table has an unknown key or a value out of range, so key administration does not start."
+explanation_key = "error.key_admin_host.settings_invalid"
+params = []
+remedy = "Use only enabled and max_key_days (1 to 3650)."
+since = "0.1.0"
+retired = true
+

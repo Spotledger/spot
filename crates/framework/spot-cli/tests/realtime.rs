@@ -172,7 +172,8 @@ async fn a_client_hears_the_room_it_may_join_and_nothing_from_the_one_it_may_not
     w.started.finish().await;
 }
 
-const VIEWER_GRANT: &str = "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"select\"]";
+const VIEWER_GRANT: &str =
+    "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"report\", \"select\"]";
 const VIEWER_NO_READ: &str = "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"select\"]";
 
 /// Rewrites the Viewer's grant on Task and publishes the new snapshot (a reload).
@@ -495,7 +496,7 @@ async fn a_notice_reaches_its_user_after_commit_and_never_another_or_a_rolled_ba
     assert_eq!(notice["room"], format!("user:{viewer_id}"));
     assert_eq!(notice["kind"], "notification");
     assert_eq!(notice["payload"]["event"], "user_notice");
-    assert_eq!(notice["payload"]["data"]["kind"], "note_created");
+    assert_eq!(notice["payload"]["data"]["doctype"], "note");
     assert!(
         !notice.to_string().contains(&format!("notify:{viewer_id}")),
         "the notice carries ids and short scalars only: {notice}"

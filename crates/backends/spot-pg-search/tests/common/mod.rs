@@ -1,7 +1,8 @@
 //! Shared fixture: a scratch database, a searchable DocType, its entity table and its projection.
 //!
-//! `spot-postgres`'s own `prepare` still refuses a catalog with a `search` declaration
-//! (`schema::refuse_search`, WP-STO-13.T1's flag to remove), so the entity table here is created
+//! These tests (`pg.rs`, `unaccent.rs`) drive the projection directly, without the maintenance
+//! hook that `spot-postgres` calls on a document write (WP-STO-13.T3; its end-to-end tests are in
+//! `search_wiring.rs`, which prepares through the backend), so the entity table here is created
 //! by the fixture with the columns `prepare` builds: `id uuid` primary key, `version bigint`, the
 //! declared text columns and their length checks. Everything the projection does is against the
 //! same table a prepared catalog would give it.
@@ -98,17 +99,67 @@ pub struct Env {
     pub plan: ProjectionPlan,
 }
 
-/// A prepared environment, or `None` (printing why) without a server or a needed extension.
-pub async fn env(typo: bool) -> Option<Env> {
-    let db = TestDb::create().await?;
+/// What the required-extension check decided for a server that lacks some extensions.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExtensionCheck {
+    /// Nothing is missing: go on.
+    Present,
+    /// Something is missing and `SPOT_REQUIRE_PG` is unset: print this and return.
+    Skip(String),
+    /// Something is missing and `SPOT_REQUIRE_PG=1`: panic with this, so CI cannot pass by skipping.
+    Fail(String),
+}
+
+/// The decision, apart from the database so it can be tested without one: `missing` is what the
+/// server does not offer, `require` is whether `SPOT_REQUIRE_PG=1` is set. (`spot-postgres`'s
+/// `TestDb` has no `require_extensions` helper yet, so the same decision is written here.)
+pub fn judge_extensions(missing: &[String], require: bool) -> ExtensionCheck {
+    if missing.is_empty() {
+        return ExtensionCheck::Present;
+    }
+    if require {
+        ExtensionCheck::Fail(format!(
+            "SPOT_REQUIRE_PG=1 but the test database does not offer the extension(s) {missing:?} \
+             that spot-pg-search needs (ADR-087: unaccent folds accents, pg_trgm gives typo \
+             tolerance); install postgresql-contrib or the matching package on the CI server"
+        ))
+    } else {
+        ExtensionCheck::Skip(format!(
+            "SKIPPED: the server does not offer {missing:?} (spot-pg-search)"
+        ))
+    }
+}
+
+/// Creates `unaccent` and `pg_trgm` in the scratch database. `false` (after printing `SKIPPED:`)
+/// when the server lacks one and `SPOT_REQUIRE_PG` is unset; a panic naming the package when it
+/// is set.
+pub async fn require_extensions(db: &TestDb) -> bool {
     let missing = db.create_extensions(&["unaccent", "pg_trgm"]).await;
-    if !missing.is_empty() {
-        println!("SKIPPED: the server does not offer {missing:?}");
+    let require = std::env::var("SPOT_REQUIRE_PG").as_deref() == Ok("1");
+    match judge_extensions(&missing, require) {
+        ExtensionCheck::Present => true,
+        ExtensionCheck::Skip(message) => {
+            println!("{message}");
+            false
+        }
+        ExtensionCheck::Fail(message) => panic!("{message}"),
+    }
+}
+
+/// A prepared environment, or `None` (printing why) without a server or a needed extension.
+/// With `SPOT_REQUIRE_PG=1` a missing extension fails instead of skipping.
+pub async fn env(typo: bool) -> Option<Env> {
+    env_with(typo, plan(typo)).await
+}
+
+/// As [`env`], with a caller-built plan (for example one whose title is projected with `simple`).
+pub async fn env_with(typo: bool, plan: ProjectionPlan) -> Option<Env> {
+    let db = TestDb::create().await?;
+    if !require_extensions(&db).await {
         return None;
     }
     let backend = PgBackend::connect(db.config()).await.expect("connect");
     let catalog = catalog_with(typo);
-    let plan = plan(typo);
     entity_table(&db).await;
     let mut tx = begin(&backend, &catalog).await;
     prepare(&mut tx, std::slice::from_ref(&plan))

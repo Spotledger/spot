@@ -1,0 +1,26 @@
+[package]
+name = "spot-deep-access-pg"
+description = "PostgreSQL stores for deep support access (WP-SEC-07.T2, ADR-070 s9, ADR-44): requests, consent records, receipt nonces (single use across nodes), revocations, credential digests and the customer's enrolled signing keys; tenant on every row, no secret ever stored"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `ReceiptNonces`, `RevocationStore`, `Revocation`, `DeepError`: the sync ports the bridge adapters implement.
+spot-deep-access = { path = "../../framework/spot-deep-access" }
+# `KeyId` for the nonce key.
+spot-signed-command = { path = "../../framework/spot-signed-command" }
+# The one shared bridge for the sync ports.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

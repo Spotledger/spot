@@ -226,8 +226,7 @@ fn snapshot_and_restore_carry_the_cursor_and_the_holds() {
     r1.add_destination(dest("d", &["item"])).unwrap();
     r1.tick(0).unwrap();
     let snap = r1.snapshot();
-    // The snapshot is plain serde data. (`spot-sync-skew`'s `HoldSet` has tuple map keys, which
-    // JSON cannot carry; a binary format can. See the task report.)
+    // The snapshot is plain serde data and round-trips as JSON.
     let mut r2 = relay_with(cfg(), stream_of(vec![e]), src, q.clone());
     r2.add_destination(dest("d", &["item"])).unwrap();
     r2.restore(snap.clone()).unwrap();
@@ -237,6 +236,51 @@ fn snapshot_and_restore_carry_the_cursor_and_the_holds() {
         .on_node_upgraded("d", report(&[("item", &[1, 2])]))
         .unwrap();
     assert_eq!(rel.bundles_queued, 1);
+}
+
+#[test]
+fn a_snapshot_round_trips_through_json_and_the_restored_relay_ticks_the_same() {
+    let mut src = Src::default();
+    src.put("item", "I1", plain(), 1);
+    src.put("item", "I2", plain(), 3);
+    let first = entry(1, "a", "item", "I1", 1);
+    let mut held = entry(2, "b", "item", "I2", 1);
+    held.major = 2;
+    // A later version of the held record is withheld behind it.
+    let behind = entry(3, "c", "item", "I2", 2);
+    let entries = vec![first, held, behind];
+
+    let q1 = SharedQueue::default();
+    let mut r1 = relay_with(cfg(), stream_of(entries.clone()), src.clone(), q1.clone());
+    r1.add_destination(dest("d", &["item"])).unwrap();
+    r1.tick(0).unwrap();
+    r1.on_ack("d", 1).unwrap();
+    assert_eq!(r1.held_positions("d"), vec![2, 3]);
+
+    let snap = r1.snapshot();
+    let text = serde_json::to_string(&snap).unwrap();
+    let back: spot_sync_hub::RelayState = serde_json::from_str(&text).unwrap();
+    assert_eq!(back, snap);
+    assert_eq!(back.destinations["d"].acked, Some(1));
+
+    let q2 = SharedQueue::default();
+    let mut r2 = relay_with(cfg(), stream_of(entries), src, q2.clone());
+    r2.add_destination(dest("d", &["item"])).unwrap();
+    r2.restore(back).unwrap();
+    assert_eq!(r2.cursor(), r1.cursor());
+    assert_eq!(r2.held_positions("d"), vec![2, 3]);
+
+    // The same next step: upgrade, then tick.
+    let upgraded = report(&[("item", &[1, 2])]);
+    let rel1 = r1.on_node_upgraded("d", upgraded.clone()).unwrap();
+    let rel2 = r2.on_node_upgraded("d", upgraded).unwrap();
+    assert_eq!(rel1, rel2);
+    assert_eq!(r1.tick(1).unwrap(), r2.tick(1).unwrap());
+    let after_first = |q: &SharedQueue| -> Vec<_> {
+        served(q, "d").into_iter().filter(|(_, p)| *p > 1).collect()
+    };
+    assert_eq!(after_first(&q1), after_first(&q2));
+    assert!(!after_first(&q2).is_empty());
 }
 
 #[test]
@@ -525,7 +569,22 @@ fn every_code_is_in_the_catalogue() {
 }
 
 /// A scope whose entitlement can be revoked while the relay holds the destination's entries.
-struct Revocable(std::rc::Rc<std::cell::Cell<bool>>);
+/// A flag a test flips while the relay owns the scope (`Cell<bool>` made `Send`).
+struct Flag(std::sync::atomic::AtomicBool);
+
+impl Flag {
+    fn new(value: bool) -> Self {
+        Self(std::sync::atomic::AtomicBool::new(value))
+    }
+    fn get(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn set(&self, value: bool) {
+        self.0.store(value, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+struct Revocable(std::sync::Arc<Flag>);
 
 impl DestinationScope for Revocable {
     fn covers(&self, entry: &StreamEntry) -> bool {
@@ -547,7 +606,7 @@ fn a_held_record_is_not_released_after_the_scope_was_revoked() {
     e1.major = 2;
     let q = SharedQueue::default();
     let mut r = relay_with(cfg(), stream_of(vec![e1]), src, q.clone());
-    let live = std::rc::Rc::new(std::cell::Cell::new(true));
+    let live = std::sync::Arc::new(Flag::new(true));
     r.add_destination(Destination::new(
         "d",
         Box::new(Revocable(live.clone())),

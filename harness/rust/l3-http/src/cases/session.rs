@@ -21,7 +21,7 @@ const SECTION: &str = "Sessions";
 
 fn run_own(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the session case could not start its own fixture"));
         };
         let result = a_user_lists_and_ends_only_their_own_sessions(&own).await;
@@ -32,7 +32,7 @@ fn run_own(_shared: &Fixture) -> CaseFuture<'_> {
 
 fn run_key(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the session case could not start its own fixture"));
         };
         let result = a_first_sign_in_session_and_a_bearer_secret_cannot_manage_sessions(&own).await;

@@ -356,6 +356,24 @@ impl ControllerSet {
         })
     }
 
+    /// Every (app, DocType) pair that has at least one registered controller, sorted by app and
+    /// then DocType, without repeats. Empty for an empty set. A DocType served only by the
+    /// framework default is not listed: it has no registered controller.
+    ///
+    /// A cheap read of the immutable set: no lock, and it holds only this set's (this site's)
+    /// controllers.
+    pub fn doctypes(&self) -> Vec<(String, String)> {
+        let pairs: BTreeSet<(&str, &str)> = self
+            .entries
+            .iter()
+            .map(|e| (e.app.as_str(), e.doctype.as_str()))
+            .collect();
+        pairs
+            .into_iter()
+            .map(|(app, doctype)| (app.to_owned(), doctype.to_owned()))
+            .collect()
+    }
+
     /// Every app that registered at least one controller, sorted and without repeats.
     pub fn apps(&self) -> Vec<String> {
         let apps: BTreeSet<&str> = self.entries.iter().map(|e| e.app.as_str()).collect();
@@ -533,6 +551,11 @@ impl ControllerRegistry {
     /// See [`ControllerSet::controller_for`].
     pub fn controller_for(&self, doctype: &str) -> Registered {
         self.set.controller_for(doctype)
+    }
+
+    /// See [`ControllerSet::doctypes`].
+    pub fn doctypes(&self) -> Vec<(String, String)> {
+        self.set.doctypes()
     }
 
     /// See [`ControllerSet::methods`].

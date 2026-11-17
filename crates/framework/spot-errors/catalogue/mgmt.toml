@@ -1,0 +1,262 @@
+# mgmt management API codes: spot-mgmt-api reasons and the spot mgmt client. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "mgmt.approval_required"
+class = "none"
+summary = "The operation needs an approval before it can run."
+explanation_key = "error.mgmt.approval_required"
+params = []
+remedy = "Ask an authorised approver to approve it, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.audit_unavailable"
+class = "none"
+summary = "The audit record could not be written, so the call was refused."
+explanation_key = "error.mgmt.audit_unavailable"
+params = []
+remedy = "Fix the audit store and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.body_too_large"
+class = "none"
+summary = "The request body is larger than the management API accepts."
+explanation_key = "error.mgmt.body_too_large"
+params = []
+remedy = "Send a smaller body."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.cancel_not_supported"
+class = "none"
+summary = "The operation cannot be cancelled once it has started."
+explanation_key = "error.mgmt.cancel_not_supported"
+params = []
+remedy = "Wait for the operation to finish."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.cancelled"
+class = "none"
+summary = "The command was cancelled before it finished."
+explanation_key = "error.mgmt.cancelled"
+params = []
+remedy = "Start the command again if it is still wanted."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.command_id_reused"
+class = "none"
+summary = "The command id was already used for a different command."
+explanation_key = "error.mgmt.command_id_reused"
+params = []
+remedy = "Use a new command id."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.command_store_unavailable"
+class = "none"
+summary = "The command store could not be reached."
+explanation_key = "error.mgmt.command_store_unavailable"
+params = []
+remedy = "Check the host's database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.conflict"
+class = "none"
+summary = "Another command holds the lock the operation needs."
+explanation_key = "error.mgmt.conflict"
+params = []
+remedy = "Wait for the other command to finish and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.forbidden"
+class = "none"
+summary = "The operator is not allowed to run this operation."
+explanation_key = "error.mgmt.forbidden"
+params = []
+remedy = "Use an operator who holds the permission."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.idempotency_key_reused"
+class = "none"
+summary = "The idempotency key was already used for a different request."
+explanation_key = "error.mgmt.idempotency_key_reused"
+params = []
+remedy = "Use a new idempotency key."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.internal"
+class = "none"
+summary = "The management API hit an internal error."
+explanation_key = "error.mgmt.internal"
+params = []
+remedy = "Retry; if it repeats, report the code and the request id to support."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.invalid_parameter"
+class = "none"
+summary = "A parameter of the operation is missing or not valid."
+explanation_key = "error.mgmt.invalid_parameter"
+params = []
+remedy = "Correct the named parameter and send the request again."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.no_client_certificate"
+class = "none"
+summary = "The request carried no client certificate."
+explanation_key = "error.mgmt.no_client_certificate"
+params = []
+remedy = "Connect with an operator client certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.nonce_store_unavailable"
+class = "none"
+summary = "The nonce store could not be reached, so the signed command was refused."
+explanation_key = "error.mgmt.nonce_store_unavailable"
+params = []
+remedy = "Check the host's database and retry with a new nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.not_available_here"
+class = "none"
+summary = "The operation is not available on this host or in this mode."
+explanation_key = "error.mgmt.not_available_here"
+params = []
+remedy = "Run it on the host that offers it."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.operation_not_permitted"
+class = "none"
+summary = "This operator may not run this operation."
+explanation_key = "error.mgmt.operation_not_permitted"
+params = []
+remedy = "Use an operator whose role allows the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.operator_not_allow_listed"
+class = "none"
+summary = "The certificate's subject is not on the operator allow-list."
+explanation_key = "error.mgmt.operator_not_allow_listed"
+params = []
+remedy = "Add the operator to the allow-list or use a listed operator."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.rate_limited"
+class = "none"
+summary = "Too many requests came in a short time."
+explanation_key = "error.mgmt.rate_limited"
+params = []
+remedy = "Wait a moment and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.refused_by_policy"
+class = "none"
+summary = "A policy refuses this operation in the current state."
+explanation_key = "error.mgmt.refused_by_policy"
+params = []
+remedy = "Change the state the policy checks, or ask an administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.replayed"
+class = "none"
+summary = "The signed command was already used."
+explanation_key = "error.mgmt.replayed"
+params = []
+remedy = "Sign the command again with a new nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.signature_expired"
+class = "none"
+summary = "The command signature has expired."
+explanation_key = "error.mgmt.signature_expired"
+params = []
+remedy = "Sign the command again."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.signature_invalid"
+class = "none"
+summary = "The command signature is missing, malformed or wrong."
+explanation_key = "error.mgmt.signature_invalid"
+params = []
+remedy = "Sign the command again with the operator key."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.signature_unbound"
+class = "none"
+summary = "The command signature is not bound to this request."
+explanation_key = "error.mgmt.signature_unbound"
+params = []
+remedy = "Sign the exact request you send."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.too_many_commands"
+class = "none"
+summary = "Too many commands are running at once."
+explanation_key = "error.mgmt.too_many_commands"
+params = []
+remedy = "Wait for a running command to finish and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.unauthenticated"
+class = "none"
+summary = "The caller is not authenticated."
+explanation_key = "error.mgmt.unauthenticated"
+params = []
+remedy = "Connect with a valid operator client certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.unknown"
+class = "none"
+summary = "The management API answered with no error code."
+explanation_key = "error.mgmt.unknown"
+params = []
+remedy = "Check the server version and its logs."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.unknown_command"
+class = "none"
+summary = "The command id is not known."
+explanation_key = "error.mgmt.unknown_command"
+params = []
+remedy = "Check the command id."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.unknown_operation"
+class = "none"
+summary = "The operation is not in the management catalogue."
+explanation_key = "error.mgmt.unknown_operation"
+params = []
+remedy = "Use an operation the catalogue lists."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt.wrong_audience"
+class = "none"
+summary = "The command is signed for a different host."
+explanation_key = "error.mgmt.wrong_audience"
+params = []
+remedy = "Sign the command for the host you are calling."
+since = "0.1.0"

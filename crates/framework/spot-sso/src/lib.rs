@@ -39,6 +39,14 @@
 //!   wildcard, `state` for CSRF, `nonce` for replay, PKCE for every client, a bounded clock
 //!   skew, and keys taken only from the configured `jwks_uri`.
 //!
+//! # Audiences (ADR-083)
+//!
+//! A provider is configured for one [`Audience`] (`staff` by default). [`resolve_for_audience`]
+//! reads it from the configuration and refuses a mismatch with the listener; a consumer
+//! provider can only end in [`Resolution::ConsumerSignIn`], never in a user, a link or a
+//! just-in-time creation ([`link_identity_for`] refuses too). The tenant sign-in policy
+//! applies to staff and partner sign-ins only ([`decide_sso_signin_for`]).
+//!
 //! # The no-weaker-method rule
 //!
 //! A sign-in through SSO carries [`AuthMethod::Sso`] and the authentication context the IdP
@@ -50,6 +58,8 @@
 
 #[cfg(feature = "testing")]
 pub mod contract;
+#[cfg(feature = "testing")]
+pub mod contract_stores;
 pub mod error;
 mod identity;
 mod jose;
@@ -59,6 +69,7 @@ pub mod oidc;
 pub mod pending;
 pub mod policy;
 pub mod provider;
+pub mod provider_store;
 pub mod replay;
 pub mod resolve;
 pub mod saml;
@@ -76,16 +87,27 @@ pub use oidc::flow::{
 };
 pub use oidc::jwks::{Jwk, Jwks, KeyCache, MIN_RSA_BITS, PublicKey, SkippedKey, parse_jwks};
 pub use oidc::jwt::ParsedToken;
-pub use pending::{MemoryPendingStore, PENDING_TTL_SECONDS, PendingAuth, PendingStore};
+pub use pending::{
+    MemoryPendingStore, PENDING_TTL_SECONDS, PendingAuth, PendingError, PendingStore,
+};
 pub use policy::{
     AlertLevel, BreakGlassAlert, BreakGlassReason, DirectoryUser, DirectoryView, JitPolicy,
     JitRule, LocalDecision, SecondFactor, SignInMode, SignInPolicy, check_policy,
-    decide_local_signin, decide_sso_signin, validate_change,
+    decide_local_signin, decide_sso_signin, decide_sso_signin_for, validate_change,
 };
-pub use provider::{ClaimsMap, ClientAuth, Jwa, ProviderConfig, ProviderId, RawProviderConfig};
+pub use provider::{
+    ClaimsMap, ClientAuth, Jwa, ProviderConfig, ProviderId, RawProviderConfig, UserOptions,
+};
+pub use provider_store::{
+    MemoryProviderStore, ProviderListing, ProviderResult, ProviderStore, ProviderStoreError,
+};
 pub use replay::{Claim, MemoryReplayStore, ReplayError, ReplayStore, StoreFuture, namespaced};
-pub use resolve::{JitCreated, Resolution, identity_key, link_identity, resolve};
+pub use resolve::{
+    JitCreated, Resolution, identity_key, link_identity, link_identity_for, resolve,
+    resolve_for_audience, user_type_fits,
+};
 pub use saml::{
     IdpConfig, IdpMetadata, MetadataTrust, SamlBinding, SamlClaimsMap, SamlEndpoint,
     SamlPendingAuth, SamlSignIn, SignaturePolicy, SpConfig,
 };
+pub use spot_core::Audience;

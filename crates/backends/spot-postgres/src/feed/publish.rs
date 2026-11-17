@@ -53,6 +53,13 @@ impl Log {
         }
     }
 
+    fn index(self) -> usize {
+        match self {
+            Log::Outbox => 0,
+            Log::Changes => 1,
+        }
+    }
+
     pub(super) fn lock_key(self) -> i64 {
         match self {
             Log::Outbox => OUTBOX_LOCK,
@@ -75,6 +82,25 @@ impl Log {
     }
 }
 
+/// Lets the readers of one process share publications instead of queueing one each.
+///
+/// A reader needs one publication that *starts after* its own call began (so that everything
+/// committed before the call is visible to it). Concurrent readers used to take the advisory lock
+/// one after the other and each ran the publication, the later ones finding nothing new: with a
+/// dozen readers polling a busy log, the publications were most of the database's work. Under the
+/// gate a reader that waited for the lock skips its own publication when another reader's
+/// publication started after it arrived (and has finished, since the lock was released); the
+/// advisory lock still keeps other processes' publishers apart.
+#[derive(Default)]
+pub(crate) struct PublishGate {
+    /// Held while one reader of this process publishes.
+    turn: tokio::sync::Mutex<()>,
+    /// How many publications this process has begun.
+    begun: std::sync::atomic::AtomicU64,
+    /// The number of publications begun when the newest *successful* one began, counting it.
+    done: std::sync::atomic::AtomicU64,
+}
+
 /// Publishes what is pending in `log`, then returns the generation and up to `limit` rows after
 /// `after`. Fails with `ResyncRequired` for a bookmark that cannot be continued from.
 pub(super) async fn publish_and_read(
@@ -83,8 +109,16 @@ pub(super) async fn publish_and_read(
     after: FeedPosition,
     limit: u32,
 ) -> StorageResult<(i64, Vec<Row>)> {
+    let gate = backend.publish_gate(log.index());
+    // Read before queueing: a publication begun after this point covers everything committed
+    // before this call.
+    let arrived = gate.begun.load(std::sync::atomic::Ordering::SeqCst);
+    let turn = gate.turn.lock().await;
+    // A publication that began after this reader arrived and succeeded covers it.
+    let needed = gate.done.load(std::sync::atomic::Ordering::SeqCst) <= arrived;
     let mut conn = backend.checkout().await?;
-    {
+    if needed {
+        let mark = gate.begun.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
         let tx = conn
             .build_transaction()
             .isolation_level(IsolationLevel::ReadCommitted)
@@ -96,7 +130,9 @@ pub(super) async fn publish_and_read(
             .map_err(db)?;
         tx.execute(log.publish_sql(), &[]).await.map_err(db)?;
         tx.commit().await.map_err(db)?;
+        gate.done.store(mark, std::sync::atomic::Ordering::SeqCst);
     }
+    drop(turn);
     let tx = conn
         .build_transaction()
         .isolation_level(IsolationLevel::RepeatableRead)

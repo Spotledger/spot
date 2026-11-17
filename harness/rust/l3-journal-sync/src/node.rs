@@ -54,6 +54,87 @@ pub struct NodeSpec {
     pub extra_config_toml: String,
 }
 
+/// `text` without the `[services.secrets]` table the harness wrote into `common.toml` (two lines),
+/// for a test that writes a table of its own (a key file under another directory).
+#[must_use]
+pub fn drop_secrets_table(text: &str) -> String {
+    let mut out = Vec::new();
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line.trim() == "[services.secrets]" {
+            // The table's own keys: the lines up to the next table header.
+            while lines
+                .peek()
+                .is_some_and(|next| !next.trim_start().starts_with('['))
+            {
+                lines.next();
+            }
+            continue;
+        }
+        out.push(line);
+    }
+    let mut joined = out.join("\n");
+    joined.push('\n');
+    joined
+}
+
+/// Writes a throwaway CA and a leaf certificate into `root` (`hub.pem`, `hub.key`, `ca.pem`) and
+/// returns the `[services.sync_hub.tls]` table that names them: a hub listener needs mutual TLS
+/// to start, and the harness's hub nodes are real hubs.
+///
+/// # Panics
+/// When a certificate or a file cannot be made.
+#[must_use]
+#[allow(clippy::expect_used)]
+pub fn write_hub_tls(root: &std::path::Path) -> String {
+    use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).expect("ca params");
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "l3 journal sync test CA");
+    let ca_key = KeyPair::generate().expect("ca key");
+    let ca = ca_params.self_signed(&ca_key).expect("ca");
+    let issuer = Issuer::new(ca_params, ca_key);
+    let key = KeyPair::generate().expect("leaf key");
+    let leaf = CertificateParams::new(vec!["localhost".to_owned()])
+        .expect("leaf params")
+        .signed_by(&key, &issuer)
+        .expect("leaf");
+    std::fs::write(root.join("hub.pem"), leaf.pem()).expect("write hub.pem");
+    std::fs::write(root.join("ca.pem"), ca.pem()).expect("write ca.pem");
+    let key_path = root.join("hub.key");
+    std::fs::write(&key_path, key.serialize_pem()).expect("write hub.key");
+    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+        .expect("chmod hub.key");
+    "\n[services.sync_hub.tls]\ncert = \"hub.pem\"\nkey = \"hub.key\"\nclient_ca = \"ca.pem\"\n"
+        .to_owned()
+}
+
+/// Whether `node` is configured as a hub: `[services.node_role]` with `role = "hub"` in its
+/// `common.toml`. The harness writes only the inert `role.toml` side file for a node of
+/// [`Role::Hub`]; a test that wants the hosted hub writes the real table itself (with
+/// [`write_hub_tls`]). A scenario that needs hosted sync probes this before it probes a route:
+/// an unauthenticated request to an unknown path answers `401`, which a route probe misreads as
+/// "served".
+#[must_use]
+pub fn hub_is_wired(node: &Node) -> bool {
+    let Ok(text) = std::fs::read_to_string(node.root().join("common.toml")) else {
+        return false;
+    };
+    let mut in_table = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_table = line == "[services.node_role]";
+        } else if in_table && line.replace(' ', "") == "role=\"hub\"" {
+            return true;
+        }
+    }
+    false
+}
+
 /// The role fragment for `spec`, built in one place so every later task that gives a node a
 /// real role changes this function instead of its own copy.
 ///
@@ -184,13 +265,27 @@ impl Node {
                  shutdown_grace = 5\n\
                  [postgres]\n\
                  admin_url = {url:?}\n\
-                 pool_max_size = 16\n\
+                 pool_max_size = 8\n\
+                 [services.secrets]\n\
+                 kek_file = {:?}\n\
+                 [services.signin_throttle]\n\
+                 per_account = {{ capacity = 100000, per_seconds = 900 }}\n\
+                 per_source = {{ capacity = 100000, per_seconds = 900 }}\n\
+                 per_tenant = {{ capacity = 10000000, per_seconds = 900 }}\n\
                  [trust]\n\
                  require_signed = false\n",
-                repo.join("apps/platform").display().to_string()
+                repo.join("apps/platform").display().to_string(),
+                format!("{}/keys/{{site}}.json", root.display()),
             ),
         )
         .unwrap_or_else(|e| panic!("cannot write common.toml: {e}"));
+        // The sign-in stores seal their credentials through the vault: the site needs its key
+        // file before it exists.
+        std::fs::create_dir_all(root.join("keys"))
+            .unwrap_or_else(|e| panic!("cannot create the key directory: {e}"));
+        spot_cli::services::secrets::init_key_file(&root.join(format!("keys/{site}.json")), &site)
+            .await
+            .unwrap_or_else(|e| panic!("the key file of `{site}`: {e}"));
         copy_dir(&repo.join("apps/sample"), &root.join("sample"));
         let log = root.join("l3-journal-sync.log");
         let secret = spot_cli::new_site_of(&root, &site, "en", SiteKind::HostWide)

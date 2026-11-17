@@ -53,7 +53,9 @@ fn invocation(site: &str) -> Invocation {
         actor: Actor::System {
             component: Name::new("capture_test").unwrap(),
         },
-        command_id: CommandId::new("cmd-capture").ok(),
+        // One command id per call: the host's command ledger refuses a reused id for a different
+        // request.
+        command_id: CommandId::new(&format!("cmd-capture-{}", RecordId::new_v7())).ok(),
         language: None,
         now: OffsetDateTime::now_utc(),
     }
@@ -73,7 +75,7 @@ fn rename(name: &str) -> DocumentPatch {
     patch
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn normal_traffic_gives_no_finding_and_a_bypass_raises_and_clears() {
     let Some(env) = Env::new(SERVICES).await else {
         return;
@@ -85,13 +87,12 @@ async fn normal_traffic_gives_no_finding_and_a_bypass_raises_and_clears() {
         .live(&env.site)
         .expect("the site is serving");
     let engine = live.engine().expect("the engine is attached");
-    let inv = invocation(&env.site);
 
     // Normal traffic: 20 creates, every other one updated, every fifth one deleted.
     let mut ids = Vec::new();
     for n in 0..20 {
         let saved = engine
-            .create(&inv, label(&format!("L{n}")))
+            .create(&invocation(&env.site), label(&format!("L{n}")))
             .await
             .unwrap()
             .value;
@@ -101,7 +102,7 @@ async fn normal_traffic_gives_no_finding_and_a_bypass_raises_and_clears() {
         if n % 2 == 0 {
             engine
                 .update(
-                    &inv,
+                    &invocation(&env.site),
                     "label",
                     doc.id(),
                     rename(&format!("R{n}")),
@@ -114,7 +115,12 @@ async fn normal_traffic_gives_no_finding_and_a_bypass_raises_and_clears() {
     for (n, doc) in ids.iter().enumerate() {
         if n % 5 == 4 && n % 2 == 1 {
             engine
-                .delete(&inv, "label", doc.id(), doc.version().unwrap())
+                .delete(
+                    &invocation(&env.site),
+                    "label",
+                    doc.id(),
+                    doc.version().unwrap(),
+                )
                 .await
                 .unwrap();
         }
@@ -224,7 +230,7 @@ async fn normal_traffic_gives_no_finding_and_a_bypass_raises_and_clears() {
     started.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_site_that_has_not_migrated_degrades_it_and_serves() {
     let Some(env) = Env::new(SERVICES).await else {
         return;

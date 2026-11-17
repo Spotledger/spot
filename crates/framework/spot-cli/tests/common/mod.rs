@@ -45,6 +45,10 @@ pub fn copy_dir(from: &Path, to: &Path) {
 
 pub fn run(root: &Path, args: &[&str], stdin: Option<&str>) -> Output {
     use std::io::Write;
+    // Every site a test makes needs its own key file (a second site: controllers, mcp_service).
+    if let ["new-site", name, ..] = args {
+        ensure_key(root, name);
+    }
     let mut child = Command::new(env!("CARGO_BIN_EXE_spot"))
         .arg("--root")
         .arg(root)
@@ -63,6 +67,30 @@ pub fn run(root: &Path, args: &[&str], stdin: Option<&str>) -> Output {
             .unwrap();
     }
     child.wait_with_output().unwrap()
+}
+
+/// The key file of `site` under `<root>/keys` (every site has its own, by `{site}`), made once.
+pub fn ensure_key(root: &std::path::Path, site: &str) {
+    let keys = root.join("keys");
+    std::fs::create_dir_all(&keys).unwrap();
+    let path = keys.join(format!("{site}.json"));
+    if path.exists() {
+        return;
+    }
+    let site = site.to_owned();
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(spot_cli::services::secrets::init_key_file(&path, &site))
+                    .unwrap();
+            })
+            .join()
+            .unwrap();
+    });
 }
 
 pub fn ok(root: &Path, args: &[&str]) -> String {
@@ -131,10 +159,48 @@ impl Env {
 
     /// Rewrites `common.toml` with the platform and `apps` (quoted names or paths).
     pub fn write_common(&self, apps: &[&str], services: &str) {
+        // The sign-in stores and the sign-in throttle are required services and seal their
+        // credentials: a site without `[services.secrets]` does not start (WP-PLT-02.T8,
+        // WP-IAM-11.T23). A test that configures its own keeps it.
+        let keys = self.root.0.join("keys");
+        std::fs::create_dir_all(&keys).unwrap();
+        // A test of what happens without the vault says so with `# no-secrets`.
+        let secrets =
+            if services.contains("[services.secrets]") || services.contains("# no-secrets") {
+                String::new()
+            } else {
+                format!(
+                    "[services.secrets]\nkek_file = {:?}\n",
+                    format!("{}/{{site}}.json", keys.display())
+                )
+            };
+        if secrets.is_empty() {
+        } else {
+            // The key file of this site (every site of a test has its own, by `{site}`).
+            let path = keys.join(format!("{}.json", self.site));
+            if !path.exists() {
+                let site = self.site.clone();
+                std::thread::scope(|scope| {
+                    scope
+                        .spawn(|| {
+                            tokio::runtime::Builder::new_current_thread()
+                                .enable_all()
+                                .build()
+                                .unwrap()
+                                .block_on(spot_cli::services::secrets::init_key_file(&path, &site))
+                                .unwrap();
+                        })
+                        .join()
+                        .unwrap();
+                });
+            }
+        }
+        let services = format!("{services}\n{secrets}");
+        let services = services.as_str();
         std::fs::write(
             self.root.0.join("common.toml"),
             format!(
-                "apps = [{:?}, {}]\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {:?}\n{services}\n[trust]\nrequire_signed = false\n",
+                "apps = [{:?}, {}]\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {:?}\npool_max_size = 8\n{services}\n[trust]\nrequire_signed = false\n",
                 repo().join("apps/platform").display().to_string(),
                 apps.join(", "),
                 self.url,
@@ -388,7 +454,16 @@ pub async fn login(addr: SocketAddr, host: &str, user: &str, password: &str) -> 
 }
 
 pub async fn token_of(addr: SocketAddr, host: &str, user: &str, password: &str) -> String {
-    let reply = login(addr, host, user, password).await;
+    // A user the CLI added while the host runs holds a staged credential that the host imports on
+    // its next reload, so a first refusal is retried for a while.
+    let mut reply = login(addr, host, user, password).await;
+    for _ in 0..40 {
+        if reply.status == 200 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        reply = login(addr, host, user, password).await;
+    }
     expect(&reply, 200);
     reply.body["data"]["token"].as_str().unwrap().to_owned()
 }

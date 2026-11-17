@@ -36,6 +36,10 @@ pub struct SourceImage {
     pub image: Value,
     /// The position of the record's latest event.
     pub position: Position,
+    /// The latest event is a delete: the record exists no more and `image` is `Value::Null`.
+    /// Such an image is a tombstone: it travels as one and is never added as an extra.
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 impl SourceImage {
@@ -46,6 +50,19 @@ impl SourceImage {
             key,
             image,
             position,
+            deleted: false,
+        }
+    }
+
+    /// Build the tombstone of a record deleted by the event at `position`: no image, no
+    /// references.
+    #[must_use]
+    pub fn tombstone(key: RecordKey, position: Position) -> Self {
+        Self {
+            key,
+            image: Value::Null,
+            position,
+            deleted: true,
         }
     }
 }
@@ -79,8 +96,12 @@ pub struct BundleRecord {
     pub key: RecordKey,
     /// Position of the record's latest event.
     pub position: Position,
-    /// The image after `excluded_fields.down`.
+    /// The image after `excluded_fields.down`. `Value::Null` for a tombstone.
     pub image: Value,
+    /// A tombstone: the record was deleted by the event at `position`. It has no image, counts
+    /// 0 bytes, has no references, is never an extra and is applied by the node as a delete.
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 /// One bundle: applied by the destination in one transaction.

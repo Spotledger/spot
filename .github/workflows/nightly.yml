@@ -181,7 +181,10 @@ jobs:
         run: bash tools/ci/start-postgres.sh
       - name: run the L7 nightly and L8 profiles
         shell: bash
-        run: bash tools/ci/nightly-profiles/run.sh
+        # 25,000 transactions per isolation run: a list-append history grows with the square of the
+        # count and the checker used 19 GB at the profile's 100,000, so the hosted runner was killed
+        # ('received a shutdown signal') three nights running. The self-hosted nightly keeps 100,000.
+        run: bash tools/ci/nightly-profiles/run.sh --l8-txns 25000
       # The first red L7 run on a hosted runner ended with `storage.unavailable` from the
       # post-run checks and no server log to explain it: keep the log with the reports.
       - if: failure()

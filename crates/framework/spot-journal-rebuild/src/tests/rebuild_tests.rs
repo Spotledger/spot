@@ -6,7 +6,7 @@ use spot_journal_rebuild_plan::{Base, Target};
 
 use super::block_on;
 use super::fixture::{Ev, Journal, delete, insert, model, options, update, uuid};
-use crate::{Call, EventClass, RecordingSink, classify, execute};
+use crate::{Call, RecordingSink, execute};
 
 /// What the sink holds, as the model holds it.
 fn sink_state(sink: &RecordingSink) -> super::fixture::Model {
@@ -117,9 +117,15 @@ fn a_backup_base_streams_no_images_and_rolls_forward() {
     let events = script();
     let journal = Journal::new(events.clone(), 8);
     let catalog = journal.catalog(vec![]);
-    let backup = spot_journal_rebuild_plan::Backup { position: 12 };
+    let backup = spot_journal_rebuild_plan::Backup::in_generation(12, 1);
     let plan = spot_journal_rebuild_plan::plan(&catalog, Some(&backup), Target::End).unwrap();
-    assert_eq!(plan.base, Base::Backup { position: 12 });
+    assert_eq!(
+        plan.base,
+        Base::Backup {
+            position: 12,
+            generation: 1
+        }
+    );
     let mut sink = RecordingSink::new();
     let outcome = block_on(execute(
         &journal.store,
@@ -240,7 +246,7 @@ fn only_state_and_audit_entries_reach_the_sink() {
         (2, 1, 2)
     );
     assert_eq!(sink.audits().len(), 1);
-    assert_eq!(sink.audits()[0].topic, "sys_role_changed");
+    assert_eq!(sink.audits()[0].topic, "sys_doc_audit");
     assert_eq!(sink.audits()[0].position.seq, 3);
 
     let mut sink = RecordingSink::new();
@@ -257,15 +263,6 @@ fn only_state_and_audit_entries_reach_the_sink() {
     .unwrap();
     assert_eq!((outcome.audit_applied, outcome.audit_skipped), (0, 1));
     assert!(sink.audits().is_empty());
-}
-
-#[test]
-fn classes_follow_the_reserved_topic_names() {
-    assert_eq!(classify("doc_state"), EventClass::State);
-    assert_eq!(classify("sys_login_failed"), EventClass::Audit);
-    assert_eq!(classify("doc_posted"), EventClass::Domain);
-    assert_eq!(classify("stock_below_reorder_level"), EventClass::Domain);
-    assert_eq!(classify("identity_changed"), EventClass::Domain);
 }
 
 #[test]

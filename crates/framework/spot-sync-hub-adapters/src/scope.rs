@@ -46,7 +46,7 @@ impl<'a, K: ScopeKeysOf> MasterScope<'a, K> {
     }
 }
 
-impl<K: ScopeKeysOf> DestinationScope for MasterScope<'_, K> {
+impl<K: ScopeKeysOf + Send> DestinationScope for MasterScope<'_, K> {
     fn covers(&self, entry: &StreamEntry) -> bool {
         self.decide(&entry.key, entry.version)
     }

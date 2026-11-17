@@ -74,7 +74,9 @@ pub fn tool_input_schema(fields: &[FieldDef]) -> Json {
     let mut required = Vec::new();
     for field in fields {
         properties.insert(field.name.as_str().to_owned(), field_schema(field));
-        if field.required && !field.read_only {
+        // A field with a default is filled by the engine when the caller omits it, so the tool
+        // does not demand it (the REST create accepts the same body).
+        if field.required && !field.read_only && field.default.is_none() {
             required.push(Json::String(field.name.as_str().to_owned()));
         }
     }

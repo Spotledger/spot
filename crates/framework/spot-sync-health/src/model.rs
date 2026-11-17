@@ -10,7 +10,7 @@ pub const MAX_ROWS: usize = 200;
 pub const SAMPLE_SIZE: usize = 5;
 
 /// The tenant-wide state: one word the screen turns into one colour and one sentence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     /// Nothing needs a person. A state the surface states, not the absence of news.
@@ -34,7 +34,7 @@ impl Status {
 }
 
 /// The colour of a node row: the worst of its facts and its open conditions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Colour {
     /// Nothing wrong.
@@ -49,7 +49,7 @@ pub enum Colour {
 ///
 /// This crate does not depend on those crates, so it owns the vocabulary the row needs; the
 /// caller maps its freshness state and skew decision onto it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeStatus {
     /// In contact and within its freshness limits.
@@ -111,6 +111,22 @@ impl Serialize for Route {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for Route {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = <String as serde::Deserialize>::deserialize(deserializer)?;
+        [
+            Self::Node,
+            Self::Record,
+            Self::Stream,
+            Self::Tenant,
+            Self::Condition,
+        ]
+        .into_iter()
+        .find(|route| route.id() == text)
+        .ok_or_else(|| serde::de::Error::custom("not a route id"))
+    }
+}
+
 impl Route {
     /// The route for a condition's subject kind.
     #[must_use]
@@ -126,7 +142,7 @@ impl Route {
 }
 
 /// One row of the `needs you` list: every open item with the same remedy, collapsed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct NeedsYou {
     /// The condition ids in the row, sorted, without duplicates.
     pub conditions: Vec<String>,
@@ -149,7 +165,7 @@ pub struct NeedsYou {
 }
 
 /// One node as the hub sees it, as of `as_of`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct NodeRow {
     /// The node id.
     pub node: String,
@@ -172,7 +188,7 @@ pub struct NodeRow {
 }
 
 /// How much is open, at every level, so a count never needs a list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct Counts {
     /// Open `info` conditions.
     pub info: usize,
@@ -189,7 +205,7 @@ pub struct Counts {
 }
 
 /// The whole view, for one tenant.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct HealthView {
     /// The one word.
     pub status: Status,

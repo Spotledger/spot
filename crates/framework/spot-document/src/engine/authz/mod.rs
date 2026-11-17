@@ -513,6 +513,32 @@ impl<B: StorageBackend> Engine<B> {
         self.authorizer.principal_for(inv).await
     }
 
+    /// The principal acting on `inv` inside `work`'s transaction: the one a batch pinned for its
+    /// actor, else a fresh resolution.
+    pub(crate) async fn principal_or(
+        &self,
+        pinned: Option<Principal>,
+        inv: &Invocation,
+    ) -> Principal {
+        match pinned {
+            Some(principal) => principal,
+            None => self.authorizer.principal_for(inv).await,
+        }
+    }
+
+    /// Refuses `action` on `doc` unless `principal` may do it.
+    pub(crate) async fn authorize_as(
+        &self,
+        principal: &Principal,
+        action: Action,
+        doc: &Document,
+    ) -> AppResult<()> {
+        self.authorizer
+            .authorize(principal, action, doc)
+            .await
+            .map_err(|e| self.denied(e))
+    }
+
     /// The document(s) of one operation result, filtered for `principal`: a write result goes
     /// through the same field filter a read does.
     pub(crate) async fn mask_result(&self, principal: &Principal, value: Ret) -> AppResult<Ret> {
@@ -607,8 +633,26 @@ impl<B: StorageBackend> Engine<B> {
             .map_err(|e| self.denied(e))
     }
 
-    /// The plan for a list query under the invocation's principal, or `None` for an empty page.
-    pub(crate) async fn query_plan(
+    /// The plan for a list query under the invocation's principal, or `None` for an empty page
+    /// (WP-SEC-04.T15).
+    ///
+    /// This is the narrow, public seam for a host that reads rows itself (the native API's list
+    /// and lookup path): the caller's query comes back with the principal's read filter ANDed in
+    /// and the select list restricted, so the row set, a `count(*)` over it and a keyset cursor
+    /// built from its last row are all computed over the rows the principal may read, and only
+    /// those. A host runs `plan.query`, then [`apply_masks`](super::apply_masks) with
+    /// `plan.masks`; on `None` it answers an empty page ([`empty_page`](super::empty_page))
+    /// without touching storage. The filter is never copied: it is built here, once.
+    ///
+    /// The same call serves every authorizer: the compatibility authorizer and the system
+    /// principal get the query back unchanged.
+    ///
+    /// # Errors
+    ///
+    /// `permission.field_denied` when the query filters, sorts, groups or aggregates on a field
+    /// the principal may not read unmasked (the no-inference rule), `permission.denied` for any
+    /// other refusal, and the same error for a query that names a secret's sealed column.
+    pub async fn query_plan(
         &self,
         inv: &Invocation,
         query: &Query,
@@ -624,8 +668,25 @@ impl<B: StorageBackend> Engine<B> {
             .detail("reason", "secret_column"));
         }
         let principal = self.authorizer.principal_for(inv).await;
+        self.query_plan_as(&principal, query).await
+    }
+
+    /// [`query_plan`](Self::query_plan) for a principal already resolved.
+    pub(crate) async fn query_plan_as(
+        &self,
+        principal: &Principal,
+        query: &Query,
+    ) -> AppResult<Option<QueryPlan>> {
+        if crate::secrets::query_names_secret_column(query) {
+            return Err(spot_app_api::AppError::new(
+                spot_app_api::ErrorClass::PermissionDenied,
+                "permission.denied",
+                "The query cannot be answered under the user's permissions.",
+            )
+            .detail("reason", "secret_column"));
+        }
         self.authorizer
-            .readable_query(&principal, query)
+            .readable_query(principal, query)
             .await
             .map_err(|e| self.denied(e))
     }

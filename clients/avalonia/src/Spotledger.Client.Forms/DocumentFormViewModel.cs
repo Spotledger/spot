@@ -80,6 +80,7 @@ public sealed partial class DocumentFormViewModel : ObservableObject, IDisposabl
     private int _messageSerial;
     private IFormHistory? _history;
     private object? _recovery;
+    private object? _banner;
     private string? _historyNote;
 
     /// <summary>Creates a form for <paramref name="doctype"/>; <paramref name="documentId"/> null opens a new document.</summary>
@@ -130,6 +131,14 @@ public sealed partial class DocumentFormViewModel : ObservableObject, IDisposabl
     {
         get => _recovery;
         set => SetField(ref _recovery, value);
+    }
+
+    /// <summary>The non-modal slot above the form body for a host's banner (the staleness bar); null when empty.
+    /// It sits above the recovery bar and below the title and toolbar.</summary>
+    public object? Banner
+    {
+        get => _banner;
+        set => SetField(ref _banner, value);
     }
 
     /// <summary>The note the history left when it was cleared by a save, reload or revert; null until then.</summary>
@@ -496,6 +505,7 @@ public sealed partial class DocumentFormViewModel : ObservableObject, IDisposabl
         Audit = AuditFooter.From(reply.DataJson);
         ReplaceMessages(reply.Messages);
         Conflict = null;
+        PendingMerge = null;
         Autosave?.DraftSettled(_doctype, draft.DocumentId);
         Rebuild();
         RaiseAll();

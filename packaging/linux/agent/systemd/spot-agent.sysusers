@@ -1,0 +1,2 @@
+# systemd-sysusers(5): the unprivileged Spotledger agent account (no shell, home = state dir).
+u spot-agent - "Spotledger host agent" /var/lib/spot-agent /sbin/nologin

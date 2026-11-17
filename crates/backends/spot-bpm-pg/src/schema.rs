@@ -6,6 +6,9 @@
 //! | `spot_bpm_case_var` | the Case's variables as `jsonb`, in their own row so a variable change never rewrites the run row |
 //! | `spot_bpm_node_outcome` | one row per node attempt: the engine attempt (state, output, branches, failure, times) and the node's wait (due/event/human) — the `(case, node, attempt)` idempotency key is the exactly-once guard |
 //! | `spot_bpm_case.children` | the sub-process child links, as a `jsonb` map keyed by node |
+//! | `spot_bpm_node_run_event` | the node-run transition log (WP-BPM-11.T6): one append-only row per node-attempt transition, ordered by the per-tenant `seq`, written in the same transaction as the node row; no payloads |
+//! | `spot_bpm_node_run_seq` | one row per tenant: the last `seq` handed out, locked last in a commit |
+//! | `spot_bpm_node_run_consumer` | one row per `(tenant, consumer)`: the consumer's checkpoint (`seq` and its folded `jsonb` state) |
 //!
 //! The tables are the store's own: they never touch, and are never touched by, the document
 //! storage backend's tables (ADR-45: the store owns its schema and its SQL).
@@ -20,6 +23,9 @@
 //! * `spot_bpm_node_outcome_event_idx (tenant, event)` partial on waiting nodes: "Cases waiting on
 //!   event X".
 //! * `spot_bpm_node_outcome_due_idx (due)` partial on waiting nodes: "timers due".
+//! * `spot_bpm_node_run_event_pkey (tenant, seq)`: the log's cursor range scan (`list_after`).
+//! * `spot_bpm_node_run_event_replay_idx` unique `(tenant, case_id, node, attempt, state)`: the
+//!   replay guard; a transition already logged is never logged twice.
 //!
 //! An earlier version created the tables without the `spot_` prefix (`bpm_case`, `bpm_case_var`,
 //! `bpm_node_outcome`), which `spot_pg_migrate` refuses. [`prepare`] renames each old table, its
@@ -98,6 +104,43 @@ CREATE INDEX IF NOT EXISTS spot_bpm_node_outcome_event_idx
 
 CREATE INDEX IF NOT EXISTS spot_bpm_node_outcome_due_idx
     ON spot_bpm_node_outcome (due) WHERE due IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS spot_bpm_node_run_event (
+    tenant       text NOT NULL,
+    seq          bigint NOT NULL CHECK (seq >= 1),
+    case_id      text NOT NULL,
+    dag_key      text NOT NULL,
+    dag_version  integer NOT NULL,
+    case_version bigint NOT NULL CHECK (case_version >= 0),
+    node         text NOT NULL,
+    attempt      integer NOT NULL CHECK (attempt >= 1),
+    state        text NOT NULL
+        CHECK (state IN ('started', 'waiting', 'done', 'failed', 'cancelled')),
+    "at"         timestamptz NOT NULL,
+    "wait"       text
+        CHECK ("wait" IN ('human_task', 'timer', 'event', 'integration_retry')),
+    failure_code text,
+    is_retry     boolean NOT NULL DEFAULT false,
+    human        text,
+    PRIMARY KEY (tenant, seq)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS spot_bpm_node_run_event_replay_idx
+    ON spot_bpm_node_run_event (tenant, case_id, node, attempt, state);
+
+CREATE TABLE IF NOT EXISTS spot_bpm_node_run_seq (
+    tenant text PRIMARY KEY,
+    last   bigint NOT NULL CHECK (last >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS spot_bpm_node_run_consumer (
+    tenant     text NOT NULL,
+    consumer   text NOT NULL,
+    seq        bigint NOT NULL CHECK (seq >= 0),
+    state      jsonb NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant, consumer)
+);
 "#;
 
 /// One table the crate used to create without the prefix.

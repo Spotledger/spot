@@ -180,6 +180,7 @@ impl<B: StorageBackend> Rig<B> {
             Value::Text(format!("{}@example.test", user_name.replace('@', "."))),
         );
         doc.set(n("state"), Value::Text(state.to_owned()));
+        doc.set(n("user_type"), Value::Text("internal".to_owned()));
         let saved = self
             .engine
             .create(&self.inv(), doc)
@@ -368,7 +369,11 @@ impl<B: StorageBackend> Rig<B> {
 
     /// The throttle store, erased to the contract's object.
     pub fn throttle(&self, config: &ThrottleConfig) -> Arc<dyn ThrottleStore> {
-        Arc::new(self.stores.throttle_store(config.window))
+        Arc::new(
+            self.stores
+                .throttle_store(config.window)
+                .with_lockout(config.lockout_after, config.lockout_duration),
+        )
     }
 
     /// A session manager over this rig's store.
@@ -436,6 +441,17 @@ impl<B: StorageBackend> Rig<B> {
         events: Arc<dyn IdentityEvents>,
         hasher: Arc<dyn PasswordHasher>,
     ) -> LoginService {
+        self.service_admitted(config, events, hasher, Arc::new(spot_login::AllowAll))
+    }
+
+    /// The same, admitting sign-ins through `admission`.
+    pub fn service_admitted(
+        &self,
+        config: LoginConfig,
+        events: Arc<dyn IdentityEvents>,
+        hasher: Arc<dyn PasswordHasher>,
+        admission: Arc<dyn spot_login::SignInAdmission>,
+    ) -> LoginService {
         let throttle = self.throttle(&config.throttle);
         let clock: Arc<dyn Clock> = self.clock.clone();
         LoginService::new(
@@ -447,6 +463,7 @@ impl<B: StorageBackend> Rig<B> {
             events,
             clock,
             hasher,
+            admission,
         )
         .expect("the service builds")
     }
@@ -522,6 +539,7 @@ impl<B: StorageBackend> Linked<B> {
         doc.set(n("user_name"), Value::Text(format!("contract-{key}")));
         doc.set(n("full_name"), Value::Text(format!("contract {key}")));
         doc.set(n("state"), Value::Text("active".to_owned()));
+        doc.set(n("user_type"), Value::Text("internal".to_owned()));
         let saved = self
             .engine
             .create(&self.inv, doc)
@@ -749,4 +767,12 @@ pub fn user_key(id: RecordId) -> UserKey {
 /// The client label every rig session carries.
 pub fn client() -> ClientInfo {
     ClientInfo::default()
+}
+
+/// The text of one column of a stored row, when it holds text.
+pub fn text_of(row: &DocumentData, column: &str) -> Option<String> {
+    match row.fields.get(&n(column)) {
+        Some(Value::Text(text)) => Some(text.clone()),
+        _ => None,
+    }
 }

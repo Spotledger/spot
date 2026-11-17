@@ -38,10 +38,11 @@
 //! for every refusal (who, report, the reason code). Never an argument value, a filter value or
 //! a row.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::Value as Json;
@@ -50,21 +51,19 @@ use spot_document::engine::PrincipalSource as DocPrincipals;
 use spot_field_guard::{
     AuditRecord as GuardAudit, FieldAccessRecord, FieldGuard, MetaProtection, Offer, TraceSink,
 };
-use spot_http::api::Ports;
 use spot_http::api::ports::report::{
     CatalogResult, ParameterOptionsOut, ReportCatalogPort, ReportDescriptionOut,
     ReportParameterOut, ReportSummaryOut,
 };
 use spot_http::api::registry::Code;
-use spot_http::api::router::routes;
 use spot_http::api::service::{
     ApiError, BoxFuture, Message, ReportColumn, ReportResult, RequestCtx,
 };
 use spot_permissions::{PermissionEngine, Principal};
 use spot_postgres::PgBackend;
 use spot_reports::{
-    Compiler, EffectiveMetaSet, ParamOptions, ParamType, QueryExecutor, ReportArgs, ReportDef,
-    ReportError, ReportRegistry, ReportRunner, Telemetry, codes,
+    Compiler, EffectiveMetaSet, ParamOptions, ParamType, QueryExecutor, RegisteredReport,
+    ReportArgs, ReportDef, ReportError, ReportRegistry, ReportRunner, Telemetry, codes,
 };
 use spot_storage_contract::{
     Catalog, Query, ReadSource, RecordId, Rows, StorageBackend, StorageError, Value,
@@ -140,7 +139,10 @@ fn read_app(app: &str, dir: &Path, out: &mut Vec<Shipped>, problems: &mut Vec<St
         if path.extension().and_then(|e| e.to_str()) != Some("toml") {
             continue;
         }
-        let label = format!("{app}/{REPORTS_DIR}/{}", entry.file_name().to_string_lossy());
+        let label = format!(
+            "{app}/{REPORTS_DIR}/{}",
+            entry.file_name().to_string_lossy()
+        );
         match ReportDef::load_file(&path) {
             Ok(def) => out.push((app.to_owned(), Arc::new(def))),
             Err(e) => problems.push(format!("{label}: {e}")),
@@ -190,6 +192,443 @@ fn compile_all(shipped: &[Shipped], meta: &EffectiveMetaSet, catalog: &Catalog) 
         }
     }
     Compiled { registry, problems }
+}
+
+// ---- report sources: a service's own data, served by the one report engine ----
+
+/// Who is asking, as a source's visibility hook sees it. Owned, so the hook runs on a task of its
+/// own: one that panics or hangs is a denial, never a crash or a stall of the request.
+#[derive(Clone, Debug)]
+pub struct AdmitRequest {
+    /// The site the request is for.
+    pub site: String,
+    /// The signed-in user's id.
+    pub user: String,
+    /// The caller as the permission model sees them.
+    pub principal: Principal,
+}
+
+/// What a source's hook lets the caller see.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Admission {
+    /// Every row of the source.
+    All,
+    /// Only the rows whose scope key is in this set. The source's executor reads the set and
+    /// applies it to its own data; the report engine never interprets a key.
+    Rows(BTreeSet<String>),
+}
+
+/// A hook's refusal: a stable reason code that is audited and never shown to the caller (the
+/// caller is answered `404 report.not_found`, exactly as for a report that does not exist).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Denied(pub &'static str);
+
+/// The most a hook may take to answer. A slower hook is a denial.
+pub const ADMIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Decides, per request, whether the caller may see a source's data and which rows.
+///
+/// Fail closed: an `Err`, a panic and a timeout all deny. The hook is called for a run, a
+/// description and, per source, for the list (a source the caller is denied is not listed).
+pub trait SourceVisibility: Send + Sync {
+    /// The caller's admission, or the reason code of the refusal.
+    fn admit<'a>(
+        &'a self,
+        request: &'a AdmitRequest,
+    ) -> spot_reports::BoxFuture<'a, std::result::Result<Admission, Denied>>;
+}
+
+/// Runs a source report's one storage query over the source's own data.
+///
+/// The query is the report engine's storage query IR, built from the registered definition; the
+/// executor answers it from its own data and applies `admission` to the rows. No request value
+/// ever names an executor: only a registered report name resolves to one.
+pub trait SourceExecutor: Send + Sync {
+    /// The rows of `query` that `admission` allows.
+    fn execute<'a>(
+        &'a self,
+        admission: &'a Admission,
+        query: &'a Query,
+    ) -> spot_reports::BoxFuture<'a, std::result::Result<Rows, StorageError>>;
+}
+
+/// One report a service serves from its own data.
+pub struct ReportSource {
+    /// The registering service (a storage-style name); it is the report's `app` in listings.
+    pub service: String,
+    /// The definition, already validated by the caller.
+    pub def: Arc<ReportDef>,
+    /// The source schema the definition compiles against: the DocType-shaped definitions of the
+    /// base name (and of any joined name). It lives only in memory: it is never persisted,
+    /// never added to the metadata the site serves and never visible to a `meta` route.
+    pub schema: Vec<spot_meta::Definition>,
+    /// Answers the query.
+    pub executor: Arc<dyn SourceExecutor>,
+    /// Decides who sees what.
+    pub visibility: Arc<dyn SourceVisibility>,
+    /// Whether a source that does not compile stops the site's start. Otherwise it is named in
+    /// the log and left out.
+    pub required: bool,
+}
+
+/// The registration port of the report service, provided with
+/// `ctx.provide::<dyn ReportSources>(..)` (start order [`ORDER`], 1020). A service whose own
+/// `ORDER` is larger fetches it with `ctx.port::<dyn ReportSources>()` from its `register`
+/// (build phase) and calls [`ReportSources::register`]. The port is absent on a site with
+/// `services.report.enabled = false` and on a reload build (the running service keeps what it
+/// registered): a module skips quietly when it is `None`.
+pub trait ReportSources: Send + Sync {
+    /// Adds `source`.
+    ///
+    /// # Errors
+    ///
+    /// The service or report name is malformed, or the report name is already registered by
+    /// another source (both services are named).
+    fn register(&self, source: ReportSource) -> Result<()>;
+
+    /// The names of the registered reports, in registration order.
+    fn names(&self) -> Vec<String>;
+}
+
+/// The sources of one site. Built per site; nothing is shared between sites. It closes when the
+/// site's [`SourceBook`] is compiled (at the start-up check): a later registration is refused, so
+/// what is served never changes behind a running site.
+#[derive(Default)]
+pub struct SourceRegistry {
+    sources: Mutex<Vec<Arc<ReportSource>>>,
+    frozen: AtomicBool,
+}
+
+impl SourceRegistry {
+    /// An empty, open registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl ReportSources for SourceRegistry {
+    fn register(&self, source: ReportSource) -> Result<()> {
+        if self.frozen.load(Ordering::Acquire) {
+            return Err(Error(format!(
+                "the report source `{}` of `{}` was registered after the site's start-up check; register from `register`",
+                source.def.name, source.service
+            )));
+        }
+        if spot_app_api::prelude::Name::new(&source.service).is_err() {
+            return Err(Error(
+                "a report source's service name must be a storage-style name".to_owned(),
+            ));
+        }
+        if spot_app_api::prelude::Name::new(&source.def.name).is_err() {
+            return Err(Error(format!(
+                "the report source `{}` of `{}` has a name that is not a storage-style name",
+                source.def.name, source.service
+            )));
+        }
+        let mut sources = lock(&self.sources);
+        if let Some(existing) = sources.iter().find(|s| s.def.name == source.def.name) {
+            return Err(Error(format!(
+                "the report `{}` is already served by `{}`, so `{}` cannot register it",
+                source.def.name, existing.service, source.service
+            )));
+        }
+        sources.push(Arc::new(source));
+        Ok(())
+    }
+
+    fn names(&self) -> Vec<String> {
+        lock(&self.sources)
+            .iter()
+            .map(|s| s.def.name.clone())
+            .collect()
+    }
+}
+
+/// A source compiled against its own in-memory schema, with the permission engine that grants
+/// the report's roles read on that schema (and nobody else).
+struct CompiledSource {
+    source: Arc<ReportSource>,
+    registry: ReportRegistry,
+    engine: Arc<PermissionEngine>,
+    protection: Arc<dyn spot_field_guard::ProtectionSource>,
+}
+
+fn compile_source(source: &Arc<ReportSource>) -> std::result::Result<CompiledSource, Vec<String>> {
+    let label = |why: &dyn std::fmt::Display| {
+        format!(
+            "report source `{}` of `{}`: {why}",
+            source.def.name, source.service
+        )
+    };
+    let registry_meta = spot_meta::Registry::new(source.schema.clone())
+        .map_err(|errors| errors.iter().map(|e| label(e)).collect::<Vec<_>>())?;
+    let meta = registry_meta.effective();
+    let catalog = crate::schema::catalog(&meta).map_err(|e| vec![label(&e)])?;
+    let set = EffectiveMetaSet::new(Arc::clone(&meta));
+    let compiler = Compiler::new(&set, &catalog);
+    let mut registry = ReportRegistry::new();
+    registry
+        .register(&source.service, Arc::clone(&source.def), &compiler)
+        .map_err(|errors| errors.iter().map(|e| label(e)).collect::<Vec<_>>())?;
+    // The source's schema is no DocType of the site, so the site's permission engine knows
+    // nothing of it. The source gets an engine of its own: the roles the report names may read
+    // its schema and no role may do anything else. Which rows is the visibility hook's answer.
+    let mut grants = Vec::new();
+    for view in meta.doctypes() {
+        for role in &source.def.roles {
+            grants.push(spot_permissions::RoleGrant {
+                doctype: view.name.as_str().to_owned(),
+                role: spot_permissions::Role(role.clone()),
+                // A report column is a list-like channel: it needs the `report` right beside `read`.
+                rights: spot_permissions::Rights::new([
+                    spot_permissions::Right::Read,
+                    spot_permissions::Right::Report,
+                ]),
+                if_owner: false,
+            });
+        }
+    }
+    grants.sort();
+    let model = spot_permissions::Model {
+        grants,
+        ..spot_permissions::Model::default()
+    };
+    let snapshot = spot_permissions::Snapshot::build(&meta, &model)
+        .map_err(|e| vec![label(&format!("{e:?}"))])?;
+    let engine = Arc::new(PermissionEngine::new(Arc::new(snapshot)));
+    let protection =
+        Arc::new(MetaProtection::new(&meta)) as Arc<dyn spot_field_guard::ProtectionSource>;
+    Ok(CompiledSource {
+        source: Arc::clone(source),
+        registry,
+        engine,
+        protection,
+    })
+}
+
+/// Runs a source's query through its executor with the caller's admission applied.
+struct Scoped {
+    executor: Arc<dyn SourceExecutor>,
+    admission: Admission,
+}
+
+impl QueryExecutor for Scoped {
+    fn execute<'a>(
+        &'a self,
+        query: &'a Query,
+    ) -> spot_reports::BoxFuture<'a, std::result::Result<Rows, StorageError>> {
+        self.executor.execute(&self.admission, query)
+    }
+}
+
+/// Calls a source's visibility hook on a task of its own, so a panic is a join error and a hook
+/// that hangs is abandoned at [`ADMIT_TIMEOUT`]. Anything but an admission is a denial.
+async fn admit_hook(
+    visibility: &Arc<dyn SourceVisibility>,
+    request: &AdmitRequest,
+) -> std::result::Result<Admission, Denied> {
+    let (visibility, request) = (Arc::clone(visibility), request.clone());
+    let mut task = tokio::spawn(async move { visibility.admit(&request).await });
+    match tokio::time::timeout(ADMIT_TIMEOUT, &mut task).await {
+        Ok(Ok(answer)) => answer,
+        Ok(Err(_)) => Err(Denied("source.admit_panicked")),
+        Err(_) => {
+            task.abort();
+            Err(Denied("source.admit_timeout"))
+        }
+    }
+}
+
+/// Every source of one site, compiled once (a source schema does not depend on the served
+/// metadata) and served by the one report engine. Built per site from that site's registry:
+/// nothing is shared between sites.
+pub struct SourceBook {
+    site_clock: Arc<dyn spot_core::Clock>,
+    ready: Vec<Arc<CompiledSource>>,
+    /// Problems that stop the start-up check (a required source that does not compile).
+    fatal: Vec<String>,
+}
+
+impl SourceBook {
+    /// Closes `registry` to further registration and compiles what it holds. A source that does
+    /// not compile is named in the log and left out; it stops the site only when it declared
+    /// itself `required`.
+    pub fn compile(registry: &SourceRegistry, clock: Arc<dyn spot_core::Clock>) -> Self {
+        registry.frozen.store(true, Ordering::Release);
+        let sources: Vec<Arc<ReportSource>> = lock(&registry.sources).clone();
+        let mut ready = Vec::new();
+        let mut fatal = Vec::new();
+        for source in &sources {
+            match compile_source(source) {
+                Ok(compiled) => ready.push(Arc::new(compiled)),
+                Err(problems) => {
+                    tracing::warn!(
+                        service = %source.service,
+                        problems = %problems.join("; "),
+                        "a report source was left out: it does not compile"
+                    );
+                    if source.required {
+                        fatal.extend(problems);
+                    }
+                }
+            }
+        }
+        Self {
+            site_clock: clock,
+            ready,
+            fatal,
+        }
+    }
+
+    /// The problems that stop the start-up check.
+    #[must_use]
+    pub fn fatal(&self) -> &[String] {
+        &self.fatal
+    }
+
+    /// The reports served, as `(report, registering service)`, in registration order.
+    #[must_use]
+    pub fn served(&self) -> Vec<(String, String)> {
+        self.ready
+            .iter()
+            .map(|c| (c.source.def.name.clone(), c.source.service.clone()))
+            .collect()
+    }
+
+    fn named(&self, report: &str) -> Option<&Arc<CompiledSource>> {
+        self.ready.iter().find(|c| c.source.def.name == report)
+    }
+
+    fn runner(
+        &self,
+        compiled: &CompiledSource,
+        executor: Arc<dyn QueryExecutor>,
+        telemetry: Arc<dyn Telemetry>,
+    ) -> ReportRunner {
+        let guard = FieldGuard::new(
+            Arc::clone(&compiled.engine),
+            Arc::clone(&compiled.protection),
+            Arc::new(GuardSinks),
+            Arc::new(GuardSinks),
+            Arc::clone(&self.site_clock),
+        );
+        ReportRunner::new(Arc::clone(&compiled.engine), guard, executor, telemetry)
+    }
+
+    /// The caller's admission to `compiled`, or the one answer for a report that does not exist
+    /// (the reason code is audited and never shown).
+    async fn admitted(
+        &self,
+        compiled: &CompiledSource,
+        who: &AdmitRequest,
+        action: &str,
+    ) -> std::result::Result<Admission, ApiError> {
+        match admit_hook(&compiled.source.visibility, who).await {
+            Ok(admission) => Ok(admission),
+            Err(Denied(reason)) => {
+                tracing::info!(
+                    target: AUDIT_TARGET,
+                    site = %who.site,
+                    action,
+                    who = %who.user,
+                    report = %compiled.source.def.name,
+                    reason,
+                    "report source refused"
+                );
+                Err(not_found(&compiled.source.def.name))
+            }
+        }
+    }
+
+    /// The compiled report `report` when its roles admit the caller.
+    fn visible(
+        &self,
+        who: &AdmitRequest,
+        report: &str,
+    ) -> Option<(&Arc<CompiledSource>, &RegisteredReport)> {
+        let compiled = self.named(report)?;
+        let registered = compiled.registry.lookup_for(report, &who.principal)?;
+        Some((compiled, registered))
+    }
+
+    /// Runs `report` for the caller.
+    ///
+    /// # Errors
+    ///
+    /// `404 report.not_found` for a name no source registered, a report the caller's roles do
+    /// not admit and a caller the visibility hook denied (an error, a panic and a timeout
+    /// included); otherwise the runner's own refusals.
+    pub async fn run(
+        &self,
+        who: &AdmitRequest,
+        report: &str,
+        filters: &Json,
+        limit: Option<u64>,
+    ) -> CatalogResult<(ReportResult, Vec<Message>)> {
+        let (compiled, registered) = self.visible(who, report).ok_or_else(|| not_found(report))?;
+        let admission = self.admitted(compiled, who, "run").await?;
+        let args = ReportArgs::from_json(filters).map_err(|e| e.to_api_error())?;
+        let limit = limit.map(|l| l.min(u64::from(registered.compiled.max_rows)));
+        let runner = self.runner(
+            compiled,
+            Arc::new(Scoped {
+                executor: Arc::clone(&compiled.source.executor),
+                admission,
+            }),
+            Arc::new(Timing),
+        );
+        let out = runner
+            .run(&registered.compiled, &who.principal, &args, limit)
+            .await
+            .map_err(|e| e.to_api_error())?;
+        Ok((out.result, out.messages))
+    }
+
+    /// The source reports the caller may see, unordered. A source the hook denies is absent.
+    pub async fn list(&self, who: &AdmitRequest) -> Vec<ReportSummaryOut> {
+        let mut out = Vec::new();
+        for compiled in &self.ready {
+            let Some(registered) = compiled
+                .registry
+                .lookup_for(&compiled.source.def.name, &who.principal)
+            else {
+                continue;
+            };
+            if self.admitted(compiled, who, "list").await.is_err() {
+                continue;
+            }
+            out.push(ReportSummaryOut {
+                name: registered.compiled.name.clone(),
+                label: registered.compiled.label.clone(),
+                app: registered.app.clone(),
+                base_doctype: registered.compiled.base.as_str().to_owned(),
+            });
+        }
+        out
+    }
+
+    /// Describes `report` for the caller.
+    ///
+    /// # Errors
+    ///
+    /// As [`SourceBook::run`].
+    pub async fn describe(
+        &self,
+        who: &AdmitRequest,
+        report: &str,
+    ) -> CatalogResult<ReportDescriptionOut> {
+        let (compiled, registered) = self.visible(who, report).ok_or_else(|| not_found(report))?;
+        // The description needs no rows, but the same hook decides whether the report exists
+        // for this caller.
+        self.admitted(compiled, who, "describe").await?;
+        let describer = self.runner(
+            compiled,
+            Arc::new(NoRows),
+            Arc::new(spot_reports::NoTelemetry),
+        );
+        describe_registered(&describer, registered, &who.principal).await
+    }
 }
 
 // ---- running ----
@@ -287,6 +726,8 @@ struct Shared {
     backend: PgBackend,
     clock: Arc<dyn spot_core::Clock>,
     shipped: Vec<Shipped>,
+    sources: Arc<SourceRegistry>,
+    book: OnceLock<SourceBook>,
     prepared: Mutex<Option<Arc<Prepared>>>,
     ready: AtomicBool,
 }
@@ -295,7 +736,8 @@ impl Shared {
     fn guard(&self, served: &Served) -> FieldGuard {
         FieldGuard::new(
             Arc::clone(&served.decision),
-            Arc::new(MetaProtection::new(&served.meta)) as Arc<dyn spot_field_guard::ProtectionSource>,
+            Arc::new(MetaProtection::new(&served.meta))
+                as Arc<dyn spot_field_guard::ProtectionSource>,
             Arc::new(GuardSinks),
             Arc::new(GuardSinks),
             Arc::clone(&self.clock),
@@ -310,6 +752,21 @@ impl Shared {
     ) -> ReportRunner {
         let engine: Arc<PermissionEngine> = Arc::clone(&served.decision);
         ReportRunner::new(engine, self.guard(served), executor, telemetry)
+    }
+
+    /// The report sources of this site, compiled at first use (the start-up check) and closed to
+    /// registration from then on.
+    fn book(&self) -> &SourceBook {
+        self.book
+            .get_or_init(|| SourceBook::compile(&self.sources, Arc::clone(&self.clock)))
+    }
+
+    fn admit_request(&self, caller: &Caller) -> AdmitRequest {
+        AdmitRequest {
+            site: self.site.clone(),
+            user: caller.user.clone(),
+            principal: caller.principal.clone(),
+        }
     }
 
     /// The reports of the snapshot served now, compiled once per snapshot.
@@ -339,7 +796,11 @@ impl Shared {
             }),
             Arc::new(Timing),
         );
-        let describer = self.runner(&served, Arc::new(NoRows), Arc::new(spot_reports::NoTelemetry));
+        let describer = self.runner(
+            &served,
+            Arc::new(NoRows),
+            Arc::new(spot_reports::NoTelemetry),
+        );
         let prepared = Arc::new(Prepared {
             served,
             registry,
@@ -418,7 +879,9 @@ impl Shared {
     ) -> CatalogResult<(ReportResult, Vec<Message>)> {
         let prepared = self.prepared()?;
         let Some(registered) = prepared.registry.lookup_for(report, &caller.principal) else {
-            return Err(not_found(report));
+            // Not a shipped report: a service's source, or nothing (`404 report.not_found`).
+            let who = self.admit_request(caller);
+            return self.book().run(&who, report, &filters, limit).await;
         };
         let args = ReportArgs::from_json(&filters).map_err(|e| e.to_api_error())?;
         // The request's `limit` never exceeds the report's maximum; the runner clamps to the
@@ -435,7 +898,7 @@ impl Shared {
     async fn list(&self, ctx: &RequestCtx) -> CatalogResult<Vec<ReportSummaryOut>> {
         let caller = self.caller(ctx).await?;
         let prepared = self.prepared()?;
-        Ok(prepared
+        let mut out: Vec<ReportSummaryOut> = prepared
             .registry
             .list_for(&caller.principal)
             .into_iter()
@@ -445,7 +908,10 @@ impl Shared {
                 app: r.app.clone(),
                 base_doctype: r.compiled.base.as_str().to_owned(),
             })
-            .collect())
+            .collect();
+        out.extend(self.book().list(&self.admit_request(&caller)).await);
+        out.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.name.cmp(&b.name)));
+        Ok(out)
     }
 
     async fn describe(
@@ -468,63 +934,73 @@ impl Shared {
     ) -> CatalogResult<ReportDescriptionOut> {
         let prepared = self.prepared()?;
         let Some(registered) = prepared.registry.lookup_for(report, &caller.principal) else {
-            return Err(not_found(report));
+            return self
+                .book()
+                .describe(&self.admit_request(caller), report)
+                .await;
         };
-        let compiled = &registered.compiled;
-        // The columns are the ones a run for this caller carries. Only the required parameters
-        // are bound, so a filter on an optional parameter is not judged: a description is
-        // refused only where a run with the same arguments would be.
-        let args = ReportArgs::from_map(
-            compiled
-                .parameters
-                .iter()
-                .filter(|p| p.required)
-                .map(|p| (p.name.clone(), placeholder(p.ty, &p.options)))
-                .collect::<BTreeMap<_, _>>(),
-        );
-        let columns = prepared
-            .describer
-            .run(compiled, &caller.principal, &args, Some(1))
-            .await
-            .map_err(|e| e.to_api_error())?
-            .result
-            .columns;
-        Ok(ReportDescriptionOut {
-            name: compiled.name.clone(),
-            label: compiled.label.clone(),
-            app: registered.app.clone(),
-            base_doctype: compiled.base.as_str().to_owned(),
-            parameters: compiled
-                .parameters
-                .iter()
-                .map(|p| ReportParameterOut {
-                    name: p.name.clone(),
-                    label: p.label.clone(),
-                    kind: p.ty.as_str().to_owned(),
-                    required: p.required,
-                    default: p.default.as_ref().map(|v| default_json(p.ty, v)),
-                    options: match &p.options {
-                        ParamOptions::None => None,
-                        ParamOptions::Values(values) => {
-                            Some(ParameterOptionsOut::Values(values.clone()))
-                        }
-                        ParamOptions::Link(doctype) => {
-                            Some(ParameterOptionsOut::Link(doctype.clone()))
-                        }
-                    },
-                })
-                .collect(),
-            columns: columns
-                .into_iter()
-                .map(|c| ReportColumn {
-                    name: c.name,
-                    label: c.label,
-                    field_type: c.field_type,
-                })
-                .collect(),
-            max_rows: compiled.max_rows,
-        })
+        describe_registered(&prepared.describer, registered, &caller.principal).await
     }
+}
+
+/// Describes one registered report as a run for `principal` over no rows states it: the columns
+/// are the ones a run for this caller carries.
+async fn describe_registered(
+    describer: &ReportRunner,
+    registered: &RegisteredReport,
+    principal: &Principal,
+) -> CatalogResult<ReportDescriptionOut> {
+    let compiled = &registered.compiled;
+    // The columns are the ones a run for this caller carries. Only the required parameters
+    // are bound, so a filter on an optional parameter is not judged: a description is
+    // refused only where a run with the same arguments would be.
+    let args = ReportArgs::from_map(
+        compiled
+            .parameters
+            .iter()
+            .filter(|p| p.required)
+            .map(|p| (p.name.clone(), placeholder(p.ty, &p.options)))
+            .collect::<BTreeMap<_, _>>(),
+    );
+    let columns = describer
+        .run(compiled, principal, &args, Some(1))
+        .await
+        .map_err(|e| e.to_api_error())?
+        .result
+        .columns;
+    Ok(ReportDescriptionOut {
+        name: compiled.name.clone(),
+        label: compiled.label.clone(),
+        app: registered.app.clone(),
+        base_doctype: compiled.base.as_str().to_owned(),
+        parameters: compiled
+            .parameters
+            .iter()
+            .map(|p| ReportParameterOut {
+                name: p.name.clone(),
+                label: p.label.clone(),
+                kind: p.ty.as_str().to_owned(),
+                required: p.required,
+                default: p.default.as_ref().map(|v| default_json(p.ty, v)),
+                options: match &p.options {
+                    ParamOptions::None => None,
+                    ParamOptions::Values(values) => {
+                        Some(ParameterOptionsOut::Values(values.clone()))
+                    }
+                    ParamOptions::Link(doctype) => Some(ParameterOptionsOut::Link(doctype.clone())),
+                },
+            })
+            .collect(),
+        columns: columns
+            .into_iter()
+            .map(|c| ReportColumn {
+                name: c.name,
+                label: c.label,
+                field_type: c.field_type,
+            })
+            .collect(),
+        max_rows: compiled.max_rows,
+    })
 }
 
 /// A value of a parameter's type that binds: what a description passes for a required parameter.
@@ -611,8 +1087,20 @@ impl Service for ReportService {
                 .shared
                 .prepared()
                 .map_err(|_| "the reports cannot be compiled".to_owned())?;
-            if !prepared.problems.is_empty() {
-                return Err(prepared.problems.join("\n"));
+            let mut problems = prepared.problems.clone();
+            let book = self.shared.book();
+            problems.extend(book.fatal().iter().cloned());
+            // A source report named like a shipped one stops the check, naming both.
+            for (name, service) in book.served() {
+                if let Some(shipped) = prepared.registry.lookup(&name) {
+                    problems.push(format!(
+                        "the report `{name}` is shipped by the app `{}` and also registered by the service `{service}`",
+                        shipped.app
+                    ));
+                }
+            }
+            if !problems.is_empty() {
+                return Err(problems.join("\n"));
             }
             self.shared.ready.store(true, Ordering::Release);
             Ok(())
@@ -637,7 +1125,7 @@ fn built() -> &'static Mutex<HashMap<String, Arc<Reports>>> {
 }
 
 /// Registers reports: the service, the engine delegate behind `report_run`, and the catalogue
-/// routes on the site's router.
+/// port the host gives the router (the registry mounts the routes).
 pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let settings: Settings = ctx.settings_or_default("report")?;
     if !settings.enabled {
@@ -646,6 +1134,9 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let env = *ctx.env()?;
     let site = env.site.site.clone();
     let port = if ctx.assembling() {
+        // Services that start later register reports of their own data through this port.
+        let sources = Arc::new(SourceRegistry::new());
+        ctx.provide::<dyn ReportSources>(Arc::clone(&sources) as Arc<dyn ReportSources>)?;
         let installed = super::controllers::installed(env.root, env.loaded, env.site)?;
         let shipped = read_definitions(installed.into_iter().map(|a| (a.name, a.dir)))
             .map_err(|problems| Error(problems.join("\n")))?;
@@ -655,6 +1146,8 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             backend: env.backend.clone(),
             clock: Arc::clone(ctx.clock()),
             shipped,
+            sources: Arc::clone(&sources),
+            book: OnceLock::new(),
             prepared: Mutex::new(None),
             ready: AtomicBool::new(false),
         });
@@ -672,20 +1165,11 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     };
     // `report_run` reaches the engine through the delegate the host hands the resource adapter.
     ctx.provide::<dyn ReportDelegate>(Arc::clone(&port) as Arc<dyn ReportDelegate>)?;
-    let mut ports = Ports::new();
-    ports.provide::<dyn ReportCatalogPort>(port);
-    // The group is mounted here, not by the route registry (see `routes/report.rs`). The host
-    // authenticates every request before the router sees it, and the port authenticates again.
-    let mounted = routes::mount(&[routes::report::registration()], &ports, &[]);
-    let router = mounted.authenticated;
-    if let Some((module, reason)) = mounted.report.skipped.first() {
-        tracing::error!(
-            module = *module,
-            ?reason,
-            "the report routes were not mounted"
-        );
-    }
-    ctx.router_layer(move |base| base.merge(router));
+    // The catalogue port goes to the host, which hands it to the router's `ApiServices`
+    // (`with_port`): the route registry then mounts `report_list` and `report_describe` once,
+    // behind the router's bearer layer (WP-PLT-14.T5). An absent port leaves the group
+    // unmounted, never half served.
+    ctx.provide::<dyn ReportCatalogPort>(port as Arc<dyn ReportCatalogPort>)?;
     Ok(())
 }
 
@@ -747,7 +1231,11 @@ field = "memo"
         let second = compile_all(&shipped(REPORT), &after, &catalog);
         assert!(second.registry.lookup("memo_list").is_none());
         assert_eq!(second.problems.len(), 1, "{:?}", second.problems);
-        assert!(second.problems[0].contains("memo_list"), "{:?}", second.problems);
+        assert!(
+            second.problems[0].contains("memo_list"),
+            "{:?}",
+            second.problems
+        );
 
         // And against a snapshot that still has it but differs elsewhere, it is compiled afresh
         // for that snapshot: the compiled form carries the digest of the metadata it saw.
@@ -769,8 +1257,16 @@ field = "memo"
     #[test]
     fn every_problem_of_every_definition_is_named() {
         let (set, catalog) = meta(vec![FieldSpec::new("memo", FieldType::Text)]);
-        let mut both = shipped(&REPORT.replace("memo_list", "first").replace("\"memo\"", "\"gone\""));
-        both.extend(shipped(&REPORT.replace("memo_list", "second").replace("journal", "ledger")));
+        let mut both = shipped(
+            &REPORT
+                .replace("memo_list", "first")
+                .replace("\"memo\"", "\"gone\""),
+        );
+        both.extend(shipped(
+            &REPORT
+                .replace("memo_list", "second")
+                .replace("journal", "ledger"),
+        ));
         let compiled = compile_all(&both, &set, &catalog);
         assert_eq!(compiled.problems.len(), 2, "{:?}", compiled.problems);
         assert!(compiled.problems.iter().any(|p| p.contains("`first`")));
@@ -788,7 +1284,11 @@ field = "memo"
         let compiled = compile_all(&both, &set, &catalog);
         assert_eq!(compiled.registry.len(), 1);
         assert_eq!(compiled.problems.len(), 1, "{:?}", compiled.problems);
-        assert!(compiled.problems[0].contains("other"), "{:?}", compiled.problems);
+        assert!(
+            compiled.problems[0].contains("other"),
+            "{:?}",
+            compiled.problems
+        );
     }
 
     #[test]
@@ -798,8 +1298,11 @@ field = "memo"
         let empty = root.join("empty");
         std::fs::create_dir_all(books.join(REPORTS_DIR)).unwrap();
         std::fs::create_dir_all(&empty).unwrap();
-        std::fs::write(books.join(REPORTS_DIR).join("b.toml"), REPORT.replace("memo_list", "second"))
-            .unwrap();
+        std::fs::write(
+            books.join(REPORTS_DIR).join("b.toml"),
+            REPORT.replace("memo_list", "second"),
+        )
+        .unwrap();
         std::fs::write(books.join(REPORTS_DIR).join("a.toml"), REPORT).unwrap();
         std::fs::write(books.join(REPORTS_DIR).join("notes.txt"), "not a report").unwrap();
 
@@ -809,7 +1312,11 @@ field = "memo"
         ])
         .unwrap();
         let order: Vec<&str> = found.iter().map(|(_, d)| d.name.as_str()).collect();
-        assert_eq!(order, ["memo_list", "second"], "file-name order; an app with no reports ships none");
+        assert_eq!(
+            order,
+            ["memo_list", "second"],
+            "file-name order; an app with no reports ships none"
+        );
 
         std::fs::write(books.join(REPORTS_DIR).join("c.toml"), "name = ").unwrap();
         std::fs::write(books.join(REPORTS_DIR).join("d.toml"), "bogus = 1").unwrap();
@@ -823,8 +1330,14 @@ field = "memo"
     #[test]
     fn a_description_binds_required_parameters_only_with_values_of_their_type() {
         let options = ParamOptions::Values(vec!["draft".to_owned(), "posted".to_owned()]);
-        assert_eq!(placeholder(ParamType::Select, &options), Json::from("draft"));
-        assert_eq!(placeholder(ParamType::Int, &ParamOptions::None), Json::from(0));
+        assert_eq!(
+            placeholder(ParamType::Select, &options),
+            Json::from("draft")
+        );
+        assert_eq!(
+            placeholder(ParamType::Int, &ParamOptions::None),
+            Json::from(0)
+        );
         assert_eq!(
             placeholder(ParamType::Date, &ParamOptions::None),
             Json::from("1970-01-01")

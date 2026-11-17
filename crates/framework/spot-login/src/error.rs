@@ -63,6 +63,11 @@ pub enum LoginErrorKind {
     InitialSecretInvalid,
     /// A one-time initial secret was already used.
     InitialSecretUsed,
+    /// The sign-in throttle could not count the attempt, so the attempt is refused (fail closed).
+    AdmissionUnavailable,
+    /// The tenant's sign-in policy is `sso_required` (or could not be read, which is treated the
+    /// same way) and the user is not a break-glass administrator: password sign-in is refused.
+    SsoRequired,
     /// A store, event sink or clock failed.
     StoreFailed,
 }
@@ -96,6 +101,8 @@ impl LoginErrorKind {
             LoginErrorKind::AdminActionDenied => "login.admin_action_denied",
             LoginErrorKind::InitialSecretInvalid => "login.initial_secret_invalid",
             LoginErrorKind::InitialSecretUsed => "login.initial_secret_used",
+            LoginErrorKind::AdmissionUnavailable => "login.admission_unavailable",
+            LoginErrorKind::SsoRequired => "login.sso_required",
             LoginErrorKind::StoreFailed => "login.store_failed",
         }
     }
@@ -128,6 +135,10 @@ impl LoginErrorKind {
             LoginErrorKind::AdminActionDenied => "The administrative action was refused.",
             LoginErrorKind::InitialSecretInvalid => "The one-time secret is unknown or expired.",
             LoginErrorKind::InitialSecretUsed => "The one-time secret was already used.",
+            LoginErrorKind::AdmissionUnavailable => {
+                "Sign-in is temporarily unavailable. Try again shortly."
+            }
+            LoginErrorKind::SsoRequired => "This tenant requires single sign-on.",
             LoginErrorKind::StoreFailed => "A backend dependency failed.",
         }
     }
@@ -163,6 +174,8 @@ impl LoginErrorKind {
                 Code::AuthSessionNotFound
             }
             LoginErrorKind::AdminActionDenied => Code::PermissionDenied,
+            LoginErrorKind::AdmissionUnavailable => Code::ServerUnavailable,
+            LoginErrorKind::SsoRequired => Code::SsoRequired,
             LoginErrorKind::StoreFailed => Code::HttpInternal,
         }
     }
@@ -257,6 +270,11 @@ impl LoginError {
                 "retry_after",
                 serde_json::Value::from(self.retry_after_secs().unwrap_or(0)),
             ),
+            LoginErrorKind::AdmissionUnavailable => ApiError::new(code, self.kind.message())
+                .detail(
+                    "retry_after",
+                    serde_json::Value::from(UNAVAILABLE_RETRY_SECS),
+                ),
             LoginErrorKind::StoreFailed if self.is_unavailable() => ApiError::new(
                 Code::ServerUnavailable,
                 "The sign-in service is temporarily unavailable.",

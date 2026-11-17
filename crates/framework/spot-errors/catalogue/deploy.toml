@@ -1,0 +1,73 @@
+# deploy codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "deploy.catalogue"
+class = "none"
+summary = "The operation was refused: catalogue."
+explanation_key = "error.deploy.catalogue"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.deploy.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.policy"
+class = "none"
+summary = "The operation was refused: policy."
+explanation_key = "error.deploy.policy"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.token_expired"
+class = "none"
+summary = "The operation was refused: token expired."
+explanation_key = "error.deploy.token_expired"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.token_other_host"
+class = "none"
+summary = "The operation was refused: token other host."
+explanation_key = "error.deploy.token_other_host"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.token_unknown"
+class = "none"
+summary = "The operation was refused: token unknown."
+explanation_key = "error.deploy.token_unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.token_used"
+class = "none"
+summary = "The operation was refused: token used."
+explanation_key = "error.deploy.token_used"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deploy.worker"
+class = "none"
+summary = "The operation was refused: worker."
+explanation_key = "error.deploy.worker"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

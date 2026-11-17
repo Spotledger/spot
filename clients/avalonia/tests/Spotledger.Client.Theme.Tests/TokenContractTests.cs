@@ -201,6 +201,10 @@ public sealed class TokenContractTests
 
         Assert.Contains("Color.Focus.Ring", axaml, StringComparison.Ordinal);
         Assert.Contains("Focus.Width", axaml, StringComparison.Ordinal);
+        foreach (var key in new[] { "Toast.Duration", "Toast.MaxWidth", "Toast.CornerRadius", "Toast.Elevation", "Toast.Offset" })
+        {
+            Assert.Contains($"x:Key=\"{key}\"", axaml, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

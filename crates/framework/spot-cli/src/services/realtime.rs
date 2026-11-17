@@ -52,11 +52,12 @@ use spot_app_api::prelude::Name;
 use spot_core::{Clock, SiteId};
 use spot_document::engine::PrincipalSource as DocPrincipals;
 use spot_http::api::codec::parse_record_id;
-use spot_http::api::service::{Credential, RequestCtx};
+use spot_http::api::service::{
+    Credential, Door, DoorTier, OfflineAdmission, OfflineRefusal, RequestCtx,
+};
 use spot_http::request::RequestId;
 use spot_permissions::{DocFacts, PermissionEngine, Snapshot};
 use spot_postgres::PgBackend;
-use spot_storage_contract::{ChangeFeed, FeedPosition};
 use spot_realtime::ws::{self, CancellationToken, ExpiryWatch, Rejected, TokenVerifier, WsConfig};
 use spot_realtime::{
     AuthFuture, BusConfig, Principal as WirePrincipal, RealtimeBus, Room, RoomAuthorizer,
@@ -65,11 +66,15 @@ use spot_realtime_bridge::{
     DocFactsSource, EngineSource, FeedPump, MappingOutcome, PermissionRoomAuthorizer,
     PositionStore, PrincipalSource as BridgePrincipals, PumpConfig, PumpPosition, PumpTelemetry,
 };
+use spot_storage_contract::{ChangeFeed, FeedPosition};
 use tokio::sync::watch;
 
 use crate::audit::PathClass;
-use crate::live::SiteLive;
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::live::{LiveProtection, SiteLive};
+use crate::services::offline_identity::{
+    self, EntryPoint, OfflineGate, OfflineIdentity, decide_at,
+};
+use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
 
 /// How often a connected session is asked whether it is still valid.
 const SESSION_CHECK: Duration = Duration::from_secs(10);
@@ -207,6 +212,278 @@ impl BridgePrincipals for LivePrincipals {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Offline identity at the doors (WP-IAM-09.T5)
+//
+// The one place every door's plumbing lives (the coverage table in `offline_identity` names the
+// file each door's decision is taken in; these types are what those files share).
+// ---------------------------------------------------------------------------------------------
+
+/// The node's monotonic reading for an offline decision (the clock the lease arithmetic uses,
+/// never the wall clock). Provided by whatever holds the node's snapshot store.
+pub trait NodeNow: Send + Sync + 'static {
+    /// The reading now.
+    fn now(&self) -> spot_offline_identity::NodeClock;
+}
+
+/// How long the node's lease for a tier still runs: the one fact a door with no user (the
+/// management API) needs. Provided by whatever holds the node's snapshot store
+/// (`SnapshotStore::lease_remaining_ms`).
+pub trait LeaseProbe: Send + Sync + 'static {
+    /// Milliseconds left on the lease of `tier`; zero when there is none.
+    fn remaining_ms(&self, tier: DoorTier) -> u64;
+}
+
+/// [`OfflineAdmission`] over an [`OfflineGate`] (the node's snapshot store) and the node's clock:
+/// every door's question becomes one [`decide_at`] call.
+pub struct GateAdmission<G> {
+    gate: G,
+    now: Arc<dyn NodeNow>,
+    lease: Option<Arc<dyn LeaseProbe>>,
+}
+
+impl<G: OfflineGate + Send + Sync + 'static> GateAdmission<G> {
+    /// An admission over `gate`, reading `now` for every decision. Without
+    /// [`GateAdmission::with_lease`] a door that asks for the node's own lease is `NotReady`.
+    #[must_use]
+    pub fn new(gate: G, now: Arc<dyn NodeNow>) -> Self {
+        Self {
+            gate,
+            now,
+            lease: None,
+        }
+    }
+
+    /// The same admission, answering the node's own lease from `lease`.
+    #[must_use]
+    pub fn with_lease(mut self, lease: Arc<dyn LeaseProbe>) -> Self {
+        self.lease = Some(lease);
+        self
+    }
+}
+
+/// The coverage-table entry a [`Door`] is.
+#[must_use]
+pub fn entry_point(door: Door) -> EntryPoint {
+    match door {
+        Door::Api => EntryPoint::Api,
+        Door::Realtime => EntryPoint::Realtime,
+        Door::Jobs => EntryPoint::Jobs,
+        Door::Scripts => EntryPoint::Scripts,
+        Door::Controllers => EntryPoint::Controllers,
+        Door::Management => EntryPoint::Management,
+    }
+}
+
+fn gate_tier(tier: DoorTier) -> spot_offline_identity::Tier {
+    match tier {
+        DoorTier::One => spot_offline_identity::Tier::One,
+        DoorTier::Two => spot_offline_identity::Tier::Two,
+        DoorTier::Three => spot_offline_identity::Tier::Three,
+    }
+}
+
+impl<G: OfflineGate + Send + Sync + 'static> OfflineAdmission for GateAdmission<G> {
+    fn admit(
+        &self,
+        door: Door,
+        user: &str,
+        tier: DoorTier,
+        permission: Option<&str>,
+    ) -> Result<(), OfflineRefusal> {
+        let decision = decide_at(
+            entry_point(door),
+            &self.gate,
+            user,
+            gate_tier(tier),
+            permission,
+            self.now.now(),
+        );
+        if decision.is_allowed() {
+            Ok(())
+        } else {
+            Err(OfflineRefusal::Denied)
+        }
+    }
+
+    fn node_admitted(&self, _door: Door, tier: DoorTier) -> Result<(), OfflineRefusal> {
+        let Some(lease) = &self.lease else {
+            return Err(OfflineRefusal::NotReady);
+        };
+        if lease.remaining_ms(tier) > 0 {
+            Ok(())
+        } else {
+            Err(OfflineRefusal::Denied)
+        }
+    }
+}
+
+/// The slot of `door` for `site`: the same one on every build of the site, so the controllers and
+/// views the host builds once keep deciding through the admission a later reload installs.
+#[must_use]
+pub fn door_slot(site: &str, door: Door) -> Arc<OfflineSlot> {
+    type Slots = Mutex<HashMap<(String, Door), Arc<OfflineSlot>>>;
+    static SLOTS: std::sync::OnceLock<Slots> =
+        std::sync::OnceLock::new();
+    let mut slots = lock(SLOTS.get_or_init(|| Mutex::new(HashMap::new())));
+    Arc::clone(
+        slots
+            .entry((site.to_owned(), door))
+            .or_insert_with(|| Arc::new(OfflineSlot::default())),
+    )
+}
+
+/// What one door found when its module finished registering.
+#[derive(Clone)]
+pub enum DoorState {
+    /// The site issues no offline identity: the door is unchanged.
+    Absent,
+    /// The site issues offline identity but this node has no admission provider (no snapshot
+    /// holder, so no node registry or user directory to decide with): the door reports not ready.
+    Unwired,
+    /// The door asks this decision before it acts.
+    Enforcing(Arc<dyn OfflineAdmission>),
+}
+
+/// Reads a door's state from the assembly. Call it only once every module has registered (from a
+/// finaliser, see [`finalise_door`]).
+#[must_use]
+pub fn door_state(ctx: &SiteCtx<'_>) -> DoorState {
+    if let Some(admission) = ctx.port::<dyn OfflineAdmission>() {
+        return DoorState::Enforcing(admission);
+    }
+    if ctx.port::<OfflineIdentity>().is_some() {
+        return DoorState::Unwired;
+    }
+    DoorState::Absent
+}
+
+/// The readiness entry of a door that has no admission provider. It names the missing provider by
+/// its error code and never a user, a node or a key.
+#[must_use]
+pub fn unwired_readiness(name: &'static str) -> Arc<Idle> {
+    Idle::new(name, Level::Optional, || -> CheckFuture<'static> {
+        Box::pin(async {
+            Err(format!(
+                "{}: this door has no offline admission provider (node registry, user directory)",
+                offline_identity::CODE_NO_DIRECTORY
+            ))
+        })
+    })
+}
+
+/// Runs `install` once every module has registered, with the admission when this door must
+/// enforce one (`None` otherwise, which clears an earlier one after a reload); a door with no
+/// provider while the site issues offline identity gets a not-ready entry named `name`.
+pub fn finalise_door(
+    ctx: &mut SiteCtx<'_>,
+    name: &'static str,
+    install: impl FnOnce(Option<Arc<dyn OfflineAdmission>>) + Send + 'static,
+) {
+    ctx.finally(move |ctx| {
+        match door_state(ctx) {
+            DoorState::Enforcing(admission) => install(Some(admission)),
+            DoorState::Unwired => {
+                install(None);
+                ctx.add(unwired_readiness(name));
+            }
+            DoorState::Absent => install(None),
+        }
+        Ok(())
+    });
+}
+
+/// A door's slot for its admission: empty means the door is unchanged. Replaceable, because a
+/// reload builds a new assembly while the hub survives.
+#[derive(Default)]
+pub struct OfflineSlot {
+    slot: Mutex<Option<Arc<dyn OfflineAdmission>>>,
+}
+
+impl OfflineSlot {
+    /// Replaces (or clears) the admission.
+    pub fn set(&self, admission: Option<Arc<dyn OfflineAdmission>>) {
+        *lock(&self.slot) = admission;
+    }
+
+    /// Whether an admission is installed.
+    #[must_use]
+    pub fn enforcing(&self) -> bool {
+        lock(&self.slot).is_some()
+    }
+
+    /// Asks the installed decision; an empty slot admits (the door is unchanged).
+    ///
+    /// # Errors
+    /// The decision's refusal.
+    pub fn admit(
+        &self,
+        door: Door,
+        user: &str,
+        tier: DoorTier,
+        permission: Option<&str>,
+    ) -> Result<(), OfflineRefusal> {
+        let admission = lock(&self.slot).clone();
+        match admission {
+            Some(admission) => admission.admit(door, user, tier, permission),
+            None => Ok(()),
+        }
+    }
+
+    /// Asks whether the node itself holds a valid lease; an empty slot admits.
+    ///
+    /// # Errors
+    /// The decision's refusal.
+    pub fn admit_node(&self, door: Door, tier: DoorTier) -> Result<(), OfflineRefusal> {
+        let admission = lock(&self.slot).clone();
+        match admission {
+            Some(admission) => admission.node_admitted(door, tier),
+            None => Ok(()),
+        }
+    }
+
+    /// Asks the decision for the person behind `actor`: a user, and the person who acted as that
+    /// user when there is one (impersonation); either refused refuses. A platform component acts
+    /// for nobody and a consumer is a separate principal outside the offline directory (ADR-083):
+    /// neither is decided here.
+    ///
+    /// # Errors
+    /// The first refusal.
+    pub fn admit_actor(
+        &self,
+        door: Door,
+        actor: &Actor,
+        tier: DoorTier,
+        permission: Option<&str>,
+    ) -> Result<(), OfflineRefusal> {
+        let Actor::User { id, via } = actor else {
+            return Ok(());
+        };
+        for user in std::iter::once(id).chain(via.as_ref()) {
+            self.admit(door, &user.to_string(), tier, permission)?;
+        }
+        Ok(())
+    }
+}
+
+/// The app error a refusal becomes: `permission.denied`, or `server.unavailable` (retry) when the
+/// decision could not be taken. Neither names a user, a permission or a node.
+#[must_use]
+pub fn refusal_error(refusal: OfflineRefusal) -> spot_app_api::AppError {
+    match refusal {
+        OfflineRefusal::Denied => spot_app_api::AppError::new(
+            spot_app_api::ErrorClass::PermissionDenied,
+            "permission.denied",
+            "The identity is not admitted on this node.",
+        ),
+        OfflineRefusal::NotReady => spot_app_api::AppError::new(
+            spot_app_api::ErrorClass::Unavailable,
+            "server.unavailable",
+            "The node cannot decide the identity yet.",
+        ),
+    }
+}
+
 type Authorizer = PermissionRoomAuthorizer<LiveEngine, LiveFacts, LivePrincipals>;
 
 /// The rooms each principal has been admitted to, so a snapshot swap knows what to ask again.
@@ -253,12 +530,17 @@ impl Ledger {
 struct Ledgered {
     inner: Authorizer,
     ledger: Arc<Ledger>,
+    offline: Arc<OfflineSlot>,
 }
 
 impl RoomAuthorizer for Ledgered {
     fn authorize(&self, site: &SiteId, principal: &WirePrincipal, room: &Room) -> AuthFuture<'_> {
         let (site, principal, room) = (site.clone(), principal.clone(), room.clone());
         Box::pin(async move {
+            // The offline decision first: an identity revoked offline joins no room.
+            self.offline
+                .admit(Door::Realtime, principal.id(), DoorTier::Three, None)
+                .map_err(|_| spot_realtime::Denied::new("the identity is not admitted"))?;
             self.inner.authorize(&site, &principal, &room).await?;
             self.ledger.record(principal.id(), &room);
             Ok(())
@@ -276,6 +558,9 @@ pub struct Sessions {
     /// The live connections of each user.
     watchers: Mutex<HashMap<String, Vec<Weak<ConnWatch>>>>,
     me: Weak<Sessions>,
+    /// The offline decision, asked at every verification (the transport repeats it every
+    /// [`SESSION_CHECK`], so a lease boundary or a revocation closes the socket).
+    offline: Arc<OfflineSlot>,
 }
 
 impl Sessions {
@@ -320,6 +605,9 @@ impl TokenVerifier for Sessions {
                 return Err(Rejected::new("the user must choose a password first"));
             }
             let user = who.user_id.to_string();
+            self.offline
+                .admit(Door::Realtime, &user, DoorTier::Three, None)
+                .map_err(|_| Rejected::new("the credential is not valid"))?;
             lock(&self.pending).insert(key, user.clone());
             Ok(WirePrincipal::user(user))
         })
@@ -444,6 +732,7 @@ pub struct Realtime {
     page_limit: u32,
     stop_sockets: CancellationToken,
     bus: RealtimeBus,
+    offline: Arc<OfflineSlot>,
 }
 
 impl Realtime {
@@ -479,12 +768,14 @@ impl Realtime {
             }),
         );
         let ledger = Arc::new(Ledger::default());
+        let offline = Arc::new(OfflineSlot::default());
         let bus = RealtimeBus::new(
             BusConfig::default(),
             Arc::clone(&clock),
             Arc::new(Ledgered {
                 inner: authorizer.clone(),
                 ledger: Arc::clone(&ledger),
+                offline: Arc::clone(&offline),
             }),
         );
         let stop_sockets = CancellationToken::new();
@@ -495,6 +786,7 @@ impl Realtime {
             pending: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
             me: me.clone(),
+            offline: Arc::clone(&offline),
         });
         let router = ws::router(
             bus.clone(),
@@ -515,7 +807,11 @@ impl Realtime {
             None,
             Arc::new(PumpLog { site: site.clone() }),
             config,
-        );
+        )
+        // A protected field name never reaches a room, and a value-bearing notice is refused
+        // (WP-SEC-04.T8, installed by WP-SEC-04.T14). The facts are read from what is served at
+        // the moment of each event, so a customisation swapped in later applies at once.
+        .with_notification_guard(Arc::new(LiveProtection::new(Arc::clone(&live))));
         Some(Arc::new(Realtime {
             site,
             live,
@@ -529,7 +825,20 @@ impl Realtime {
             page_limit,
             stop_sockets,
             bus,
+            offline,
         }))
+    }
+
+    /// Installs (or, with `None`, clears) the offline admission every join, verification and
+    /// revalidation asks (WP-IAM-09.T5). Called from the finaliser of [`register`].
+    pub fn set_offline_admission(&self, admission: Option<Arc<dyn OfflineAdmission>>) {
+        self.offline.set(admission);
+    }
+
+    /// The slot the sockets' decisions read (for tests).
+    #[must_use]
+    pub fn offline_slot(&self) -> &Arc<OfflineSlot> {
+        &self.offline
     }
 
     /// The `GET /api/v1/realtime` route.
@@ -601,10 +910,19 @@ impl Realtime {
                 continue;
             }
             let principal = WirePrincipal::user(user.clone());
-            let evicted = self
-                .authorizer
-                .revalidate(&self.site, &principal, &rooms)
-                .await;
+            // A user the offline decision no longer admits keeps no room (the socket itself
+            // closes at its next verification).
+            let evicted = if self
+                .offline
+                .admit(Door::Realtime, &user, DoorTier::Three, None)
+                .is_err()
+            {
+                rooms.clone()
+            } else {
+                self.authorizer
+                    .revalidate(&self.site, &principal, &rooms)
+                    .await
+            };
             if evicted.is_empty() {
                 continue;
             }
@@ -700,16 +1018,43 @@ impl Service for RealtimeService {
     }
 }
 
+/// This module's start order: the one it had in the host's table before it moved here.
+pub const ORDER: u32 = 800;
+
+/// Realtime: optional, so a feed that cannot be read degrades the site, not stops it.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    if let Some(hub) = ctx.env()?.live.realtime() {
+        ctx.add(hub.service());
+        let door = Arc::clone(&hub);
+        finalise_door(ctx, "offline_door_realtime", move |admission| {
+            door.set_offline_admission(admission);
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_authorisation_doctype;
 
     #[test]
     fn only_the_records_the_permission_engine_reads_signal_a_revalidation() {
-        for doctype in ["role", "role_duty", "role_assignment", "role_assignment_scope"] {
+        for doctype in [
+            "role",
+            "role_duty",
+            "role_assignment",
+            "role_assignment_scope",
+        ] {
             assert!(is_authorisation_doctype(doctype), "{doctype}");
         }
-        for doctype in ["task", "project", "user", "session", "api_key", "sys_user_notice"] {
+        for doctype in [
+            "task",
+            "project",
+            "user",
+            "session",
+            "api_key",
+            "sys_user_notice",
+        ] {
             assert!(!is_authorisation_doctype(doctype), "{doctype}");
         }
     }

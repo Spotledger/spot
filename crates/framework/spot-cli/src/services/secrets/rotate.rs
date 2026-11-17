@@ -163,9 +163,8 @@ pub async fn sweep_once(
         language: None,
         now: clock.now_utc(),
     };
-    // The operator tool acts with the bootstrap's capability: there is no separate caller kind
-    // for it (see the report's open questions).
-    let access = engine.secret_access(SecretCaller::Seed, &invocation);
+    // The operator tool is audited as `operator`, not as the bootstrap's `seed`.
+    let access = engine.secret_access(SecretCaller::Operator, &invocation);
     let mut totals = SweepTotals::default();
     for def in meta.definitions() {
         if def.is_child || !def.fields.iter().any(|f| f.ty == FieldType::Secret) {

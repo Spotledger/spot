@@ -19,6 +19,15 @@
 //!   verified position of a clean run is returned for the caller to record.
 //! * A rebuild that fails is [`AuditRun::Failed`] with the failing crate's code, not an error:
 //!   the schedule wants a result row either way.
+//!
+//! # Positions are pairs
+//!
+//! A position is `(generation, seq)` and every generation restarts at 1 (ADR-061 amendment A.0),
+//! so a bare `seq` identifies nothing. The pinned position, the snapshot filter, the plan target
+//! (`Target::In`) and the in-memory live side's ordering all use the pair, ordered
+//! lexicographically. `VerifiedPosition` and `OldestSnapshot` of `spot-journal-audit` already
+//! hold a `Position` with both fields, and their JSON keeps `generation` beside `seq`: a reader
+//! of an older shape that knew only `seq` must read `generation` too.
 #![forbid(unsafe_code)]
 
 mod error;

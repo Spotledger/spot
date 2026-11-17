@@ -11,7 +11,10 @@
 //! is known to be aborted (ADR-46).
 
 mod admin;
-pub use admin::{create_database, database_exists};
+pub use admin::{
+    DEFAULT_CTYPE, check_text_search_ctype, create_database, create_database_with_ctype,
+    database_exists,
+};
 
 mod backend;
 mod config;
@@ -22,9 +25,11 @@ mod tx;
 mod documents;
 mod feed;
 mod graph;
+mod ledger;
 mod locks;
 mod query;
 mod schema;
+mod search_hook;
 mod sequences;
 
 #[cfg(feature = "testing")]
@@ -33,7 +38,11 @@ pub mod testing;
 pub use backend::PgBackend;
 pub use config::{PgConfig, Tls};
 pub use error::kind_for_sqlstate;
-pub use feed::{Cleanup, cleanup, envelopes, retention, set_retention, start_new_generation};
+pub use feed::{
+    Cleanup, GENERATION_NOT_NEWER, WOULD_REGRESS, adopt_position, cleanup, envelopes,
+    open_generation, retention, set_retention, start_new_generation,
+};
+pub use search_hook::{HookFuture, SearchMaintenance};
 pub use tx::PgTransaction;
 
 /// The PostgreSQL major version this backend supports (architecture decision of 29 Sep 2026).

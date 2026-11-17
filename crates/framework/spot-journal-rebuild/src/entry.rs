@@ -5,7 +5,7 @@ use serde_json::Value;
 use spot_events_contract::envelope::{EventEnvelope, Position};
 
 use crate::error::RebuildError;
-use crate::options::{EventClass, classify};
+use crate::options::EventClass;
 
 /// The net operation of a `doc_state` entry (ADR-061 s3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +31,8 @@ pub(crate) struct State {
 pub(crate) struct Entry {
     pub(crate) position: Position,
     pub(crate) class: EventClass,
+    /// The classifier did not know the topic (the class is then domain).
+    pub(crate) unknown: bool,
     pub(crate) topic: String,
     pub(crate) event_id: String,
     pub(crate) entity: String,
@@ -42,7 +44,12 @@ pub(crate) struct Entry {
 }
 
 /// Parses one segment line at `position` and checks it belongs to `source` and to that position.
-pub(crate) fn parse(line: &str, position: Position, source: &str) -> Result<Entry, RebuildError> {
+pub(crate) fn parse(
+    line: &str,
+    position: Position,
+    source: &str,
+    resolve: &dyn Fn(&str) -> (EventClass, bool),
+) -> Result<Entry, RebuildError> {
     let invalid = |reason: &'static str| RebuildError::EntryInvalid {
         generation: position.generation,
         seq: position.seq,
@@ -60,7 +67,7 @@ pub(crate) fn parse(line: &str, position: Position, source: &str) -> Result<Entr
         return Err(invalid("the envelope names another position than its slot"));
     }
     let topic = envelope.topic.as_str().to_owned();
-    let class = classify(&topic);
+    let (class, unknown) = resolve(&topic);
     let entity = envelope.subject.entity.clone();
     let id = envelope.subject.id.to_string();
     let event_id = envelope.event_id.to_string();
@@ -78,6 +85,7 @@ pub(crate) fn parse(line: &str, position: Position, source: &str) -> Result<Entr
     Ok(Entry {
         position,
         class,
+        unknown,
         topic,
         event_id,
         entity,

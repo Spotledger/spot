@@ -48,7 +48,10 @@ jobs:
         shell: bash
         run: bash tools/ci/start-postgres.sh
       - name: workflow lint
-        run: python tools/opensource-ci/workflow_lint.py .github/workflows
+        shell: bash
+        run: |
+          python tools/opensource-ci/workflow_lint.py .github/workflows --exclude spot-pr.yml --exclude spot-verdict.yml
+          python tools/opensource-ci/ops_workflow_lint.py --public-pair .github/workflows
       - name: licence lint
         run: python tools/lints/license/check.py
       - name: python suites

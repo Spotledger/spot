@@ -8,11 +8,19 @@
 //!   transaction that loads the row under a write lock, replaces the three counters and commits.
 //!   The account is resolved through the **same name-or-email lookup** the user directory signs
 //!   in with, so lockout and backoff engage whichever identifier is presented.
-//!   A name that belongs to no user has no row to hold a counter, but it is **counted all the
-//!   same**, through the same state machine, in a bounded per-process map
-//!   ([`UNKNOWN_ACCOUNT_CAP`]): an unknown name backs off and locks exactly like a real one, so
-//!   the response is no account-existence oracle. (The map is not shared between nodes or kept
-//!   across restarts; the per-source counter and the durable real-account counter are.)
+//!   A name that belongs to no user has no row to hold a counter, so each failure counted on it
+//!   is appended as a `login_attempt` row of its own kind (`account` = the presented name, which
+//!   "need not belong to a user", result `login.failure_counted`, source digest
+//!   [`ACCOUNT_COUNTER_SOURCE`], which no source counter ever reads), and `get` replays those
+//!   rows with the same window, backoff threshold and lockout as a real account's row
+//!   ([`derive_unknown_account`]). The service's own attempt rows are not read: they also
+//!   record refusals that count nothing, and the host's event sink may not store them. Without this an unknown name never backs off or locks while a
+//!   real one does, and the answer tells an attacker which names exist. The admission port
+//!   (`CoordinatorAdmission`, a bucket per account name on the shared coordinator) counts both
+//!   alike as well. There is no in-process map to fill or evict.
+//!   The two limits meet like this: the coordinator's account bucket is a **rate** that refills,
+//!   the user-row counters are a **state** (backoff, then a lock) an operator can read and clear.
+//!   Neither is set from source evidence alone: only failures on this account write the row.
 //! - **Per source.** There is no source-counter record, and inventing one is not in an owned
 //!   path. The counter is therefore **derived** from the append-only `login_attempt` rows the
 //!   service already writes for every attempt: the failures of one source digest inside the
@@ -27,15 +35,14 @@
 //! No value here is a credential: the source is already a salted digest and the counters are
 //! integers and instants.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use spot_platform_app::doctype::{LOGIN_ATTEMPT, USER};
 use spot_sessions::throttle::{FailureRecord, ThrottleError, ThrottleStore};
 use spot_storage_contract::{
-    DocumentStore, Expr, Fields, Name, Nulls, Order, OrderDir, Query, QueryExecutor, QueryPath,
-    RowLock, Selection, StorageBackend, Transaction, Value, Wait,
+    DocumentData, DocumentStore, Expr, Fields, Name, Nulls, Order, OrderDir, Query, QueryExecutor,
+    QueryPath, RowLock, Selection, StorageBackend, Transaction, Value, Wait,
 };
 
 use super::{LoginStores, instant, name, seconds, text};
@@ -44,86 +51,22 @@ use super::{LoginStores, instant, name, seconds, text};
 /// counter: a source with more failures than this inside a window is throttled anyway).
 pub const SOURCE_WINDOW_ROWS: u32 = 512;
 
-/// The most unknown sign-in names whose counters are held at once (a bound on memory, since an
-/// attacker chooses the names).
-pub const UNKNOWN_ACCOUNT_CAP: usize = 10_000;
+/// The `source_digest` of the rows that hold a counted failure of a name that belongs to nobody.
+/// It is not a digest: no source counter's key renders to it, so those rows are never read as a
+/// source's failures.
+pub const ACCOUNT_COUNTER_SOURCE: &str = "account-counter";
 
-/// The key of the one bucket every further unknown name shares once all
-/// [`UNKNOWN_ACCOUNT_CAP`] slots hold a locked counter. It starts with a NUL, which a
-/// normalised sign-in name cannot, so no real or invented name can address it.
-const OVERFLOW_KEY: &str = "\u{0}overflow";
-
-/// The bounded in-memory counters of names that belong to no user.
-///
-/// An attacker chooses the names, so the map is capped. When it is full, entries that have aged
-/// out of the window go first, then the oldest *unlocked* entry; a locked entry is never evicted
-/// to make room (a recorded security finding: evicting it would make a flood of names erase a lock, a weak oracle on
-/// which names are real). If every entry is locked, new names share the single overflow bucket,
-/// whose lock touches no real account because real accounts keep their counters on their own
-/// records.
-#[derive(Default)]
-struct UnknownCounters {
-    map: HashMap<String, FailureRecord>,
-}
-
-impl UnknownCounters {
-    fn get(&self, account: &str) -> FailureRecord {
-        let key = account.to_lowercase();
-        if let Some(record) = self.map.get(&key) {
-            return *record;
-        }
-        if self.map.len() >= UNKNOWN_ACCOUNT_CAP {
-            // A full map: a name with no slot of its own is counted in the overflow bucket.
-            return self.map.get(OVERFLOW_KEY).copied().unwrap_or_default();
-        }
-        FailureRecord::default()
-    }
-
-    fn put(&mut self, account: &str, record: FailureRecord, window: Duration) {
-        let mut key = account.to_lowercase();
-        if record == FailureRecord::default() {
-            if self.map.contains_key(&key) {
-                self.map.remove(&key);
-            } else if self.map.len() >= UNKNOWN_ACCOUNT_CAP {
-                self.map.remove(OVERFLOW_KEY);
-            }
-            return;
-        }
-        if !self.map.contains_key(&key) && self.map.len() >= UNKNOWN_ACCOUNT_CAP {
-            let window = i64::try_from(window.as_secs()).unwrap_or(i64::MAX);
-            let newest = self.map.values().map(|r| r.last_failure).max().unwrap_or(0);
-            // Drop what has aged out of the window and is not locked.
-            self.map.retain(|k, r| {
-                k == OVERFLOW_KEY || r.locked_until > newest || newest - r.last_failure <= window
-            });
-            if self.map.len() >= UNKNOWN_ACCOUNT_CAP {
-                // Still full: evict the oldest unlocked entry, never a locked one.
-                let oldest = self
-                    .map
-                    .iter()
-                    .filter(|(k, r)| k.as_str() != OVERFLOW_KEY && r.locked_until <= newest)
-                    .min_by_key(|(_, r)| r.last_failure)
-                    .map(|(k, _)| k.clone());
-                match oldest {
-                    Some(oldest) => {
-                        self.map.remove(&oldest);
-                    }
-                    None => {
-                        // Every entry is locked: share the one overflow bucket.
-                        key = OVERFLOW_KEY.to_owned();
-                    }
-                }
-            }
-        }
-        self.map.insert(key, record);
-    }
-}
+/// The result code of those rows.
+pub const RESULT_FAILURE_COUNTED: &str = "login.failure_counted";
 
 /// Throttle counters over the platform app's records.
 pub struct StorageThrottleStore<B: StorageBackend> {
     stores: Arc<LoginStores<B>>,
     window: Duration,
-    unknown: Mutex<UnknownCounters>,
+    /// Failures inside the window that lock an account, and for how long (the sign-in
+    /// throttle's `lockout_after` and `lockout_duration`): a name that belongs to nobody is
+    /// locked by the same rule as a real one. `None` derives backoff only.
+    lockout: Option<(u32, Duration)>,
 }
 
 impl<B: StorageBackend> StorageThrottleStore<B> {
@@ -133,8 +76,17 @@ impl<B: StorageBackend> StorageThrottleStore<B> {
         Self {
             stores,
             window,
-            unknown: Mutex::new(UnknownCounters::default()),
+            lockout: None,
         }
+    }
+
+    /// Applies the sign-in throttle's lockout (`after` failures inside the window lock the
+    /// account for `duration`) to a name that belongs to nobody, as it applies to a real
+    /// account's row.
+    #[must_use]
+    pub fn with_lockout(mut self, after: u32, duration: Duration) -> Self {
+        self.lockout = Some((after, duration));
+        self
     }
 
     fn column(text: &str) -> Result<Name, ThrottleError> {
@@ -180,26 +132,11 @@ impl<B: StorageBackend> StorageThrottleStore<B> {
             .map_err(|error| ThrottleError::StoreFailed(error.store_text()))
     }
 
-    /// The counter of a name that belongs to no user (see the module docs).
-    fn unknown_get(&self, account: &str) -> FailureRecord {
-        self.unknown
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(account)
-    }
-
-    /// Replaces (or, for an all-zero record, removes) the counter of an unknown name.
-    fn unknown_put(&self, account: &str, record: FailureRecord) {
-        self.unknown
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .put(account, record, self.window);
-    }
-
     /// The account counter, from the user's own fields.
     async fn account_record(&self, account: &str) -> Result<FailureRecord, ThrottleError> {
         let Some(id) = self.user_id(account).await? else {
-            return Ok(self.unknown_get(account));
+            // No row to hold a counter: derive it from the attempts of the name.
+            return self.unknown_account_record(account).await;
         };
         let mut tx = self
             .stores
@@ -231,9 +168,12 @@ impl<B: StorageBackend> StorageThrottleStore<B> {
         record: FailureRecord,
     ) -> Result<(), ThrottleError> {
         let Some(id) = self.user_id(account).await? else {
-            // No user record: the name is counted in the bounded unknown-name map, through
-            // the same state machine, so it locks and backs off exactly like a real account.
-            self.unknown_put(account, record);
+            // No user record: a counted failure is appended as a counter row (see the module
+            // docs); clearing (nothing counts for a name that cannot sign in) writes nothing.
+            if record.failures > 0 {
+                self.append_unknown_failure(account, record.last_failure)
+                    .await?;
+            }
             return Ok(());
         };
         let mut tx = self
@@ -283,6 +223,86 @@ impl<B: StorageBackend> StorageThrottleStore<B> {
                 )))
             }
         }
+    }
+
+    /// Appends the counter row of one failure counted on a name that belongs to nobody.
+    async fn append_unknown_failure(&self, account: &str, at: i64) -> Result<(), ThrottleError> {
+        let instant =
+            instant(at).map_err(|error| ThrottleError::StoreFailed(error.store_text()))?;
+        let mut fields = Fields::new();
+        fields.insert(Self::column("account")?, Value::Text(account.to_owned()));
+        fields.insert(
+            Self::column("source_digest")?,
+            Value::Text(ACCOUNT_COUNTER_SOURCE.to_owned()),
+        );
+        fields.insert(
+            Self::column("result_code")?,
+            Value::Text(RESULT_FAILURE_COUNTED.to_owned()),
+        );
+        fields.insert(Self::column("at")?, Value::DateTime(instant));
+        let doc = DocumentData {
+            entity: Self::entity(LOGIN_ATTEMPT)?,
+            id: spot_storage_contract::RecordId::new_v7(),
+            fields,
+            children: Default::default(),
+        };
+        let mut tx = self
+            .stores
+            .begin(&Self::label("throttle_unknown_write"), true)
+            .await
+            .map_err(|error| ThrottleError::StoreFailed(error.store_text()))?;
+        if let Err(error) = tx.insert(&doc).await {
+            let _ = tx.rollback().await;
+            return Err(ThrottleError::StoreFailed(super::failed_text(
+                "throttle unknown account",
+                &error,
+            )));
+        }
+        tx.commit().await.map_err(|error| {
+            ThrottleError::StoreFailed(super::failed_text("commit throttle", &error))
+        })?;
+        Ok(())
+    }
+
+    /// The counter of a name that belongs to nobody, replayed from its counter rows.
+    async fn unknown_account_record(&self, account: &str) -> Result<FailureRecord, ThrottleError> {
+        let entity = Self::entity(LOGIN_ATTEMPT)?;
+        let alias = Self::column("a")?;
+        let mut query = Query::from(&entity, &alias, QueryPath::Report);
+        query.select = vec![Selection {
+            expr: Expr::field(&alias, &Self::column("at")?),
+            alias: Self::column("at")?,
+        }];
+        query.filter = Some(Expr::And(vec![
+            Expr::field(&alias, &Self::column("account")?)
+                .eq(Expr::value(Value::Text(account.to_owned()))),
+            Expr::field(&alias, &Self::column("result_code")?)
+                .eq(Expr::value(Value::Text(RESULT_FAILURE_COUNTED.to_owned()))),
+        ]));
+        query.order_by = vec![Order {
+            expr: Expr::field(&alias, &Self::column("at")?),
+            dir: OrderDir::Desc,
+            nulls: Nulls::Last,
+        }];
+        query.limit = Some(SOURCE_WINDOW_ROWS);
+        let mut tx = self
+            .stores
+            .begin(&Self::label("throttle_unknown"), false)
+            .await
+            .map_err(|error| ThrottleError::StoreFailed(error.store_text()))?;
+        let rows = tx.query(&query).await;
+        let _ = tx.rollback().await;
+        let rows = rows
+            .map_err(|error| {
+                ThrottleError::StoreFailed(super::failed_text("throttle unknown account", &error))
+            })?
+            .rows;
+        let mut failures: Vec<i64> = rows
+            .iter()
+            .filter_map(|row| row.first().and_then(seconds).filter(|at| *at != 0))
+            .collect();
+        failures.reverse();
+        Ok(derive_unknown_account(&failures, self.window, self.lockout))
     }
 
     /// The source counter, derived from the `login_attempt` rows inside the window.
@@ -354,6 +374,38 @@ impl<B: StorageBackend> StorageThrottleStore<B> {
     }
 }
 
+/// The counter a user row would hold for a name that belongs to nobody: replays the failures
+/// (instants in ascending order) with the service's own rules. The first failure of a window
+/// opens it (`window_start`), a failure after the window has passed starts a new one, the
+/// `lockout.0`-th failure inside a window locks until its instant plus `lockout.1`, and a lock
+/// that has passed is cleared by the next failure before it counts, as `check` clears it.
+#[must_use]
+pub fn derive_unknown_account(
+    failures: &[i64],
+    window: Duration,
+    lockout: Option<(u32, Duration)>,
+) -> FailureRecord {
+    let window = i64::try_from(window.as_secs()).unwrap_or(i64::MAX);
+    let mut record = FailureRecord::default();
+    for &at in failures {
+        if record.locked_until != 0 && at >= record.locked_until {
+            record = FailureRecord::default();
+        }
+        let live = record.failures > 0 && at - record.window_start < window;
+        let count = (if live { record.failures } else { 0 }) + 1;
+        record.window_start = if count == 1 { at } else { record.window_start };
+        record.failures = count;
+        record.last_failure = at;
+        if let Some((after, duration)) = lockout
+            && count >= after
+        {
+            record.locked_until =
+                at.saturating_add(i64::try_from(duration.as_secs()).unwrap_or(i64::MAX));
+        }
+    }
+    record
+}
+
 /// The `source_digest` text of a source key: the digest's first eight bytes in base16, exactly
 /// as [`spot_sessions::SourceHash`]'s `Display` renders it for the audit row.
 fn source_digest_text(key: &[u8]) -> String {
@@ -422,67 +474,42 @@ fn account_text(key: &[u8]) -> String {
 mod tests {
     use std::time::Duration;
 
-    use spot_sessions::throttle::FailureRecord;
+    use super::{derive_unknown_account, source_digest_text};
 
-    use super::{OVERFLOW_KEY, UNKNOWN_ACCOUNT_CAP, UnknownCounters, source_digest_text};
+    const WINDOW: Duration = Duration::from_secs(60);
+    const LOCK: Option<(u32, Duration)> = Some((3, Duration::from_secs(60)));
 
-    const WINDOW: Duration = Duration::from_secs(900);
-
-    fn failed(at: i64) -> FailureRecord {
-        FailureRecord {
-            failures: 1,
-            window_start: at,
-            locked_until: 0,
-            last_failure: at,
-        }
-    }
-
-    fn locked(at: i64) -> FailureRecord {
-        FailureRecord {
-            failures: 10,
-            window_start: at,
-            locked_until: at + 1_800,
-            last_failure: at,
-        }
+    #[test]
+    fn an_unknown_name_backs_off_and_locks_like_a_real_row() {
+        // Two failures: the counter the backoff threshold (2) reads.
+        let two = derive_unknown_account(&[100, 101], WINDOW, LOCK);
+        assert_eq!(
+            (two.failures, two.window_start, two.locked_until),
+            (2, 100, 0)
+        );
+        // The third inside the window locks until its instant plus the duration.
+        let three = derive_unknown_account(&[100, 101, 102], WINDOW, LOCK);
+        assert_eq!((three.failures, three.locked_until), (3, 162));
+        // Without a lockout setting only the counter exists.
+        let none = derive_unknown_account(&[100, 101, 102], WINDOW, None);
+        assert_eq!((none.failures, none.locked_until), (3, 0));
     }
 
     #[test]
-    fn a_flood_of_unknown_names_does_not_evict_a_locked_name() {
-        let mut counters = UnknownCounters::default();
-        counters.put("victim", locked(1_000), WINDOW);
-        // Twice the cap of invented names, each fresher than the locked one.
-        for n in 0..(2 * UNKNOWN_ACCOUNT_CAP) {
-            let at = 1_001 + i64::try_from(n % 100).unwrap_or(0);
-            counters.put(&format!("flood-{n}"), failed(at), WINDOW);
-        }
-        assert_eq!(counters.get("victim"), locked(1_000), "the lock survives");
-        assert!(counters.map.len() <= UNKNOWN_ACCOUNT_CAP + 1);
-    }
-
-    #[test]
-    fn when_every_entry_is_locked_new_names_share_one_overflow_bucket() {
-        let mut counters = UnknownCounters::default();
-        for n in 0..UNKNOWN_ACCOUNT_CAP {
-            counters.put(&format!("locked-{n}"), locked(1_000), WINDOW);
-        }
-        counters.put("newcomer-a", failed(1_100), WINDOW);
-        // A different new name sees the same bucket, and no locked name was touched.
-        assert_eq!(counters.get("newcomer-b"), failed(1_100));
-        assert!(counters.map.contains_key(OVERFLOW_KEY));
-        assert_eq!(counters.get("locked-0"), locked(1_000));
-        assert!(counters.map.len() <= UNKNOWN_ACCOUNT_CAP + 1);
-    }
-
-    #[test]
-    fn the_oldest_unlocked_entry_goes_first() {
-        let mut counters = UnknownCounters::default();
-        counters.put("oldest", failed(100), WINDOW);
-        for n in 0..(UNKNOWN_ACCOUNT_CAP - 1) {
-            counters.put(&format!("n-{n}"), failed(200), WINDOW);
-        }
-        counters.put("fresh", failed(250), WINDOW);
-        assert_eq!(counters.get("oldest"), FailureRecord::default());
-        assert_eq!(counters.get("fresh"), failed(250));
+    fn a_passed_window_or_lock_starts_the_counter_afresh() {
+        // The second failure is after the window: a new window of one.
+        let late = derive_unknown_account(&[100, 200], WINDOW, LOCK);
+        assert_eq!((late.failures, late.window_start), (1, 200));
+        // A failure after the lock has passed is the first of a clean counter.
+        let after = derive_unknown_account(&[100, 101, 102, 170], WINDOW, LOCK);
+        assert_eq!(
+            (after.failures, after.locked_until, after.window_start),
+            (1, 0, 170)
+        );
+        assert_eq!(
+            derive_unknown_account(&[], WINDOW, LOCK),
+            Default::default()
+        );
     }
 
     #[test]

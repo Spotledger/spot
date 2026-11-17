@@ -35,8 +35,19 @@ time = { version = "0.3.55", default-features = false, features = ["std", "serde
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
 # Typed errors with stable `backup.*` codes.
 thiserror = "2"
+# Payload encryption (WP-PRD-04.T6). The key provider (`KeyProvider`, `KeyRef`) comes from
+# spot-secrets; the AEAD, RNG and zeroizing crates below are the versions already in
+# Cargo.lock (chacha20poly1305 0.10.1, rand 0.9.5, zeroize 1.9.0), the same requirements
+# spot-secrets declares.
+spot-secrets = { path = "../spot-secrets" }
+chacha20poly1305 = "0.10"
+rand = "0.9"
+zeroize = "1"
 
 [dev-dependencies]
+# Test-only: the base64 form of key bytes, to prove none reaches an error or a manifest
+# (already in Cargo.lock, base64 0.22).
+base64 = "0.22"
 # Real, throwaway directories for atomic writes and package builds.
 tempfile = "3"
 tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "rt", "macros", "rt-multi-thread"] }

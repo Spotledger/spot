@@ -1,0 +1,37 @@
+# Development configuration for compose.yaml. Throwaway; never use in production.
+region = "dev"
+audience = "spot-control-plane"
+# Replace with the public key of a development administrator (64 hex characters).
+administrator_keys = ["REPLACE-WITH-64-HEX-ADMINISTRATOR-PUBLIC-KEY"]
+
+[database]
+host = "db"
+dbname = "spot_control"
+user = "spot_control"
+password_env = "SPOT_CP_DB_PASSWORD"
+# The development database has no TLS.
+tls = false
+
+[operator_listener]
+listen = "0.0.0.0:8443"
+server_cert = "/etc/spot-control-plane/tls/operator-server.pem"
+server_key = "/etc/spot-control-plane/tls/operator-server.key"
+client_ca = "/etc/spot-control-plane/operator-ca/ca.pem"
+
+[host_listener]
+listen = "0.0.0.0:8444"
+server_cert = "/etc/spot-control-plane/tls/host-server.pem"
+server_key = "/etc/spot-control-plane/tls/host-server.key"
+client_ca = "/etc/spot-control-plane/host-ca/ca.pem"
+
+[host_ca]
+cert = "/etc/spot-control-plane/host-ca/ca.pem"
+key = "/etc/spot-control-plane/host-ca/ca.key"
+common_name = "Spotledger dev host CA"
+validity_days = 30
+revocation_list = "/var/lib/spot-control-plane/revoked.txt"
+
+[[operators]]
+subject = "CN=dev-operator"
+principal = "dev-operator"
+tenants = ["*"]

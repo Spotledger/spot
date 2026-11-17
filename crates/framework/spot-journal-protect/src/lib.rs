@@ -19,7 +19,7 @@
 //! # What is transformed
 //!
 //! * **State images only** (topic `doc_state`, the rebuild executor's own
-//!   [`spot_journal_rebuild::classify`] rule). A tombstone's image is protected too when it
+//!   [`spot_journal_rebuild::RegistryClassifier`], the events contract registry). A tombstone's image is protected too when it
 //!   carries personal fields.
 //! * **Audit and domain events pass through as the same bytes.** A domain event is a fact for
 //!   consumers, not a state image, and this crate cannot know which of its values are personal.

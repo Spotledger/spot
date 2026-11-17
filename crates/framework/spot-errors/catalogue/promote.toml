@@ -1,0 +1,28 @@
+# promote codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "promote.approvals_missing"
+class = "none"
+summary = "Printed when production lacks two distinct approvers, one not the requester."
+explanation_key = "error.promote.approvals_missing"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "promote.environment_mismatch"
+class = "none"
+summary = "Printed when source and target are in different environment sets."
+explanation_key = "error.promote.environment_mismatch"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "promote.rehearsal_stale"
+class = "none"
+summary = "Printed when a production target has no rehearsal report younger than the policy limit."
+explanation_key = "error.promote.rehearsal_stale"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

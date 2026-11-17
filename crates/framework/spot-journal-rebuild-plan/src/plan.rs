@@ -97,63 +97,71 @@ impl RebuildPlan {
 
 /// Plans a rebuild of `catalog` to `target`, optionally rolling a `backup` forward.
 ///
+/// Positions restart at 1 in every generation, so the journal's order is `(generation, position)`
+/// and the walk keeps a cursor of that pair: inside a generation positions are contiguous, and a
+/// generation is entered only at the position the previous one was cut at, from its position 1.
+///
 /// The base is a backup newer than the best verified snapshot at or before the target **when the
 /// segments cover its position up to the target**; otherwise the latest verified snapshot at or
 /// before the target; otherwise nothing at all, when the segments run from [`FIRST_POSITION`].
 /// A snapshot the segments cannot continue is a refusal, not a reason to replay from the start.
 ///
 /// Rebuilding to the end of the journal keeps the generation and preserves positions;
-/// rebuilding to an earlier position forks, naming the point in [`RebuildPlan::fork_point`] and
-/// the new generation in [`RebuildPlan::new_generation`].
+/// rebuilding to an earlier position of the current generation forks, naming the point in
+/// [`RebuildPlan::fork_point`] and the new generation in [`RebuildPlan::new_generation`]. A
+/// point-in-time target in an older generation is refused: see [`Target::In`].
 ///
 /// # Errors
 /// [`PlanError`]: no segments, no base, a gap between the base and the target, a target in an
-/// abandoned generation or beyond the end, a reversed range, inconsistent ranges, or a
-/// generation entered with no fork recorded.
+/// abandoned generation, before a later fork or beyond the end, a reversed range, inconsistent
+/// ranges, a generation entered with no fork recorded, or a backup two generations claim.
 pub fn plan(
     catalog: &JournalCatalog,
     backup: Option<&Backup>,
     target: Target,
 ) -> Result<RebuildPlan, PlanError> {
     let chain = LiveChain::build(catalog)?;
-    let target_position = match target {
+    let target: (Generation, Position) = match target {
         Target::End => chain.end,
-        Target::At(position) => position,
+        Target::At(position) => (chain.end.0, position),
+        Target::In {
+            generation,
+            position,
+        } => (generation, position),
     };
-    if target_position > chain.end {
-        return Err(chain.classify_target(target_position));
+    if target > chain.end || target.0 < chain.end.0 {
+        return Err(chain.classify_target(target.0, target.1));
     }
-    let snapshot: Option<&SnapshotInfo> = catalog.best_snapshot(target_position);
-    let backup: Option<Backup> = backup.filter(|b| b.position <= target_position).copied();
+    let snapshot: Option<&SnapshotInfo> = catalog.best_snapshot(target.0, target.1);
+    let backup: Option<(Backup, Generation)> = match backup {
+        Some(b) => resolve_backup(&chain, b)?.filter(|(b, g)| (*g, b.position) <= target),
+        None => None,
+    };
     // A backup newer than the best snapshot is tried first, and only kept when the segments
     // cover its position up to the target. A verified snapshot is the documented base: if the
     // segments cannot continue it, that is the refusal, because replaying the whole journal
     // instead would hide a snapshot the journal no longer agrees with.
     let mut refusal: Option<PlanError> = None;
-    if let Some(backup) = backup
-        && snapshot.is_none_or(|s| backup.position > s.position)
+    if let Some((backup, generation)) = backup
+        && snapshot.is_none_or(|s| (generation, backup.position) > (s.generation, s.position))
     {
-        match walk(&chain, backup.position, None, target_position) {
+        match walk(&chain, (generation, backup.position), target) {
             Ok(steps) => {
                 return Ok(finish(
                     &chain,
                     Base::Backup {
                         position: backup.position,
+                        generation,
                     },
                     steps,
-                    target_position,
+                    target,
                 ));
             }
             Err(error) => refusal = Some(error),
         }
     }
     if let Some(snapshot) = snapshot {
-        let steps = walk(
-            &chain,
-            snapshot.position,
-            Some(snapshot.generation),
-            target_position,
-        )?;
+        let steps = walk(&chain, (snapshot.generation, snapshot.position), target)?;
         return Ok(finish(
             &chain,
             Base::Snapshot {
@@ -161,83 +169,105 @@ pub fn plan(
                 generation: snapshot.generation,
             },
             steps,
-            target_position,
+            target,
         ));
     }
     // No snapshot at all: the segments may still carry the rebuild from the first position, and
     // if they do not, their first hole is the answer rather than a missing base.
-    if chain.start == FIRST_POSITION {
-        let steps = walk(&chain, 0, None, target_position)?;
-        return Ok(finish(&chain, Base::Empty, steps, target_position));
+    if chain.start.1 == FIRST_POSITION {
+        let steps = walk(&chain, (chain.start.0, 0), target)?;
+        return Ok(finish(&chain, Base::Empty, steps, target));
     }
     Err(refusal.unwrap_or(PlanError::NoBase))
 }
 
-/// Applies the live ranges from `from` (exclusive) to `target` (inclusive).
+/// The generation of a backup: the one it names, or the one live range that covers its position.
+/// `None` when the position is before every live range that could hold it.
+fn resolve_backup(
+    chain: &LiveChain,
+    backup: &Backup,
+) -> Result<Option<(Backup, Generation)>, PlanError> {
+    if let Some(generation) = backup.generation {
+        return Ok(Some((*backup, generation)));
+    }
+    let covering = chain.generations_covering(backup.position);
+    match covering.as_slice() {
+        [generation] => Ok(Some((*backup, *generation))),
+        [] => Ok(chain
+            .ranges
+            .iter()
+            .find(|r| r.first_seq > backup.position)
+            .map(|r| (*backup, r.generation))),
+        _ => Err(PlanError::BackupAmbiguous {
+            position: backup.position,
+        }),
+    }
+}
+
+/// Applies the live ranges from the cursor `from` (exclusive) to `target` (inclusive).
 fn walk(
     chain: &LiveChain,
-    from: Position,
-    generation: Option<Generation>,
-    target: Position,
+    from: (Generation, Position),
+    target: (Generation, Position),
 ) -> Result<Vec<Step>, PlanError> {
     let mut steps: Vec<Step> = Vec::new();
-    let mut position = from;
-    let mut generation = generation;
-    for range in &chain.ranges[chain.first_range_after(position)..] {
-        if position >= target {
+    let (mut generation, mut position) = from;
+    for range in &chain.ranges[chain.first_range_after(generation, position)..] {
+        if (generation, position) >= target || range.generation > target.0 {
             break;
+        }
+        if range.generation != generation {
+            // A generation is entered only at the position the previous one was cut at, and its
+            // positions start again at the beginning.
+            if !chain.forked_at(range.generation, position) {
+                return Err(PlanError::UnrecordedFork {
+                    generation: range.generation,
+                    position: range.first_seq,
+                });
+            }
+            generation = range.generation;
+            position = 0;
         }
         if range.first_seq > position.saturating_add(1) {
-            return Err(chain.classify_missing(position.saturating_add(1)));
+            return Err(chain.classify_missing(generation, position.saturating_add(1)));
         }
         let first_seq = range.first_seq.max(position.saturating_add(1));
-        if first_seq > target {
+        let last_seq = if range.generation == target.0 {
+            range.last_seq.min(target.1)
+        } else {
+            range.last_seq
+        };
+        if first_seq > last_seq {
             break;
         }
-        let last_seq = range.last_seq.min(target);
-        if let Some(previous) = generation
-            && previous != range.generation
-            && !chain.forked_at(range.generation, position)
-        {
-            return Err(PlanError::UnrecordedFork {
-                generation: range.generation,
-                position: first_seq,
-            });
-        }
         steps.push(Step::ApplySegmentRange {
-            generation: range.generation,
+            generation,
             first_seq,
             last_seq,
         });
         position = last_seq;
-        generation = Some(range.generation);
     }
-    if position < target {
-        return Err(chain.classify_missing(position.saturating_add(1)));
+    if (generation, position) < target {
+        return Err(chain.classify_missing(generation, position.saturating_add(1)));
     }
     Ok(steps)
 }
 
 /// Fills in the shape of a plan that reaches the target: whether it forks, and what runs after.
-fn finish(chain: &LiveChain, base: Base, steps: Vec<Step>, ends_at: Position) -> RebuildPlan {
-    let fork_point = if ends_at < chain.end {
-        let abandoned_generation = steps
-            .last()
-            .map(Step::generation)
-            .or_else(|| base.generation())
-            .or_else(|| chain.generation_at(base.position()))
-            .unwrap_or(chain.current_generation);
-        Some(ForkPoint {
-            from_position: ends_at,
-            abandoned_generation,
-        })
-    } else {
-        None
-    };
+fn finish(
+    chain: &LiveChain,
+    base: Base,
+    steps: Vec<Step>,
+    ends_at: (Generation, Position),
+) -> RebuildPlan {
+    let fork_point = (ends_at < chain.end).then_some(ForkPoint {
+        from_position: ends_at.1,
+        abandoned_generation: ends_at.0,
+    });
     RebuildPlan {
         base,
         steps,
-        ends_at,
+        ends_at: ends_at.1,
         new_generation: fork_point
             .is_some()
             .then(|| chain.current_generation.saturating_add(1)),

@@ -80,3 +80,12 @@ explanation_key = "error.probe.loaded"
 params = []
 remedy = "Contract test only."
 since = "0.1.0"
+
+[[entry]]
+code = "probe.name"
+class = "none"
+summary = "The operation was refused: name."
+explanation_key = "error.probe.name"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

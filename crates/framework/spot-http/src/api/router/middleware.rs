@@ -6,10 +6,12 @@ use crate::api::idempotency::{
     IdempotencyError, IdempotencyStore, KeyScope, Reservation, StoredResponse, fingerprint,
 };
 use crate::api::registry::Code;
-use crate::api::service::{ApiError, Credential};
+use crate::api::service::{ApiError, AuthService, Credential, RequestCtx};
 use crate::request::RequestId;
 use crate::site::SiteContext;
 use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+use std::hash::BuildHasher;
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,30 +21,180 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use serde_json::Value as Json;
-use spot_core::Clock;
+use spot_core::{Audience, Clock};
 
 use super::routes::RateClass;
 use super::{
     MAX_READ_BODY, REPLAYED_HEADER, SharedState, ValidatedKey, credential_hash, render_error,
 };
-/// `Authorization: Bearer <token>` extraction; a secured route without it answers
-/// `401 auth.required` before anything runs. The token is not validated here — the services
-/// do that (WP-PLT-02).
-pub(super) async fn auth_middleware(request: Request, next: Next) -> Response {
-    if header_credential(request.headers()).is_some() {
-        return next.run(request).await;
-    }
-    let request_id = request_id_of(&request);
-    render_error(ApiError::from_code(Code::AuthRequired), &request_id)
+use crate::api::routes::{GuestCall, RouteMark, route_table};
+/// What the bearer layer carries: the auth port that tells a credential's audience, the clock
+/// that times the refusal log's rate bound, and whether a secured route without a
+/// [`RouteMark`] is a wiring error (`strict`, every router built from the table) or is let
+/// through on bearer presence alone (the legacy `router_with` seam, which tests use to mount
+/// their own groups that are not in the table).
+#[derive(Clone)]
+pub(super) struct AuthGate {
+    auth: Arc<dyn AuthService>,
+    clock: Arc<dyn Clock>,
+    strict: bool,
+    logged: Arc<Mutex<HashMap<(Audience, &'static str), Duration>>>,
 }
 
-/// Requests one client address may make in a rate class per window.
-const AUTH_LIMIT: u32 = 20;
-/// The fixed window of every class.
-const RATE_WINDOW: Duration = Duration::from_secs(60);
-/// Most distinct client keys held at once. When the table is full of live windows a new key is
-/// refused (fail closed) rather than the table growing without bound.
-const MAX_RATE_KEYS: usize = 65_536;
+/// One refusal log line per (presented audience, operation) per this long, so a flood of wrong
+/// -audience requests cannot fill the log.
+const REFUSAL_LOG_WINDOW: Duration = Duration::from_secs(60);
+
+impl AuthGate {
+    pub(super) fn new(auth: Arc<dyn AuthService>, clock: Arc<dyn Clock>, strict: bool) -> Self {
+        AuthGate {
+            auth,
+            clock,
+            strict,
+            logged: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Whether a refusal for `(presented, operation)` may be logged now (and records it).
+    fn may_log(&self, presented: Audience, operation: &'static str) -> bool {
+        let now = self.clock.monotonic();
+        let mut logged = self
+            .logged
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match logged.get(&(presented, operation)) {
+            Some(last) if now.saturating_sub(*last) < REFUSAL_LOG_WINDOW => false,
+            _ => {
+                logged.insert((presented, operation), now);
+                true
+            }
+        }
+    }
+}
+
+/// The bearer layer of every secured route (ADR-083 Barrier 1). In order:
+///
+/// 1. a missing bearer is `401 auth.required`;
+/// 2. the route's [`RouteMark`] (stamped by the outer mark layer) is read; a secured route with
+///    no mark is a wiring error: `500 http.internal` and an error log, no handler runs (a
+///    non-strict gate, the legacy test seam, skips the audience check for such a route);
+/// 3. the auth port says which audience the credential is for (an invalid or expired credential
+///    is the port's own 401); an audience the mark does not list is `403 permission.denied`
+///    before any handler and before the idempotency middleware, so no key is reserved and no
+///    side effect happens. The body does not name audiences.
+///
+/// Nothing here logs a token, a header or a body.
+pub(super) async fn auth_middleware(
+    axum::extract::State(gate): axum::extract::State<AuthGate>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(credential) = header_credential(request.headers()) else {
+        // A function call with no `Authorization` header at all, on a site that serves guest
+        // functions, is a guest call: the function service decides it as an anonymous caller,
+        // which reaches only functions declared `guest` (WP-PLT-17.T3). Any other secured route
+        // still needs its bearer.
+        if request.headers().get(header::AUTHORIZATION).is_none()
+            && request.extensions().get::<GuestCall>().is_some()
+        {
+            return next.run(request).await;
+        }
+        let request_id = request_id_of(&request);
+        return render_error(ApiError::from_code(Code::AuthRequired), &request_id);
+    };
+    let mark = request.extensions().get::<RouteMark>().copied();
+    let Some(mark) = mark else {
+        // No mark. A request on a path the table knows but with a method it does not list has
+        // no handler: the router answers 405 and nothing runs, so it is let through. Any other
+        // unmarked secured request is a wiring error in a strict gate.
+        let on_known_path = request
+            .extensions()
+            .get::<MatchedPath>()
+            .is_some_and(|path| {
+                route_table()
+                    .iter()
+                    .any(|entry| entry.path == path.as_str())
+            });
+        if !gate.strict || on_known_path {
+            return next.run(request).await;
+        }
+        tracing::error!("a secured route has no route mark; refusing (wiring error)");
+        let request_id = request_id_of(&request);
+        return render_error(ApiError::from_code(Code::HttpInternal), &request_id);
+    };
+    let Some(site) = request.extensions().get::<SiteContext>().cloned() else {
+        tracing::error!(
+            operation = mark.operation,
+            "no site context at the bearer layer"
+        );
+        let request_id = request_id_of(&request);
+        return render_error(ApiError::from_code(Code::HttpInternal), &request_id);
+    };
+    let ctx = RequestCtx {
+        site: site.site.clone(),
+        credential: Some(credential),
+        idempotency_key: None,
+        language: None,
+        request_id: site.request_id.clone(),
+        peer: site.peer,
+    };
+    match gate.auth.audience_of(&ctx).await {
+        Ok(presented) if mark.audiences.contains(&presented) => next.run(request).await,
+        Ok(presented) => {
+            if gate.may_log(presented, mark.operation) {
+                tracing::warn!(
+                    operation = mark.operation,
+                    presented = presented.as_str(),
+                    allowed = ?mark.audiences.iter().map(|a| a.as_str()).collect::<Vec<_>>(),
+                    request_id = site.request_id.as_str(),
+                    reason = "wrong_audience",
+                    "credential refused on a route not marked for its audience"
+                );
+            }
+            render_error(
+                ApiError::new(
+                    Code::PermissionDenied,
+                    "This credential cannot be used on this route.",
+                ),
+                &site.request_id,
+            )
+        }
+        Err(error) => render_error(error, &site.request_id),
+    }
+}
+
+/// Requests one client address may make in the `auth` class per window, by default.
+pub const DEFAULT_AUTH_LIMIT: u32 = 20;
+/// The fixed window of the `auth` class, by default.
+pub const DEFAULT_RATE_WINDOW: Duration = Duration::from_secs(60);
+/// The largest `auth_rate_limit` a configuration may set: above it a limit is no limit.
+pub const MAX_AUTH_LIMIT: u32 = 10_000;
+/// The longest `auth_rate_window_seconds` a configuration may set (one hour).
+pub const MAX_RATE_WINDOW_SECS: u64 = 3_600;
+/// Most live windows the limiter holds in total, across its shards. A full table evicts its
+/// oldest window to admit a new key; it never refuses one.
+pub const RATE_TABLE_CAPACITY: usize = 65_536;
+/// Independent mutex-guarded tables (a power of two, so one lock is never held across all keys).
+const RATE_SHARDS: usize = 16;
+
+/// The limits of the rate classes (the `auth` class is the one public groups run in). `Default` is
+/// the numbers the limiter always had: 20 requests per 60 seconds per client address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RateLimits {
+    /// Requests per window per client address, 1 to [`MAX_AUTH_LIMIT`].
+    pub auth_limit: u32,
+    /// The fixed window, 1 to [`MAX_RATE_WINDOW_SECS`] seconds.
+    pub auth_window: Duration,
+}
+
+impl Default for RateLimits {
+    fn default() -> Self {
+        RateLimits {
+            auth_limit: DEFAULT_AUTH_LIMIT,
+            auth_window: DEFAULT_RATE_WINDOW,
+        }
+    }
+}
 
 /// A client key: the address (an IPv6 address is reduced to its /64, the unit one subscriber
 /// holds, and an IPv4-mapped one to its IPv4 address) or `Unknown` for a request without one.
@@ -70,58 +222,232 @@ impl ClientKey {
     }
 }
 
-/// A small in-memory fixed-window limiter keyed by (rate class, client address), timed by the
-/// server's injected clock (monotonic, never the wall clock). One counter per class and client
-/// address, shared by every public group of that class.
-pub(super) struct RateLimiter {
+type RateKey = (RateClass, ClientKey);
+
+/// "No node" in the intrusive list.
+const NIL: usize = usize::MAX;
+
+/// One live window in a shard's list.
+struct Node {
+    key: RateKey,
+    /// When the window began (monotonic).
+    start: Duration,
+    count: u32,
+    prev: usize,
+    next: usize,
+}
+
+/// One shard: a map from key to a slot, and the slots in a doubly linked list ordered by window
+/// start (oldest at the head). A window that restarts moves to the tail, so the head is always
+/// the oldest window and therefore the first to be expired. Every operation is O(1): nothing
+/// here scans the table.
+struct Shard {
+    capacity: usize,
+    map: HashMap<RateKey, usize>,
+    nodes: Vec<Node>,
+    free: Vec<usize>,
+    head: usize,
+    tail: usize,
+}
+
+impl Shard {
+    fn new(capacity: usize) -> Self {
+        Shard {
+            capacity,
+            map: HashMap::new(),
+            nodes: Vec::new(),
+            free: Vec::new(),
+            head: NIL,
+            tail: NIL,
+        }
+    }
+
+    fn unlink(&mut self, i: usize) {
+        let (prev, next) = (self.nodes[i].prev, self.nodes[i].next);
+        match prev {
+            NIL => self.head = next,
+            p => self.nodes[p].next = next,
+        }
+        match next {
+            NIL => self.tail = prev,
+            n => self.nodes[n].prev = prev,
+        }
+        self.nodes[i].prev = NIL;
+        self.nodes[i].next = NIL;
+    }
+
+    fn push_back(&mut self, i: usize) {
+        self.nodes[i].prev = self.tail;
+        self.nodes[i].next = NIL;
+        match self.tail {
+            NIL => self.head = i,
+            t => self.nodes[t].next = i,
+        }
+        self.tail = i;
+    }
+
+    /// Drops the oldest window (the head), if any.
+    fn evict_oldest(&mut self) {
+        let i = self.head;
+        if i == NIL {
+            return;
+        }
+        self.unlink(i);
+        let key = self.nodes[i].key;
+        self.map.remove(&key);
+        self.free.push(i);
+    }
+
+    /// Admits a new key with a window starting `now` and one request counted. Only when the
+    /// shard is full is the oldest window evicted: below capacity nothing ever is.
+    fn admit(&mut self, key: RateKey, now: Duration) {
+        if self.map.len() >= self.capacity {
+            self.evict_oldest();
+        }
+        let node = Node {
+            key,
+            start: now,
+            count: 1,
+            prev: NIL,
+            next: NIL,
+        };
+        let i = match self.free.pop() {
+            Some(i) => {
+                self.nodes[i] = node;
+                i
+            }
+            None => {
+                self.nodes.push(node);
+                self.nodes.len() - 1
+            }
+        };
+        self.map.insert(key, i);
+        self.push_back(i);
+    }
+}
+
+/// A fixed-window limiter keyed by (rate class, client address), timed by the server's injected
+/// clock (monotonic, never the wall clock). One counter per class and client address, shared by
+/// every public group of that class.
+///
+/// **Structure.** The table is sharded: `RATE_SHARDS` independent mutex-guarded maps, selected by
+/// a keyed hash of the key (the hash key is random per limiter, so which shard an address lands
+/// in cannot be steered). Each shard keeps its windows in a linked list ordered by window start.
+/// A request takes one shard's lock, does a map lookup and at most one list move, insert or
+/// eviction: O(1), no scan of the table, no global lock. **A full shard evicts its oldest
+/// window to admit a new key** (an expired window goes first, being the oldest); below capacity
+/// nothing is evicted. A flood of distinct addresses therefore displaces other clients'
+/// counters only at the rate of its own requests, and never blocks a new client.
+///
+/// **Residual behaviour.** An attacker that cycles more than a shard's capacity of distinct
+/// addresses inside one window can push a limited client's counter out and so reset it. The
+/// capacity is therefore a sized, documented constant ([`RATE_TABLE_CAPACITY`], 65,536 windows
+/// in total) and the keys are IPv6 /64s, so the attacker needs that many /64s (an IPv6 /48 is
+/// exactly that many) and must sustain the rate for the whole window.
+pub struct RateLimiter {
     clock: Arc<dyn Clock>,
-    windows: Mutex<HashMap<(RateClass, ClientKey), (Duration, u32)>>,
+    limits: RateLimits,
+    hasher: RandomState,
+    shards: Vec<Mutex<Shard>>,
 }
 
 impl RateLimiter {
-    pub(super) fn new(clock: Arc<dyn Clock>) -> Self {
+    /// A limiter with the default limits.
+    pub fn new(clock: Arc<dyn Clock>) -> Self {
+        Self::with_limits(clock, RateLimits::default())
+    }
+
+    /// A limiter with `limits` and the standard table capacity.
+    pub fn with_limits(clock: Arc<dyn Clock>, limits: RateLimits) -> Self {
+        Self::build(
+            clock,
+            limits,
+            RATE_SHARDS,
+            RATE_TABLE_CAPACITY / RATE_SHARDS,
+        )
+    }
+
+    /// A limiter with a small table, for tests of the eviction rule: `shards` tables of
+    /// `capacity_per_shard` windows each.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn with_capacity(
+        clock: Arc<dyn Clock>,
+        limits: RateLimits,
+        shards: usize,
+        capacity_per_shard: usize,
+    ) -> Self {
+        Self::build(clock, limits, shards.max(1), capacity_per_shard.max(1))
+    }
+
+    fn build(clock: Arc<dyn Clock>, limits: RateLimits, shards: usize, capacity: usize) -> Self {
         RateLimiter {
             clock,
-            windows: Mutex::new(HashMap::new()),
+            limits,
+            hasher: RandomState::new(),
+            shards: (0..shards)
+                .map(|_| Mutex::new(Shard::new(capacity)))
+                .collect(),
         }
     }
 
-    fn limit(class: RateClass) -> u32 {
+    fn limit(&self, class: RateClass) -> u32 {
         match class {
-            RateClass::Auth => AUTH_LIMIT,
+            RateClass::Auth => self.limits.auth_limit,
         }
     }
 
-    /// Counts one request; `Err(seconds)` is the wait until the window ends.
-    fn check(&self, class: RateClass, peer: Option<IpAddr>) -> Result<(), u64> {
+    fn window(&self, class: RateClass) -> Duration {
+        match class {
+            RateClass::Auth => self.limits.auth_window,
+        }
+    }
+
+    /// How many windows are held now (all shards), for tests.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn len(&self) -> usize {
+        self.shards
+            .iter()
+            .map(|s| s.lock().unwrap_or_else(|p| p.into_inner()).map.len())
+            .sum()
+    }
+
+    /// Whether no window is held, for tests.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Counts one request of `class` from `peer`; `Err(seconds)` is the wait until the window
+    /// ends. O(1): one shard's lock, one map lookup, at most one list operation.
+    pub fn check(&self, class: RateClass, peer: Option<IpAddr>) -> Result<(), u64> {
         let now = self.clock.monotonic();
-        let mut windows = self.windows.lock().unwrap_or_else(|p| p.into_inner());
-        let key = (class, ClientKey::of(peer));
+        let key: RateKey = (class, ClientKey::of(peer));
+        let (limit, window) = (self.limit(class), self.window(class));
+        let shard = self.hasher.hash_one(key) as usize % self.shards.len();
+        let mut shard = self.shards[shard].lock().unwrap_or_else(|p| p.into_inner());
         let wait = |start: Duration| {
-            (start + RATE_WINDOW)
+            (start + window)
                 .saturating_sub(now)
                 .as_secs()
                 .saturating_add(1)
         };
-        if let Some((start, count)) = windows.get_mut(&key) {
-            if now.saturating_sub(*start) >= RATE_WINDOW {
-                *start = now;
-                *count = 1;
-                return Ok(());
-            }
-            if *count >= Self::limit(class) {
-                return Err(wait(*start));
-            }
-            *count += 1;
+        let Some(&i) = shard.map.get(&key) else {
+            shard.admit(key, now);
+            return Ok(());
+        };
+        let (start, count) = (shard.nodes[i].start, shard.nodes[i].count);
+        if now.saturating_sub(start) >= window {
+            // The window ended: a fresh one begins now, and is the newest.
+            shard.nodes[i].start = now;
+            shard.nodes[i].count = 1;
+            shard.unlink(i);
+            shard.push_back(i);
             return Ok(());
         }
-        if windows.len() >= MAX_RATE_KEYS {
-            windows.retain(|_, (start, _)| now.saturating_sub(*start) < RATE_WINDOW);
-            if windows.len() >= MAX_RATE_KEYS {
-                return Err(RATE_WINDOW.as_secs());
-            }
+        if count >= limit {
+            return Err(wait(start));
         }
-        windows.insert(key, (now, 1));
+        shard.nodes[i].count = count + 1;
         Ok(())
     }
 }
@@ -327,6 +653,12 @@ pub(super) async fn settle(
 /// with the same in-flight key **waits** and then replays (documented choice; see
 /// `api::idempotency`). When the store is down the request is answered `503 server.unavailable`
 /// and never executed: a keyed request does not run unreserved.
+///
+/// The request fingerprint covers the method, the path **and the raw query** as received
+/// (`path?query`, no reordering or normalisation: a different order is a different request,
+/// which is the safe direction). A request that was in flight at deploy time under the old
+/// fingerprint (path only) answers `409 api.idempotency_conflict` to its own retry once, since
+/// a key lives 24 hours; that is accepted.
 pub(super) async fn idempotency_middleware(
     axum::extract::State(state): axum::extract::State<SharedState>,
     request: Request,
@@ -362,7 +694,12 @@ pub(super) async fn idempotency_middleware(
     );
     let (mut parts, body) = request.into_parts();
     let method = parts.method.clone();
-    let path = parts.uri.path().to_owned();
+    // The query is part of what was asked: `?dry_run=true` and `?dry_run=false` are different
+    // requests and must not share a fingerprint (and so a stored answer).
+    let path = match parts.uri.query() {
+        Some(query) => format!("{}?{query}", parts.uri.path()),
+        None => parts.uri.path().to_owned(),
+    };
     let bytes = match axum::body::to_bytes(body, MAX_READ_BODY).await {
         Ok(bytes) => bytes.to_vec(),
         Err(_) => {
@@ -437,9 +774,14 @@ pub(super) async fn idempotency_middleware(
     // request never holds the key — the handler answers 400 for an empty body on a required
     // route, which the middleware cannot know before the key is reserved.
     // `401` is released too: the bearer is only checked for presence before this layer, so a
-    // bogus token would otherwise write one durable row per unauthenticated request.
+    // bogus token would otherwise write one durable row per unauthenticated request. So is
+    // `403`: a valid session without the right (or a token the service rejects as forbidden)
+    // would otherwise replay a refusal for 24 hours to a retry made after the right was
+    // granted, and write one durable row per refused request. A `404` or a `409` remains stored
+    // and replayed: those describe the state of the data, not the caller's standing.
     let release = status.is_server_error()
         || status == StatusCode::UNAUTHORIZED
+        || status == StatusCode::FORBIDDEN
         || status == StatusCode::BAD_REQUEST
         || status == StatusCode::UNSUPPORTED_MEDIA_TYPE
         || status == StatusCode::PRECONDITION_FAILED
@@ -527,6 +869,7 @@ pub(super) fn replay_response(stored: &StoredResponse, request_id: &RequestId) -
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::api::idempotency::{MemoryIdempotencyStore, Reservation};
@@ -589,5 +932,297 @@ mod tests {
             retry_after_secs: 0,
         });
         assert_eq!(crate::api::storage_error::retry_after_secs(&error), Some(1));
+    }
+
+    /// An auth port that says every credential is for one audience and counts its calls.
+    struct OneAudience(Audience, std::sync::atomic::AtomicUsize);
+
+    impl AuthService for OneAudience {
+        fn login<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+            _: &'a crate::api::service::LoginBody,
+        ) -> crate::api::service::BoxFuture<'a, Result<crate::api::service::Session, ApiError>>
+        {
+            Box::pin(async { Err(ApiError::from_code(Code::HttpInternal)) })
+        }
+        fn logout<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+        ) -> crate::api::service::BoxFuture<'a, Result<(), ApiError>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn session<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+        ) -> crate::api::service::BoxFuture<'a, Result<crate::api::service::SessionInfo, ApiError>>
+        {
+            Box::pin(async { Err(ApiError::from_code(Code::HttpInternal)) })
+        }
+        fn audience_of<'a>(
+            &'a self,
+            _: &'a RequestCtx,
+        ) -> crate::api::service::BoxFuture<'a, Result<Audience, ApiError>> {
+            self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let audience = self.0;
+            Box::pin(async move { Ok(audience) })
+        }
+    }
+
+    fn gate(strict: bool) -> (AuthGate, Arc<OneAudience>) {
+        let auth = Arc::new(OneAudience(
+            Audience::Staff,
+            std::sync::atomic::AtomicUsize::new(0),
+        ));
+        let clock = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));
+        (AuthGate::new(auth.clone(), clock, strict), auth)
+    }
+
+    /// A router with one route at `path` (answering `method`) behind the bearer layer, and a
+    /// flag the handler sets.
+    fn guarded(
+        gate: AuthGate,
+        path: &'static str,
+        post: bool,
+        reached: Arc<std::sync::atomic::AtomicBool>,
+    ) -> axum::Router {
+        let handler = move || {
+            let reached = reached.clone();
+            async move {
+                reached.store(true, std::sync::atomic::Ordering::SeqCst);
+                "handler"
+            }
+        };
+        let route = if post {
+            axum::routing::post(handler)
+        } else {
+            axum::routing::get(handler)
+        };
+        axum::Router::new()
+            .route(path, route)
+            .layer(axum::middleware::from_fn_with_state(gate, auth_middleware))
+    }
+
+    async fn status_of(app: &axum::Router, method: &str, path: &str) -> StatusCode {
+        use tower::ServiceExt as _;
+        let request = axum::http::Request::builder()
+            .method(method)
+            .uri(path)
+            .header("authorization", "Bearer test-token")
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|error| panic!("request: {error}"));
+        match app.clone().oneshot(request).await {
+            Ok(response) => response.status(),
+            Err(never) => match never {},
+        }
+    }
+
+    #[tokio::test]
+    async fn a_secured_route_without_a_mark_is_a_500_and_runs_no_handler() {
+        let (strict, auth) = gate(true);
+        let reached = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let app = guarded(strict, "/api/v1/not-in-the-table", false, reached.clone());
+        assert_eq!(
+            status_of(&app, "GET", "/api/v1/not-in-the-table").await,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert!(!reached.load(std::sync::atomic::Ordering::SeqCst));
+        // The audience was never even asked for: the wiring error comes first.
+        assert_eq!(auth.1.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_lenient_gate_lets_an_unmarked_test_route_through_on_bearer_presence() {
+        let (lenient, _) = gate(false);
+        let reached = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let app = guarded(lenient, "/api/v1/not-in-the-table", false, reached.clone());
+        assert_eq!(
+            status_of(&app, "GET", "/api/v1/not-in-the-table").await,
+            StatusCode::OK
+        );
+        assert!(reached.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn a_method_the_table_does_not_list_on_a_known_path_is_the_routers_405() {
+        let (strict, _) = gate(true);
+        let reached = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // The table lists GET for this path; the route here is POST only, so a GET has no
+        // handler and no mark: the router answers 405 and nothing runs.
+        let app = guarded(strict, "/api/v1/auth/session", true, reached.clone());
+        assert_eq!(
+            status_of(&app, "GET", "/api/v1/auth/session").await,
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert!(!reached.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn the_refusal_log_is_bounded_to_one_line_per_key_per_window() {
+        let auth = Arc::new(OneAudience(
+            Audience::Staff,
+            std::sync::atomic::AtomicUsize::new(0),
+        ));
+        let clock = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));
+        let gate = AuthGate::new(auth, clock.clone(), true);
+        assert!(gate.may_log(Audience::Consumer, "auth_session"));
+        assert!(!gate.may_log(Audience::Consumer, "auth_session"));
+        // Another key is its own bucket.
+        assert!(gate.may_log(Audience::Partner, "auth_session"));
+        assert!(gate.may_log(Audience::Consumer, "auth_logout"));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod rate_limiter_tests {
+    use super::*;
+    use spot_core::ManualClock;
+    use std::net::Ipv4Addr;
+    use time::OffsetDateTime;
+
+    fn addr(n: u32) -> Option<IpAddr> {
+        Some(IpAddr::V4(Ipv4Addr::from(0x0a00_0000 + n)))
+    }
+
+    fn limiter(limit: u32, shards: usize, capacity: usize) -> (RateLimiter, Arc<ManualClock>) {
+        let clock = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));
+        let limits = RateLimits {
+            auth_limit: limit,
+            auth_window: Duration::from_secs(60),
+        };
+        (
+            RateLimiter::with_capacity(clock.clone(), limits, shards, capacity),
+            clock,
+        )
+    }
+
+    #[test]
+    fn below_capacity_nothing_is_evicted() {
+        let (l, _) = limiter(1, 1, 4);
+        for n in 0..4 {
+            assert!(l.check(RateClass::Auth, addr(n)).is_ok());
+        }
+        assert_eq!(l.len(), 4);
+        // Every one of the four is still counted: a second request is limited.
+        for n in 0..4 {
+            assert!(l.check(RateClass::Auth, addr(n)).is_err(), "{n}");
+        }
+    }
+
+    #[test]
+    fn a_full_table_admits_a_new_key_by_evicting_the_oldest_window() {
+        let (l, clock) = limiter(1, 1, 4);
+        for n in 0..4 {
+            clock.advance(Duration::from_secs(1));
+            assert!(l.check(RateClass::Auth, addr(n)).is_ok());
+        }
+        // A new address is admitted, never refused, and counted from one.
+        assert!(l.check(RateClass::Auth, addr(100)).is_ok());
+        assert_eq!(l.len(), 4);
+        assert!(
+            l.check(RateClass::Auth, addr(100)).is_err(),
+            "counted from 1"
+        );
+        // The oldest (address 0) lost its counter and starts afresh; the others kept theirs.
+        assert!(l.check(RateClass::Auth, addr(0)).is_ok());
+        assert!(l.check(RateClass::Auth, addr(3)).is_err());
+    }
+
+    #[test]
+    fn a_window_that_restarted_is_the_newest_not_the_oldest() {
+        let (l, clock) = limiter(1, 1, 2);
+        assert!(l.check(RateClass::Auth, addr(1)).is_ok());
+        clock.advance(Duration::from_secs(30));
+        assert!(l.check(RateClass::Auth, addr(2)).is_ok());
+        clock.advance(Duration::from_secs(31));
+        // Address 1's window ended: it restarts and moves behind address 2.
+        assert!(l.check(RateClass::Auth, addr(1)).is_ok());
+        // Admitting a third evicts the oldest window, which is address 2's.
+        assert!(l.check(RateClass::Auth, addr(3)).is_ok());
+        assert!(
+            l.check(RateClass::Auth, addr(1)).is_err(),
+            "address 1 kept its counter"
+        );
+        assert!(
+            l.check(RateClass::Auth, addr(2)).is_ok(),
+            "address 2 was evicted"
+        );
+    }
+
+    #[test]
+    fn a_limited_client_stays_limited_while_its_entry_survives() {
+        let (l, _) = limiter(2, 1, 8);
+        assert!(l.check(RateClass::Auth, addr(1)).is_ok());
+        assert!(l.check(RateClass::Auth, addr(1)).is_ok());
+        let wait = l.check(RateClass::Auth, addr(1)).unwrap_err();
+        assert!((1..=61).contains(&wait), "{wait}");
+        // Other clients flooding below capacity do not free it.
+        for n in 10..13 {
+            assert!(l.check(RateClass::Auth, addr(n)).is_ok());
+        }
+        assert!(l.check(RateClass::Auth, addr(1)).is_err());
+    }
+
+    #[test]
+    fn ipv6_is_reduced_to_its_64_and_unknown_shares_one_bucket() {
+        let (l, _) = limiter(1, 1, 8);
+        let a: IpAddr = "2001:db8:1:1::5".parse().unwrap();
+        let b: IpAddr = "2001:db8:1:1::9".parse().unwrap();
+        let c: IpAddr = "2001:db8:1:2::1".parse().unwrap();
+        assert!(l.check(RateClass::Auth, Some(a)).is_ok());
+        assert!(l.check(RateClass::Auth, Some(b)).is_err());
+        assert!(l.check(RateClass::Auth, Some(c)).is_ok());
+        let mapped: IpAddr = "::ffff:10.0.0.200".parse().unwrap();
+        assert!(l.check(RateClass::Auth, Some(mapped)).is_ok());
+        assert!(
+            l.check(RateClass::Auth, addr(200)).is_err(),
+            "mapped is the IPv4 key"
+        );
+        assert!(l.check(RateClass::Auth, None).is_ok());
+        assert!(l.check(RateClass::Auth, None).is_err());
+    }
+
+    #[test]
+    fn many_distinct_keys_stay_within_capacity_and_do_not_go_quadratic() {
+        let clock = Arc::new(ManualClock::new(OffsetDateTime::UNIX_EPOCH));
+        let l = RateLimiter::new(clock);
+        let started = std::time::Instant::now();
+        for n in 0..200_000u32 {
+            assert!(l.check(RateClass::Auth, addr(n)).is_ok(), "{n}");
+            if n % 1000 == 0 {
+                assert!(l.len() <= RATE_TABLE_CAPACITY);
+            }
+        }
+        assert!(l.len() <= RATE_TABLE_CAPACITY);
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(20),
+            "200,000 keys took {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn concurrent_checks_never_exceed_the_limit_of_one_key_in_a_window() {
+        let (l, _) = limiter(50, 4, 1024);
+        let l = Arc::new(l);
+        let admitted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut handles = Vec::new();
+        for t in 0..8u32 {
+            let (l, admitted) = (l.clone(), admitted.clone());
+            handles.push(std::thread::spawn(move || {
+                for i in 0..100u32 {
+                    // Same key for everyone, plus a distinct key per thread.
+                    if l.check(RateClass::Auth, addr(1)).is_ok() {
+                        admitted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    let _ = l.check(RateClass::Auth, addr(1000 + t * 1000 + i));
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(admitted.load(std::sync::atomic::Ordering::SeqCst), 50);
     }
 }

@@ -19,6 +19,11 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <!-- The notification fakes, shared as source (WP-UI-02.T6). -->
+    <Compile Include="../Spotledger.Client.Notifications.Tests/Fakes.cs" Link="Fakes/NotificationFakes.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Client.Notifications/Spotledger.Client.Notifications.csproj" />
     <ProjectReference Include="../../src/Spotledger.Client.Forms/Spotledger.Client.Forms.csproj" />
     <ProjectReference Include="../Spotledger.Client.TestSupport/Spotledger.Client.TestSupport.csproj" />
   </ItemGroup>

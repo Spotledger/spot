@@ -16,6 +16,8 @@ thiserror = "2"
 [dev-dependencies]
 # Property run: served majors are always decodable by the node.
 proptest = "1"
+# The state tests pin the JSON form of a hold set.
+serde_json = "1"
 
 [lints]
 workspace = true

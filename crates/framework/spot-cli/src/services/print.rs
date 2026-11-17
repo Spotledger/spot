@@ -24,7 +24,19 @@
 //! The document is loaded **as the caller** through the engine, so read permission, hidden
 //! fields and masked fields apply exactly as for `GET /api/v1/resource/...`: the page shows what
 //! the caller could read. A missing document, one the caller may not read and an unknown
-//! DocType are the same `404`. Template names are validated and read from the template folder
+//! DocType are the same `404`.
+//!
+//! # The field guard (WP-SEC-04.T12 and T16)
+//!
+//! A print is a data channel (`Channel::Print`). Between the read and the renderer the document
+//! goes through [`guard_document`] with the caller's principal and the protection facts of the
+//! metadata served now: a hidden field is absent from the template's context, a masked one
+//! carries its mask, a child column is judged per row, and a guard error empties the document and
+//! answers `print.render_failed`. `Printing::render_with` is the only caller of the renderer
+//! and it always passes the guard first: `PrintService::render_document` is private to this
+//! module, so no other code in the host can render an unguarded document. A site that cannot
+//! build the guard (a diverged node, no runtime attached) fails the print; it never prints
+//! unguarded. Template names are validated and read from the template folder
 //! only (no parent step, no symlink, a size limit), and nothing from a template or a document
 //! ever appears in an error body or a log line.
 //!
@@ -33,7 +45,7 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -41,7 +53,8 @@ use spot_app_api::context::{Actor, DocumentService, Invocation};
 use spot_app_api::prelude::{Name, RecordId, Value};
 use spot_app_api::{DocTypeDef, Document, FieldKind};
 use spot_core::{Clock, SiteId};
-use spot_http::api::print::{PdfBytes, PrintPort, PrintPortError};
+use spot_document::engine::Authorizer;
+use spot_http::api::print::{PdfBytes, PrintInput, PrintPort, PrintPortError, guard_document};
 use spot_http::api::service::{BoxFuture, Credential, RequestCtx};
 use spot_http::request::RequestId;
 use spot_print::{AssetMap, FontSet, PdfRenderer, RenderLimits, RenderOptions};
@@ -49,8 +62,9 @@ use spot_template::{Context, CtxValue, TemplateEngine, TemplateSource, Version};
 use tokio::sync::watch;
 
 use crate::audit::PathClass;
+use crate::config;
 use crate::live::SiteLive;
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 
 /// The print routes' path (the port is not handed the request path); see `PathClass::of_path`.
 const PRINT_ROUTE: &str = "/api/v1/print";
@@ -203,7 +217,7 @@ impl PrintService {
     /// # Errors
     ///
     /// [`PrintFailure`]: an unknown format, or a template or renderer failure.
-    pub async fn render_document(
+    async fn render_document(
         &self,
         def: &DocTypeDef,
         doc: &Document,
@@ -415,6 +429,35 @@ impl Printing {
         .await
     }
 
+    /// `doc` as the print channel may show it to the actor of `inv`: the site's field guard over
+    /// the metadata served now. Fails closed with `print.render_failed` when the guard cannot be
+    /// built (nothing served, no authorizer) or cannot judge the document.
+    async fn guarded(
+        &self,
+        inv: &Invocation,
+        id: RecordId,
+        doc: Document,
+    ) -> Result<Document, PrintPortError> {
+        let served = self
+            .live
+            .current()
+            .map_err(|_| PrintPortError::render_failed())?;
+        let authorizer = self
+            .live
+            .authorizer()
+            .ok_or_else(PrintPortError::render_failed)?;
+        let guard = crate::live::field_guard(&served, &self.clock);
+        let principal = authorizer.principal_for(inv).await;
+        let facts = spot_api_services::access::doc_facts(&doc, Some(&id.to_string()));
+        let mut input = PrintInput {
+            document: doc,
+            principal,
+            facts,
+        };
+        guard_document(&guard, &mut input)?;
+        Ok(input.document)
+    }
+
     async fn render_with(
         &self,
         inv: Invocation,
@@ -436,6 +479,9 @@ impl Printing {
             .meta(doctype)
             .await
             .map_err(|_| PrintPortError::not_found())?;
+        // The guard comes between the read and the renderer, whoever asked (a caller or the
+        // platform itself): the renderer never sees a document the guard has not judged.
+        let doc = self.guarded(&inv, id, doc).await?;
         self.service
             .render_document(&def, &doc, format, inv.now)
             .await
@@ -525,4 +571,38 @@ impl Service for PrintCheck {
             Ok(())
         })
     }
+}
+
+/// This module's start order: the one it had in the host's table before it moved here.
+pub const ORDER: u32 = 900;
+
+/// Print: optional, so a renderer that cannot make a page degrades the site, not stops it.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    let live = ctx.env()?.live;
+    ctx.add(PrintCheck::new(live.print(), Arc::clone(ctx.clock())));
+    Ok(())
+}
+
+/// What the print service of `site` is built from; `None` when printing is switched off.
+/// `build_site` calls it too, so it stays here as the one place that reads `services.print`.
+pub(crate) fn print_settings(
+    root: &Path,
+    loaded: &config::Loaded,
+    site: &config::Site,
+    live: &Arc<SiteLive>,
+    clock: &Arc<dyn Clock>,
+) -> Option<Settings> {
+    let print = &loaded.common.services.print;
+    if !print.enabled {
+        return None;
+    }
+    Some(Settings {
+        site: SiteId::new(&site.site).ok()?,
+        live: live.clone(),
+        clock: clock.clone(),
+        templates: root
+            .join("sites")
+            .join(&site.site)
+            .join(&print.template_root),
+    })
 }

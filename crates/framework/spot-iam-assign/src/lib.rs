@@ -34,6 +34,7 @@ pub use ownership::{Actor, ChangeRequest, ManagedRoles, authorise_change};
 pub use plan::{Change, EndCause, EventPayload, Plan, UserError};
 pub use rules::{RestrictionSpec, RoleDirectory, Rule, RuleSet, RuleSpec};
 pub use spot_iam_roles::{Assignment, OutsideGuard, RoleName, Scope, Source};
+// `plan_rules` and `plan_idp` are deprecated (fail-open for portal users) but stay exported.
 #[allow(deprecated)]
 pub use sync::{expire, plan_idp, plan_idp_guarded, plan_rules, plan_rules_guarded};
 

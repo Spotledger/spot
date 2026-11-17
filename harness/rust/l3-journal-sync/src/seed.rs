@@ -1,8 +1,14 @@
 //! `seed::documents`: creates sample-app documents through a node's own API, for later tasks
 //! that need existing data to sync, snapshot or audit.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::Node;
 use crate::node::{SEED_DOCTYPE, seed_project_body};
+
+/// A process-wide sequence: two calls on one node (a seed before a cut and another during it) must
+/// not reuse a project code, which is unique.
+static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 /// Creates `n` `project` documents on `node` as its Administrator and returns their ids, in
 /// creation order.
@@ -15,8 +21,12 @@ pub async fn documents(node: &Node, n: usize) -> Result<Vec<String>, String> {
         .ok_or_else(|| format!("node `{}` is not running", node.name()))?;
     let owner = node.admin_id();
     let mut ids = Vec::with_capacity(n);
-    for i in 0..n {
-        let unique = format!("{}-seed-{i}", node.name());
+    for _ in 0..n {
+        let unique = format!(
+            "{}-seed-{}",
+            node.name(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        );
         let body = seed_project_body(&unique, &owner);
         let reply = client.create(SEED_DOCTYPE, &body).await?;
         reply.expect(201)?;

@@ -39,6 +39,7 @@ internal sealed class WorkspaceHost : IDisposable
         public DraftScope Scope { get; } = scope;
         public WorkspaceTabViewModel? Tab { get; set; }
         public IDisposable? Binding { get; set; }
+        public IDisposable? Staleness { get; set; }
         public FormHistoryAdapter? History { get; set; }
         public EventHandler? HistoryChanged { get; set; }
     }
@@ -74,6 +75,12 @@ internal sealed class WorkspaceHost : IDisposable
         _drafts.ScopeChanged += OnScopeChanged;
     }
 
+    /// <summary>
+    /// Called for each form this host opens, before it loads (WP-UI-02.T6): the notification host joins the
+    /// document's room and puts the staleness bar in the form. The result is disposed when the tab closes.
+    /// </summary>
+    public Func<DocumentFormViewModel, IDisposable?>? StalenessFactory { get; set; }
+
     /// <summary>How many drafts the open scope holds (the File menu text and the status line show it).</summary>
     public int DraftCount => _draftCount;
 
@@ -108,6 +115,7 @@ internal sealed class WorkspaceHost : IDisposable
         var tab = _shell.OpenContentTab(form.Title, form, key);
         info.Tab = tab;
         info.Binding = DocumentTabs.Bind(tab, form);
+        info.Staleness = StalenessFactory?.Invoke(form);
         tab.CloseGuard = () => GuardCloseAsync(tab, form, info);
         _ = LoadAsync(form);
         return tab;
@@ -285,6 +293,7 @@ internal sealed class WorkspaceHost : IDisposable
     private async Task CloseFormAsync(DocumentFormViewModel form, OpenForm info, bool signedOut)
     {
         info.Binding?.Dispose();
+        info.Staleness?.Dispose();
         if (info.History is { } history && info.HistoryChanged is { } handler)
         {
             history.Changed -= handler;

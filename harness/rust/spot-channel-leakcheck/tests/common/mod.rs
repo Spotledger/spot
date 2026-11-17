@@ -236,7 +236,22 @@ pub struct Core {
 }
 
 pub fn core() -> Core {
-    let meta = meta();
+    core_over(meta())
+}
+
+/// The core over the standard DocTypes after `tweak` changed their definitions (a field that
+/// became protected, say). The permission model stays the standard one.
+pub fn core_with(tweak: impl FnOnce(&mut Vec<Definition>)) -> Core {
+    let mut defs = definitions();
+    tweak(&mut defs);
+    let options = BuildOptions::new().with_derivations(&derivations());
+    let meta = Registry::with_options(defs, options)
+        .unwrap_or_else(|e| panic!("fixture meta: {e:?}"))
+        .effective();
+    core_over(meta)
+}
+
+fn core_over(meta: Arc<EffectiveMeta>) -> Core {
     let protection = Arc::new(MetaProtection::new(&meta));
     let engine = Arc::new(PermissionEngine::new(Arc::new(snapshot(
         &meta,

@@ -13,10 +13,11 @@
 use std::sync::Arc;
 
 use spot_auth::{OpaqueToken, TokenDigest};
+use spot_core::Audience;
 
 use crate::error::{InternalReason, SessionEndReasonText, SessionError, invalid};
 use crate::model::{Session, SessionEndReason, SessionPolicy, SessionState, SourceHash, UserKey};
-use crate::store::{SessionRecord, SessionStore};
+use crate::store::{SessionRecord, SessionStore, Touched};
 
 /// What `end` or `end_others` did, for the caller's response and audit note.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,11 +80,15 @@ impl<S: SessionStore> SessionManager<S> {
     /// Signs a user in: creates the token, enforces `max_per_user` (evicting the oldest
     /// active session with reason `evicted` when needed), stores the digest-only record.
     ///
+    /// `audience` is who the session is for (ADR-083 Barrier 1): chosen once here, by the issuing
+    /// service, and never changed afterwards (this is the only writer). There is no default.
+    ///
     /// `source` is the **raw** source address string; it is salted-digested here and never
     /// stored or logged. `now` and the deadlines derive from it (unix seconds).
     pub async fn start(
         &self,
         user: UserKey,
+        audience: Audience,
         source: &str,
         client: crate::model::ClientInfo,
         now: i64,
@@ -115,6 +120,7 @@ impl<S: SessionStore> SessionManager<S> {
         let record = Session {
             id: String::new(), // The store assigns the id.
             user,
+            audience,
             token_digest: digest,
             created: now,
             last_seen: now,
@@ -158,7 +164,8 @@ impl<S: SessionStore> SessionManager<S> {
 
         // Alive: touch (side effect 1). The store skips writes under the granularity and
         // clamps to the absolute bound itself.
-        self.store
+        let touched = self
+            .store
             .touch(
                 &record.id,
                 now,
@@ -190,6 +197,15 @@ impl<S: SessionStore> SessionManager<S> {
         } else {
             None
         };
+
+        // Nothing was written (no extension, no rotation): the record just read is current, and
+        // a second lookup would cost another indexed find and its secret-audit event.
+        if touched == Touched::Skipped && renewed_token.is_none() {
+            return Ok(Validated {
+                session: record,
+                renewed_token: None,
+            });
+        }
 
         // The post-touch (and post-rotation) record: re-read so the caller sees the
         // extended window and the swapped digest. The digest to look up is the *fresh*

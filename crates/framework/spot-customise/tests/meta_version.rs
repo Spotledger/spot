@@ -49,12 +49,8 @@ async fn the_metadata_version_rises_on_every_step_on_the_applying_node_and_on_a_
             }
         }
         let current = rig.live.current();
-        // Known gap (see the PR's open questions): the store's counter starts at 1, and the
-        // starting snapshot (`Version::ZERO`) already reports metadata version 1, so the very
-        // first change of a fresh site cannot rise while the metadata version equals the site
-        // version. Every later step must.
         assert!(
-            step == 0 || current.meta().version() > before_live,
+            current.meta().version() > before_live,
             "step {step}: the applying node's metadata version rose ({} -> {})",
             before_live,
             current.meta().version()
@@ -69,7 +65,7 @@ async fn the_metadata_version_rises_on_every_step_on_the_applying_node_and_on_a_
         node.poll().await.unwrap();
         let adopted = node.snapshot().unwrap();
         assert!(
-            step == 0 || adopted.meta().version() > before_follower,
+            adopted.meta().version() > before_follower,
             "step {step}: the follower's metadata version rose ({} -> {})",
             before_follower,
             adopted.meta().version()
@@ -78,4 +74,79 @@ async fn the_metadata_version_rises_on_every_step_on_the_applying_node_and_on_a_
         assert_eq!(adopted.meta().version(), current.meta().version());
         before_follower = adopted.meta().version();
     }
+}
+
+/// What a cache keyed on the served metadata version sees across one change.
+async fn first_change_is_seen_by_the_cache_and_the_follower(
+    rig: &Rig,
+    change: impl std::future::Future<Output = ()>,
+) {
+    let node = Node::new(rig.follower());
+    let before = rig.live.current();
+    // A fresh site starts at `Version::ZERO`, whose metadata already reports version 1.
+    assert_eq!(before.version(), spot_meta_live::Version::ZERO);
+    assert_eq!(before.meta().version(), 1);
+    let mut cache: std::collections::HashMap<u64, &'static str> = std::collections::HashMap::new();
+    cache.insert(before.meta().version(), "plan before the change");
+    let etag_input_before = before.meta().version();
+
+    change.await;
+
+    let after = rig.live.current();
+    assert_eq!(
+        after.meta().version(),
+        2,
+        "the first change is version 2, never 1"
+    );
+    assert_eq!(after.version().get(), 2);
+    assert!(
+        !cache.contains_key(&after.meta().version()),
+        "the cache keyed on the metadata version must miss after the first change"
+    );
+    assert_ne!(
+        etag_input_before,
+        after.meta().version(),
+        "the metadata ETag input changed"
+    );
+
+    node.poll().await.unwrap();
+    let adopted = node.snapshot().unwrap();
+    assert_eq!(adopted.meta().version(), after.meta().version());
+    assert_eq!(adopted.version(), after.version());
+}
+
+#[tokio::test]
+async fn the_first_customisation_on_a_fresh_site_changes_the_metadata_version() {
+    let rig = Rig::new().await;
+    first_change_is_seen_by_the_cache_and_the_follower(&rig, async {
+        rig.service
+            .add_custom_field(&admin(), "invoice", &field("custom_first"), None)
+            .await
+            .unwrap();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_first_doctype_on_a_fresh_site_changes_the_metadata_version() {
+    let rig = Rig::new().await;
+    first_change_is_seen_by_the_cache_and_the_follower(&rig, async {
+        rig.service
+            .create_doctypes(&admin(), &[TICKET, TICKET_NOTE])
+            .await
+            .unwrap();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_first_property_on_a_fresh_site_changes_the_metadata_version() {
+    let rig = Rig::new().await;
+    first_change_is_seen_by_the_cache_and_the_follower(&rig, async {
+        rig.service
+            .set_property(&admin(), "invoice", Some("amount"), "read_only", "true")
+            .await
+            .unwrap();
+    })
+    .await;
 }

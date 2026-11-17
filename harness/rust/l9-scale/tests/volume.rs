@@ -61,6 +61,13 @@ const NIGHTLY_DEPTH_PAGES: u64 = 10_000;
 
 const PAGE_SIZE: u64 = 25;
 
+/// Persistent connections seeding at once. The server's database pool holds 16 connections and
+/// every request (sign-in, permission, the write) draws from it; more writers than that only
+/// queue for a connection, and a request that waits past the pool's wait time is answered 503.
+/// Measured against a release `spot` on a loaded host: 64 writers seeded no faster than 12 and
+/// had requests refused with 503, 6 writers were a third slower. Stay under the pool size.
+const SEED_WORKERS: usize = 12;
+
 async fn sign_in(
     conn: &mut Conn,
     target: &l9_scale::http::Target,
@@ -202,7 +209,7 @@ async fn the_volume_profile_seeds_100k_rows_and_meets_its_operation_budgets() {
         children_min: 0,
         children_max: 3,
         seed: 20261107,
-        workers: 64,
+        workers: SEED_WORKERS,
         request_timeout: Duration::from_secs(10),
         checkpoint: checkpoint.clone(),
         // A deadline close enough to "now" that the first call almost certainly cannot finish
@@ -211,6 +218,7 @@ async fn the_volume_profile_seeds_100k_rows_and_meets_its_operation_budgets() {
         // read (the hard rule: time is an argument).
         deadline_ns: Some(clock.now_ns() + 50_000_000),
     };
+    let seed_started = clock.now_ns();
     let first = seed::seed(&options, &projects, clock.clone())
         .await
         .unwrap_or_else(|e| panic!("seeding (first call) failed: {e}"));
@@ -232,6 +240,13 @@ async fn the_volume_profile_seeds_100k_rows_and_meets_its_operation_budgets() {
         first.created + second.created + first.failed + second.failed,
         parents,
         "every row is accounted for exactly once across both calls"
+    );
+    println!(
+        "l9-scale volume: seeding took {} s, {} rows failed ({} + {})",
+        (clock.now_ns() - seed_started) / 1_000_000_000,
+        first.failed + second.failed,
+        first.failed,
+        second.failed
     );
     println!(
         "l9-scale volume: seeded {} task parents ({} child rows) in two calls (resumed)",

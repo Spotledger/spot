@@ -1,3 +1,6 @@
+using Avalonia;
+using Spotledger.Client.Theme;
+
 namespace Spotledger.Client.Notifications;
 
 /// <summary>
@@ -7,8 +10,14 @@ namespace Spotledger.Client.Notifications;
 /// </summary>
 public sealed class ToastTray(TimeProvider time, TimeSpan? duration = null) : IDisposable
 {
-    /// <summary>The default time a toast stays: no toast token exists yet, so this is the one place it is set.</summary>
-    public static readonly TimeSpan DefaultDuration = TimeSpan.FromSeconds(6);
+    /// <summary>The time a toast stays when no application (so no token) is present: the token's own value.</summary>
+    public static readonly TimeSpan FallbackDuration = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// The default time a toast stays: the <c>Toast.Duration</c> theme token of the running application,
+    /// or <see cref="FallbackDuration"/> when there is no application or the token is missing.
+    /// </summary>
+    public static TimeSpan DefaultDuration => ToastTokens.Duration(FallbackDuration);
 
     /// <summary>The most toasts waiting; older waiting toasts are dropped first.</summary>
     public const int MaxWaiting = 20;
@@ -178,4 +187,20 @@ public sealed class ToastTray(TimeProvider time, TimeSpan? duration = null) : ID
     }
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+}
+
+/// <summary>Reads the toast token group from the running application's resources.</summary>
+internal static class ToastTokens
+{
+    public static TimeSpan Duration(TimeSpan fallback) => Read(Tokens.TokenToastDuration, fallback);
+
+    public static double Number(string key, double fallback) => Read(key, fallback);
+
+    private static T Read<T>(string key, T fallback)
+    {
+        var application = Application.Current;
+        return application is not null && application.TryGetResource(key, application.ActualThemeVariant, out var value) && value is T typed
+            ? typed
+            : fallback;
+    }
 }

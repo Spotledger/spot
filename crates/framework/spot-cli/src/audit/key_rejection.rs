@@ -48,6 +48,8 @@ pub enum PathClass {
     Metrics,
     /// The realtime socket.
     Realtime,
+    /// The SCIM provisioning endpoint.
+    Scim,
 }
 
 impl PathClass {
@@ -56,6 +58,7 @@ impl PathClass {
             Self::Api => "api",
             Self::Metrics => "metrics",
             Self::Realtime => "realtime",
+            Self::Scim => "scim",
         }
     }
 
@@ -65,6 +68,7 @@ impl PathClass {
         match path {
             "/metrics" => Self::Metrics,
             "/api/v1/realtime" => Self::Realtime,
+            other if other == "/scim/v2" || other.starts_with("/scim/v2/") => Self::Scim,
             _ => Self::Api,
         }
     }

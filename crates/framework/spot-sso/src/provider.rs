@@ -9,6 +9,8 @@
 //! this crate verifies signatures with a public key, and no configuration may turn that off.
 
 use serde::{Deserialize, Serialize};
+use spot_core::Audience;
+use spot_iam_directory::UserType;
 use url::Url;
 
 use crate::error::{self as e, ResultList, SsoError, SsoErrors};
@@ -124,6 +126,72 @@ impl Default for ClaimsMap {
     }
 }
 
+/// Serde for [`Audience`] (`spot-core` carries no serde): the lower-case name.
+mod audience_wire {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use spot_core::Audience;
+
+    pub(super) fn serialize<S: Serializer>(audience: &Audience, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(audience.as_str())
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Audience, D::Error> {
+        let text = String::deserialize(d)?;
+        Audience::parse(&text).ok_or_else(|| {
+            serde::de::Error::custom("not an audience: expected `staff`, `partner` or `consumer`")
+        })
+    }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// A configuration that predates audiences keeps its meaning: it is a staff provider.
+fn default_audience() -> Audience {
+    Audience::Staff
+}
+
+/// The options that make a provider create or link directory users. Only a staff or partner
+/// provider may set any of them; the loader refuses them on a consumer provider
+/// ([`e::codes::AUDIENCE_OPTION_CONFLICT`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UserOptions {
+    /// Roles named for users created just in time through this provider.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jit_roles: Vec<String>,
+    /// Link an unknown identity to a user with the same e-mail.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub link_by_email: bool,
+    /// The kind of directory user this provider's sign-ins create or map to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory_user_type: Option<UserType>,
+}
+
+impl UserOptions {
+    /// Whether no option is set.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.jit_roles.is_empty() && !self.link_by_email && self.directory_user_type.is_none()
+    }
+
+    /// The names of the options that are set.
+    fn set_names(&self) -> Vec<&'static str> {
+        let mut names = Vec::new();
+        if !self.jit_roles.is_empty() {
+            names.push("jit_roles");
+        }
+        if self.link_by_email {
+            names.push("link_by_email");
+        }
+        if self.directory_user_type.is_some() {
+            names.push("directory_user_type");
+        }
+        names
+    }
+}
+
 /// A provider's full configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +224,13 @@ pub struct ProviderConfig {
     pub require_email_verified: bool,
     /// The `acr` values the tenant requires, if any.
     pub acr_values: Vec<String>,
+    /// Who this provider signs in: `staff` (the default for a stored configuration without
+    /// the key), `partner` or `consumer` (ADR-083 section 2.3).
+    #[serde(default = "default_audience", with = "audience_wire")]
+    pub audience: Audience,
+    /// The options that create or link directory users (never on a consumer provider).
+    #[serde(default, skip_serializing_if = "UserOptions::is_empty")]
+    pub user_options: UserOptions,
 }
 
 /// A provider configuration as an administrator writes it: algorithms are plain strings, so
@@ -194,6 +269,12 @@ pub struct RawProviderConfig {
     /// Required `acr` values.
     #[serde(default)]
     pub acr_values: Vec<String>,
+    /// Who this provider signs in; defaults to `staff`.
+    #[serde(default = "default_audience", with = "audience_wire")]
+    pub audience: Audience,
+    /// The options that create or link directory users.
+    #[serde(default, skip_serializing_if = "UserOptions::is_empty")]
+    pub user_options: UserOptions,
 }
 
 /// The default longest lifetime of a back-channel logout token, in seconds.
@@ -280,6 +361,18 @@ impl ProviderConfig {
                 );
             }
         }
+        if self.audience == Audience::Consumer {
+            for name in self.user_options.set_names() {
+                problems.push(
+                    SsoError::new(
+                        e::codes::AUDIENCE_OPTION_CONFLICT,
+                        "The identity provider is not configured completely.",
+                        "A consumer provider cannot create or link directory users: remove the option, or make the provider a staff or partner provider.",
+                    )
+                    .with_detail(name),
+                );
+            }
+        }
         finish(problems)
     }
 
@@ -323,6 +416,8 @@ impl ProviderConfig {
             claims_map: raw.claims_map,
             require_email_verified: raw.require_email_verified,
             acr_values: raw.acr_values,
+            audience: raw.audience,
+            user_options: raw.user_options,
         };
         match config.validate() {
             Ok(()) => finish(problems).map(|()| config),
@@ -463,6 +558,8 @@ mod tests {
             claims_map: ClaimsMap::default(),
             require_email_verified: true,
             acr_values: Vec::new(),
+            audience: Audience::Staff,
+            user_options: UserOptions::default(),
         }
     }
 
@@ -532,6 +629,8 @@ mod tests {
             claims_map: ClaimsMap::default(),
             require_email_verified: false,
             acr_values: Vec::new(),
+            audience: Audience::Staff,
+            user_options: UserOptions::default(),
         };
         let errors = match ProviderConfig::load(raw) {
             Err(errors) => errors,

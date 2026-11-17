@@ -216,11 +216,49 @@ pub struct Migrate {
     pub plan_hash: Option<String>,
 }
 
+#[path = "migrate_seed.rs"]
+pub mod migrate_seed;
+
+/// A boolean of `sites/<site>/migrations.toml` (`require_plan`, `require_rehearsal`); `false` when
+/// the file or the key is absent. The default stays `false` until the architecture owner decides whether new sites
+/// start with `require_plan = true` (WP-MIG-07.T3 open question). A file that does not parse
+/// counts as `true`: a site that cannot say it does not need the lifecycle must use it.
+fn migrations_flag(root: &Path, site: &str, key: &str) -> bool {
+    let path = root.join("sites").join(site).join("migrations.toml");
+    match std::fs::read_to_string(path) {
+        Ok(text) => text.parse::<toml::Table>().map_or(true, |table| {
+            table
+                .get(key)
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(false)
+        }),
+        Err(_) => false,
+    }
+}
+
+/// Whether `spot migrate --apply` is refused for `site` because the lifecycle is required.
+pub fn requires_plan(root: &Path, site: &str) -> bool {
+    migrations_flag(root, site, "require_plan")
+}
+
+/// Whether every plan of `site` must be rehearsed before it is applied.
+pub fn requires_rehearsal(root: &Path, site: &str) -> bool {
+    migrations_flag(root, site, "require_rehearsal")
+}
+
 /// Plans (and with `apply` runs) the schema change from the live database to the installed apps'
 /// current metadata.
 pub async fn migrate(root: &Path, site: Option<&str>, options: Migrate) -> Result<String> {
     let loaded = config::load(root, false)?;
     let site = sitefile::pick(root, site)?;
+    if options.apply && requires_plan(root, &site.site) {
+        return Err(Error(
+            "migration.not_approved: this site applies migrations through the lifecycle; run \
+             `spot migrate-plan plan`, have it approved (and rehearsed), then \
+             `spot migrate-apply apply HASH`"
+                .to_owned(),
+        ));
+    }
     let meta = apps::serving(root, &loaded, &site)?;
     let backend = schema::backend(&loaded, &site).await?;
     // The plan carries the platform's non-document tables too (edge sync's and the mail sent
@@ -232,6 +270,7 @@ pub async fn migrate(root: &Path, site: Option<&str>, options: Migrate) -> Resul
         if !plan.is_empty() {
             out.push_str("dry run: nothing was changed; add --apply (and --plan-hash) to apply\n");
         }
+        seed_preview(&site, &backend, &meta, plan.is_empty(), &mut out).await;
         return Ok(out);
     }
     if plan.is_empty() {
@@ -239,15 +278,60 @@ pub async fn migrate(root: &Path, site: Option<&str>, options: Migrate) -> Resul
         // tables (their triggers are outside the plan's hook), so a site that has just been
         // given a `[partition]` profile still needs this command to run.
         schema::protect_audit(&backend).await?;
+        schema::prepare_migration_control(&backend).await?;
         prepare_partition(&loaded, &site, &backend, &mut out).await?;
+        seed_step(&site, &backend, &meta, &mut out).await?;
         return Ok(out);
     }
     let report = schema::apply(&backend, &plan, options.plan_hash.as_deref()).await?;
     let _ = writeln!(out, "applied {} step(s)", report.executed.len());
     // The audit chain's role, grants and guard triggers (the plan cannot hold them).
     schema::protect_audit(&backend).await?;
+    schema::prepare_migration_control(&backend).await?;
     prepare_partition(&loaded, &site, &backend, &mut out).await?;
+    seed_step(&site, &backend, &meta, &mut out).await?;
     Ok(out)
+}
+
+/// Seeds the platform's missing system rows after the schema step (always on `--apply`; a bare
+/// site has no platform app and is skipped silently). A failure is an error, not a warning.
+pub async fn seed_step(
+    site: &config::Site,
+    backend: &spot_postgres::PgBackend,
+    meta: &spot_meta::EffectiveMeta,
+    out: &mut String,
+) -> Result<()> {
+    if !migrate_seed::has_platform(site) {
+        return Ok(());
+    }
+    match migrate_seed::seed_missing(backend, meta).await {
+        Ok(added) => {
+            out.push_str(&migrate_seed::applied_lines(&added));
+            Ok(())
+        }
+        Err(Error(cause)) => Err(Error(format!("{out}{}", migrate_seed::failure(&cause)))),
+    }
+}
+
+/// The seed lines of a plan-only run: read-only, and not queried while the schema still has steps.
+async fn seed_preview(
+    site: &config::Site,
+    backend: &spot_postgres::PgBackend,
+    meta: &spot_meta::EffectiveMeta,
+    schema_is_current: bool,
+    out: &mut String,
+) {
+    if !migrate_seed::has_platform(site) {
+        return;
+    }
+    if !schema_is_current {
+        out.push_str("seed: after the schema is applied\n");
+        return;
+    }
+    match migrate_seed::would_add(backend, meta).await {
+        Ok(added) => out.push_str(&migrate_seed::would_lines(&added)),
+        Err(_) => out.push_str("seed: after the schema is applied\n"),
+    }
 }
 
 /// Creates the ownership registry's tables for a partitioned site, and says so.

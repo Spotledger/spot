@@ -3,11 +3,20 @@
 //!
 //! Credential material is kept in `site.toml`: the platform's `user.password_hash` field has no
 //! storage column until the secrets service lands (WP-SEC-10).
+//!
+//! # The portal rule (ADR-083 Barrier 3)
+//!
+//! A portal user may hold only a portal role whose duties are all outside-exposed. The rule is
+//! checked in [`outside`] at the two places this module keeps a role assignment: before an
+//! invitation inserts each `role_assignment` (`write_user`, a refusal rolls the whole
+//! invitation back: no user, no credential) and when an invited user is activated (`activate`,
+//! a refusal leaves the account `invited`). Internal users are unaffected, and `add-user`
+//! still writes internal users.
 use crate::config::{self, Credential, Key, Site};
 use crate::onetime::Issue;
 use crate::{Error, Result, apps, auth, error, schema, sitefile};
 use spot_auth::{ApiKey, HashParams, Password, PasswordPolicy, hash_password};
-use spot_platform_app::bootstrap::{SeedParams, seed};
+use spot_platform_app::bootstrap::{SeedError, SeedParams, StateCapture, seed_with_capture};
 use spot_platform_app::{doctype, role};
 use spot_postgres::PgBackend;
 use spot_storage_contract::{
@@ -18,6 +27,10 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+
+// The file is `src/outside.rs`; `crate::lib` does not declare it, so it hangs off this module.
+#[path = "outside.rs"]
+pub mod outside;
 
 fn name(text: &str) -> Result<Name> {
     Name::new(text).map_err(error)
@@ -71,15 +84,143 @@ fn document(entity: &str, id: RecordId, fields: BTreeMap<Name, Value>) -> Result
     })
 }
 
-/// Writes the Administrator, the system roles and the Administrator's role assignment.
-/// Returns the Administrator's id.
+/// One stored value in the native API value encoding (ADR-055), for the kinds the platform seed
+/// writes. Any other kind is an error, never a guess: the seed must not journal an image the engine
+/// would have written differently.
+fn seed_value(value: &Value) -> std::result::Result<serde_json::Value, SeedError> {
+    Ok(match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(b) => serde_json::Value::Bool(*b),
+        Value::Int(i) => serde_json::json!(i),
+        Value::Decimal(d) => serde_json::Value::String(d.to_string()),
+        Value::Text(t) => serde_json::Value::String(t.clone()),
+        Value::Id(id) => serde_json::Value::String(id.to_string()),
+        _ => {
+            return Err(SeedError::Data(
+                "a seed row holds a value kind the journal capture does not encode".to_owned(),
+            ));
+        }
+    })
+}
+
+/// The `doc_state` events of the rows the platform seed inserts (WP-JRN-02.T6): built the way the
+/// engine's capture builds them (the whole image as storage holds it, `op` `insert`, the version
+/// storage assigned, schema 1, topic `doc_state`), acting as the system component `provisioning`.
+///
+/// The time and the ids are arguments (the host supplies them), so two runs with the same inputs write
+/// the same events.
+pub struct SeedCapture<'a> {
+    meta: &'a spot_meta::EffectiveMeta,
+    now: time::OffsetDateTime,
+    ids: &'a mut (dyn FnMut() -> RecordId + Send),
+}
+
+impl<'a> SeedCapture<'a> {
+    /// A capture over the metadata the site serves, at `now`, drawing event ids from `ids`.
+    pub fn new(
+        meta: &'a spot_meta::EffectiveMeta,
+        now: time::OffsetDateTime,
+        ids: &'a mut (dyn FnMut() -> RecordId + Send),
+    ) -> Self {
+        Self { meta, now, ids }
+    }
+
+    /// The image of `doc`: `id`, `version`, every declared stored field (`null` when unset) and an
+    /// empty array for every child table (the seed writes no child row).
+    fn image(
+        &self,
+        doc: &DocumentData,
+        version: spot_storage_contract::Version,
+    ) -> std::result::Result<serde_json::Value, SeedError> {
+        let def = self.meta.definition(doc.entity.as_str()).ok_or_else(|| {
+            SeedError::Data(format!("no definition for `{}`", doc.entity.as_str()))
+        })?;
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "id".to_owned(),
+            serde_json::Value::String(doc.id.to_string()),
+        );
+        map.insert("version".to_owned(), serde_json::json!(version.0));
+        for spec in &def.fields {
+            if spec.ty.is_table() {
+                map.insert(spec.name.clone(), serde_json::Value::Array(Vec::new()));
+            } else if spec.ty != spot_meta::FieldType::Secret && spec.name != spot_meta::DOC_STATE {
+                let key = Name::new(&spec.name)
+                    .map_err(|e| SeedError::Data(format!("`{}`: {e}", spec.name)))?;
+                let null = Value::Null;
+                let value = doc.fields.get(&key).unwrap_or(&null);
+                map.insert(spec.name.clone(), seed_value(value)?);
+            }
+        }
+        Ok(serde_json::Value::Object(map))
+    }
+}
+
+impl StateCapture for SeedCapture<'_> {
+    fn insert_event(
+        &mut self,
+        doc: &DocumentData,
+        version: spot_storage_contract::Version,
+    ) -> std::result::Result<Option<spot_storage_contract::OutboxEvent>, SeedError> {
+        let data = serde_json::json!({
+            "op": "insert",
+            "entity_schema": self.meta.version().max(1),
+            "image": self.image(doc, version)?,
+        });
+        let bad =
+            |what: &str| SeedError::Data(format!("the seed event could not be built: {what}"));
+        let id = (self.ids)();
+        let topic =
+            spot_events_contract::Topic::any("doc_state").map_err(|e| bad(&e.to_string()))?;
+        let actor = spot_events_contract::Actor::System {
+            component: Name::new("provisioning").map_err(|e| bad(&e.to_string()))?,
+        };
+        let meta = spot_events_contract::EventMeta {
+            occurred_at: self.now,
+            actor,
+            command_id: None,
+            causation_id: None,
+            correlation_id: id,
+            trace_id: None,
+        };
+        let subject = spot_storage_contract::NodeRef {
+            entity: doc.entity.clone(),
+            id: doc.id,
+        };
+        spot_events_contract::PayloadDocument { meta, data }
+            .to_outbox_event(id, &topic, subject, Some(version), 1)
+            .map(Some)
+            .map_err(|e| bad(&e.to_string()))
+    }
+}
+
+/// Writes the Administrator, the system roles and the Administrator's role assignment, each with
+/// its journal event, in one transaction. Returns the Administrator's id.
+///
+/// The time and the event ids come from the host here (the system clock, UUIDv7s);
+/// [`seed_platform_with`] takes them as arguments.
 pub async fn seed_platform(
     backend: &PgBackend,
     meta: &spot_meta::EffectiveMeta,
 ) -> Result<RecordId> {
+    use spot_core::Clock as _;
+    let now = spot_core::SystemClock::new().now_utc();
+    let mut ids = RecordId::new_v7;
+    seed_platform_with(backend, meta, now, &mut ids).await
+}
+
+/// [`seed_platform`] with the time and the event-id source given. A second run finds every row and
+/// writes no row, no version and no event.
+pub async fn seed_platform_with(
+    backend: &PgBackend,
+    meta: &spot_meta::EffectiveMeta,
+    now: time::OffsetDateTime,
+    ids: &mut (dyn FnMut() -> RecordId + Send),
+) -> Result<RecordId> {
     let catalog = Arc::new(schema::catalog(meta)?);
     let mut tx = backend.begin(catalog, options()?).await.map_err(error)?;
-    let outcome = match seed(&mut tx, &SeedParams::default()).await {
+    let mut capture = SeedCapture::new(meta, now, ids);
+    let outcome = match seed_with_capture(&mut tx, &SeedParams::default(), &mut capture).await {
         Ok(outcome) => outcome,
         Err(e) => {
             let _ = tx.rollback().await;
@@ -237,6 +378,11 @@ async fn activate(t: &Target, user: RecordId) -> Result<()> {
             return Err(error(e));
         }
     };
+    // A portal user holding a refused assignment is not activated: the account stays invited.
+    if let Err(e) = outside::check_user_assignments(&mut tx, user).await {
+        let _ = tx.rollback().await;
+        return Err(e);
+    }
     let mut data = loaded.data;
     data.fields
         .insert(name("state")?, Value::Text("active".into()));
@@ -276,6 +422,23 @@ pub async fn add_user_with(
     roles: &[String],
     issue: &Issue,
 ) -> Result<Invitation> {
+    add_user_typed(root, site, email, full_name, roles, "internal", issue).await
+}
+
+/// Like [`add_user_with`], for a user of `user_type` (`internal`, `portal`, `service` or
+/// `agent`). A portal invitation whose roles the portal rule refuses is aborted as a whole.
+pub async fn add_user_typed(
+    root: &Path,
+    site: &str,
+    email: &str,
+    full_name: Option<&str>,
+    roles: &[String],
+    user_type: &str,
+    issue: &Issue,
+) -> Result<Invitation> {
+    if !matches!(user_type, "internal" | "portal" | "service" | "agent") {
+        return Err(Error("the user type is not valid".into()));
+    }
     let email = email.trim().to_lowercase();
     if !email_ok(&email) {
         return Err(Error("the e-mail address is not valid".into()));
@@ -286,7 +449,7 @@ pub async fn add_user_with(
         .begin(t.catalog.clone(), options()?)
         .await
         .map_err(error)?;
-    let created = write_user(&mut tx, &email, full_name, roles).await;
+    let created = write_user(&mut tx, &email, full_name, roles, user_type).await;
     let user = match created {
         Ok(user) => user,
         Err(e) => {
@@ -316,6 +479,7 @@ async fn write_user<T: Transaction>(
     email: &str,
     full_name: Option<&str>,
     roles: &[String],
+    user_type: &str,
 ) -> Result<RecordId> {
     if find(tx, doctype::USER, "user_name", email).await?.is_some() {
         return Err(Error(format!("user `{email}` already exists")));
@@ -331,13 +495,15 @@ async fn write_user<T: Transaction>(
     if !unknown.is_empty() {
         return Err(Error(format!("unknown role(s): {}", unknown.join(", "))));
     }
+    // The portal rule, before anything is written: the error names the role and the duty.
+    outside::check_new_assignments(tx, user_type, roles).await?;
     let id = RecordId::new_v7();
     let local = email.split('@').next().unwrap_or(email);
     let mut f = blank(doctype::USER)?;
     set(&mut f, "user_name", email)?;
     set(&mut f, "email", email)?;
     set(&mut f, "full_name", full_name.unwrap_or(local))?;
-    set(&mut f, "user_type", "internal")?;
+    set(&mut f, "user_type", user_type)?;
     set(&mut f, "state", "invited")?;
     set(&mut f, "language", "en")?;
     set(&mut f, "time_zone", "UTC")?;
@@ -436,10 +602,20 @@ pub async fn set_password(root: &Path, site: &str, user: &str, password: &Passwo
         Ok(None) => find(&mut tx, doctype::USER, "email", &identifier).await,
         other => other,
     };
-    let _ = tx.rollback().await;
-    let Some(id) = found? else {
+    let Some(id) = (match found {
+        Ok(found) => found,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+    }) else {
+        let _ = tx.rollback().await;
         return Err(Error(format!("no user `{identifier}`")));
     };
+    // Check the portal rule before a credential is written, so a refusal leaves no credential.
+    let allowed = outside::check_user_assignments(&mut tx, id).await;
+    let _ = tx.rollback().await;
+    allowed?;
     let local = identifier.split('@').next().unwrap_or(&identifier);
     if let Err(violations) =
         PasswordPolicy::default().check(password, &[&identifier, local, &t.site.site])
@@ -475,7 +651,7 @@ pub async fn set_password(root: &Path, site: &str, user: &str, password: &Passwo
 /// once instead of at the next restart. Harmless when no host runs (the marker is only read by a
 /// host that is serving).
 fn refresh_running_host(root: &Path, site: &str) {
-    let _ = crate::request_reload(root, site);
+    let _ = crate::request_reload_and_wait(root, site);
 }
 
 /// Replaces every credential of the Administrator with one new one-time secret, and records

@@ -80,7 +80,7 @@ fn entries(log: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
     log.lock().unwrap().clone()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn services_start_in_order_and_stop_in_reverse() {
     let log = log();
     let mut assembly = Services::new("acme", Duration::from_secs(2));
@@ -129,7 +129,7 @@ async fn services_start_in_order_and_stop_in_reverse() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_required_failure_stops_the_site_and_starts_nothing() {
     let log = log();
     let mut assembly = Services::new("acme", Duration::from_secs(2));
@@ -174,7 +174,7 @@ async fn a_required_failure_stops_the_site_and_starts_nothing() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_failed_optional_service_degrades_the_site_and_readiness_says_so() {
     let log = log();
     let mut assembly = Services::new("acme", Duration::from_secs(2));
@@ -218,7 +218,7 @@ async fn a_failed_optional_service_degrades_the_site_and_readiness_says_so() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_stopped_required_service_makes_the_site_not_ready() {
     let log = log();
     let mut assembly = Services::new("acme", Duration::from_secs(2));
@@ -242,7 +242,7 @@ async fn a_stopped_required_service_makes_the_site_not_ready() {
     assembly.shutdown().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shutdown_does_not_wait_past_the_grace_period() {
     let log = log();
     let mut assembly = Services::new("acme", Duration::from_millis(50));

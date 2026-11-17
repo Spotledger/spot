@@ -9,8 +9,11 @@
 //! an owner that holds the explicit stream right for that class; the syntax is checked here and
 //! the right at [`register`](crate::StreamEngine::register).
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use spot_events_contract::envelope::Position;
+use spot_events_contract::registry::Class;
 use spot_events_contract::{Topic, names::InvalidName};
 use spot_storage_contract::{Name, RecordId};
 
@@ -112,6 +115,132 @@ impl From<TopicSelector> for String {
     }
 }
 
+/// The class of an event a consumer may select (ADR-061 section 2). Telemetry is not an event
+/// and has no variant: a consumer that names it is refused at parse time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum StreamClass {
+    /// The full image of one record after one committed transaction. Reserved.
+    State,
+    /// A business or app fact.
+    Domain,
+    /// A system fact that matters for proof. Reserved.
+    Audit,
+}
+
+impl StreamClass {
+    /// What a consumer that names no classes receives: `domain` and `audit`.
+    pub const DEFAULT: [StreamClass; 2] = [StreamClass::Domain, StreamClass::Audit];
+
+    /// The stable lower-case name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::State => "state",
+            Self::Domain => "domain",
+            Self::Audit => "audit",
+        }
+    }
+
+    /// The class named exactly `text`.
+    ///
+    /// # Errors
+    ///
+    /// [`StreamError::ClassUnknown`] (`eventstream.class_unknown`) for anything else, including
+    /// `telemetry`.
+    pub fn parse(text: &str) -> Result<Self, StreamError> {
+        match text {
+            "state" => Ok(Self::State),
+            "domain" => Ok(Self::Domain),
+            "audit" => Ok(Self::Audit),
+            _ => Err(StreamError::ClassUnknown),
+        }
+    }
+
+    /// Whether the class is reserved: it needs the owner's stream right (`state`, `audit`).
+    #[must_use]
+    pub const fn is_reserved(self) -> bool {
+        matches!(self, Self::State | Self::Audit)
+    }
+
+    /// The name the owner's stream right is asked for: the reserved topic class the event class
+    /// lives in. `state` events are the `doc_` class and `audit` events the `sys_` class, so one
+    /// right (`doc_`, `sys_`) gates both the topic selector and the class selector.
+    /// `domain` is not reserved and has none.
+    #[must_use]
+    pub const fn right_name(self) -> Option<&'static str> {
+        match self {
+            Self::State => Some("doc_"),
+            Self::Audit => Some("sys_"),
+            Self::Domain => None,
+        }
+    }
+
+    /// The class of the registry's entry.
+    #[must_use]
+    pub const fn from_registry(class: Class) -> Self {
+        match class {
+            Class::State => Self::State,
+            Class::Domain => Self::Domain,
+            Class::Audit => Self::Audit,
+        }
+    }
+}
+
+impl TryFrom<String> for StreamClass {
+    type Error = StreamError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(&value)
+    }
+}
+
+impl From<StreamClass> for String {
+    fn from(value: StreamClass) -> Self {
+        value.as_str().to_owned()
+    }
+}
+
+/// Serde for the optional set of entity names (`Name` carries no serde): a sorted list of
+/// storage names, each checked on read.
+mod entity_set {
+    use std::collections::BTreeSet;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use spot_storage_contract::Name;
+
+    #[allow(clippy::ref_option)]
+    pub(super) fn serialize<S: Serializer>(
+        value: &Option<BTreeSet<Name>>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(set) => set
+                .iter()
+                .map(Name::as_str)
+                .collect::<Vec<_>>()
+                .serialize(s),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<BTreeSet<Name>>, D::Error> {
+        let Some(names) = Option::<Vec<String>>::deserialize(d)? else {
+            return Ok(None);
+        };
+        names
+            .iter()
+            .map(|text| {
+                Name::new(text)
+                    .map_err(|_| serde::de::Error::custom("an entity is [a-z][a-z0-9_]*"))
+            })
+            .collect::<Result<BTreeSet<_>, _>>()
+            .map(Some)
+    }
+}
+
 /// How much of the event a consumer receives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -154,6 +283,17 @@ pub struct ConsumerSpec {
     pub payload_mode: PayloadMode,
     /// Where to start.
     pub start: Start,
+    /// The event classes to receive. `None` (also what a definition from before this field
+    /// reads as) is [`StreamClass::DEFAULT`]: `domain` and `audit`. `state` and `audit` are
+    /// reserved: naming either needs the owner's stream right, which is re-checked on every
+    /// pull.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classes: Option<BTreeSet<StreamClass>>,
+    /// The entities (DocType storage names) whose `state` events are received; other `state`
+    /// events are not. Applies to `state` only, so naming entities without `state` is refused.
+    /// `None` is every entity.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "entity_set")]
+    pub entities: Option<BTreeSet<Name>>,
 }
 
 impl ConsumerSpec {
@@ -180,6 +320,21 @@ impl ConsumerSpec {
                 "partitions must be 1 to {MAX_PARTITIONS}"
             )));
         }
+        if self.classes.as_ref().is_some_and(BTreeSet::is_empty) {
+            return Err(StreamError::spec(
+                "classes must name at least one class, or be left out for the default",
+            ));
+        }
+        if let Some(entities) = &self.entities {
+            if entities.is_empty() {
+                return Err(StreamError::spec(
+                    "entities must name at least one entity, or be left out for every entity",
+                ));
+            }
+            if !self.effective_classes().contains(&StreamClass::State) {
+                return Err(StreamError::EntitiesNeedState);
+            }
+        }
         if let Some(filter) = &self.filter {
             spot_expr::parse(filter)
                 .map_err(|e| StreamError::spec(format!("the filter does not parse: {e}")))?;
@@ -193,6 +348,26 @@ impl ConsumerSpec {
             ));
         }
         Ok(())
+    }
+
+    /// The classes the consumer asked for: its own set, or [`StreamClass::DEFAULT`].
+    #[must_use]
+    pub fn effective_classes(&self) -> BTreeSet<StreamClass> {
+        self.classes
+            .clone()
+            .unwrap_or_else(|| StreamClass::DEFAULT.into_iter().collect())
+    }
+
+    /// The reserved classes the definition names explicitly (the ones whose stream right is
+    /// checked at registration).
+    #[must_use]
+    pub fn named_reserved_classes(&self) -> Vec<StreamClass> {
+        self.classes
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|class| class.is_reserved())
+            .collect()
     }
 
     /// Whether the topic is selected by any of the spec's selectors.

@@ -20,7 +20,8 @@
 //! - **Search** is evaluated against the projection table (`SEARCH_TABLE`): a correlated
 //!   `EXISTS` for a filter, a correlated scalar subquery for the rank. The term is parsed by
 //!   `websearch_to_tsquery` (`Web`), `phraseto_tsquery` (`Phrase`) or `plainto_tsquery`
-//!   (`Plain`). `ts_rank` appears only as an `ORDER BY` key; the contract's `id` tie-break
+//!   (`Plain`), on the bound text folded by `unaccent` as the projection folds it (an entity
+//!   whose projection opts out of folding is not supported by the query side). `ts_rank` appears only as an `ORDER BY` key; the contract's `id` tie-break
 //!   follows it like any other key.
 
 use rust_decimal::Decimal;
@@ -271,6 +272,7 @@ impl<'q> Builder<'q> {
         };
         let doctype = self.param(Param::Text(self.from_entity.as_str().to_owned()));
         let text = self.param(Param::Text(t.text.clone()));
+        let text = fold_accents(&text);
         (format!("{func}({TS_CONFIG}, {text})"), doctype)
     }
 
@@ -295,6 +297,7 @@ impl<'q> Builder<'q> {
         if typo {
             // Trigram similarity (`pg_trgm`), only where the entity declared typo tolerance.
             let text = self.param(Param::Text(t.text.clone()));
+            let text = fold_accents(&text);
             matched = format!("({matched} OR strip({terms})::text % {text})");
         }
         let sql = format!(
@@ -318,6 +321,15 @@ impl<'q> Builder<'q> {
             self.projection_where(&doctype)?
         ))
     }
+}
+
+/// Folds accents on a bound text parameter with the same `unaccent` form the projection uses
+/// (`field_vector_sql` in `spot-pg-search`), so a query typed with the accent meets the folded
+/// stored text. Applied unconditionally: an entity whose projection opts out of folding
+/// (`without_accent_folding()` in `spot-pg-search`) is not supported by the query side, because
+/// its stored text keeps the accents while the query text would not.
+fn fold_accents(param: &str) -> String {
+    format!("unaccent('unaccent'::regdictionary, {param})")
 }
 
 impl Compiled {

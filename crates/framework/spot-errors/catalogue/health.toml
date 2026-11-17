@@ -1,0 +1,55 @@
+# health codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "health.alert_settings"
+class = "none"
+summary = "The operation was refused: alert settings."
+explanation_key = "error.health.alert_settings"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "health.evaluate"
+class = "none"
+summary = "The operation was refused: evaluate."
+explanation_key = "error.health.evaluate"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "health.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.health.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "health.rules"
+class = "none"
+summary = "The operation was refused: rules."
+explanation_key = "error.health.rules"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "health.settings"
+class = "none"
+summary = "The operation was refused: settings."
+explanation_key = "error.health.settings"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "health.state"
+class = "none"
+summary = "The operation was refused: state."
+explanation_key = "error.health.state"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

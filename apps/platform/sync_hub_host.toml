@@ -1,0 +1,146 @@
+# The catalogue of the sync hub's settings (WP-RTB-02.T13). Reference data for the operator guide
+# (docs/running-spot/sync_hub.md) and the settings checks: one [[setting]] per key, the
+# table it lives in, its type, its default and its bounds. The modules that read them
+# (`services/sync_hub.rs`, `services/sync_hub_parts.rs`) validate the same bounds and refuse a
+# value outside them; this file states them once for people and tools.
+#
+# No setting here holds a secret: certificate and key are file paths, the enrolment code is
+# created at run time by the enrolment service and never stored in a configuration file.
+
+[[setting]]
+table = "services.sync_hub"
+key = "listen"
+type = "address:port"
+default = "(none: required on a hub site)"
+description = "The address the edges dial, for example 0.0.0.0:7443."
+
+[[setting]]
+table = "services.sync_hub"
+key = "tls"
+type = "table { cert, key, client_ca }"
+default = "(none: required with listen)"
+description = "The hub's certificate chain, its private key (mode 0600) and the CA of the edges' client certificates."
+
+[[setting]]
+table = "services.sync_hub"
+key = "per_node_connections"
+type = "integer"
+default = 2
+min = 1
+max = 16
+description = "Concurrent requests per node."
+
+[[setting]]
+table = "services.sync_hub"
+key = "global_connections"
+type = "integer"
+default = 2000
+min = 1
+max = 100000
+description = "Concurrent requests for the whole host."
+
+[[setting]]
+table = "services.sync_hub"
+key = "push_per_second"
+type = "integer"
+default = 20
+min = 1
+max = 1000
+description = "Push batches per node per second."
+
+[[setting]]
+table = "services.sync_hub"
+key = "max_body_mib"
+type = "integer"
+default = 64
+min = 1
+max = 256
+description = "The largest push body, in MiB."
+
+[[setting]]
+table = "services.sync_hub"
+key = "max_batch_records"
+type = "integer"
+default = 4096
+min = 1
+max = 65536
+description = "The most records one batch may carry."
+
+[[setting]]
+table = "services.sync_hub"
+key = "long_poll_secs"
+type = "integer"
+default = 25
+min = 1
+max = 60
+description = "The longest a pull waits for records."
+
+[[setting]]
+table = "services.sync_hub"
+key = "heartbeat_secs"
+type = "integer"
+default = 5
+min = 1
+max = 30
+description = "The heartbeat of a waiting pull. A revoked node's open pull ends within one heartbeat."
+
+[[setting]]
+table = "services.sync_hub"
+key = "audit_interval_secs"
+type = "integer"
+default = 60
+min = 10
+max = 3600
+description = "The least time between two audit records for one node."
+
+[[setting]]
+table = "services.sync_hub"
+key = "window"
+type = "integer"
+default = 4096
+min = 1
+max = 65536
+description = "Queued items per destination the serve cache publishes."
+
+[[setting]]
+table = "services.sync_hub"
+key = "drive_interval_ms"
+type = "integer"
+default = 200
+min = 20
+max = 5000
+description = "The pause between relay rounds."
+
+[[setting]]
+table = "services.sync_hub_parts"
+key = "hub_name"
+type = "text"
+default = "hub"
+description = "The hub's node id inside its site: <site>#<hub_name>."
+
+[[setting]]
+table = "services.sync_hub_parts"
+key = "directory_refresh_secs"
+type = "integer"
+default = 2
+min = 1
+max = 5
+description = "Seconds between node directory refreshes. After 30 s without a refresh the directory refuses every node (fail closed)."
+
+[[setting]]
+table = "services.sync_hub_parts"
+key = "enrol_per_second"
+type = "integer"
+default = 5
+min = 1
+max = 100
+description = "Enrolment requests per second the endpoint accepts, whole endpoint."
+
+[[setting]]
+table = "services.sync_hub_parts"
+key = "enrol_queued"
+type = "integer"
+default = 8
+min = 1
+max = 64
+description = "Enrolment requests that may wait for the database at once."

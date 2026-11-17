@@ -22,6 +22,15 @@ impl PrefixTracker {
         Self::default()
     }
 
+    /// A tracker restored from durable state: everything up to `applied` is settled.
+    #[must_use]
+    pub fn restored(applied: Option<Position>) -> Self {
+        Self {
+            settled: applied.into_iter().collect(),
+            pending: BTreeMap::new(),
+        }
+    }
+
     /// A bundle with this first position is unsettled until `release` removes it.
     pub fn hold(&mut self, first: Position) {
         *self.pending.entry(first).or_insert(0) += 1;

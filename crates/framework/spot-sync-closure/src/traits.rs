@@ -6,7 +6,7 @@ use crate::model::{Position, RecordKey, SourceImage};
 use serde_json::Value;
 
 /// The catalog's view of references (ADR-064 section 2).
-pub trait References {
+pub trait References: Send {
     /// The declared references of one record image: fixed links in the parent and every child
     /// row, and dynamic links whose target entity is read from the record's type field. Text that
     /// merely looks like a name or number is not a reference.
@@ -45,6 +45,8 @@ pub trait DestinationKnows {
 /// The source's records.
 pub trait ImageSource {
     /// The current image of a record with its latest event position, or `None` if it does not exist.
+    /// A source that remembers the delete may answer a tombstone ([`SourceImage::tombstone`]): it
+    /// is never added to a closure as an extra (there is nothing to send for it).
     ///
     /// # Errors
     /// `SourceFailed` when the adapter fails.
@@ -52,7 +54,7 @@ pub trait ImageSource {
 }
 
 /// Applies the destination's `excluded_fields.down` (ADR-063) to an image.
-pub trait Redactor {
+pub trait Redactor: Send {
     /// Remove the excluded fields of `entity` from `image`, parent and child rows.
     fn redact_down(&self, entity: &str, image: &mut Value);
 }

@@ -45,6 +45,50 @@ pub trait AuditStore: Send + Sync {
         entry: ChainEntry,
     ) -> StoreFuture<'a, AppendOutcome>;
 
+    /// Appends `entries`, which must follow one another (each `seq` one more than the last,
+    /// each `prev_hash` the hash before it), if the chain's head has sequence number
+    /// `expected_seq`: all of them or none. [`AppendOutcome::HeadMoved`] writes nothing.
+    ///
+    /// The provided implementation appends one by one and is **not** atomic: it exists so a
+    /// store that only knows [`append_if_head`](Self::append_if_head) still answers. A store
+    /// that makes the whole call one atomic write returns `true` from
+    /// [`batches_appends`](Self::batches_appends), and only then does a caller prefer this
+    /// method.
+    ///
+    /// # Errors
+    /// [`AuditError::Store`] when the head matches but the entries do not extend it, or the
+    /// backend fails (or, for the provided implementation, when the head moves after the first
+    /// entry).
+    fn append_many_if_head<'a>(
+        &'a self,
+        site: &'a str,
+        expected_seq: u64,
+        entries: Vec<ChainEntry>,
+    ) -> StoreFuture<'a, AppendOutcome> {
+        Box::pin(async move {
+            let mut expected = expected_seq;
+            for (index, entry) in entries.into_iter().enumerate() {
+                let seq = entry.seq;
+                match self.append_if_head(site, expected, entry).await? {
+                    AppendOutcome::Appended => expected = seq,
+                    AppendOutcome::HeadMoved if index == 0 => return Ok(AppendOutcome::HeadMoved),
+                    AppendOutcome::HeadMoved => {
+                        return Err(AuditError::Store(
+                            "the head moved in the middle of a batch append".to_owned(),
+                        ));
+                    }
+                }
+            }
+            Ok(AppendOutcome::Appended)
+        })
+    }
+
+    /// Whether [`append_many_if_head`](Self::append_many_if_head) is one atomic write (cheaper
+    /// than a loop of single appends).
+    fn batches_appends(&self) -> bool {
+        false
+    }
+
     /// The stored entries with `from <= seq <= to`, in stored order.
     fn range<'a>(&'a self, site: &'a str, from: u64, to: u64) -> StoreFuture<'a, Vec<ChainEntry>>;
 
@@ -111,6 +155,40 @@ impl AuditStore for InMemoryStore {
             chain.push(entry);
             Ok(AppendOutcome::Appended)
         })
+    }
+
+    fn append_many_if_head<'a>(
+        &'a self,
+        site: &'a str,
+        expected_seq: u64,
+        entries: Vec<ChainEntry>,
+    ) -> StoreFuture<'a, AppendOutcome> {
+        Box::pin(async move {
+            let mut state = self.lock()?;
+            let chain = state.entries.entry(site.to_owned()).or_default();
+            let head_seq = chain.last().map_or(0, |e| e.seq);
+            if head_seq != expected_seq {
+                return Ok(AppendOutcome::HeadMoved);
+            }
+            let mut seq = expected_seq;
+            let mut hash = chain.last().map(|h| h.hash);
+            for entry in &entries {
+                let linked = hash.is_none_or(|h| h == entry.prev_hash);
+                if entry.seq != seq.saturating_add(1) || !linked {
+                    return Err(AuditError::Store(
+                        "the entry does not extend the head".to_owned(),
+                    ));
+                }
+                seq = entry.seq;
+                hash = Some(entry.hash);
+            }
+            chain.extend(entries);
+            Ok(AppendOutcome::Appended)
+        })
+    }
+
+    fn batches_appends(&self) -> bool {
+        true
     }
 
     fn range<'a>(&'a self, site: &'a str, from: u64, to: u64) -> StoreFuture<'a, Vec<ChainEntry>> {

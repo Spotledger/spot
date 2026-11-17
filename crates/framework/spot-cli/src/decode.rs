@@ -12,6 +12,32 @@ fn fields(schema: &str) -> &'static [Field] {
             ("services", "services", false),
             ("audit", "audit", false),
             ("trust", "trust", false),
+            ("backup", "backup", false),
+        ],
+        "backup" => &[
+            ("targets", "backup_targets", false),
+            ("retention", "backup_retention", false),
+            ("verify", "string", false),
+            ("default_target", "string", false),
+            ("pg_bin_dir", "string", false),
+        ],
+        "backup_retention" => &[
+            ("keep_daily", "integer", false),
+            ("keep_weekly", "integer", false),
+            ("keep_monthly", "integer", false),
+            ("keep_last", "integer", false),
+        ],
+        "backup_target" => &[
+            ("kind", "string", true),
+            ("path", "string", false),
+            ("endpoint", "string", false),
+            ("key_id", "string", false),
+            ("volume", "string", false),
+            ("subdir", "string", false),
+            ("credential_ref", "string", false),
+            ("prefix", "string", false),
+            ("max_kbps", "integer", false),
+            ("quota_bytes", "integer", false),
         ],
         "trust" => &[
             ("roots", "string", false),
@@ -57,10 +83,15 @@ fn fields(schema: &str) -> &'static [Field] {
             ("shutdown_grace", "integer", false),
             ("trusted_proxies", "strings", false),
             ("fallback_site", "string", false),
+            ("listeners", "listeners", false),
+            ("auth_rate_limit", "integer", false),
+            ("auth_rate_window_seconds", "integer", false),
         ],
+        "listener" => &[("bind", "string", true), ("audience", "string", true)],
         "postgres" => &[
             ("admin_url", "string", true),
             ("pool_max_size", "integer", false),
+            ("pool_wait_ms", "integer", false),
         ],
         "telemetry" => &[
             ("filter", "string", false),
@@ -72,6 +103,10 @@ fn fields(schema: &str) -> &'static [Field] {
         "audit" => &[
             ("identity_file_mirror", "boolean", false),
             ("identity_chain_strict", "boolean", false),
+            ("doc_lanes", "integer", false),
+            ("doc_lane_epoch", "integer", false),
+            ("doc_append_poll_ms", "integer", false),
+            ("doc_append_batch", "integer", false),
         ],
         "otlp" => &[
             ("endpoint", "string", true),
@@ -85,7 +120,9 @@ fn empty(kind: &str) -> Value {
         "string" => Value::String(String::new()),
         "integer" => Value::Integer(0),
         "boolean" => Value::Boolean(false),
-        "strings" | "keys" | "credentials" | "scope_fields" => Value::Array(Vec::new()),
+        "strings" | "keys" | "credentials" | "scope_fields" | "listeners" => {
+            Value::Array(Vec::new())
+        }
         _ => Value::Table(toml::map::Map::new()),
     }
 }
@@ -122,7 +159,7 @@ pub(crate) fn clean(value: &mut Value, schema: &str, path: &str, errors: &mut Ve
             "string" => value.is_str(),
             "integer" => value.as_integer().is_some_and(|i| i >= 0),
             "boolean" => value.as_bool().is_some(),
-            "strings" | "keys" | "credentials" | "scope_fields" => value.is_array(),
+            "strings" | "keys" | "credentials" | "scope_fields" | "listeners" => value.is_array(),
             _ => value.is_table(),
         };
         if !valid {
@@ -154,6 +191,13 @@ pub(crate) fn clean(value: &mut Value, schema: &str, path: &str, errors: &mut Ve
                     }
                 }
             }
+            "listeners" => {
+                if let Some(values) = value.as_array_mut() {
+                    for (i, value) in values.iter_mut().enumerate() {
+                        clean(value, "listener", &format!("{child}[{i}]"), errors);
+                    }
+                }
+            }
             "scope_fields" => {
                 if let Some(values) = value.as_array_mut() {
                     for (i, value) in values.iter_mut().enumerate() {
@@ -161,9 +205,17 @@ pub(crate) fn clean(value: &mut Value, schema: &str, path: &str, errors: &mut Ve
                     }
                 }
             }
-            "server" | "postgres" | "telemetry" | "otlp" | "services" | "partition" | "audit" => {
-                clean(value, kind, &child, errors)
+            "backup_targets" => {
+                // Named targets: every value is a table checked on its own; names are not
+                // echoed beyond the path (they are operator-chosen labels, not secrets).
+                if let Some(targets) = value.as_table_mut() {
+                    for (name, target) in targets.iter_mut() {
+                        clean(target, "backup_target", &format!("{child}.{name}"), errors);
+                    }
+                }
             }
+            "server" | "postgres" | "telemetry" | "otlp" | "services" | "partition" | "audit"
+            | "backup" | "backup_retention" => clean(value, kind, &child, errors),
             _ => {}
         }
     }

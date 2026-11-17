@@ -43,6 +43,16 @@ class Plan(unittest.TestCase):
         self.assertEqual(steps[1].env["SPOT_L8_FAULTS_PROFILE"], "nightly")
         self.assertIn("l8-isolation-list-append-104", names)
 
+    def test_l8_txns_reaches_only_the_isolation_runs(self):
+        plain = np.build_steps(100, Path("o"), 1)
+        self.assertTrue(all("--txns" not in s.argv for s in plain))
+        small = np.build_steps(100, Path("o"), 1, l8_txns=25000)
+        iso = [s for s in small if s.name.startswith("l8-isolation")]
+        self.assertEqual(len(iso), 2)
+        for s in iso:
+            self.assertEqual(s.argv[s.argv.index("--txns") + 1], "25000")
+        self.assertTrue(all("--txns" not in s.argv for s in small if not s.name.startswith("l8-isolation")))
+
     def test_dry_run_runs_nothing(self):
         buf = io.StringIO()
         with redirect_stdout(buf):

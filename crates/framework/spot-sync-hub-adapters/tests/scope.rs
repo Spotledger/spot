@@ -44,6 +44,7 @@ fn entry(entity: &str, id: &str, version: u64) -> StreamEntry {
         topic: entity.into(),
         major: 1,
         lane: Lane::Bulk,
+        deleted: false,
     }
 }
 

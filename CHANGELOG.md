@@ -9,6 +9,38 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.8] - 2026-11-17
+
+A large batch of runtime work (about 270 tasks, integrated and compiled together), and the hosted
+continuous-integration failures of 0.1.7 fixed. Not ready yet: the hub-side sync assembly keeps
+its documented limits (tenant push sinks, policy-generation swap needs a reload), the sign-in
+throttle's source-side counter is not written in production, and the webhook worker cannot be
+switched on by a reload.
+
+### Added
+
+- Batched writes: `Engine::create_batch` creates many documents of one actor in one transaction
+  (a savepoint per document, each with its own validation, permission checks, events and
+  ledger row), and the import host uses it, up to eight batches at once for DocTypes whose naming
+  and unique keys do not depend on write order. A 100,000-row import takes about a minute.
+- `Engine::load_many` and a batched native list path: a list of 20 rows no longer resolves the
+  caller's roles once per row.
+- The audit-chain appender and the feed publisher work in groups, without a lock convoy.
+- `postgres.pool_wait_ms` (100 to 60,000 ms, default 5,000): how long a request waits for a
+  database connection before it is refused with `storage.unavailable`.
+- Events contract 0.7.8 (command ids up to 320 characters).
+
+### Fixed
+
+- The graph drift check no longer starves request serving: it reads in short transactions, pages
+  by key and pauses between pages.
+- A process-version migration, role-named task members and the process run list work end to end.
+- Hosted continuous integration: the l3 harness's root sweep no longer races with itself, the
+  Windows build no longer fails on helpers only the Unix build uses, the browser publish uses
+  the pinned .NET SDK, the dotnet analyzer level is pinned, the release-workflow test is skipped
+  where its workflow is absent, and the nightly L8 isolation run uses 25,000 transactions per run
+  (at 100,000 its checker needed 19 GB and the hosted runner was shut down).
+
 ## [0.1.7] - 2026-11-12
 
 Continuous integration and packaging checks: 0.1.6 still failed on the hosted runners.

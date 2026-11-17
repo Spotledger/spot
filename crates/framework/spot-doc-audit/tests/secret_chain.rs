@@ -217,7 +217,7 @@ async fn a_secret_event_is_chained_once_in_sequence_with_document_events() {
     assert_eq!(again.appended, 0);
 
     // The restart: the bookmark is lost, the same rows are read again, nothing is chained twice.
-    r.state.set_bookmark(0, FeedPosition::START);
+    r.state.set_bookmark(0, FeedPosition::START).await.unwrap();
     let restarted = LaneAppender::new(
         Arc::clone(&r.store),
         SITE,
@@ -311,7 +311,7 @@ async fn a_failed_chain_append_does_not_drop_the_outbox_row() {
     let failed = appender.drain(feed, 100).await;
     assert!(matches!(failed, Err(DocAuditError::Chain(_))));
     assert_eq!(
-        state.bookmark(0),
+        state.bookmark(0).await.unwrap(),
         FeedPosition::START,
         "the row was not passed"
     );
@@ -404,7 +404,11 @@ async fn an_event_that_could_carry_a_value_is_not_chained() {
             "the refusal names no content: {message}"
         );
         assert!(entries(&r.store).await.is_empty(), "nothing was chained");
-        assert_eq!(r.state.bookmark(0), FeedPosition::START, "the row stays");
+        assert_eq!(
+            r.state.bookmark(0).await.unwrap(),
+            FeedPosition::START,
+            "the row stays"
+        );
     }
 }
 
@@ -481,7 +485,8 @@ async fn the_chain_entries_hold_only_the_journal_fields() {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            ["digest", "secret_event", "topic"]
+            // `event_id` is the appender's recovery key (see the appender module docs).
+            ["digest", "event_id", "secret_event", "topic"]
         );
         let event = secret_event_of(entry).unwrap();
         // The event JSON holds the journal's keys and the chain's own, nothing else.

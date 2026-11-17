@@ -373,6 +373,53 @@ async fn a_read_masks_protected_fields_and_drops_unreadable_ones() {
 }
 
 #[tokio::test]
+async fn load_many_answers_each_id_as_a_single_load_does() {
+    let world = World::new();
+    let engine = engine(authorizer(&world)).await;
+    seed_regions(&engine, &world).await;
+    let mut ids = Vec::new();
+    for name in ["Acme", "Birch"] {
+        let mut doc = customer(name);
+        doc.set(n("secret_note"), "the launch code is 1234");
+        doc.set(n("salary"), Value::Decimal(Decimal::new(900_000, 2)));
+        doc.set(n("region"), region(ALLOWED_REGION));
+        ids.push(
+            engine
+                .create(&world.inv("editor"), doc)
+                .await
+                .unwrap()
+                .value
+                .id(),
+        );
+    }
+    let missing = RecordId::new_v7();
+    let asked = [ids[0], missing, ids[1]];
+    for who in ["reader", "editor"] {
+        let inv = world.inv(who);
+        let many = engine.load_many(&inv, "customer", &asked).await;
+        assert_eq!(many.len(), 3, "one answer per id, in order");
+        for (id, answer) in asked.iter().zip(many) {
+            let single = engine.load(&inv, "customer", *id).await;
+            match (single, answer) {
+                (Ok(a), Ok(b)) => assert_eq!(a.value, b.value, "{who}: same masked document"),
+                (Err(a), Err(b)) => assert_eq!(a.code, b.code, "{who}: same refusal"),
+                (a, b) => panic!("{who}: single {a:?} but batch {b:?}"),
+            }
+        }
+    }
+    let nobody = world.inv("no_role");
+    for answer in engine.load_many(&nobody, "customer", &ids).await {
+        assert!(answer.is_err(), "a principal with no role reads nothing");
+    }
+    assert!(
+        engine
+            .load_many(&world.inv("reader"), "customer", &[])
+            .await
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn the_document_a_write_returns_goes_through_the_same_filter() {
     let world = World::new();
     let engine = engine(authorizer(&world)).await;

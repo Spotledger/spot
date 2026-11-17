@@ -1,0 +1,13 @@
+# totp_host codes: the hosting of the second-factor self-service routes (WP-PLT-02.T9). The
+# operations answer with the contract's `identity.totp_state`, `auth.totp_invalid`,
+# `auth.invalid_credentials`, `api.rate_limited` and `server.unavailable`; the codes below are the
+# host's own start-up vocabulary.
+
+[[entry]]
+code = "totp_host.not_mounted"
+class = "none"
+summary = "The second-factor routes are not mounted because the sign-in stores or the sign-in throttle are not on this site."
+explanation_key = "error.totp_host.not_mounted"
+params = []
+remedy = "Configure [services.secrets] and [services.signin_throttle] (the sign-in stores are always on), then reload; or set [services.totp] enabled = false to silence this."
+since = "0.1.0"

@@ -445,8 +445,17 @@ impl Task {
     }
 
     /// Whether `user` is one of the resolved assignees.
+    ///
+    /// A task named for a role keeps the members found at creation only to show and to notify
+    /// them: they do not act because they were listed, but because they hold the role **now**
+    /// (the directory is asked at every action), so removing a member from the role stops
+    /// them. A reassignment or an escalation clears the roles, and the one user named then is an
+    /// explicit assignee.
     #[must_use]
     pub fn is_explicit_assignee(&self, user: &str) -> bool {
+        if matches!(self.assignee_spec, AssigneeSpec::Role(_)) && !self.roles.is_empty() {
+            return false;
+        }
         self.assignees.contains(user)
     }
 

@@ -17,6 +17,7 @@ use tokio_postgres::SimpleQueryMessage;
 use crate::config::PgConfig;
 use crate::conn::{TlsMode, build_pool, connect_raw};
 use crate::error::map_pg_error;
+use crate::search_hook::{SearchMaintenance, SharedHook};
 use crate::{SUPPORTED_MAJOR_VERSION, feed, query, schema, tx};
 
 /// The highest `max_writes` a transaction may declare on this backend.
@@ -29,6 +30,9 @@ const POOL_WAIT_DEGRADED_AFTER: Duration = Duration::from_secs(1);
 #[derive(Clone)]
 pub struct PgBackend {
     inner: Arc<Inner>,
+    /// The search projection's maintenance (WP-STO-13.T3), installed with
+    /// [`PgBackend::with_search`]; `None` keeps search refused as `Unsupported`.
+    search: Option<SharedHook>,
 }
 
 struct Inner {
@@ -40,9 +44,16 @@ struct Inner {
     /// `server_version` as reported when connecting; unset for an unchecked backend.
     server_version: OnceLock<String>,
     waiters: Waiters,
+    /// One publication gate per feed log (outbox, changes); see `feed::publish`.
+    pub(crate) publish_gates: [crate::feed::PublishGate; 2],
 }
 
 impl PgBackend {
+    /// The publication gate of the log with index `log` (0 outbox, 1 changes).
+    pub(crate) fn publish_gate(&self, log: usize) -> &crate::feed::PublishGate {
+        &self.inner.publish_gates[log]
+    }
+
     /// Opens the pool and checks the server: it must be PostgreSQL 18 and offer the ICU collation
     /// provider (needed from WP-STO-03 on). Anything else fails with `Unsupported`; an unreachable
     /// server fails with `Unavailable`.
@@ -75,8 +86,36 @@ impl PgBackend {
                 pool,
                 server_version: OnceLock::new(),
                 waiters: Waiters::default(),
+                publish_gates: Default::default(),
             }),
+            search: None,
         })
+    }
+
+    /// Installs the search maintenance hook (`spot_pg_search::SearchHook`): from then on
+    /// `prepare` creates the projection of every DocType with a `search` declaration, every
+    /// document write and delete of such a DocType keeps it in the write's own transaction, and
+    /// `Expr::Search` is served (`Capabilities::search` follows the hook).
+    ///
+    /// Without a hook the backend behaves as before: a catalog with a `search` declaration is
+    /// refused by `prepare` and a search is `Unsupported`. Clones taken before this call keep
+    /// their own setting; install the hook before cloning the backend or beginning transactions.
+    #[must_use]
+    pub fn with_search(mut self, hook: Arc<dyn SearchMaintenance>) -> Self {
+        self.search = Some(hook);
+        self
+    }
+
+    /// The installed search hook, if any.
+    pub(crate) fn search_hook(&self) -> Option<&SharedHook> {
+        self.search.as_ref()
+    }
+
+    /// Whether search is served: a hook is installed and says so.
+    pub(crate) fn serves_search(&self) -> bool {
+        self.search
+            .as_ref()
+            .is_some_and(|hook| hook.serves_search())
     }
 
     /// The config this backend was built from.
@@ -160,11 +199,11 @@ impl StorageBackend for PgBackend {
             feed_retention: Duration::from_secs(7 * 24 * 60 * 60),
             // ADR-087: `prepare` creates geo and range columns and exclusions, and refuses with
             // `InvalidSchema` (naming `extension.install`) a database without the extension a
-            // catalog needs, so these hold whenever `prepare` succeeds. Search stays off until
-            // its projection exists (WP-STO-13.T1).
+            // catalog needs, so these hold whenever `prepare` succeeds. Search is on exactly when
+            // a search maintenance hook is installed (WP-STO-13.T3): its projection exists then.
             geo_filters: true,
             range_exclusion: true,
-            search: false,
+            search: self.serves_search(),
         }
     }
 
@@ -173,7 +212,9 @@ impl StorageBackend for PgBackend {
     }
 
     async fn begin(&self, catalog: Arc<Catalog>, options: TxOptions) -> StorageResult<Self::Tx> {
-        tx::begin(self, catalog, options, MAX_WRITES_PER_TX).await
+        let mut tx = tx::begin(self, catalog, options, MAX_WRITES_PER_TX).await?;
+        tx.search = self.search.clone();
+        Ok(tx)
     }
 
     async fn read(

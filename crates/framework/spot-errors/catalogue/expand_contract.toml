@@ -54,3 +54,12 @@ explanation_key = "error.expand_contract.contract_object_missing"
 params = ["target"]
 remedy = "Name the object as `table` or `table.column` so the gate can check it against the previous release."
 since = "0.1.0"
+
+[[entry]]
+code = "expand_contract.not_configured"
+class = "none"
+summary = "The expand-contract migration steps are not set up for this site."
+explanation_key = "error.expand_contract.not_configured"
+params = []
+remedy = "Configure expand-contract before planning a migration that needs it."
+since = "0.1.0"

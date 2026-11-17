@@ -17,3 +17,39 @@ explanation_key = "error.step.foreign_app"
 params = []
 remedy = "Declare the controller under the step-owning app."
 since = "0.1.0"
+
+[[entry]]
+code = "step.cancelled"
+class = "none"
+summary = "The operation was refused: cancelled."
+explanation_key = "error.step.cancelled"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "step.completed"
+class = "none"
+summary = "The operation was refused: completed."
+explanation_key = "error.step.completed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "step.failed"
+class = "none"
+summary = "The operation was refused: failed."
+explanation_key = "error.step.failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "step.skipped"
+class = "none"
+summary = "The operation was refused: skipped."
+explanation_key = "error.step.skipped"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

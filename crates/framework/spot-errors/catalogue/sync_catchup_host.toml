@@ -1,0 +1,37 @@
+# sync_catchup_host codes: catch-up and bootstrap hosted by the hub (WP-RTB-02.T7, ADR-066): routing, parallel bootstrap admission and resumable progress. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_catchup_host.config_invalid"
+class = "none"
+summary = "A catch-up setting is outside its documented bounds (thresholds, share, chunk size, parallel bootstraps, chunk tokens)."
+explanation_key = "error.sync_catchup_host.config_invalid"
+params = []
+remedy = "Correct [services.sync_catchup]; unknown keys are refused."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_host.planner_refused"
+class = "none"
+summary = "The planner refused the gap summary or its settings (positions out of order, class counts above the gap), so the node was not routed."
+explanation_key = "error.sync_catchup_host.planner_refused"
+params = []
+remedy = "Report the planner code in the log; the node stays on live relay until the summary is consistent."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_host.store_failed"
+class = "none"
+summary = "The catch-up progress could not be read or written (the table is created by `spot migrate`), so a resumable plan could not be kept."
+explanation_key = "error.sync_catchup_host.store_failed"
+params = []
+remedy = "Run `spot migrate` if the table is missing, or check the database; the hub routes the node again on its next hello."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_host.chunk_out_of_order"
+class = "none"
+summary = "A chunk was reported for a node with no bootstrap in progress, or not the next chunk of its plan."
+explanation_key = "error.sync_catchup_host.chunk_out_of_order"
+params = []
+remedy = "The node resumes from the chunk the hub names; chunks are applied in order and verified against the snapshot index."
+since = "0.1.0"

@@ -434,3 +434,75 @@ async fn a_missing_case_is_not_found() {
     let result = store.commit(&id, 0, CaseUpdate::new()).await;
     assert!(matches!(result, Err(EngineError::CaseNotFound { .. })));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_visible_cases_are_cut_by_the_viewers_right_before_the_page() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let store = store(&db).await;
+    let dag = chain(2);
+    // ann started a, b and c; bob started d.
+    for (id, user) in [
+        ("case_vis_a", "ann"),
+        ("case_vis_b", "ann"),
+        ("case_vis_c", "ann"),
+        ("case_vis_d", "bob"),
+    ] {
+        let mut record = new_case(&dag, id, &format!("key-{id}"));
+        record.initiator = Some(user.to_owned());
+        store.create(record).await.unwrap();
+    }
+    let ask = |viewer: &'static str,
+               also: &'static [String],
+               sees_all: bool,
+               mine: bool,
+               limit: u32,
+               after: Option<(time::OffsetDateTime, String)>| {
+        let store = &store;
+        async move {
+            store
+                .page_visible(&spot_bpm_pg::VisibleCases {
+                    viewer,
+                    also_cases: also,
+                    sees_all,
+                    process: None,
+                    status: None,
+                    mine,
+                    after,
+                    limit,
+                })
+                .await
+                .unwrap()
+        }
+    };
+    // Ann sees her three, never bob's.
+    let ann = ask("ann", &[], false, false, 10, None).await;
+    let ids: Vec<&str> = ann.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids.len(), 3);
+    assert!(!ids.contains(&"case_vis_d"));
+    // Bob sees his own; a case of his task adds that case; `mine` drops it again.
+    static ALSO: std::sync::LazyLock<Vec<String>> =
+        std::sync::LazyLock::new(|| vec!["case_vis_a".to_owned()]);
+    let bob = ask("bob", &ALSO, false, false, 10, None).await;
+    assert_eq!(bob.len(), 2);
+    let bob_mine = ask("bob", &ALSO, false, true, 10, None).await;
+    assert_eq!(bob_mine.len(), 1);
+    // A supervisor sees all four, and the keyset cursor pages without a gap or a repeat.
+    let first = ask("root", &[], true, false, 3, None).await;
+    assert_eq!(first.len(), 3);
+    let (last_id, last_at) = {
+        let (id, at) = first.last().unwrap();
+        (id.clone(), *at)
+    };
+    let rest = ask("root", &[], true, false, 3, Some((last_at, last_id))).await;
+    assert_eq!(rest.len(), 1);
+    let mut all: Vec<&str> = first
+        .iter()
+        .chain(rest.iter())
+        .map(|(id, _)| id.as_str())
+        .collect();
+    all.sort_unstable();
+    all.dedup();
+    assert_eq!(all.len(), 4);
+}

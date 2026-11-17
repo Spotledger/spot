@@ -2,7 +2,7 @@
 
 use crate::deliver::{Ctx, DestState, flush_releases, group_by_txn, run_groups};
 use crate::error::HubError;
-use crate::model::{DestReport, RelayConfig, ReleaseReport, StreamEntry, TickReport};
+use crate::model::{DestReport, RelayConfig, ReleaseReport, ServedAck, StreamEntry, TickReport};
 use crate::state::{DestSnapshot, RelayState};
 use crate::stream_contract::StreamContract;
 use crate::traits::{
@@ -26,6 +26,10 @@ pub struct Destination {
     pub report: NodeReport,
     /// Most entries the hub holds back for it (version skew).
     pub hold_limit: usize,
+    /// The identity of the scope the hub registered for this node (hub data, never a node claim):
+    /// a scoped re-send must name exactly this string. `None` refuses every re-send (fail
+    /// closed). Set it with [`with_scope_identity`](Self::with_scope_identity).
+    pub scope_identity: Option<String>,
 }
 
 impl Destination {
@@ -43,7 +47,15 @@ impl Destination {
             redactor,
             report,
             hold_limit: DEFAULT_HOLD_LIMIT,
+            scope_identity: None,
         }
+    }
+
+    /// Set the registered scope identity a scoped re-send is checked against.
+    #[must_use]
+    pub fn with_scope_identity(mut self, identity: impl Into<String>) -> Self {
+        self.scope_identity = Some(identity.into());
+        self
     }
 }
 
@@ -58,8 +70,8 @@ pub struct HubRelay<Q: SendQueue, S: HubStream, I: ImageSource> {
     pub(crate) cfg: RelayConfig,
     pub(crate) stream: S,
     queue: Q,
-    images: I,
-    refs: Box<dyn References>,
+    pub(crate) images: I,
+    pub(crate) refs: Box<dyn References>,
     observer: Box<dyn AckObserver>,
     pub(crate) dests: BTreeMap<String, DestState>,
     cursor: u64,
@@ -267,6 +279,10 @@ impl<Q: SendQueue, S: HubStream, I: ImageSource> HubRelay<Q, S, I> {
     /// `StreamFailed` or `StreamDisorder` when the stream cannot be read as promised; nothing has
     /// moved then. A failing destination is reported in `TickReport`, not returned.
     pub fn tick(&mut self, now_millis: i64) -> Result<TickReport, HubError> {
+        // A new tick: every destination's pull allowance starts again.
+        for st in self.dests.values_mut() {
+            st.pulled_keys = 0;
+        }
         let Self {
             cfg,
             stream,
@@ -444,6 +460,91 @@ impl<Q: SendQueue, S: HubStream, I: ImageSource> HubRelay<Q, S, I> {
         }
         self.observer.on_ack(dest, applied_prefix);
         Ok(removed)
+    }
+
+    /// The destination reports the serve sequence it has applied through, heard at hub time at
+    /// `at`: the acknowledgement of option A (WP-SYN-11.T2). The node acknowledges the highest
+    /// serve sequence for which it has applied every earlier one (`NodeIntake::served_prefix`),
+    /// so it can only claim what it was sent, in the order the queue numbered it, whatever the
+    /// lane order or the image positions. The queue is trimmed by that sequence and by nothing
+    /// else; journal positions stay for ordering within a record key and for the obligation
+    /// ledger.
+    ///
+    /// The journal prefix the ledger, the observer and the closure's acknowledged position get is
+    /// **derived by the hub**: the position just below the oldest item still queued for the
+    /// destination (the cursor when none is), held back by a destination that is behind
+    /// (`catchup_from`), never above the hub's own stream head and never behind an earlier
+    /// acknowledgement. A claim above the newest sequence the queue ever assigned is refused,
+    /// marks the destination suspect and changes nothing. A claim at or below one already heard
+    /// is a repeat (a late or duplicated frame): it trims nothing more and moves no prefix back.
+    ///
+    /// # Errors
+    /// `UnknownDestination`, `ServeAckAhead`, `StreamFailed`, `QueueFailed` or the ledger's own
+    /// refusal (nothing is trimmed then).
+    pub fn on_ack_served_at(
+        &mut self,
+        dest: &str,
+        through: u64,
+        at: i64,
+    ) -> Result<ServedAck, HubError> {
+        let Some(st) = self.dests.get(dest) else {
+            return Err(HubError::UnknownDestination {
+                dest: dest.to_owned(),
+            });
+        };
+        let before = st.acked.unwrap_or(0);
+        let catchup_from = st.catchup_from;
+        let issued = self.queue.last_serve_seq(dest)?;
+        if through > issued {
+            self.mark_suspect(dest);
+            return Err(HubError::ServeAckAhead {
+                dest: dest.to_owned(),
+                claimed: through,
+                issued,
+            });
+        }
+        let head = self.stream.head()?;
+        // A queued bundle answers for its whole transaction group (`floor..=position`), so the
+        // oldest thing still owed is the lowest floor of the remaining items.
+        let lowest_owed = self
+            .queue
+            .peek(dest, usize::MAX)?
+            .iter()
+            .filter(|p| !p.item.redelivery && p.item.serve_seq > through)
+            .map(|p| {
+                if p.item.floor > 0 {
+                    p.item.floor.min(p.position)
+                } else {
+                    p.position
+                }
+            })
+            .min();
+        let mut prefix = match lowest_owed {
+            Some(lowest) => lowest.saturating_sub(1),
+            None => self.cursor,
+        };
+        if let Some(from) = catchup_from {
+            prefix = prefix.min(from.saturating_sub(1));
+        }
+        let prefix = prefix.min(self.cursor).min(head).max(before);
+        if let Some(ledger) = self.ledger.as_mut()
+            && let Err(e) = ledger.on_ack(dest, &self.cfg.tenant, prefix, StreamHead::new(head), at)
+        {
+            return Err(self.ack_failure(dest, e));
+        }
+        let removed = self.queue.ack_served(dest, through)?;
+        if let Some(st) = self.dests.get_mut(dest)
+            && (prefix > 0 || st.acked.is_some())
+        {
+            st.acked = Some(prefix);
+        }
+        if prefix > before {
+            self.observer.on_ack(dest, prefix);
+        }
+        Ok(ServedAck {
+            removed,
+            applied_prefix: prefix,
+        })
     }
 
     /// Map a ledger refusal to the hub's error; an over-claim marks the destination suspect.

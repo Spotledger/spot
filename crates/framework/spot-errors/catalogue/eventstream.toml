@@ -62,3 +62,21 @@ explanation_key = "error.eventstream.spec_invalid"
 params = []
 remedy = "Fix the named fields, or register a new consumer for a different partition count."
 since = "0.1.0"
+
+[[entry]]
+code = "eventstream.class_unknown"
+class = "none"
+summary = "The consumer names an event class that does not exist."
+explanation_key = "error.eventstream.class_unknown"
+params = []
+remedy = "Select only the classes state, domain and audit; telemetry is not an event class."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream.entities_need_state"
+class = "none"
+summary = "The consumer selects entities without selecting the state class."
+explanation_key = "error.eventstream.entities_need_state"
+params = []
+remedy = "Add the state class to the consumer, or remove its entities, because entities apply to state events only."
+since = "0.1.0"

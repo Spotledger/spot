@@ -5,7 +5,7 @@ use spot_journal_segment::{SegmentConfig, SegmentWriter, genesis_hash, segment_h
 use spot_journal_store::Layout;
 
 use super::support::*;
-use crate::chunk;
+use crate::tail::v1 as chunk;
 use crate::{Durability, Relay, RelayError};
 
 /// A store holding two sealed segments (1..=3 and 4..=6); returns it with the head hash.

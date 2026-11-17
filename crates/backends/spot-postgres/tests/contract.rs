@@ -10,8 +10,8 @@
 use std::sync::Mutex;
 
 use spot_postgres::PgBackend;
-use spot_postgres::testing::TestDb;
-use spot_storage_contract::contract_tests::{Fixture, run_matching};
+use spot_postgres::testing::{TestDb, require_pg};
+use spot_storage_contract::contract_tests::{Fixture, run_all, run_matching};
 
 /// Cases that prepare the geo catalog and so need PostGIS.
 const NEEDS_POSTGIS: &[&str] = &[
@@ -53,12 +53,20 @@ async fn the_whole_storage_contract_passes_on_postgres() {
     let Some(probe) = TestDb::create().await else {
         return;
     };
-    let postgis = probe.create_extensions(&["postgis"]).await.is_empty();
+    let required = require_pg();
+    // Under SPOT_REQUIRE_PG a server without PostGIS panics here instead of skipping.
+    let postgis = probe.require_extensions(&["postgis"]).await.is_empty();
     drop(probe);
     let fixture = Postgres {
         databases: Mutex::new(Vec::new()),
         postgis: Mutex::new(postgis),
     };
+    if required {
+        let report = run_all(&fixture).await;
+        assert_eq!(report.outcomes.len(), 43, "every case must run");
+        report.assert_all_passed();
+        return;
+    }
     let report = run_matching(&fixture, |case| postgis || !NEEDS_POSTGIS.contains(&case)).await;
     let expected = if postgis {
         43

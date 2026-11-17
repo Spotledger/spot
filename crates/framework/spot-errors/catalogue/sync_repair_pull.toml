@@ -18,3 +18,12 @@ explanation_key = "error.sync_repair_pull.invalid_config"
 params = ["reason"]
 remedy = "Set every repair bound and interval above zero, and the maximum interval at or above the ask interval."
 since = "0.1.0"
+
+[[entry]]
+code = "sync_repair_pull.too_many_tenants"
+class = "none"
+summary = "A missing record of another tenant was not tracked: the repair loop already holds {limit} tenants."
+explanation_key = "error.sync_repair_pull.too_many_tenants"
+params = ["limit"]
+remedy = "Escalate to the lead: the node serves more tenants than the repair loop's tenant bound allows. Raise `max_tenants` (it follows the node's own tenant bound) or check for a tenant tag that is not a real tenant."
+since = "0.1.0"

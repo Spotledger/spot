@@ -12,8 +12,11 @@
 //! A [`JournalCatalog`] describing what the journal holds — [`SnapshotInfo`] entries (each with
 //! its position, generation, a verified flag and when it was taken), [`SegmentRange`]s (each
 //! with its generation and first and last sequence number) and [`ForkInfo`] records — plus an
-//! optional [`Backup`] to roll forward and a [`Target`]: [`Target::End`] or
-//! [`Target::At`] a position. Positions and generations start at one ([`FIRST_POSITION`]).
+//! optional [`Backup`] to roll forward and a [`Target`]: [`Target::End`], [`Target::At`] a position
+//! of the current generation, or [`Target::In`] a named generation. Positions and generations
+//! start at one ([`FIRST_POSITION`]), and **positions start again at one in every generation**
+//! (WP-JRN-03.T10): the journal's order is `(generation, position)`, as the manifest, the relay and
+//! the feed already number it.
 //!
 //! # The rules it enforces
 //!
@@ -32,7 +35,9 @@
 //! * A backup newer than the best snapshot is preferred for roll-forward **only** when the
 //!   segments cover its position up to the target; otherwise the snapshot is used.
 //! * Segments are applied contiguously and in order, and a step may only enter a new generation
-//!   at a recorded fork point.
+//!   at a recorded fork point, at that generation's first position.
+//! * A point-in-time target must lie in the current generation: a fork from inside an older
+//!   generation cannot be recorded in the manifest chain ([`PlanError::TargetBeforeFork`]).
 //!
 //! Time is an argument (`taken_at_millis`), never read; the crate has no I/O, no clock, no
 //! randomness and no floats, and `plan` is deterministic: the same catalogue, backup and target
@@ -78,6 +83,7 @@ mod catalog;
 mod error;
 mod explain;
 mod plan;
+pub mod unsealed;
 
 #[cfg(test)]
 mod tests;

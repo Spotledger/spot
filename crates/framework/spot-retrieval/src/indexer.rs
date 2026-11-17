@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use spot_core::SiteId;
+use spot_field_guard::ProtectionSource;
 use spot_storage_contract::{Change, ChangeFeed, ChangeOp, FeedPosition, RecordId, Version};
 
 use crate::chunk::chunk_text;
@@ -29,6 +30,10 @@ use crate::vector::{Chunk, VectorStore};
 
 /// The default cap on a document's total indexable characters.
 pub const DEFAULT_MAX_DOCUMENT_CHARS: usize = 1_000_000;
+
+/// Stable code in [`Skipped`] for a document whose DocType the protection source does not know:
+/// nothing of it is indexed (fail closed, WP-SEC-04.T7).
+pub const CODE_PROTECTION_UNKNOWN: &str = "retrieval.protection_unknown";
 
 /// The limits of one indexer.
 #[derive(Clone, Debug)]
@@ -87,6 +92,14 @@ pub struct Indexer {
     store: Arc<dyn VectorStore>,
     positions: Arc<dyn PositionStore>,
     config: IndexerConfig,
+    protection: Option<Protection>,
+}
+
+/// The live protection facts the indexer consults, and whether the tenant allows a protected
+/// field into the index at all.
+struct Protection {
+    source: Arc<dyn ProtectionSource>,
+    index_protected: bool,
 }
 
 impl Indexer {
@@ -109,7 +122,30 @@ impl Indexer {
             store,
             positions,
             config,
+            protection: None,
         }
+    }
+
+    /// Makes the field guard's protection facts authoritative at index time (WP-SEC-04.T7).
+    ///
+    /// A field that belongs to a protection group, carries a classification tag or a mask is
+    /// **left out of the index** (and never reaches the embedding provider) unless the policy
+    /// lists it under `restricted_ok` **and** `index_protected` is true (the tenant-wide
+    /// default, off unless the operator turns it on). A DocType the source does not know is not
+    /// indexed at all and is reported as skipped with [`CODE_PROTECTION_UNKNOWN`]. The facts are
+    /// read on every document, so a change of protection applies from the next change on; the
+    /// documents indexed before are re-indexed by replaying the feed (see the crate docs).
+    #[must_use]
+    pub fn with_protection(
+        mut self,
+        source: Arc<dyn ProtectionSource>,
+        index_protected: bool,
+    ) -> Self {
+        self.protection = Some(Protection {
+            source,
+            index_protected,
+        });
+        self
     }
 
     /// The site the indexer serves.
@@ -205,9 +241,33 @@ impl Indexer {
             report.deleted += 1;
             return Ok(false);
         };
+        let protection = match &self.protection {
+            Some(p) => match p.source.protection(doctype) {
+                Some(facts) => Some((facts, p.index_protected)),
+                None => {
+                    // Fail closed: unknown protection means nothing of the document is indexed.
+                    self.store.delete_document(doctype, id)?;
+                    report.skipped.push(Skipped {
+                        doctype: doctype.to_owned(),
+                        id,
+                        code: CODE_PROTECTION_UNKNOWN,
+                    });
+                    return Ok(false);
+                }
+            },
+            None => None,
+        };
         let mut texts: Vec<(String, String)> = Vec::new();
         let mut total = 0usize;
         for plan in &policy.fields {
+            if let Some((facts, index_protected)) = &protection {
+                let field = facts.field(&plan.name);
+                let protected =
+                    !field.groups.is_empty() || !field.tags.is_empty() || field.mask.is_some();
+                if protected && !(plan.restricted && *index_protected) {
+                    continue;
+                }
+            }
             let Some(value) = document.values.get(&plan.name) else {
                 continue;
             };

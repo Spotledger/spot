@@ -319,7 +319,11 @@ pub fn check_against(verified: &Verified, observed: &[SegmentSummary]) -> Vec<Fi
     }
 
     // Generations: the manifest's own is compared above; every other generation storage holds is
-    // either a newer one no fork opened, or an abandoned one whose fork point it has run past.
+    // either a newer one no fork opened, or an older one no fork records. An older generation a
+    // fork records is **abandoned history** and stays in the journal forever (ADR-061 s6), including
+    // the sealed segments after the fork point: positions restart in the new generation, so those
+    // segments are explained by the fork record, whatever their numbers. Whether the older
+    // generation grew after the fork is a question for that generation's own manifest.
     for segment in observed
         .iter()
         .filter(|segment| segment.generation != generation)
@@ -328,8 +332,7 @@ pub fn check_against(verified: &Verified, observed: &[SegmentSummary]) -> Vec<Fi
             && manifest
                 .forks
                 .iter()
-                .find(|fork| fork.generation == segment.generation.saturating_add(1))
-                .is_some_and(|fork| segment.first_seq <= fork.forked_from_position);
+                .any(|fork| fork.generation == segment.generation.saturating_add(1));
         if !accounted {
             findings.push(Finding::ForkNotRecorded {
                 generation: segment.generation,

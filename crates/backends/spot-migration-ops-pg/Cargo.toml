@@ -1,0 +1,34 @@
+[package]
+name = "spot-migration-ops-pg"
+description = "The PostgreSQL PlanStore, ApprovalStore and rehearsal ledger of the migration lifecycle (WP-MIG-04.T6): plans by hash, approvals with author and approver, state transitions by compare-and-set, tamper evidence on load, tables created through the spot-pg-migrate extra-table hook"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `PlanStore` trait, `PlanHash`, `PlanState`, `StoredPlan` and the stable `migration.*` errors.
+spot-migration-ops = { path = "../../framework/spot-migration-ops" }
+# The `ApprovalStore` trait, `Approval`, `PlanDigest` and the digest's domain prefix.
+spot-migration-approval = { path = "../../framework/spot-migration-approval" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# `ExtraTable`: the tables are created by the migrator's extra-table hook (WP-STO-12.T3).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The driver: statements run on the connection the bridge hands to the closure.
+tokio-postgres = "0.7"
+# The digest is recomputed over the stored text on every load (tamper evidence).
+sha2 = "0.10"
+# `PlanDigest` is rebuilt from its stored hex through its serde form (it has no other constructor).
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-migration-ops = { path = "../../framework/spot-migration-ops", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

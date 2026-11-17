@@ -90,7 +90,7 @@ def _base_has_contract(root: Path, base_ref: str, name: str) -> bool:
 
 
 def check_contract(root: Path, base_ref: str, head_ref: str, name: str,
-                   changes: list[Change], report: list[str]) -> None:
+                   changes: list[Change], report: list[str], require_adr: bool = True) -> None:
     directory = f"contracts/{name}"
     version_path = f"{directory}/VERSION"
     base_exists = _base_has_contract(root, base_ref, name)
@@ -121,7 +121,7 @@ def check_contract(root: Path, base_ref: str, head_ref: str, name: str,
     if new_version <= old_version:
         report.append(f"{version_path}: version must increase from {base_version_text.strip()} to {head_version_text.strip()}")
         return
-    if breaking_bump(old_version, new_version) and not _adr_mentions_contract(root, head_ref, changes, name):
+    if require_adr and breaking_bump(old_version, new_version) and not _adr_mentions_contract(root, head_ref, changes, name):
         report.append(f"{version_path}: breaking version bump requires an added or modified docs/adr/ file mentioning {directory} or {name}")
 
 
@@ -129,14 +129,20 @@ def run(root: Path, base: str | None = None) -> int:
     if not (root / "contracts").is_dir():
         print("G6: no contracts/ directory, nothing to check")
         return 0
+    require_adr = True
     try:
         explicit_base = base or os.environ.get("GITHUB_BASE_REF")
         if explicit_base:
             base_ref = explicit_base if explicit_base.startswith("origin/") else f"origin/{explicit_base}"
             diff_spec = f"{base_ref}...HEAD"
         elif git(root, "branch", "--show-current").stdout.strip() == "main":
+            # A push to main is a public release commit (one commit per release, the whole
+            # release diff). The ADR rule was enforced on every pull request that made the
+            # change, and a release squash cannot be expected to touch the ADR itself, so
+            # only the version rules apply here.
             diff_spec = "HEAD~1..HEAD"
             base_ref = "HEAD~1"
+            require_adr = False
         else:
             base_ref = "origin/main"
             diff_spec = f"{base_ref}...HEAD"
@@ -148,7 +154,7 @@ def run(root: Path, base: str | None = None) -> int:
             return 0
         violations: list[str] = []
         for name in names:
-            check_contract(root, base_ref, "HEAD", name, changes, violations)
+            check_contract(root, base_ref, "HEAD", name, changes, violations, require_adr)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"G6: {exc}", file=sys.stderr)
         return 2

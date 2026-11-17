@@ -150,6 +150,7 @@ pub fn entry(position: u64, txn: &str, entity: &str, id: &str, version: u64) -> 
         topic: entity.to_owned(),
         major: 1,
         lane: Lane::Bulk,
+        deleted: false,
     }
 }
 
@@ -169,6 +170,15 @@ impl SendQueue for SharedQueue {
     }
     fn remove_redelivered(&mut self, dest: &str, position: u64) -> Result<usize, HubError> {
         self.0.borrow_mut().remove_redelivered(dest, position)
+    }
+    fn last_serve_seq(&self, dest: &str) -> Result<u64, HubError> {
+        self.0.borrow().last_serve_seq(dest)
+    }
+    fn lowest_position_after(&self, dest: &str, through: u64) -> Result<Option<u64>, HubError> {
+        self.0.borrow().lowest_position_after(dest, through)
+    }
+    fn ack_served(&mut self, dest: &str, through: u64) -> Result<usize, HubError> {
+        self.0.borrow_mut().ack_served(dest, through)
     }
     fn queued_bytes(&self, dest: &str) -> Result<usize, HubError> {
         self.0.borrow().queued_bytes(dest)

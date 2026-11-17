@@ -14,6 +14,8 @@
 //! - [`task`]: the [`Task`], its options, its assignee spec and its delegation.
 //! - [`event`]: the immutable [`TaskEvent`] audit line.
 //! - [`store`]: the [`TaskStore`] port and the in-memory reference.
+//! - [`async_store`]: the [`AsyncTaskStore`] twin of the store port, for a caller on a tokio
+//!   runtime thread, and its in-memory reference.
 //! - [`service`]: the [`TaskService`] actions, the permission-filtered inbox and the SLA tick;
 //!   a completion resumes the Case through the [`TaskEngine`] exactly once.
 //! - [`sla`]: per-node reminders and escalation through a [`SlaTimerPort`], with
@@ -22,6 +24,8 @@
 //!   `spot-permissions`.
 //! - [`segregation`]: the creator-distinctness and `spot-sod` completion gates.
 //! - [`notify`]: the [`Notifier`] port; a notification carries ids and titles only.
+//! - [`outbox`]: the durable notification outbox: entries written with the task state, a worker
+//!   with at-least-once delivery, backoff and idempotency keys.
 //! - [`text`]: the run-label pair (ADR-080); user-visible text never names a run with the
 //!   internal word.
 //!
@@ -33,12 +37,14 @@
 #![forbid(unsafe_code)]
 
 pub mod access;
+pub mod async_store;
 pub mod error;
 pub mod event;
 pub mod facts;
 pub mod handler;
 pub mod metrics;
 pub mod notify;
+pub mod outbox;
 pub mod resolve;
 pub mod segregation;
 pub mod service;
@@ -52,6 +58,7 @@ pub use access::{
     AccessFuture, AssigneeAccess, DocFactsSource, InboxAccess, MapDocFacts, MapPrincipals,
     PermissionAccess, PrincipalSource, is_direct_manager, is_personal_assignee,
 };
+pub use async_store::{AsyncInMemoryTaskStore, AsyncTaskStore};
 pub use error::{TasksError, TasksResult};
 pub use event::{SLA_ACTOR, TaskAction, TaskEvent, human_approvers, is_person};
 pub use facts::{DocumentServiceFacts, NowFn};
@@ -59,6 +66,11 @@ pub use handler::DecisionNodeHandler;
 pub use metrics::{CountingMetrics, NoMetrics, SlaMetrics};
 pub use notify::{
     NoNotifier, Notification, NotificationKind, Notifier, RecordingNotifier, subject,
+};
+pub use outbox::{
+    BackoffPolicy, DeliveryError, DeliveryTransport, InMemoryOutbox, InMemoryOutboxTaskStore,
+    NotifierTransport, OutboxEntry, OutboxStatus, OutboxStore, OutboxWorker, RunReport,
+    TransactionalTaskStore,
 };
 pub use resolve::{
     ApproverResolver, Directory, MapDirectory, NoApprovers, Resolved, resolve_assignees,

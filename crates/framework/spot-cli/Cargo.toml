@@ -10,12 +10,34 @@ rust-version.workspace = true
 name = "spot"
 path = "src/main.rs"
 
+# `usage_manifest generate|check` (WP-STO-07.T9): the release's usage manifest, compiled from the
+# catalogue; wrapped by `tools/ci/usage_manifest.py`.
+[[bin]]
+name = "usage_manifest"
+path = "src/bin/usage_manifest.rs"
+
 [dependencies]
+spot-sync-skew = { path = "../spot-sync-skew" }
+spot-sync-policy-host = { path = "../spot-sync-policy-host" }
+spot-sync-policy = { path = "../spot-sync-policy" }
+spot-sync-node = { path = "../spot-sync-node" }
+spot-sso-pg = { path = "../../backends/spot-sso-pg" }
+spot-sso = { path = "../spot-sso" }
+spot-sealed-fields = { path = "../spot-sealed-fields" }
+spot-protected-keys = { path = "../spot-protected-keys" }
+spot-offline-identity-adapters = { path = "../spot-offline-identity-adapters" }
+spot-offline-identity = { path = "../spot-offline-identity" }
+spot-iam-questions = { path = "../spot-iam-questions" }
+spot-iam-governance = { path = "../spot-iam-governance" }
+spot-edi = { path = "../spot-edi" }
+spot-deep-access-pg = { path = "../../backends/spot-deep-access-pg" }
+spot-deep-access = { path = "../spot-deep-access" }
+spot-break-glass = { path = "../spot-break-glass" }
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time", "net", "io-util", "process"] }
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 spot-core = { path = "../spot-core" }
@@ -34,11 +56,35 @@ spot-manifest = { path = "../spot-manifest" }
 # (anchor, certificate, signature, revocation list). No other bundle crate is a direct dependency.
 spot-pack = { path = "../spot-pack" }
 spot-bundle-signing = { path = "../spot-bundle-signing" }
+# `spot bundle export|diff|import` (WP-ALM-02.T3): the customisation bundle, the three-way merge and
+# conflict detection against the installed platform, and the environment ladder's `Role`; `semver` is
+# the version type the bundle's `SiteReader` trait names (same version as those crates).
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+spot-bundle-merge = { path = "../spot-bundle-merge" }
+spot-environments = { path = "../spot-environments" }
+semver = "1"
+# `spot sandbox` (WP-ALM-05.T3): the masking classes, policy, masker and leak-scan index.
+spot-sandbox = { path = "../spot-sandbox" }
+# `spot airgap export|verify|import|list` (WP-ADM-12.T2): the signed offline bundles, the verified
+# import into the local repository, and the digest type the signer callback names.
+spot-airgap = { path = "../spot-airgap" }
+spot-bundle = { path = "../spot-bundle" }
+# The `--version` of an export and the versions the repository index compares.
 spot-permissions = { path = "../spot-permissions" }
 spot-perm-query = { path = "../spot-perm-query" }
 spot-platform-app = { path = "../spot-platform-app" }
+# Barrier 3 of ADR-083 (WP-IAM-11.T16): the portal-user guard `outside.rs` asks before it writes
+# or activates a role assignment, and the role model it is built from.
+spot-iam-roles = { path = "../spot-iam-roles" }
 spot-login = { path = "../spot-login" }
 spot-sessions = { path = "../spot-sessions" }
+# SCIM 2.0 hosting (WP-IAM-06.T2, `services/scim.rs`): the sans-I/O server core and the directory,
+# assignment, role and key-scope crates its store is built over. The core's `http` adapter is not
+# used; `spot-http` mounts the routes through its own port.
+spot-iam-scim = { path = "../spot-iam-scim" }
+spot-iam-directory = { path = "../spot-iam-directory" }
+spot-iam-assign = { path = "../spot-iam-assign" }
+spot-iam-access = { path = "../spot-iam-access" }
 spot-pg-migrate = { path = "../../backends/spot-pg-migrate" }
 spot-sample-app = { path = "../../apps/spot-sample-app" }
 spot-controllers = { path = "../spot-controllers" }
@@ -56,6 +102,18 @@ spot-realtime-bridge = { path = "../spot-realtime-bridge" }
 spot-meta-live = { path = "../spot-meta-live", features = ["storage"] }
 spot-customise = { path = "../spot-customise", features = ["postgres"] }
 spot-jobs = { path = "../spot-jobs" }
+# The `sys:committed_steps` job handler and its durable done markers (WP-DOC-04.T9).
+spot-committed-delivery = { path = "../spot-committed-delivery" }
+# The sync hub service (WP-RTB-02.T4): the join, the wire, and the TLS the listener runs on.
+spot-sync-hub-host = { path = "../spot-sync-hub-host" }
+spot-sync-http = { path = "../spot-sync-http" }
+spot-sync-hub-pg = { path = "../../backends/spot-sync-hub-pg" }
+# The hub assembly (WP-RTB-02.T13): the relay, its image and reference seams, the delivery lanes.
+spot-sync-hub = { path = "../spot-sync-hub" }
+spot-sync-closure = { path = "../spot-sync-closure" }
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 spot-scheduler = { path = "../spot-scheduler" }
 spot-coordinator = { path = "../spot-coordinator" }
 spot-jobs-pg = { path = "../../backends/spot-jobs-pg" }
@@ -72,15 +130,42 @@ spot-field-guard = { path = "../spot-field-guard" }
 # Reports (WP-PLT-14.T2): the report engine the report service hosts.
 spot-reports = { path = "../spot-reports" }
 spot-doc-audit = { path = "../spot-doc-audit" }
+# The audit participant's field masker over the metadata the site serves (WP-PRD-01.T22).
+spot-site-masker = { path = "../spot-site-masker" }
 spot-audit-chain = { path = "../spot-audit-chain" }
 spot-audit-store = { path = "../../backends/spot-audit-store" }
 spot-partition = { path = "../spot-partition" }
 spot-partition-pg = { path = "../../backends/spot-partition-pg" }
 spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
 spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The quarantine admin hosted (WP-RTB-03.T9): the queue library, its PostgreSQL store, and the
+# record type a held image is read from.
+spot-quarantine = { path = "../spot-quarantine" }
+spot-quarantine-pg = { path = "../../backends/spot-quarantine-pg" }
+spot-replica-apply = { path = "../spot-replica-apply" }
+# The edge sync service (WP-RTB-02.T5): the loop, the wire it dials and the node identity it presents.
+spot-sync-node-host = { path = "../spot-sync-node-host" }
+spot-edge-offline-host = { path = "../spot-edge-offline-host" }
+spot-sync-node-pg = { path = "../../backends/spot-sync-node-pg" }
+spot-sync-enrol = { path = "../spot-sync-enrol" }
+# The periodic sync loops `services/sync_loops.rs` ticks (WP-RTB-02.T6).
+spot-sync-loops = { path = "../spot-sync-loops" }
 spot-edge-sync = { path = "../spot-edge-sync" }
 spot-edge-pg = { path = "../../backends/spot-edge-pg" }
 spot-secrets = { path = "../spot-secrets" }
+# `spot backup` (WP-PRD-04.T2): the runner, ledger and encryption of the package, and the
+# `pg_dump` snapshot provider it takes and restores with. No other backup crate is used here.
+spot-backup = { path = "../spot-backup" }
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Backup targets (WP-PRD-04.T5): the cloud adapter stores sealed chunks through the `ObjectStore` port
+# and the tenant `RecoveryKey` of `spot-cloud-backup`; no other cloud-backup type is used here.
+spot-cloud-backup = { path = "../spot-cloud-backup" }
+# `spot backup run --kind stopped` (WP-PRD-04.T8): the layout type the stopped-instance provider takes.
+spot-pg-supervisor = { path = "../spot-pg-supervisor" }
+# `spot bi` (WP-PRD-07.T2): the curated reporting views, their read-only role and the checks; and
+# the database error type (SQLSTATE only is ever printed). Same versions as spot-bi-views.
+spot-bi-views = { path = "../../backends/spot-bi-views" }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-serde_json-1"] }
 # Module-level whitelisted functions (WP-PLT-17.T2): the registry the `function` hosting module builds
 # per site from the installed apps' manifests and the native handlers of `natives.rs`.
 spot-functions = { path = "../spot-functions" }
@@ -125,23 +210,66 @@ spot-dag-exec = { path = "../spot-dag-exec" }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 # Process engine counters (Runs started/completed/failed, steps run, resume backlog).
 metrics = "0.24"
+# Process insight hosting (WP-BPM-11.T2): the fold of node-run events into cycle time, waiting
+# time and stuck Runs, whose accumulator state is the log checkpoint.
+spot-bpm-insight = { path = "../spot-bpm-insight" }
 # Integration node hosting (WP-BPM-06.T3): the node handlers themselves and the wire types the
 # hosted egress client, the SMTP transport and the raw webhook post need.
 spot-bpm-integration = { path = "../spot-bpm-integration" }
+# Outbound webhooks hosting (WP-INT-01.T2): the delivery handler, intake types and signing, and the
+# derived delivery id (uuid v5, so a replayed intake yields the same id and no second job).
+spot-webhooks = { path = "../spot-webhooks" }
+uuid = { version = "1.26", default-features = false, features = ["std", "v5"] }
 async-trait = "0.1"
+# Server Scripts and TypeScript controllers hosting (WP-EXT-06.T4): the script controller, the
+# compile-on-save controller, the TypeScript controller factory and the engine they run on.
+spot-server-scripts = { path = "../spot-server-scripts" }
+spot-ts-controllers = { path = "../spot-ts-controllers" }
+spot-ts = { path = "../spot-ts" }
 http = "1"
 url = "2"
+# The durable HTTP Idempotency-Key store the host wires on each site's own pool (WP-PLT-05.T8,
+# Recorded security finding): `PgIdempotencyStore`, its retention policy and config.
+spot-idempotency-pg = { path = "../../backends/spot-idempotency-pg" }
 # Document node hosting (WP-BPM-04.T6): the Document node handler, the Case file and the
 # service-principal policy this module wires to the live document engine and IAM.
 spot-bpm-documents = { path = "../spot-bpm-documents", features = ["pg"] }
+# Task inbox hosting (WP-BPM-05.T8): the Decision node and the inbox logic, and the PostgreSQL
+# task store `services/process_tasks.rs` runs them over.
+spot-bpm-tasks = { path = "../spot-bpm-tasks" }
+spot-bpm-tasks-pg = { path = "../../backends/spot-bpm-tasks-pg" }
 # `NodeId`: the engine hands a node its id; the service-principal audit trail names it.
 spot-dag = { path = "../spot-dag" }
 # `EdgeTypeId`: the stable id of the service-principal audit edge type this module writes.
 spot-graph-model = { path = "../spot-graph-model" }
+# `usage_manifest` (WP-STO-07.T9): the manifest type and its check, used read-only, and the
+# traversal model that lists the derived reverse indexes the catalogue carries.
+spot-expand-contract = { path = "../spot-expand-contract" }
+spot-migration-plan = { path = "../spot-migration-plan" }
 # `spot console` (WP-PRD-01.T30): the maintenance gate it reads before any write. The gate type and
 # its PostgreSQL wiring; no other part of the migration apply engine is used here.
 spot-migration-apply = { path = "../spot-migration-apply" }
 spot-migration-apply-pg = { path = "../../backends/spot-migration-apply-pg" }
+# The side-effect hold (WP-MIG-08.T4): the gate every external effect asks, its durable PostgreSQL
+# ledger, and the lifecycle operations (`hold`, `release`, `status`) the CLI and the management API share.
+spot-effect-hold = { path = "../spot-effect-hold" }
+spot-effect-hold-pg = { path = "../../backends/spot-effect-hold-pg" }
+spot-migration-ops = { path = "../spot-migration-ops" }
+# The approval service and the run-access check the lifecycle context carries.
+spot-migration-approval = { path = "../spot-migration-approval" }
+spot-migration-audit = { path = "../spot-migration-audit" }
+# `spot migrate-plan` and `spot migrate-approve` (WP-MIG-04.T7): the PostgreSQL plan, approval and rehearsal
+# stores, reached from a plain thread through the shared blocking bridge (spot-pg-bridge, ADR-082 addendum 1).
+spot-migration-ops-pg = { path = "../../backends/spot-migration-ops-pg" }
+# `spot migrate-rehearse` (WP-MIG-06.T5): the rehearsal engine's real parts (the pg_dump provider and the
+# scratch reaper come from `spot-snapshot`, already a dependency).
+spot-rehearsal = { path = "../spot-rehearsal" }
+
+# `spot promote` (WP-ALM-04.T5): the promotion service and its ports; `spot-tenancy` for the tenant id of
+# an environment address (`EnvRef`) and `spot-views` for the view types the site writer's traits name.
+spot-promotion = { path = "../spot-promotion" }
+spot-tenancy = { path = "../spot-tenancy" }
+spot-views = { path = "../spot-views" }
 
 # The optional Redis/Valkey plugin (WP-PLT-19.T2): the cluster-redis profile hosting in
 # `services/cluster_redis.rs`. Nothing here is used unless `[services.cluster_redis]` is enabled.
@@ -154,11 +282,200 @@ redis = { version = "1", default-features = false, features = ["aio", "tokio-com
 # The merged bus subscription (`FallbackBus`) is a `Stream`; the same crate `spot-meta-live` uses.
 futures-core = "0.3"
 
+# The hosted management API (WP-ADM-01.T5): the server library, the operation catalogue it serves,
+# the durable nonce store, rustls for the listener's TLS configuration and the driver for the command
+# store's error codes. `spot-mgmt-api`, `rustls` and `tokio-rustls` may already be listed by the `spot mgmt` task.
+spot-mgmt-api = { path = "../spot-mgmt-api" }
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+spot-signed-command = { path = "../spot-signed-command" }
+spot-signed-command-pg = { path = "../../backends/spot-signed-command-pg" }
+# `spot mgmt` (WP-ADM-01.T7): the management API client. The wire envelope shared with the server
+# library, the signed command, TLS 1.3 with the operator CA pinned, the helper that makes the CA
+# and client certificates, and the random source for administrator keys.
+rcgen = "0.14"
+rand = "0.9"
+# Trigger intake hosting (WP-BPM-03.T4): the intake and index, the webhook signature verifier and
+# the model's text parser the published versions are read through.
+spot-bpm-triggers = { path = "../spot-bpm-triggers" }
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The Case id a start key derives to.
+sha2 = "0.10"
+# Process governance hosting (WP-BPM-08.T3): the governed-write guard, the form step and the
+# `process_only` guard, and the production request authority `services/process_governance.rs`
+# joins; `spot-bpm-model` is the `DraftMode` the form step's draft writer matches on.
+spot-bpm-governance = { path = "../spot-bpm-governance" }
+spot-bpm-entry = { path = "../spot-bpm-entry" }
+spot-bpm-request-authority = { path = "../spot-bpm-request-authority" }
+
+# Process versions hosting (WP-BPM-09.T4): the plan and mapping of a Run migration, and the
+# publish-time effect checks.
+spot-bpm-versioning = { path = "../spot-bpm-versioning" }
+spot-bpm-effect-checks = { path = "../spot-bpm-effect-checks" }
+
+# Conversations across organisations, hosted (WP-BPM-12.T7): the library, its PostgreSQL record
+# store, the process contract the messages are held to, and the link crates the receiver and the
+# sender run over.
+spot-bpm-conversations = { path = "../spot-bpm-conversations" }
+spot-bpm-conversations-pg = { path = "../../backends/spot-bpm-conversations-pg" }
+spot-bpm-contract = { path = "../spot-bpm-contract" }
+spot-link-exchange = { path = "../spot-link-exchange" }
+spot-tenant-link = { path = "../spot-tenant-link" }
+# Request effects hosting (WP-BPM-15.T4): the request record file with undo and rewind, the
+# request-scoped effect hold and its PostgreSQL ledger, and commit points, joined by
+# `services/process_effects.rs`.
+spot-bpm-effects = { path = "../spot-bpm-effects" }
+spot-bpm-commit = { path = "../spot-bpm-commit" }
+# The link exchange runner (WP-CTL-10.T9): the signed-message exchange and its carriers; the sync
+# transport seam (`PeerTransport` wraps its `Transport`).
+spot-link-transport = { path = "../spot-link-transport" }
+
+# External peers hosted (WP-CTL-11.T4): the external carrier (sender, receiver, channels) and the
+# credential vault trait its channels and receiver resolve secrets through.
+spot-link-external = { path = "../spot-link-external" }
+spot-connectors = { path = "../spot-connectors" }
+
+# Tenant links, hosted (WP-CTL-09.T8): the link model and handshake, the tenant's PostgreSQL link
+# store with its administration operations, the tenant id, and the UUID parse of the setting.
+spot-tenant-link-pg = { path = "../../backends/spot-tenant-link-pg" }
+# The app runtime service (WP-EXT-05.T2): the WebAssembly host, the installed-app registry and its
+# PostgreSQL store (`services/apps.rs`).
+spot-wasm = { path = "../spot-wasm" }
+spot-installer = { path = "../spot-installer" }
+spot-installer-pg = { path = "../../backends/spot-installer-pg" }
+# WP-GRA-02.T2 (services/graph.rs): the graph index, query API, event decoder and edge table rows.
+spot-graph-index = { path = "../spot-graph-index" }
+spot-graph-query = { path = "../spot-graph-query" }
+spot-graph-projection = { path = "../spot-graph-projection" }
+
+# WP-DAG-05.T2 (services/lineage.rs).
+spot-lineage = { path = "../spot-lineage" }
+# WP-GRA-04.T2 (services/rule_graph.rs).
+spot-rule-graph = { path = "../spot-rule-graph" }
+
+# The connector service (WP-INT-05.T3): the connector SDK and host (`services/connectors.rs`).
+# `spot update` and the updater service (WP-PRD-03.T5): the signed-manifest verification, the update
+# engine and its seams, over an HTTPS client that trusts the platform roots (rustls with `ring`,
+# same versions and features as spot-mail and spot-sync-http; no HTTP client crate).
+spot-updater = { path = "../spot-updater" }
+rustls-native-certs = "0.8"
+
+# MCP endpoint hosting (WP-AI-04.T4), support sessions (WP-AI-06.T4), AI isolation (WP-AI-05.T4).
+spot-mcp = { path = "../spot-mcp" }
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+spot-support-session = { path = "../spot-support-session" }
+spot-ai-isolation = { path = "../spot-ai-isolation" }
+
+# Hosted by services/access_review*.rs (separation of duties, access reviews), services/search.rs
+# (the PostgreSQL search hook) and services/signin_throttle.rs (the coordinator-backed throttle).
+# The import engine hosted by services/import.rs (WP-DOC-09.T5).
+spot-import = { path = "../spot-import" }
+spot-sod = { path = "../spot-sod" }
+spot-access-review = { path = "../spot-access-review" }
+spot-pg-search = { path = "../../backends/spot-pg-search" }
+spot-throttle-coordinator = { path = "../spot-throttle-coordinator" }
+
+# Trigger intake hosting (WP-BPM-03.T4): the intake and index, the webhook signature verifier and
+# the model's text parser the published versions are read through.
+# The process API (WP-BPM-02.T6): the trigger roles and input schema a start is checked against,
+# the model's trigger nodes, and the task store's ties of people to runs.
+# The Case id a start key derives to.
+# The journal service (WP-RTB-01.T3): the shipper, the relay it drives, the folder store the
+# journal is written to and the sealing limits; verification and the manifest types are used by
+# `tests/journal_host.rs`.
+spot-journal-ship = { path = "../spot-journal-ship" }
+spot-journal-relay = { path = "../spot-journal-relay" }
+spot-journal-store = { path = "../spot-journal-store" }
+spot-journal-segment = { path = "../spot-journal-segment" }
+# Event history from the journal (WP-JRN-09.T3): the reader behind the stream engine and the
+# decoder of the unsealed tail chunks it needs.
+spot-event-stream-journal = { path = "../spot-event-stream-journal" }
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+
+# The hosted management API (WP-ADM-01.T5): the server library, the operation catalogue it serves,
+# the durable nonce store, rustls for the listener's TLS configuration and the driver for the command
+# store's error codes. `spot-mgmt-api`, `rustls` and `tokio-rustls` may already be listed by the `spot mgmt` task.
+# The settings management service (WP-ADM-07.T2): the typed schema and the value store with history.
+spot-settings = { path = "../spot-settings" }
+spot-settings-store-pg = { path = "../spot-settings-store-pg" }
+
+# The site operations of the management API (WP-ADM-01.T6): the handlers, run as the CLI commands.
+spot-mgmt-site = { path = "../spot-mgmt-site" }
+
+# The usage emitter (WP-CTL-05.T6): the sync transport seam its shipper posts through (shared with
+# the link services; keep one line when stacked) and the digest of active users.
+
+# The journal access surface (WP-JRN-09.T4): the journal_reader grants, the manifest-gated reader and
+# its PostgreSQL store; the signed manifest's verifying keys and the journal object store it reads.
+spot-journal-access = { path = "../spot-journal-access" }
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# Catch-up and bootstrap hosted (WP-RTB-02.T7): the hub-side director and its progress table.
+spot-sync-catchup-host = { path = "../spot-sync-catchup-host" }
+# The durability gate (WP-RTB-01.T4): the acknowledgement middleware `services/durability.rs` installs.
+spot-durability-gate = { path = "../spot-durability-gate" }
+# Journal snapshots hosted (WP-RTB-01.T5): the PostgreSQL image reader, the snapshot writer and
+# reader, the Ed25519 signer and the manifest crate (the manifest hash a snapshot is bound to).
+spot-journal-snapshot-pg = { path = "../../backends/spot-journal-snapshot-pg" }
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The verifying half of the journal signing key (the manifest hash a snapshot is bound to is
+# read from the verified manifest).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Personal-field protection and erasure hosted (WP-RTB-01.T8): the declared fields and the eraser,
+# the subject-key adapter over the site's key provider and the PostgreSQL wrapped-key store.
+spot-journal-privacy = { path = "../spot-journal-privacy" }
+spot-journal-pii = { path = "../spot-journal-pii" }
+spot-journal-pii-secrets = { path = "../spot-journal-pii-secrets" }
+spot-journal-pii-secrets-pg = { path = "../../backends/spot-journal-pii-secrets-pg" }
+spot-journal-protect = { path = "../spot-journal-protect" }
+# The operating-system random source for new subject keys (the library never draws randomness);
+# same version as spot-secrets.
+
+# The hosted journal audit (WP-RTB-01.T7): the job, the runner's sides, the PostgreSQL providers,
+# the recovery report and the one blocking bridge the live side reads through.
+spot-journal-audit = { path = "../spot-journal-audit" }
+spot-journal-audit-job = { path = "../spot-journal-audit-job" }
+spot-journal-audit-run = { path = "../spot-journal-audit-run" }
+spot-journal-recovery = { path = "../spot-journal-recovery" }
+spot-journal-audit-host-pg = { path = "../../backends/spot-journal-audit-host-pg" }
+
+# The journal and sync management operations' typed executors (WP-RTB-04.T3).
+spot-mgmt-journal = { path = "../spot-mgmt-journal" }
+spot-mgmt-sync = { path = "../spot-mgmt-sync" }
+
+# Process definitions as hub-owned master data that syncs (WP-SYN-12.T1/T2).
+spot-sync-process = { path = "../spot-sync-process" }
+
+# Data policy and residency hosting (WP-SEC-05); the sync health view the management executor returns.
+spot-data-policy = { path = "../spot-data-policy" }
+spot-sync-health = { path = "../spot-sync-health" }
+
+[target.'cfg(windows)'.dependencies]
+# Stop and start of the Windows service for an update (`spot_winsvc::service::install`).
+spot-winsvc = { path = "../spot-winsvc" }
+
 [dev-dependencies]
+# The contract store samples the SSO module tests use (WP-IAM-05.T11/T13/T14).
+spot-sso = { path = "../spot-sso", features = ["testing"] }
+spot-sync-closure = { path = "../spot-sync-closure" }
+spot-sync-catchup = { path = "../spot-sync-catchup" }
+# Test components for `tests/app_runtime.rs` are written as WebAssembly text.
+wat = "1"
+# tests/scripts.rs: the document engine on the in-memory backend, without a database.
+# tests/committed_markers.rs: the in-memory storage backend of the end-to-end case.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# tests/link_exchange.rs reuses the two-tenant fixture of spot-link-transport's tests.
+spot-iam-access = { path = "../spot-iam-access" }
+spot-data-policy = { path = "../spot-data-policy" }
+# tests/link_external.rs: the signing key of the fixture's signed requests and the `Egress` trait
+# its outbound-policy double implements.
+spot-webhooks = { path = "../spot-webhooks" }
+http-body-util = "0.1"
+spot-journal-verify = { path = "../spot-journal-verify" }
+tempfile = "3"
+# tests/journal_access_host.rs: signs the test journal's manifest.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 spot-node-role-pg = { path = "../../backends/spot-node-role-pg", features = ["testing"] }
 tokio = { version = "1", features = ["net", "io-util"] }
 spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
-spot-site-masker = { path = "../spot-site-masker" }
 spot-activity = { path = "../spot-activity" }
 # tests/process.rs: a direct pool per tenant, the model text parser, and `NodeId` for reading
 # back a Case's node attempts.
@@ -166,6 +483,14 @@ deadpool-postgres = "0.14"
 tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1"] }
 spot-bpm-model = { path = "../spot-bpm-model" }
 spot-dag = { path = "../spot-dag" }
+# tests/update.rs: the in-memory file system, service and hooks, and a local HTTPS server on a
+# generated certificate authority (same crate and version as spot-sync-http's tests).
+spot-updater = { path = "../spot-updater", features = ["testing"] }
+rcgen = "0.14"
+
+# tests/process_conversations.rs: two sites joined by a real handshake (tenant ids, the consent
+# step-up) and the peer-region case.
+spot-tenancy = { path = "../spot-tenancy" }
 
 [lints]
 workspace = true

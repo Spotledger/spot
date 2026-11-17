@@ -83,3 +83,12 @@ explanation_key = "error.docaudit.denial_not_recorded"
 params = []
 remedy = "Check the outbox and the database connection; the count of unrecorded denials is in the audit status."
 since = "0.1.0"
+
+[[entry]]
+code = "docaudit.appender_state"
+class = "none"
+summary = "The lane appender could not read or write its durable state (bookmark, event index, document index or site checkpoint); the drain stopped and nothing was skipped or chained twice."
+explanation_key = "error.docaudit.appender_state"
+params = []
+remedy = "Check the database connection and the appender tables; the appender job retries by itself and chains the same events once the state answers again."
+since = "0.1.0"

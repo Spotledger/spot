@@ -98,7 +98,7 @@ async fn check(w: &World, who: &str) {
     assert_no_leak(&corpus.without(&visible), &outputs);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn report_never_leaks() {
     let w = world().await;
     for name in PRINCIPALS {
@@ -109,13 +109,13 @@ async fn report_never_leaks() {
 /// A principal with the field-level `read` right on `pci` and `hr` but no `report` right (on
 /// the DocType or on the group) receives no value in a report: the runner asks the field
 /// guard for `Channel::Report`, which needs `report`.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn report_read_without_report_right_never_leaks() {
     let w = world().await;
     check(&w, "read_no_report").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_removed_column_is_announced_by_count_never_by_value() {
     let w = world().await;
     let out = w

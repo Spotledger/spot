@@ -218,7 +218,7 @@ impl<'a, B: StorageBackend> Ctx<'a, B> {
         match self.work.as_deref_mut() {
             Some(work) => {
                 let ret = engine.nested(snap, work, inv, req).await?;
-                let principal = engine.acting_principal(inv).await;
+                let principal = engine.principal_or(work.pinned_for(inv), inv).await;
                 engine.mask_result(&principal, ret).await
             }
             None => {
@@ -257,7 +257,11 @@ impl<B: StorageBackend> Repository for Ctx<'_, B> {
                 None => self.engine.read_document(self.snap, doctype, id).await?,
             };
             let doc = found.ok_or_else(not_found)?;
-            let principal = self.engine.authorize(self.inv, Action::Read, &doc).await?;
+            let pinned = self.work.as_deref().and_then(|w| w.pinned_for(self.inv));
+            let principal = self.engine.principal_or(pinned, self.inv).await;
+            self.engine
+                .authorize_as(&principal, Action::Read, &doc)
+                .await?;
             self.engine.readable(&principal, doc).await
         })
     }
@@ -267,7 +271,9 @@ impl<B: StorageBackend> Repository for Ctx<'_, B> {
             // The invocation's read rights compile into a filter on `query` here, before it
             // reaches storage: the caller's query is checked, combined and column-restricted,
             // and a principal that may read no row gets an empty page without a storage read.
-            let Some(plan) = self.engine.query_plan(self.inv, query).await? else {
+            let pinned = self.work.as_deref().and_then(|w| w.pinned_for(self.inv));
+            let principal = self.engine.principal_or(pinned, self.inv).await;
+            let Some(plan) = self.engine.query_plan_as(&principal, query).await? else {
                 return Ok(empty_page(query));
             };
             let mut rows = match self.work.as_deref_mut() {

@@ -237,6 +237,7 @@ async fn a_sign_in_that_hits_unavailable_storage_is_logged_once_without_the_iden
         Arc::new(common::MemEvents::default()),
         rig.clock.clone(),
         hasher,
+        Arc::new(spot_login::AllowAll),
     )
     .expect("the service builds");
 

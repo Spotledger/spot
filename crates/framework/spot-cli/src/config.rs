@@ -31,6 +31,9 @@ pub struct Common {
     /// Which publishers this site trusts for `spot install-app`.
     #[serde(default)]
     pub trust: Trust,
+    /// Backup targets, retention and verification (`spot backup`).
+    #[serde(default)]
+    pub backup: Backup,
 }
 /// The `[trust]` section of `common.toml`: who may sign the apps this site installs.
 ///
@@ -57,12 +60,311 @@ impl Default for Trust {
         }
     }
 }
+/// The `[backup]` table of `common.toml`: where `spot backup` writes and how long it keeps.
+///
+/// Absent means no targets. The checks here are lexical only (see [`Backup::problems`]); the
+/// filesystem checks belong to the run that uses a target.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Backup {
+    /// Named targets, `[backup.targets.<name>]`.
+    pub targets: BTreeMap<String, BackupTarget>,
+    /// How many backups each target keeps.
+    pub retention: BackupRetention,
+    /// `quick` or `full`: how a written backup is checked.
+    pub verify: String,
+    /// The target used when a command names none.
+    pub default_target: Option<String>,
+    /// The directory of the PostgreSQL client tools (`pg_dump`). The first source of the order
+    /// `[backup] pg_bin_dir`, then `SPOT_PG_BIN`, then `PATH`. Absolute, without `..`.
+    pub pg_bin_dir: Option<PathBuf>,
+}
+impl Default for Backup {
+    fn default() -> Self {
+        Self {
+            targets: BTreeMap::new(),
+            retention: BackupRetention::default(),
+            verify: "quick".into(),
+            default_target: None,
+            pg_bin_dir: None,
+        }
+    }
+}
+/// One backup destination.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum BackupTarget {
+    /// A directory on this machine (a mounted USB drive included).
+    Folder {
+        /// Absolute path of the directory.
+        path: PathBuf,
+    },
+    /// A removable drive (a USB stick or disk) named by label or UUID, never by drive letter or
+    /// path. The packages go to `subdir` (default `spot-backups`) on the mounted volume; a drive
+    /// that is not plugged in is `backup.target_absent` and nothing is written.
+    Removable {
+        /// The volume label or UUID (`uuid:<id>` or `label:<name>`).
+        volume: String,
+        /// The folder on the volume, relative, letters, digits, `-`, `_`, `.`.
+        #[serde(default)]
+        subdir: Option<String>,
+    },
+    /// An object store. Parsed and validated here; WP-PRD-04.T5 runs it, through a connector the
+    /// host supplies (none is configured on this host yet).
+    Cloud {
+        /// The store's `https://` endpoint, without credentials.
+        endpoint: String,
+        /// An identifier of the access key, never key material (the secret comes through the
+        /// secrets path).
+        key_id: String,
+        /// The secret reference (`secret:<name>`) of the access key's secret, never the secret.
+        #[serde(default)]
+        credential_ref: Option<String>,
+        /// A folder-like prefix inside the bucket.
+        #[serde(default)]
+        prefix: Option<String>,
+        /// Upload pacing, kilobits per second (at least 1).
+        #[serde(default)]
+        max_kbps: Option<u32>,
+        /// The most bytes the target may hold.
+        #[serde(default)]
+        quota_bytes: Option<u64>,
+    },
+}
+/// The retention numbers (the grandfather-father-son window of `spot_backup::RetentionPolicy`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BackupRetention {
+    /// Daily backups to keep.
+    pub keep_daily: u32,
+    /// Weekly backups to keep.
+    pub keep_weekly: u32,
+    /// Monthly backups to keep.
+    pub keep_monthly: u32,
+    /// The newest backups always kept, at least 1.
+    pub keep_last: u32,
+}
+impl Default for BackupRetention {
+    fn default() -> Self {
+        // The library's `RetentionPolicy::default()` values (7, 4, 12); the library has no
+        // `keep_last` (it always keeps the newest verified backup), so 1 is the floor.
+        Self {
+            keep_daily: 7,
+            keep_weekly: 4,
+            keep_monthly: 12,
+            keep_last: 1,
+        }
+    }
+}
+/// Why [`Backup::target`] found no target.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BackupConfigError {
+    /// `[backup]` configures no target.
+    NoTargets,
+    /// The named target (or `default_target`) is not configured.
+    Unknown(String),
+    /// Several targets exist, none was named and there is no `default_target`.
+    Ambiguous,
+}
+impl std::fmt::Display for BackupConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoTargets => f.write_str("backup: no targets are configured"),
+            Self::Unknown(name) => write!(f, "backup: unknown target {name:?}"),
+            Self::Ambiguous => {
+                f.write_str("backup: several targets exist; name one or set backup.default_target")
+            }
+        }
+    }
+}
+impl std::error::Error for BackupConfigError {}
+const BACKUP_MAX_TARGETS: usize = 32;
+const BACKUP_MAX_COUNT: u32 = 10_000;
+impl Backup {
+    /// The named target, else `default_target`, else the only target.
+    pub fn target(
+        &self,
+        name: Option<&str>,
+    ) -> std::result::Result<(&str, &BackupTarget), BackupConfigError> {
+        if self.targets.is_empty() {
+            return Err(BackupConfigError::NoTargets);
+        }
+        let wanted = name.or(self.default_target.as_deref());
+        if let Some(wanted) = wanted {
+            return self
+                .targets
+                .get_key_value(wanted)
+                .map(|(key, target)| (key.as_str(), target))
+                .ok_or_else(|| BackupConfigError::Unknown(wanted.to_owned()));
+        }
+        let mut all = self.targets.iter();
+        match (all.next(), all.next()) {
+            (Some((key, target)), None) => Ok((key.as_str(), target)),
+            _ => Err(BackupConfigError::Ambiguous),
+        }
+    }
+    /// Every lexical problem, each naming the table path and the rule and never a value
+    /// (an endpoint may carry a secret).
+    pub fn problems(&self) -> Vec<String> {
+        let mut problems = Vec::new();
+        if self.targets.len() > BACKUP_MAX_TARGETS {
+            problems.push(format!(
+                "backup.targets: at most {BACKUP_MAX_TARGETS} targets"
+            ));
+        }
+        if self.verify != "quick" && self.verify != "full" {
+            problems.push("backup.verify: must be quick or full".into());
+        }
+        let r = &self.retention;
+        for (key, count) in [
+            ("keep_daily", r.keep_daily),
+            ("keep_weekly", r.keep_weekly),
+            ("keep_monthly", r.keep_monthly),
+            ("keep_last", r.keep_last),
+        ] {
+            if count > BACKUP_MAX_COUNT {
+                problems.push(format!(
+                    "backup.retention.{key}: must be at most {BACKUP_MAX_COUNT}"
+                ));
+            }
+        }
+        if r.keep_last == 0 {
+            problems.push("backup.retention.keep_last: must be at least 1".into());
+        }
+        if let Some(default) = &self.default_target
+            && !self.targets.contains_key(default)
+        {
+            problems.push("backup.default_target: names no configured target".into());
+        }
+        if let Some(dir) = &self.pg_bin_dir {
+            if dir.as_os_str().is_empty() {
+                problems.push("backup.pg_bin_dir: must not be empty".into());
+            } else if dir.as_os_str().as_encoded_bytes().contains(&0) {
+                problems.push("backup.pg_bin_dir: must not contain a NUL".into());
+            } else if dir
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                problems.push("backup.pg_bin_dir: must not contain a '..' component".into());
+            } else if !dir.is_absolute() {
+                problems.push("backup.pg_bin_dir: must be an absolute path".into());
+            }
+        }
+        let mut paths: BTreeMap<PathBuf, &str> = BTreeMap::new();
+        for (name, target) in &self.targets {
+            let valid_name = name.len() <= 32
+                && name.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+                && name.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
+                });
+            if !valid_name {
+                problems.push(format!(
+                    "backup.targets.{name:?}: name must match [a-z][a-z0-9_-]{{0,31}}"
+                ));
+                continue;
+            }
+            let at = format!("backup.targets.{name}");
+            match target {
+                BackupTarget::Folder { path } => {
+                    if path.as_os_str().is_empty() {
+                        problems.push(format!("{at}.path: must not be empty"));
+                    } else if path
+                        .components()
+                        .any(|c| matches!(c, std::path::Component::ParentDir))
+                    {
+                        problems.push(format!("{at}.path: must not contain a '..' component"));
+                    } else if !path.is_absolute() {
+                        problems.push(format!("{at}.path: must be an absolute path"));
+                    } else {
+                        let normal: PathBuf = path
+                            .components()
+                            .filter(|c| !matches!(c, std::path::Component::CurDir))
+                            .collect();
+                        if let Some(first) = paths.insert(normal, name) {
+                            problems.push(format!(
+                                "{at}.path: names the same path as backup.targets.{first}"
+                            ));
+                        }
+                    }
+                }
+                BackupTarget::Cloud {
+                    endpoint,
+                    key_id,
+                    credential_ref,
+                    prefix,
+                    max_kbps,
+                    quota_bytes,
+                } => {
+                    problems.extend(endpoint_problem(endpoint, &at));
+                    if key_id.is_empty() || key_id.len() > 128 {
+                        problems.push(format!("{at}.key_id: must be 1 to 128 bytes"));
+                    }
+                    // The rest of the rules live with the adapter's own spec. A configuration
+                    // without a credential reference is still valid here (older files); using it
+                    // for a run is what needs one.
+                    let spec = crate::services::backup_targets::TargetSpec::Cloud {
+                        endpoint: endpoint.clone(),
+                        key_id: key_id.clone(),
+                        credential_ref: credential_ref
+                            .clone()
+                            .unwrap_or_else(|| "secret:unset".to_owned()),
+                        prefix: prefix.clone(),
+                        max_kbps: *max_kbps,
+                        quota_bytes: *quota_bytes,
+                    };
+                    for problem in spec.problems() {
+                        if ["credential_ref", "prefix", "max_kbps"]
+                            .iter()
+                            .any(|key| problem.starts_with(key))
+                        {
+                            problems.push(format!("{at}.{problem}"));
+                        }
+                    }
+                }
+                BackupTarget::Removable { volume, subdir } => {
+                    let spec = crate::services::backup_targets::TargetSpec::Removable {
+                        volume: volume.clone(),
+                        subdir: subdir.clone(),
+                    };
+                    for problem in spec.problems() {
+                        problems.push(format!("{at}.{problem}"));
+                    }
+                }
+            }
+        }
+        problems
+    }
+}
+/// The rule an endpoint breaks, without echoing it.
+fn endpoint_problem(endpoint: &str, at: &str) -> Option<String> {
+    let Some(rest) = endpoint.strip_prefix("https://") else {
+        return Some(format!("{at}.endpoint: must be an https:// URL"));
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.is_empty()
+        || endpoint
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control())
+    {
+        Some(format!(
+            "{at}.endpoint: must be an https:// URL with a host"
+        ))
+    } else if authority.contains('@') {
+        Some(format!("{at}.endpoint: must not contain userinfo"))
+    } else if endpoint.contains('?') || endpoint.contains('#') {
+        Some(format!(
+            "{at}.endpoint: must not contain a query or fragment"
+        ))
+    } else {
+        None
+    }
+}
 /// The identity audit trail.
 ///
 /// A site with a PostgreSQL database writes its identity events to the hash-chained audit store;
 /// these options only say what is written *beside* the chain and how loudly a broken chain is
 /// reported. The defaults keep the file log off and readiness warning-only.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Audit {
     /// Also append every identity record to `sites/<site>/identity-audit.log` (mode 0600, size
@@ -71,6 +373,30 @@ pub struct Audit {
     pub identity_file_mirror: bool,
     /// Make `/api/health/ready` fail (not only warn) while the identity chain does not verify.
     pub identity_chain_strict: bool,
+    /// The document audit's chain lanes (WP-PRD-01.T22): how many independent chains the lane
+    /// appenders write (1 to 64). **Fixed for the life of the site**: changing it needs a new
+    /// lane epoch (`doc_lane_epoch`) and a migration of the lane heads, which this release does not
+    /// provide, so the host refuses to start when the stored checkpoint disagrees.
+    pub doc_lanes: u32,
+    /// The lane epoch: bumped only together with a lane count change.
+    pub doc_lane_epoch: u32,
+    /// How often, in milliseconds, one chain-append job per lane is requested (100 to 60000).
+    pub doc_append_poll_ms: u64,
+    /// How many outbox events one append job drains at most (1 to 5000).
+    pub doc_append_batch: u32,
+}
+
+impl Default for Audit {
+    fn default() -> Self {
+        Self {
+            identity_file_mirror: false,
+            identity_chain_strict: false,
+            doc_lanes: 4,
+            doc_lane_epoch: 1,
+            doc_append_poll_ms: 1_000,
+            doc_append_batch: 200,
+        }
+    }
 }
 /// Per-service runtime settings.
 ///
@@ -185,7 +511,9 @@ pub struct Jobs {
 impl Default for Jobs {
     fn default() -> Self {
         Self {
-            queues: vec!["default".into()],
+            // The queues a schedule may name (`default`, `short`, `long`): a worker that claims
+            // only `default` would leave every `short` and `long` scheduled job pending.
+            queues: vec!["default".into(), "short".into(), "long".into()],
             intake_poll_ms: 250,
             grace_ms: 10_000,
             store: "postgres".into(),
@@ -226,6 +554,11 @@ pub struct Mail {
     /// site is refused unless the job store is PostgreSQL) or `memory` (this process only: a
     /// restart can send an accepted message again).
     pub sent_log: String,
+    /// Where the bounces of mail that could not be delivered are kept: `memory` (the default:
+    /// this process only, a restart forgets them) or `postgres` (the site's database,
+    /// `spot_mail_bounce_log`, unique on job, recipient and class, so a restart or a second node
+    /// neither loses a bounce nor writes it twice; needs `services.jobs.store = "postgres"`).
+    pub bounce_log: String,
     /// The SMTP account, required when `sink = "smtp"`. The password is a secret and is
     /// never included in an error, a log line or the readiness report.
     pub smtp: Option<Smtp>,
@@ -249,6 +582,12 @@ impl Mail {
         self.effective_sent_log(job_store) == "postgres"
     }
 
+    /// Whether the bounce log lives in PostgreSQL: only when the operator chose `postgres`.
+    #[must_use]
+    pub fn bounce_log_in_postgres(&self, _job_store: &str) -> bool {
+        self.bounce_log == "postgres"
+    }
+
     /// One line saying which sent log is in use and why, for the start-up log.
     #[must_use]
     pub fn sent_log_description(&self, job_store: &str) -> String {
@@ -267,6 +606,7 @@ impl Default for Mail {
             enabled: true,
             sink: "memory".into(),
             sent_log: "auto".into(),
+            bounce_log: "memory".into(),
             smtp: None,
         }
     }
@@ -406,6 +746,14 @@ impl Services {
         if !matches!(self.mail.sent_log.as_str(), "auto" | "memory" | "postgres") {
             errors.push("services.mail.sent_log must be auto, memory or postgres".into());
         }
+        if !matches!(self.mail.bounce_log.as_str(), "memory" | "postgres") {
+            errors.push("services.mail.bounce_log must be memory or postgres".into());
+        }
+        if self.mail.bounce_log == "postgres" && self.jobs.store != "postgres" {
+            errors.push(
+                "services.mail.bounce_log = postgres needs services.jobs.store = postgres".into(),
+            );
+        }
         if self.mail.sent_log == "postgres" && self.jobs.store != "postgres" {
             errors.push(
                 "services.mail.sent_log = postgres needs services.jobs.store = postgres".into(),
@@ -498,6 +846,22 @@ pub struct Postgres {
     /// Maximum per-site pooled connections.
     #[serde(default = "pool_size")]
     pub pool_max_size: usize,
+    /// How long a request waits for a pooled connection before it is answered as unavailable, in
+    /// milliseconds (100 to 60,000). Absent: the driver's default of five seconds.
+    #[serde(default)]
+    pub pool_wait_ms: Option<u64>,
+}
+
+impl Postgres {
+    /// `pg` with this section's pool settings applied.
+    #[must_use]
+    pub fn apply_pool(&self, mut pg: spot_postgres::PgConfig) -> spot_postgres::PgConfig {
+        pg.pool_max_size = self.pool_max_size;
+        if let Some(ms) = self.pool_wait_ms {
+            pg.pool_wait_timeout = std::time::Duration::from_millis(ms);
+        }
+        pg
+    }
 }
 fn pool_size() -> usize {
     16
@@ -829,6 +1193,7 @@ pub fn load(root: &Path, dev: bool) -> Result<Loaded> {
 pub fn load_collect(root: &Path, dev: bool) -> Result<(Loaded, Vec<String>)> {
     let mut errors = Vec::new();
     let common: Common = parse(&root.join("common.toml"), "common", &mut errors)?;
+    errors.extend(common.backup.problems());
     let allowed = [
         "bind",
         "max_body_bytes",
@@ -836,6 +1201,9 @@ pub fn load_collect(root: &Path, dev: bool) -> Result<(Loaded, Vec<String>)> {
         "shutdown_grace",
         "trusted_proxies",
         "fallback_site",
+        "listeners",
+        "auth_rate_limit",
+        "auth_rate_window_seconds",
     ];
     if let Some(table) = common.server.as_table() {
         for key in table.keys() {
@@ -881,6 +1249,13 @@ pub fn load_collect(root: &Path, dev: bool) -> Result<(Loaded, Vec<String>)> {
             PgConfig::new("", 0, "", "", "")
         }
     };
+    if common
+        .postgres
+        .pool_wait_ms
+        .is_some_and(|ms| !(100..=60_000).contains(&ms))
+    {
+        errors.push("postgres.pool_wait_ms must be 100 to 60000".into());
+    }
     if common.postgres.pool_max_size == 0 {
         errors.push("postgres.pool_max_size must be positive".into());
     }

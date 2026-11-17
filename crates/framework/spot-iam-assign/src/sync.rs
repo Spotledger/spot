@@ -136,9 +136,10 @@ pub fn plan_rules_guarded(
 /// know are ignored. New assignments take their id from `ids`.
 ///
 /// **Fail-open for portal users.** This variant does not know who is a portal user, so a
-/// group can give one a staff role (ADR-083 Barrier 3). Use [`plan_idp_guarded`]. It is meant
-/// to carry `#[deprecated]` like [`plan_rules`]; the attribute waits for a follow-up because
-/// `spot-iam-scim`'s `request.rs` still imports it and is outside this task's owned paths.
+/// group can give one a staff role (ADR-083 Barrier 3). Use [`plan_idp_guarded`].
+#[deprecated(
+    note = "use plan_idp_guarded: plan_idp does not apply the portal rule (ADR-083 Barrier 3)"
+)]
 pub fn plan_idp(
     mapping: &GroupRoleMap,
     ids: &mut dyn IdSource,

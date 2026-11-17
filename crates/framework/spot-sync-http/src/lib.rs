@@ -67,6 +67,7 @@
 
 pub mod client;
 pub mod error;
+pub mod guard;
 pub mod hub;
 pub mod identity;
 pub mod resilience;

@@ -119,8 +119,8 @@ fn source_ids_are_a_site_with_an_optional_partition() {
 #[test]
 fn command_ids_are_visible_ascii() {
     assert!(CommandId::new("a").is_ok());
-    assert!(CommandId::new(&"x".repeat(128)).is_ok());
-    for bad in ["", "has space", "tab\t", "é", &"x".repeat(129)] {
+    assert!(CommandId::new(&"x".repeat(320)).is_ok());
+    for bad in ["", "has space", "tab\t", "é", &"x".repeat(321)] {
         assert!(CommandId::new(bad).is_err(), "{bad:?}");
     }
 }

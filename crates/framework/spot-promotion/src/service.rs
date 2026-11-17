@@ -260,7 +260,7 @@ impl PromotionService {
             actor,
             format!("planned {changes} change(s) against {env_name}"),
         )?;
-        self.store.save(promotion.clone())?;
+        self.persist(&mut promotion)?;
 
         let run = promotion.run_id()?;
         self.audit
@@ -296,7 +296,7 @@ impl PromotionService {
                     },
                 )
                 .await?;
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
         }
         Ok(promotion)
     }
@@ -398,7 +398,7 @@ impl PromotionService {
                 &approval.approver,
                 format!("rejected by {}", evaluation.rejected_by.join(", ")),
             )?;
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
             self.finish(promotion.id(), Outcome::Refused, approval.at)
                 .await?;
             return Ok(promotion);
@@ -417,7 +417,7 @@ impl PromotionService {
                     }
                 ),
             )?;
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
         }
         Ok(promotion)
     }
@@ -444,6 +444,7 @@ impl PromotionService {
         self.require(&promotion, &[PromotionState::Approved])?;
         let plan = promotion.check_plan(bundle)?.clone();
         Self::check_environment(&promotion, target)?;
+        let plan = self.live_plan(plan, bundle, target)?;
         let ticket = self.authorise(&promotion, at)?;
         let report = runner.rehearse(&RehearsalRequest {
             plan: &plan,
@@ -480,7 +481,7 @@ impl PromotionService {
                 actor,
                 format!("rehearsal {verdict} with {findings} finding(s)"),
             )?;
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
             return Ok(promotion);
         }
         self.fail(
@@ -564,7 +565,7 @@ impl PromotionService {
         } else {
             let pre_image = self.applier.capture(target)?;
             promotion.set_pre_image(pre_image);
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
             match self.applier.apply(&current, target) {
                 Ok(evidence) => evidence,
                 Err(error) => {
@@ -593,7 +594,7 @@ impl PromotionService {
             actor,
             format!("applied {} change(s)", evidence.steps),
         )?;
-        self.store.save(promotion.clone())?;
+        self.persist(&mut promotion)?;
         let json = serde_json::to_vec(&evidence).unwrap_or_default();
         self.audit
             .applied(
@@ -634,7 +635,17 @@ impl PromotionService {
 
         Self::check_environment(&promotion, target)?;
 
-        let evidence = self.applier.verify(plan.apply_plan(), bundle, target)?;
+        // A restored plan holds no typed changes; verification re-plans against the applied
+        // target anyway, so that re-plan is what the applier receives.
+        let replanned;
+        let apply_plan = match plan.apply_plan() {
+            Some(apply_plan) => apply_plan,
+            None => {
+                replanned = self.applier.plan(bundle, target)?;
+                &replanned
+            }
+        };
+        let evidence = self.applier.verify(apply_plan, bundle, target)?;
         if evidence.passed {
             promotion.advance(
                 PromotionState::Verified,
@@ -642,7 +653,7 @@ impl PromotionService {
                 actor,
                 format!("verified {} change(s)", plan.apply_changes()),
             )?;
-            self.store.save(promotion.clone())?;
+            self.persist(&mut promotion)?;
             self.finish(promotion.id(), Outcome::Verified, at).await?;
             return Ok(promotion);
         }
@@ -718,7 +729,7 @@ impl PromotionService {
             return Ok(promotion);
         }
         let run = promotion.next_run_id()?;
-        self.store.save(promotion.clone())?;
+        self.persist(&mut promotion)?;
         if let Some(plan) = promotion.plan().cloned() {
             self.audit
                 .open(OpenRun {
@@ -734,6 +745,29 @@ impl PromotionService {
         Ok(promotion)
     }
 
+    /// Saves the promotion and records its new store revision on the value in hand, so the
+    /// next save of the same value is made against the revision the store now holds.
+    fn persist(&self, promotion: &mut Promotion) -> Result<(), PromotionError> {
+        self.store.save(promotion.clone())?;
+        promotion.mark_saved();
+        Ok(())
+    }
+
+    /// A plan with its live apply plan: a plan restored from a snapshot re-derives it against
+    /// the target and refuses it when its hash is not the approved one.
+    fn live_plan(
+        &self,
+        plan: PromotionPlan,
+        bundle: &Bundle,
+        target: &dyn TargetSite,
+    ) -> Result<PromotionPlan, PromotionError> {
+        if plan.apply_plan().is_some() {
+            return Ok(plan);
+        }
+        let current = self.applier.plan(bundle, target)?;
+        plan.with_apply_plan(current)
+    }
+
     /// Marks the promotion failed, journals the evidence and closes the audit run.
     async fn fail(
         &self,
@@ -745,7 +779,7 @@ impl PromotionService {
         let message = evidence.message.clone();
         promotion.set_failure(evidence);
         promotion.advance(PromotionState::Failed, at, actor, message)?;
-        self.store.save(promotion.clone())?;
+        self.persist(promotion)?;
         self.finish(promotion.id(), Outcome::Failed, at).await
     }
 

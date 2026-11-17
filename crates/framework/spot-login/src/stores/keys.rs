@@ -374,6 +374,20 @@ impl<B: StorageBackend> KeyStore for StorageKeyStore<B> {
     }
 }
 
+/// Whether the key's scope rows name `scim`: such a key opens the provisioning endpoint only.
+fn is_scim_only(data: &DocumentData) -> bool {
+    let Ok(scopes) = Name::new("scopes") else {
+        return false;
+    };
+    data.children.get(&scopes).is_some_and(|rows| {
+        rows.iter().any(|row| {
+            row.fields.iter().any(|(name, value)| {
+                name.as_str() == "scope" && text(value).as_deref() == Some("scim")
+            })
+        })
+    })
+}
+
 /// The domain record of one stored `api_key` row.
 fn key_of(id: RecordId, data: &DocumentData, digest: TokenDigest) -> Result<KeyRecord, LoginError> {
     let text = |field: &str| {
@@ -409,5 +423,6 @@ fn key_of(id: RecordId, data: &DocumentData, digest: TokenDigest) -> Result<KeyR
         owner,
         state,
         expires_at,
+        scim_only: is_scim_only(data),
     })
 }

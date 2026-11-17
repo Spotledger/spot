@@ -1,0 +1,91 @@
+# restore site restore codes (the spot restore command). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "restore.busy"
+class = "none"
+summary = "Another restore of this site is running."
+explanation_key = "error.restore.busy"
+params = []
+remedy = "Wait for it to finish."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.confirm_invalid"
+class = "none"
+summary = "The confirmation text does not match."
+explanation_key = "error.restore.confirm_invalid"
+params = []
+remedy = "Type the confirmation exactly as shown."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.failed"
+class = "none"
+summary = "The restore failed."
+explanation_key = "error.restore.failed"
+params = []
+remedy = "Read the restore report; the site may need to be restored again."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.schema_older"
+class = "none"
+summary = "The package's schema is older than the site's schema."
+explanation_key = "error.restore.schema_older"
+params = []
+remedy = "Pass --migrate-forward to restore it and migrate it forward."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.schema_unverified"
+class = "none"
+summary = "The package's schema could not be verified."
+explanation_key = "error.restore.schema_unverified"
+params = []
+remedy = "Pass --accept-unverified-schema to restore it anyway."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.site_busy"
+class = "none"
+summary = "The site is busy, so it cannot be restored now."
+explanation_key = "error.restore.site_busy"
+params = []
+remedy = "Stop or wait for the site activity and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.target_exists"
+class = "none"
+summary = "The target database already exists."
+explanation_key = "error.restore.target_exists"
+params = []
+remedy = "Choose a new site name or remove the target first."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.target_missing"
+class = "none"
+summary = "The site's database does not exist."
+explanation_key = "error.restore.target_missing"
+params = []
+remedy = "Use --as-new-site."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.too_new"
+class = "none"
+summary = "The package's schema is newer than this platform version."
+explanation_key = "error.restore.too_new"
+params = []
+remedy = "Upgrade the platform, then restore."
+since = "0.1.0"
+
+[[entry]]
+code = "restore.user"
+class = "none"
+summary = "The restore was started by the wrong operating-system user."
+explanation_key = "error.restore.user"
+params = []
+remedy = "Run the restore as the service user."
+since = "0.1.0"

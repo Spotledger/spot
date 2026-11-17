@@ -33,8 +33,10 @@
 //! generation or beyond the head fails with `ResyncRequired`.
 
 mod admin;
+mod adopt;
 mod envelope;
 mod publish;
+pub(crate) use publish::PublishGate;
 mod registry_gate;
 mod sql;
 
@@ -50,6 +52,7 @@ use crate::schema::names::{META_TABLE, quote};
 use crate::{PgBackend, PgTransaction};
 
 pub use self::admin::{Cleanup, cleanup, retention, set_retention, start_new_generation};
+pub use self::adopt::{GENERATION_NOT_NEWER, WOULD_REGRESS, adopt_position, open_generation};
 pub use self::envelope::envelopes;
 
 /// Names `install` creates in the database; an entity cannot use them.
@@ -160,10 +163,11 @@ pub(crate) async fn enqueue(tx: &mut PgTransaction, event: &OutboxEvent) -> Stor
     let subject_id = Uuid::from_bytes(*event.subject.id.as_bytes());
     let topic = event.topic.as_str();
     let entity = event.subject.entity.as_str();
+    let statement = tx.cached(sql::ENQUEUE).await?;
     let client = tx.client()?;
     let result = client
         .execute(
-            sql::ENQUEUE,
+            &statement,
             &[
                 &id,
                 &topic,

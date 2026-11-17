@@ -16,7 +16,11 @@ spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["
 spot-auth = { path = "../../../crates/framework/spot-auth" }
 # The JournalStore trait FlakyStore wraps and the FolderStore layout tamper reads.
 spot-journal-store = { path = "../../../crates/framework/spot-journal-store" }
+# `StorageBackend::prepare`, for the scratch database the quarantine cases open.
+spot-storage-contract = { path = "../../../contracts/storage" }
 
+# The hub listener needs mutual TLS to start: `write_hub_tls` makes a throwaway CA and leaf.
+rcgen = "0.14"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "fs"] }
 # Only to name the type `spot_postgres::testing::TestDb::raw_client` returns, for the read-only

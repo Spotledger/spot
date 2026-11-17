@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::filter::Outgoing;
 use crate::model::{Major, NodeReport, Topic};
+use crate::persist::{HoldSetRepr, holds_entries, pending_entries};
 
 /// A record by identity and version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -115,23 +116,24 @@ pub fn release_holds(holds: &[Hold], node: &NodeReport) -> Release {
 
 /// The holds of one node, at most one per record identity: a later version supersedes an earlier
 /// undecodable one (full images make this safe, ADR-066).
+///
+/// Serialised as sequences of `(entity, id, value)` entries sorted by key (not as maps with tuple
+/// keys), so JSON and binary formats both carry it; loading refuses a duplicate key, an
+/// out-of-order queue and a queue over its limit (`crate::persist`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HoldSetRepr")]
 pub struct HoldSet {
+    #[serde(with = "holds_entries")]
     holds: BTreeMap<(String, String), Hold>,
     /// Hub-side queue per record key, ascending by position (see `crate::filter`).
-    #[serde(default)]
+    #[serde(with = "pending_entries")]
     pending: BTreeMap<(String, String), Vec<Pending>>,
     /// Most entries the hub-side queue may hold for this node.
-    #[serde(default = "default_limit")]
     limit: usize,
 }
 
 /// Default size limit of the hub-side queue per node (ADR-066 open-question starting value).
 pub const DEFAULT_HOLD_LIMIT: usize = 100_000;
-
-fn default_limit() -> usize {
-    DEFAULT_HOLD_LIMIT
-}
 
 impl Default for HoldSet {
     fn default() -> Self {
@@ -226,6 +228,19 @@ impl HoldSet {
         let mut all: Vec<&Pending> = self.pending.values().flatten().collect();
         all.sort_by_key(|p| p.entry.position);
         all.into_iter().map(|p| p.hold.clone()).collect()
+    }
+
+    /// Assemble a set from validated parts (`crate::persist`).
+    pub(crate) fn from_parts(
+        holds: BTreeMap<(String, String), Hold>,
+        pending: BTreeMap<(String, String), Vec<Pending>>,
+        limit: usize,
+    ) -> Self {
+        Self {
+            holds,
+            pending,
+            limit,
+        }
     }
 
     pub(crate) fn queue(&self, key: &(String, String)) -> Option<&Vec<Pending>> {

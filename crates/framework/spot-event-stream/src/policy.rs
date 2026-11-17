@@ -67,6 +67,9 @@ pub struct Batch {
     /// Events skipped by the permission filter (and by a filter that could not be evaluated).
     /// No subject is named.
     pub skipped: u64,
+    /// Events dropped because their topic is a platform topic with no registry entry, so no
+    /// class could be resolved (never delivered by guess). No topic is named.
+    pub unclassified: u64,
     /// The pull returned nothing because the in-flight window is full.
     pub window_full: bool,
     /// The pull returned nothing because the partition is parked.
@@ -81,6 +84,7 @@ impl Batch {
             events: Vec::new(),
             next_position: None,
             skipped: 0,
+            unclassified: 0,
             window_full: false,
             parked: false,
         }
@@ -159,7 +163,8 @@ pub trait FeedHead: Send + Sync {
 /// Whether an owner holds the explicit stream right for a reserved topic class.
 pub trait StreamRights: Send + Sync {
     /// Whether `owner` may stream the class named by a reserved prefix (`doc_`, `sys_`,
-    /// `identity_`).
+    /// `identity_`) or the class a reserved event class lives in (`state` asks for `doc_`, `audit` for `sys_`). The engine asks again on every
+    /// pull for the event classes, so a revoked right stops delivery at the next pull.
     fn may_stream_class(&self, owner: &str, class: &str) -> bool;
 }
 

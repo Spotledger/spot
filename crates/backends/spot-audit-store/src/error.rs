@@ -24,6 +24,9 @@ pub const EVENT_CONFLICT: &str = "auditstore.event_conflict";
 /// has not run. A host refuses to serve the site on it.
 pub const APPENDER_TABLES_MISSING: &str = "auditstore.appender_tables_missing";
 
+/// A denial event was handed to a writer that belongs to another site; nothing was written.
+pub const SITE_MISMATCH: &str = "auditstore.site_mismatch";
+
 /// An error with a stable code. Messages never carry a payload value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {

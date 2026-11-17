@@ -251,3 +251,88 @@ fn install_stays_lenient_about_an_unknown_effect_class() {
     assert_eq!(effects.len(), 1, "the declared effect is visible");
     assert_eq!(effects[0].effects.len(), 1);
 }
+
+#[test]
+fn doctypes_are_sorted_without_duplicates_and_empty_for_an_empty_registry() {
+    let mut registry = ControllerRegistry::new();
+    assert!(registry.doctypes().is_empty());
+    assert!(registry.set().doctypes().is_empty());
+
+    registry
+        .register(
+            APP_B,
+            Arc::new(Probe::new("note")),
+            ControllerSource::Native,
+        )
+        .register(
+            APP_A,
+            Arc::new(Probe::new("task")),
+            ControllerSource::Native,
+        )
+        .register(
+            APP_A,
+            Arc::new(Probe::new("note")),
+            ControllerSource::Native,
+        )
+        // A second controller of the same (app, DocType) is listed once.
+        .register(APP_A, Arc::new(Probe::new("note")), ControllerSource::Wasm);
+    let expected = vec![
+        (APP_A.to_owned(), "note".to_owned()),
+        (APP_A.to_owned(), "task".to_owned()),
+        (APP_B.to_owned(), "note".to_owned()),
+    ];
+    assert_eq!(registry.doctypes(), expected);
+    assert_eq!(registry.set().doctypes(), expected);
+}
+
+#[test]
+fn doctypes_follow_register_and_unregister() {
+    let mut registry = ControllerRegistry::new();
+    registry.register(
+        APP_A,
+        Arc::new(Probe::new("note")),
+        ControllerSource::Native,
+    );
+    // A DocType registered for app A is not reported for app B.
+    assert_eq!(
+        registry.doctypes(),
+        vec![(APP_A.to_owned(), "note".to_owned())]
+    );
+    assert!(!registry.doctypes().iter().any(|(app, _)| app == APP_B));
+
+    registry.register(
+        APP_B,
+        Arc::new(Probe::new("task")),
+        ControllerSource::Native,
+    );
+    assert_eq!(registry.doctypes().len(), 2);
+
+    // Removing the last controller of a DocType removes the DocType from the list.
+    assert!(registry.unregister_app(APP_A));
+    assert_eq!(
+        registry.doctypes(),
+        vec![(APP_B.to_owned(), "task".to_owned())]
+    );
+    assert!(registry.unregister_app(APP_B));
+    assert!(registry.doctypes().is_empty());
+}
+
+#[test]
+fn an_earlier_set_keeps_its_doctypes_and_two_registries_share_no_list() {
+    let mut one = ControllerRegistry::new();
+    let two = ControllerRegistry::new();
+    one.register(
+        APP_A,
+        Arc::new(Probe::new("note")),
+        ControllerSource::Native,
+    );
+    let before = one.set();
+    one.register(
+        APP_A,
+        Arc::new(Probe::new("task")),
+        ControllerSource::Native,
+    );
+    assert_eq!(before.doctypes().len(), 1);
+    assert_eq!(one.doctypes().len(), 2);
+    assert!(two.doctypes().is_empty());
+}

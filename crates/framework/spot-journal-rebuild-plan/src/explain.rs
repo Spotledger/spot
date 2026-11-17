@@ -52,9 +52,15 @@ pub fn explain(plan: &RebuildPlan) -> Vec<ExplainLine> {
                 ("position", position.to_string()),
             ],
         )),
-        Base::Backup { position } => lines.push(ExplainLine::new(
+        Base::Backup {
+            position,
+            generation,
+        } => lines.push(ExplainLine::new(
             "journal-rebuild-base-backup",
-            vec![("position", position.to_string())],
+            vec![
+                ("generation", generation.to_string()),
+                ("position", position.to_string()),
+            ],
         )),
         Base::Empty => lines.push(ExplainLine::new("journal-rebuild-base-empty", Vec::new())),
     }

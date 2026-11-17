@@ -16,7 +16,7 @@ impl Fixture for StubFixture {
 }
 
 /// The suite has at least the 20 cases the task brief pins; the stub host passes all of them.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stub_host_passes_the_l3_document_suite() {
     let contract_report = run_all(&StubFixture).await;
     assert!(

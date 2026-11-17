@@ -14,19 +14,17 @@ spot-audit-chain = { path = "../../framework/spot-audit-chain" }
 spot-agent-tiers = { path = "../../framework/spot-agent-tiers" }
 # The job handler result the verification body returns.
 spot-jobs = { path = "../../framework/spot-jobs" }
-# `AppenderStore`, the durable state of the lane appender this crate implements (WP-AI-11.T5), and
+# `AppenderStore`, the async durable state of the lane appender this crate implements (WP-AI-11.T5), and
 # `SiteCheckpoint`, the signed value it stores.
 spot-doc-audit = { path = "../../framework/spot-doc-audit" }
-# The one shared blocking bridge the synchronous `AppenderStore` reaches the database through
-# (ADR-082 addendum 1, class C).
-spot-pg-bridge = { path = "../spot-pg-bridge" }
 # `FeedPosition`, the outbox bookmark the appender stores.
 spot-storage-contract = { path = "../../../contracts/storage" }
 # The pool the caller builds; this store owns its SQL objects and the `spot_audit_app` role.
 deadpool-postgres = "0.14"
 tokio-postgres = { version = "0.7", features = ["with-time-0_3"] }
-# A bounded channel between the synchronous decision sink and the drain.
-tokio = { version = "1", default-features = false, features = ["sync"] }
+# A bounded channel between the synchronous decision sink and the drain; `time` for the deadline
+# and retry pause of the appender state.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 # Records and checkpoints are persisted as JSON; the canonical hash is recomputed from them.
 serde_json = "1"
 

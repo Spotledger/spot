@@ -18,6 +18,7 @@
 //! | TOTP secret and its last accepted step | `user` | `totp_secret` | secret |
 //! | API key digest | `api_key` | `digest` | lookup secret (blind index) |
 //! | one-time initial secret | `api_key` | `digest` | lookup secret (blind index) |
+//! | recovery-code digest | `recovery_code` | `digest` | lookup secret (blind index) |
 //!
 //! Everything else (a session's window, a user's state, an attempt's result) is an ordinary
 //! column read and written as the system principal through the storage contract, exactly as
@@ -32,15 +33,17 @@
 //! `ReadCommitted` for a write, read-only for a read. A `touch` inside the granularity window
 //! never opens a write.
 //!
-//! # Gaps in the platform app this crate cannot fix
+//! # Gaps closed by WP-PLT-02.T10
 //!
-//! The platform app's DocTypes (`apps/platform/doctypes/`, not an owned path of this task) have
-//! no column for a session's source digest, no session end-reason, and no home for the
-//! recovery-code digests (they are child-table rows, and the secret path refuses child
-//! DocTypes). Where that leaves a security property unexpressible, the store below **fails
-//! closed** and the report lists the exact field each one needs.
+//! `session.source_digest` and `session.end_reason` hold the source digest and the cause of an
+//! end, and a top-level `recovery_code` DocType is the secret-capable home of recovery-code
+//! digests (the legacy child DocType `user_recovery_digest` is no longer written). The branches
+//! that failed closed for want of them are gone; see the `session` and `recovery` store modules for the
+//! formats. Sessions created before the upgrade have no source digest (read as the zero digest,
+//! "unknown source") and no end reason.
 
 mod keys;
+mod recovery;
 mod session;
 mod throttle;
 pub(crate) mod user;

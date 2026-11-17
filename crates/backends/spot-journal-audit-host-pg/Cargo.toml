@@ -1,0 +1,47 @@
+[package]
+name = "spot-journal-audit-host-pg"
+description = "The PostgreSQL side of the hosted journal audit (WP-RTB-01.T7, ADR-061 s8 and s9): the tenant directory, the result table, the audit inputs over the live site pool and a throwaway scratch database on the same server, the scratch database's lifecycle and leak sweep, and the per-tenant recovery report built from real facts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The job's provider traits (TenantDirectory, AuditInputs, ResultSink) and result types.
+spot-journal-audit-job = { path = "../../framework/spot-journal-audit-job" }
+# The sides the runner audits, the options and the clock.
+spot-journal-audit-run = { path = "../../framework/spot-journal-audit-run" }
+# The result model: the first differing record, the verified position.
+spot-journal-audit = { path = "../../framework/spot-journal-audit" }
+spot-events-contract = { path = "../../../contracts/events" }
+# The recovery report and its fact traits.
+spot-journal-recovery = { path = "../../framework/spot-journal-recovery" }
+# The tenant id, the store and the keys the rebuild reads.
+spot-journal-store = { path = "../../framework/spot-journal-store" }
+spot-journal-manifest = { path = "../../framework/spot-journal-manifest" }
+spot-journal-snapshot = { path = "../../framework/spot-journal-snapshot" }
+# The chain check the recovery report collects (Expected, Mode).
+spot-journal-verify = { path = "../../framework/spot-journal-verify" }
+spot-image-upcast = { path = "../../framework/spot-image-upcast" }
+# The ApplySink the scratch side wraps.
+spot-journal-rebuild = { path = "../../framework/spot-journal-rebuild" }
+# The PostgreSQL sides of the audit: the held live snapshot and the scratch schema.
+spot-journal-audit-pg = { path = "../spot-journal-audit-pg" }
+# The one blocking way to PostgreSQL for the audit's sides.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The site pool, the configuration of a connection to another database on the same server.
+spot-postgres = { path = "../spot-postgres" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "time"] }
+thiserror = "2"
+serde_json = "1"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+
+[lints]
+workspace = true

@@ -12,6 +12,18 @@
 //! [`seed`] works on the [`DocumentStore`] of a transaction the caller opened. It writes
 //! nothing outside it and does not commit; on any error the caller rolls the transaction back,
 //! so a failed seed leaves no partial set. That is what "in one transaction" means here.
+//!
+//! # Journal capture (WP-JRN-02.T6)
+//!
+//! The seed writes rows at the storage level, not through the document engine, so it does not get the
+//! engine's `doc_state` event for free. [`seed_with_capture`] and [`seed_system_rows_with_capture`]
+//! take a [`StateCapture`]: right after each row is **inserted** the seed asks it for the `doc_state`
+//! event of that insert and enqueues it in the same transaction, so a row never commits without its
+//! state and a state never commits without its row. A row that already exists is not touched and
+//! gets no event, so a second seed adds no event and no version. [`seed`] and [`seed_system_rows`]
+//! capture nothing (they are [`NoCapture`]): a caller that wants the journal complete uses the
+//! `_with_capture` form. This crate builds no event itself (it reads no clock and draws no id): the
+//! host supplies the time, the ids and the metadata version through its [`StateCapture`].
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,7 +31,8 @@ use std::fmt;
 use serde::Deserialize;
 use spot_meta::{Definition, FieldType};
 use spot_storage_contract::{
-    DocumentData, DocumentStore, ErrorKind, Fields, Name, RecordId, RowLock, StorageError, Value,
+    DocumentData, DocumentStore, ErrorKind, Fields, Name, Outbox, OutboxEvent, RecordId, RowLock,
+    StorageError, Value, Version,
 };
 
 use crate::{definitions, doctype};
@@ -55,6 +68,35 @@ pub struct SeedOutcome {
     pub administrator: RecordId,
     /// How many records this run wrote; 0 when everything was already there.
     pub written: usize,
+}
+
+/// Builds the journal event of a row the seed inserted. Implemented by the host, which owns the
+/// clock, the id source and the metadata version the event needs.
+pub trait StateCapture: Send {
+    /// The `doc_state` insert event of `doc`, written at `version`, or `None` to capture nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`SeedError`] when the event cannot be built; the seed fails and the caller rolls back.
+    fn insert_event(
+        &mut self,
+        doc: &DocumentData,
+        version: Version,
+    ) -> Result<Option<OutboxEvent>, SeedError>;
+}
+
+/// Captures nothing: what [`seed`] and [`seed_system_rows`] use.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoCapture;
+
+impl StateCapture for NoCapture {
+    fn insert_event(
+        &mut self,
+        _doc: &DocumentData,
+        _version: Version,
+    ) -> Result<Option<OutboxEvent>, SeedError> {
+        Ok(None)
+    }
 }
 
 /// Why a [`seed`] run failed.
@@ -185,8 +227,13 @@ fn storage_error(doctype: &str, e: StorageError) -> SeedError {
     }
 }
 
-/// Writes `doc` unless a document with its id exists. Returns whether it wrote.
-async fn ensure(store: &mut impl DocumentStore, doc: DocumentData) -> Result<bool, SeedError> {
+/// Writes `doc` unless a document with its id exists, and enqueues its captured event in the same
+/// transaction. Returns whether it wrote.
+async fn ensure(
+    store: &mut (impl DocumentStore + Outbox),
+    capture: &mut dyn StateCapture,
+    doc: DocumentData,
+) -> Result<bool, SeedError> {
     let entity = doc.entity.as_str().to_owned();
     let found = store
         .load(&doc.entity, doc.id, RowLock::None)
@@ -195,10 +242,16 @@ async fn ensure(store: &mut impl DocumentStore, doc: DocumentData) -> Result<boo
     if found.is_some() {
         return Ok(false);
     }
-    store
+    let version = store
         .insert(&doc)
         .await
         .map_err(|e| storage_error(&entity, e))?;
+    if let Some(event) = capture.insert_event(&doc, version)? {
+        store
+            .enqueue(&event)
+            .await
+            .map_err(|e| storage_error(&entity, e))?;
+    }
     Ok(true)
 }
 
@@ -211,35 +264,109 @@ fn document(entity: &str, id: RecordId, fields: Fields) -> Result<DocumentData, 
     })
 }
 
-/// Creates the `Administrator` user, the system roles and the Administrator's assignment,
-/// whatever is missing, in the caller's transaction (see the module docs).
+/// What [`seed_system_rows`] did: the names of the rows it added (never a count alone).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SystemRowsOutcome {
+    /// The system roles this run wrote, in `bootstrap.toml` order. Empty when everything was there.
+    pub roles_added: Vec<String>,
+}
+
+impl SystemRowsOutcome {
+    /// How many rows this run wrote.
+    #[must_use]
+    pub fn written(&self) -> usize {
+        self.roles_added.len()
+    }
+}
+
+fn read_bootstrap() -> Result<BootstrapFile, SeedError> {
+    toml::from_str(BOOTSTRAP).map_err(|e| SeedError::Data(e.to_string()))
+}
+
+/// Writes the system roles, and any other non-identity row `bootstrap.toml` declares (today: roles
+/// only), that are missing. Each is written by its fixed id through [`ensure`], so a row with that id
+/// is left exactly as it is (an edited description survives) and a second run writes nothing.
 ///
-/// Idempotent: a record with the expected id is left exactly as it is, so a second run writes
-/// nothing and a site's later edits survive. Fails with [`SeedError::DoctypeMissing`] when the
-/// platform DocTypes are not in the transaction's catalogue.
+/// This is what `spot migrate --apply` runs on an existing site, so a role a later task adds to
+/// `bootstrap.toml` reaches sites created before it. It **never** writes the `Administrator`, a
+/// `User`, a role assignment or any credential: those belong to [`seed`] at site creation.
 ///
 /// # Errors
 ///
 /// [`SeedError`]; the caller rolls its transaction back.
-pub async fn seed(
-    store: &mut impl DocumentStore,
+pub async fn seed_system_rows(
+    store: &mut (impl DocumentStore + Outbox),
     params: &SeedParams,
-) -> Result<SeedOutcome, SeedError> {
-    let file: BootstrapFile =
-        toml::from_str(BOOTSTRAP).map_err(|e| SeedError::Data(e.to_string()))?;
-    let defs = definitions().map_err(|e| SeedError::Data(e.to_string()))?;
-    let mut written = 0usize;
+) -> Result<SystemRowsOutcome, SeedError> {
+    seed_system_rows_with_capture(store, params, &mut NoCapture).await
+}
 
-    let mut role_ids = BTreeMap::new();
+/// [`seed_system_rows`] that also enqueues, in the same transaction, the journal event of every
+/// role it inserts (see the module docs).
+///
+/// # Errors
+///
+/// [`SeedError`]; the caller rolls its transaction back.
+pub async fn seed_system_rows_with_capture(
+    store: &mut (impl DocumentStore + Outbox),
+    _params: &SeedParams,
+    capture: &mut dyn StateCapture,
+) -> Result<SystemRowsOutcome, SeedError> {
+    let file = read_bootstrap()?;
+    let defs = definitions().map_err(|e| SeedError::Data(e.to_string()))?;
+    let mut outcome = SystemRowsOutcome::default();
     for row in &file.roles {
         let id = record_id(&row.id)?;
-        role_ids.insert(row.name.clone(), id);
         let mut f = blank(&defs, doctype::ROLE)?;
         set(&mut f, "role_name", row.name.as_str())?;
         set(&mut f, "description", row.description.as_str())?;
         set(&mut f, "is_system", true)?;
         set(&mut f, "origin", "reference")?;
-        written += usize::from(ensure(store, document(doctype::ROLE, id, f)?).await?);
+        if ensure(store, capture, document(doctype::ROLE, id, f)?).await? {
+            outcome.roles_added.push(row.name.clone());
+        }
+    }
+    Ok(outcome)
+}
+
+/// Creates the `Administrator` user, the system roles and the Administrator's assignment,
+/// whatever is missing, in the caller's transaction (see the module docs).
+///
+/// It is [`seed_system_rows`] followed by the Administrator and its assignment, so creation and
+/// migration cannot drift. Idempotent: a record with the expected id is left exactly as it is, so a
+/// second run writes nothing and a site's later edits survive. Fails with
+/// [`SeedError::DoctypeMissing`] when the platform DocTypes are not in the transaction's catalogue.
+///
+/// # Errors
+///
+/// [`SeedError`]; the caller rolls its transaction back.
+pub async fn seed(
+    store: &mut (impl DocumentStore + Outbox),
+    params: &SeedParams,
+) -> Result<SeedOutcome, SeedError> {
+    seed_with_capture(store, params, &mut NoCapture).await
+}
+
+/// [`seed`] that also enqueues, in the same transaction, the journal event of every row it inserts
+/// (the roles, the Administrator and the Administrator's assignment; see the module docs).
+///
+/// # Errors
+///
+/// [`SeedError`]; the caller rolls its transaction back.
+pub async fn seed_with_capture(
+    store: &mut (impl DocumentStore + Outbox),
+    params: &SeedParams,
+    capture: &mut dyn StateCapture,
+) -> Result<SeedOutcome, SeedError> {
+    let file = read_bootstrap()?;
+    let defs = definitions().map_err(|e| SeedError::Data(e.to_string()))?;
+    let mut written = seed_system_rows_with_capture(store, params, capture)
+        .await?
+        .written();
+
+    let mut role_ids = BTreeMap::new();
+    for row in &file.roles {
+        role_ids.insert(row.name.clone(), record_id(&row.id)?);
     }
 
     let admin = &file.administrator;
@@ -255,7 +382,7 @@ pub async fn seed(
     if let Some(email) = &params.email {
         set(&mut f, "email", email.as_str())?;
     }
-    written += usize::from(ensure(store, document(doctype::USER, admin_id, f)?).await?);
+    written += usize::from(ensure(store, capture, document(doctype::USER, admin_id, f)?).await?);
 
     let role_id = *role_ids
         .get(&admin.role)
@@ -267,8 +394,14 @@ pub async fn seed(
     set(&mut f, "state", "active")?;
     set(&mut f, "reason", "Created with the site.")?;
     let assignment = record_id(&admin.assignment_id)?;
-    written +=
-        usize::from(ensure(store, document(doctype::ROLE_ASSIGNMENT, assignment, f)?).await?);
+    written += usize::from(
+        ensure(
+            store,
+            capture,
+            document(doctype::ROLE_ASSIGNMENT, assignment, f)?,
+        )
+        .await?,
+    );
 
     Ok(SeedOutcome {
         administrator: admin_id,

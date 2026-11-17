@@ -253,8 +253,10 @@ fn a_newer_generation_without_a_fork_is_fork_not_recorded() {
 }
 
 #[test]
-fn positions_past_a_recorded_fork_point_are_fork_not_recorded() {
-    let first = journal(10, 5);
+fn abandoned_history_past_the_fork_point_is_accounted_for_by_the_fork_record() {
+    // Generation 1 sealed 1..=20; the fork cut it at 10. The sealed segments after the fork point
+    // are abandoned history that stays in the journal forever, and generation 2 starts again at 1.
+    let first = journal(20, 5);
     let second = append_segments(
         &first
             .fork(10, "rebuild to before the bad import", 0, 0)
@@ -262,22 +264,9 @@ fn positions_past_a_recorded_fork_point_are_fork_not_recorded() {
         &tiling(2, 4, 4, 9),
     )
     .expect("append");
-    let verified = verified(&second);
-    let past = SegmentSummary::new(1, 11, 14, 4, hash(0x90), hash(0x91));
-    let observed = vec![
-        first.segments[0],
-        first.segments[1],
-        past,
-        second.segments[0],
-    ];
-    assert_eq!(
-        verified.check_against(&observed),
-        vec![Finding::ForkNotRecorded {
-            generation: 1,
-            first_seq: 11,
-            last_seq: 14,
-        }]
-    );
+    let mut observed = first.segments.clone();
+    observed.push(second.segments[0]);
+    assert!(verified(&second).check_against(&observed).is_empty());
 }
 
 #[test]

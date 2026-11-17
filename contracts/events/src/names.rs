@@ -169,7 +169,7 @@ fn check_host(name: &str) -> Result<(), &'static str> {
 }
 
 /// The id of the command that caused an event: the native API's `Idempotency-Key` (ADR-055),
-/// or an id a job or script assigns. 1 to 128 visible ASCII characters. Retrying an uncertain
+/// or an id a job or script assigns. 1 to 320 visible ASCII characters (a request-step grant of the process engine travels as one and is longer than 128). Retrying an uncertain
 /// command with the same id lets consumers and the API recognise the retry.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommandId(String);
@@ -177,11 +177,11 @@ pub struct CommandId(String);
 impl CommandId {
     /// Validates a command id.
     pub fn new(s: &str) -> Result<Self, InvalidName> {
-        if s.is_empty() || s.len() > 128 || !s.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+        if s.is_empty() || s.len() > 320 || !s.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
             return Err(invalid(
                 "command id",
                 s,
-                "a command id is 1 to 128 visible ASCII characters",
+                "a command id is 1 to 320 visible ASCII characters",
             ));
         }
         Ok(Self(s.to_owned()))

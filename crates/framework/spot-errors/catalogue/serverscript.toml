@@ -34,7 +34,7 @@ class = "Validation"
 summary = "A Server Script record is missing or malformed."
 explanation_key = "error.serverscript.record_invalid"
 params = []
-remedy = "Give the script a name, a DocType, one of the document events and TypeScript source."
+remedy = "Give the script a name and a DocType scripts may be attached to (not a credential, session, role, webhook or Server Script DocType). Choose one of the document events and add TypeScript source."
 since = "0.1.0"
 
 [[entry]]
@@ -43,5 +43,5 @@ class = "Internal"
 summary = "The script store could not load or record what it was asked to."
 explanation_key = "error.serverscript.store_failed"
 params = []
-remedy = "Report the failure with the request details; the store's backend is unavailable or misconfigured."
+remedy = "If it appears on a write during start-up, wait until the site is ready; otherwise report the failure with the request details: the script store is unavailable or misconfigured."
 since = "0.1.0"

@@ -39,6 +39,12 @@ pub enum FieldType {
     Bytes,
     /// A child table.
     Table,
+    /// A write-only secret (the contract's `secret`): never sent, never echoed, written only
+    /// through the secret path. Its value is never in a reply.
+    Secret,
+    /// A set of links held as child rows (the contract's `table_multiselect`); `child_doctype`
+    /// and `link_field` say which table and which row field.
+    TableMultiselect,
     /// Base64 bytes interpreted as attached-file text (the contract's `attach`).
     Attach,
 }
@@ -58,8 +64,15 @@ impl FieldType {
             FieldType::Json => "json",
             FieldType::Bytes => "bytes",
             FieldType::Table => "table",
+            FieldType::Secret => "secret",
+            FieldType::TableMultiselect => "table_multiselect",
             FieldType::Attach => "attach",
         }
+    }
+
+    /// Whether the field holds child rows: a `table` or a `table_multiselect`.
+    pub fn is_table(&self) -> bool {
+        matches!(self, FieldType::Table | FieldType::TableMultiselect)
     }
 
     /// Parses the contract's string form.
@@ -76,6 +89,8 @@ impl FieldType {
             "json" => FieldType::Json,
             "bytes" => FieldType::Bytes,
             "table" => FieldType::Table,
+            "secret" => FieldType::Secret,
+            "table_multiselect" => FieldType::TableMultiselect,
             "attach" => FieldType::Attach,
             _ => return None,
         })
@@ -393,4 +408,22 @@ fn meta_field_json(f: &MetaField) -> Json {
 pub trait MetaResolver: Send + Sync + 'static {
     /// The metadata for a DocType name; unknown → `meta.unknown_doctype`.
     fn resolve(&self, doctype: &str) -> Result<DocTypeMeta, crate::api::service::ApiError>;
+}
+
+#[cfg(test)]
+mod field_type_tests {
+    use super::FieldType;
+
+    #[test]
+    fn secret_and_table_multiselect_have_the_contract_names() {
+        assert_eq!(FieldType::Secret.as_str(), "secret");
+        assert_eq!(FieldType::TableMultiselect.as_str(), "table_multiselect");
+        assert_eq!(FieldType::parse("secret"), Some(FieldType::Secret));
+        assert_eq!(
+            FieldType::parse("table_multiselect"),
+            Some(FieldType::TableMultiselect)
+        );
+        assert!(FieldType::Table.is_table() && FieldType::TableMultiselect.is_table());
+        assert!(!FieldType::Secret.is_table() && !FieldType::Bytes.is_table());
+    }
 }

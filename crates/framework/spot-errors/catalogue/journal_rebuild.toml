@@ -145,6 +145,15 @@ remedy = "Fix what the sink reports; the sink was told to abort and nothing is v
 since = "0.1.0"
 
 [[entry]]
+code = "journal_rebuild.unknown_topic"
+class = "none"
+summary = "The entry at generation {generation}, position {seq}, has the topic {topic}, which the event classifier does not know."
+explanation_key = "error.journal_rebuild.unknown_topic"
+params = ["generation", "seq", "topic"]
+remedy = "Register the topic with its class (state, domain or audit) in the classifier the rebuild is given, or run the rebuild without strict topics to treat it as domain."
+since = "0.1.0"
+
+[[entry]]
 code = "journal_rebuild.cancelled"
 class = "none"
 summary = "The rebuild was cancelled after {processed} entries; the sink was told to abort."

@@ -16,9 +16,29 @@ use spot_sync_hub::{
     AckBook, GapSource, HubAudit, HubError, HubRelay, MemoryStream, RelayState, StreamEntry,
 };
 use spot_sync_obligations::{MandatoryEvent, ObligationSettings};
-use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
+
+/// `RefCell`'s `borrow` and `borrow_mut` over a mutex: the relay's collaborators are `Send`.
+struct SyncCell<T>(std::sync::Mutex<T>);
+
+impl<T: Default> Default for SyncCell<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
+}
+
+impl<T> SyncCell<T> {
+    fn new(value: T) -> Self {
+        Self(std::sync::Mutex::new(value))
+    }
+    fn borrow(&self) -> std::sync::MutexGuard<'_, T> {
+        self.0.lock().unwrap()
+    }
+    fn borrow_mut(&self) -> std::sync::MutexGuard<'_, T> {
+        self.0.lock().unwrap()
+    }
+}
 
 type Ledger = AckLedger<MemoryStore, MemorySink>;
 type Relay = HubRelay<SharedQueue, MemoryStream, Src>;
@@ -30,7 +50,7 @@ const NOW: i64 = 20_000 * DAY;
 
 /// A ledger the test keeps a handle on after the relay owns the other one.
 #[derive(Clone)]
-struct Shared(Rc<RefCell<Ledger>>);
+struct Shared(Arc<SyncCell<Ledger>>);
 
 impl AckBook for Shared {
     fn on_ack(
@@ -95,7 +115,7 @@ impl AckBook for Shared {
 }
 
 #[derive(Clone, Default)]
-struct Notes(Rc<RefCell<Vec<spot_sync_freshness::RejectNote>>>);
+struct Notes(Arc<SyncCell<Vec<spot_sync_freshness::RejectNote>>>);
 
 impl HubAudit for Notes {
     fn stamp_rejected(&mut self, note: spot_sync_freshness::RejectNote) {
@@ -103,8 +123,8 @@ impl HubAudit for Notes {
     }
 }
 
-fn ledger() -> Rc<RefCell<Ledger>> {
-    Rc::new(RefCell::new(
+fn ledger() -> Arc<SyncCell<Ledger>> {
+    Arc::new(SyncCell::new(
         AckLedger::with_catalogue(
             MemoryStore::new(),
             MemorySink::new(),
@@ -114,7 +134,7 @@ fn ledger() -> Rc<RefCell<Ledger>> {
     ))
 }
 
-fn relay_over(entries: Vec<StreamEntry>, led: &Rc<RefCell<Ledger>>) -> Relay {
+fn relay_over(entries: Vec<StreamEntry>, led: &Arc<SyncCell<Ledger>>) -> Relay {
     let mut stream = MemoryStream::new();
     for e in entries {
         stream.append(e);
@@ -256,7 +276,7 @@ fn stamp(stamped_at: i64, offset: i64) -> SyncStamp {
     }
 }
 
-fn stamped_relay() -> (Relay, Rc<RefCell<Ledger>>, Notes) {
+fn stamped_relay() -> (Relay, Arc<SyncCell<Ledger>>, Notes) {
     let led = ledger();
     led.borrow_mut().register_node("n1", T, "1", 0).unwrap();
     // A mandatory tax change published 10 days before the document reaches the hub.

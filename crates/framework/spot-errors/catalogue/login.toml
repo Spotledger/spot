@@ -223,3 +223,21 @@ explanation_key = "error.login.store_failed"
 params = []
 remedy = "Retry; if the backend keeps failing, check its connection and health checks."
 since = "0.1.0"
+
+[[entry]]
+code = "login.admission_unavailable"
+class = "none"
+summary = "The sign-in throttle could not count the attempt, so the sign-in was refused."
+explanation_key = "error.login.admission_unavailable"
+params = []
+remedy = "Try again shortly; if it persists, check that the site's coordinator is reachable and healthy."
+since = "0.1.0"
+
+[[entry]]
+code = "login.sso_required"
+class = "none"
+summary = "The tenant requires single sign-on, so a password sign-in was refused."
+explanation_key = "error.login.sso_required"
+params = []
+remedy = "Sign in through the identity provider, or use a break-glass administrator account. A policy that cannot be read is treated the same way (fail closed): restore the settings store."
+since = "0.1.0"

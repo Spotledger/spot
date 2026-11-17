@@ -1,0 +1,37 @@
+# sso_providers_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sso_providers_host.settings_invalid"
+class = "none"
+summary = "The [services.sso_identity] table has an unknown key or a value out of range, so the single sign-on providers do not start."
+explanation_key = "error.sso_providers_host.settings_invalid"
+params = []
+remedy = "Use only enabled, handover_ttl_secs (10 to 300), base_url (an https origin with no trailing slash) and client_secrets (name to env:NAME or file:/absolute/path)."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_providers_host.migration_failed"
+class = "none"
+summary = "A table of the single sign-on providers (SAML providers, policy, hand-over, session index) could not be created."
+explanation_key = "error.sso_providers_host.migration_failed"
+params = []
+remedy = "Check that the site database accepts the platform role's DDL, then restart; the statements are safe to repeat."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_providers_host.tenant_invalid"
+class = "none"
+summary = "The site name cannot be used as the tenant key of the single sign-on tables (empty or longer than 128 bytes)."
+explanation_key = "error.sso_providers_host.tenant_invalid"
+params = []
+remedy = "Rename the site."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_providers_host.no_sign_in_storage"
+class = "none"
+summary = "[services.sso_identity] is on but the sign-in stores are not, so there is no session store to start sessions in."
+explanation_key = "error.sso_providers_host.no_sign_in_storage"
+params = []
+remedy = "Enable [services.login_stores] (it is on by default) before enabling the providers."
+since = "0.1.0"

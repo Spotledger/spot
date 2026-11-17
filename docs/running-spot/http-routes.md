@@ -118,14 +118,41 @@ The rules, all fail closed:
   - `:id` and `{id}` are one form in the check, although axum 0.8 panics on `:id` at startup, so
     that spelling never survives the first test run.
 - **A rate class is mandatory.** `Public` has one field, `rate_class`, not optional. `Auth`
-  (the class `auth_login` runs in) allows 20 requests per minute per client address (an IPv6
-  address counts as its /64), counted in memory by the router with the clock of
+  (the class `auth_login` runs in) allows **20 requests per 60 seconds per client address** by
+  default (an IPv6 address counts as its /64), counted in memory by the router with the clock of
   `ApiServices::with_clock` (monotonic, never the wall clock) and answers `429 api.rate_limited`
   with `Retry-After`. The limit runs before the handler, so before any cookie is read. The
   counter is per rate class and address, shared by every public group of the class, and is
   separate from the failed-sign-in limit the auth service keeps for `auth_login` (per user and
-  address). A request without a known address shares one bucket; a full table refuses a new
-  address rather than growing.
+  address). A request without a known address shares one bucket.
+- **Tuning the `auth` limit.** Two `ServerConfig` keys, both optional:
+
+  | key | default | bounds |
+  |---|---|---|
+  | `auth_rate_limit` | 20 | 1 to 10,000 requests per window per client address |
+  | `auth_rate_window_seconds` | 60 | 1 to 3,600 seconds |
+
+  A value outside the bounds stops start-up (`ServerConfig::validate` returns
+  `ServerError::InvalidSetting` naming the key, never the value); a negative, fractional or
+  overflowing value does not deserialize and is never wrapped or clamped. The host passes them
+  on with `ApiServices::with_rate_limits(config.rate_limits())`; without that call the defaults
+  apply, so every existing caller keeps today's numbers.
+- **The table is bounded and has no lock-out lever.** The limiter holds at most 65,536 live
+  windows (`RATE_TABLE_CAPACITY`), in 16 independent shards chosen by a randomly keyed hash of
+  the key. Each shard keeps its windows in a list ordered by window start. A new key is **always
+  admitted**: when its shard is full the oldest window (an expired one goes first, being the
+  oldest) is evicted to make room, and below capacity nothing is evicted. A request does one
+  shard lookup and at most one list operation, so it never scans the table and never holds a
+  global lock. The residual behaviour: an attacker that sends requests from more distinct /64s
+  than the table holds, inside one window, can push a limited client's counter out and reset it;
+  that costs the attacker the same number of requests as the table is large, and an IPv6 /48 is
+  exactly 65,536 /64s, which is why the capacity is a sized constant and not a setting.
+- **Deployment behind a proxy.** The limiter keys on the client address that
+  `request_client_addr` resolves: the socket peer, unless the peer is listed in
+  `trusted_proxies`, in which case the forwarded client. Behind a reverse proxy that is **not**
+  listed there, every client has the proxy's address and therefore shares **one bucket**: 20
+  requests per minute for the whole site. `trusted_proxies` is a required setting for any
+  proxied deployment. A request with no address at all (`Unknown`) also shares one bucket.
 - **No identity.** The router removes `Authorization` before a public handler runs. The
   handler's `RouteState` holds only its declared ports, as for every group.
 - A public group is subject to the same skip rules (missing port, duplicate operation, serves

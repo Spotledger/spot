@@ -197,17 +197,22 @@ async fn an_unauthenticated_request_never_reaches_a_delegate() {
     .await;
     let mut anonymous = ctx();
     anonymous.credential = None;
-    let function = app
-        .resources
+    // Guest function calls (WP-PLT-17.T3): a function call with no credential reaches the
+    // function delegate, which decides what a guest may do (tests/function_guest.rs). A report
+    // still needs a credential and never reaches its delegate.
+    app.resources
         .call_function(&anonymous, "a", "m", "f", json!({}), false)
         .await
-        .unwrap_err();
-    assert_eq!(function.code.as_str(), Code::AuthRequired.as_str());
+        .unwrap();
     let report = app
         .resources
         .run_report(&anonymous, "r", json!({}), None)
         .await
         .unwrap_err();
     assert_eq!(report.code.as_str(), Code::AuthRequired.as_str());
-    assert_eq!(fake.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        fake.calls.load(Ordering::SeqCst),
+        1,
+        "only the guest function call"
+    );
 }

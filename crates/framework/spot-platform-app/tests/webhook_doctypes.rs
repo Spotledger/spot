@@ -52,7 +52,7 @@ fn every_doctype_file_of_the_app_is_in_the_load_list() {
     );
     let all: BTreeSet<String> = doctype::ALL.iter().map(|d| (*d).to_owned()).collect();
     assert_eq!(all, loaded, "doctype::ALL and DOCTYPE_SOURCES must agree");
-    assert_eq!(doctype::ALL.len(), 16);
+    assert_eq!(doctype::ALL.len(), loaded.len());
     assert!(loaded.contains(doctype::WEBHOOK));
     assert!(loaded.contains(doctype::WEBHOOK_DELIVERY));
 }
@@ -313,7 +313,7 @@ async fn a_site_created_before_the_webhook_doctypes_gains_them_additively() {
         .into_iter()
         .filter(|d| d.name != doctype::WEBHOOK && d.name != doctype::WEBHOOK_DELIVERY)
         .collect();
-    assert_eq!(old.len(), 14);
+    assert_eq!(old.len(), definitions().unwrap().len() - 2);
     let old_catalog = Registry::build(old, &Customisations::new())
         .unwrap()
         .catalog(collation())

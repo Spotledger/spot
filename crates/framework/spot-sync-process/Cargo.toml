@@ -1,0 +1,17 @@
+[package]
+name = "spot-sync-process"
+description = "Process definitions as hub-owned data that syncs (WP-SYN-12.T1, ADR-083): the published version of a process as a master record, the hub publisher, the edge intake that installs beside running versions, holds a definition the engine cannot run, retires only unpinned versions, picks the start version, and the Case origin rule"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SHA-256 of the canonical definition text: the definition hash.
+sha2 = "0.10"
+
+[lints]
+workspace = true

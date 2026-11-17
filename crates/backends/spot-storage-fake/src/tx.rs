@@ -3,15 +3,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use time::OffsetDateTime;
+
 use spot_storage_contract::{
-    Access, Catalog, ChangeOp, ChildRow, Document, DocumentData, DocumentStore, EntityDef,
-    ErrorKind, Fields, GraphTraversal, LockKey, LockMode, Locks, Name, NodeRef, Outbox,
+    Access, Catalog, ChangeOp, ChildRow, CommandRecord, Document, DocumentData, DocumentStore,
+    EntityDef, ErrorKind, Fields, GraphTraversal, LockKey, LockMode, Locks, Name, NodeRef, Outbox,
     OutboxEvent, OutboxRecord, Query, QueryExecutor, RecordId, RowLock, Rows, Savepoint, Sequences,
     SeriesKey, StorageError, StorageResult, Transaction, Traversal, TraversalResult, TxOptions,
     Value, Version, Wait,
 };
 
 use crate::constraints::{check_links, check_unique};
+use crate::ledger::{Key, duplicate, pruned_by};
 use crate::locks::{LockTarget, TxRowLocker, acquire, row_lock_mode, wait_until_free};
 use crate::store::{Data, DocOp, Overlay, Record, RecordKind, View};
 use crate::validate::{already_exists, check_document, child_entity, document_entity, stored};
@@ -29,6 +32,10 @@ struct Work {
     sequences: BTreeMap<SeriesKey, u64>,
     /// Counter for [`DocOp::order`].
     ops: u64,
+    /// Command records this transaction inserted (storage contract 0.3.0).
+    commands: BTreeMap<Key, CommandRecord>,
+    /// The `before` of each command prune this transaction ran; applied at commit.
+    prunes: Vec<OffsetDateTime>,
 }
 
 /// A record to write (`Some`) or delete (`None`).
@@ -354,9 +361,15 @@ impl FakeTx {
     fn commit_locked(&self, state: &mut State) -> StorageResult<()> {
         let work = &self.work;
         let overlay = &work.overlay;
-        if overlay.is_empty() && work.outbox.is_empty() && work.sequences.is_empty() {
+        if overlay.is_empty()
+            && work.outbox.is_empty()
+            && work.sequences.is_empty()
+            && work.commands.is_empty()
+            && work.prunes.is_empty()
+        {
             return Ok(());
         }
+        state.commands.check_inserts(&work.commands, &work.prunes)?;
         let written = || {
             overlay
                 .records
@@ -437,6 +450,7 @@ impl FakeTx {
         for (series, next) in &work.sequences {
             state.sequences.insert(series.clone(), *next);
         }
+        state.commands.apply(&work.commands, &work.prunes);
         for (ordinal, event) in work.outbox.iter().enumerate() {
             let position = state.feeds.next_outbox_position();
             state.feeds.event_ids.insert(event.id);
@@ -740,6 +754,62 @@ impl Transaction for FakeTx {
 
     fn options(&self) -> &TxOptions {
         &self.options
+    }
+
+    fn command_get(
+        &self,
+        principal: &str,
+        command_id: &str,
+    ) -> impl std::future::Future<Output = StorageResult<Option<CommandRecord>>> + Send {
+        let key: Key = (principal.to_owned(), command_id.to_owned());
+        // This transaction's own insert first, then the committed record unless this
+        // transaction pruned it. Answered before the future is built, so it holds no borrow of
+        // the transaction.
+        let found = match self.work.commands.get(&key) {
+            Some(own) => Some(own.clone()),
+            None => self
+                .shared
+                .state()
+                .commands
+                .get(&key)
+                .filter(|r| !pruned_by(r, &self.work.prunes))
+                .cloned(),
+        };
+        async move { Ok(found) }
+    }
+
+    async fn command_put(&mut self, record: CommandRecord) -> StorageResult<()> {
+        self.writable()?;
+        record.validate()?;
+        let key: Key = (record.principal.clone(), record.command_id.clone());
+        if self.work.commands.contains_key(&key) {
+            return Err(duplicate(&key));
+        }
+        {
+            let state = self.shared.state();
+            if state
+                .commands
+                .get(&key)
+                .is_some_and(|r| !pruned_by(r, &self.work.prunes))
+            {
+                return Err(duplicate(&key));
+            }
+        }
+        self.check_writes(1)?;
+        self.work.commands.insert(key, record);
+        self.work.overlay.writes += 1;
+        Ok(())
+    }
+
+    async fn command_prune(&mut self, before: OffsetDateTime) -> StorageResult<u64> {
+        self.writable()?;
+        let committed = {
+            let state = self.shared.state();
+            // Records an earlier prune of this transaction already removed count once.
+            state.commands.prunable(before, &self.work.prunes)
+        };
+        self.work.prunes.push(before);
+        Ok(committed)
     }
 
     async fn savepoint(&mut self) -> StorageResult<Savepoint> {

@@ -83,7 +83,7 @@ async fn provisions_and_serves_real_http_lifecycle_with_child_rows() {
     )
     .unwrap();
     let url = std::env::var("SPOT_TEST_PG_URL").unwrap();
-    std::fs::write(root.0.join("common.toml"), format!("apps = ['app']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\n")).unwrap();
+    std::fs::write(root.0.join("common.toml"), format!("apps = ['app']\n[server]\nbind = ['127.0.0.1:0']\nshutdown_grace = 2\n[postgres]\nadmin_url = {url:?}\n[services.secrets]\nkek_file = {:?}\n", format!("{}/keys/{{site}}.json", root.0.display()))).unwrap();
     std::fs::write(
         root.0.join("app/doctypes/customer.toml"),
         "name = 'customer'\n[[fields]]\nname = 'title'\ntype = 'text'\nrequired = true\n",
@@ -95,6 +95,11 @@ async fn provisions_and_serves_real_http_lifecycle_with_child_rows() {
         "spot-test-{}",
         RecordId::new_v7().to_string().replace('-', "")
     );
+    // The sign-in stores seal their credentials: the site needs its key file before it starts.
+    std::fs::create_dir_all(root.0.join("keys")).unwrap();
+    spot_cli::services::secrets::init_key_file(&root.0.join(format!("keys/{site}.json")), &site)
+        .await
+        .unwrap();
     // Exercise the actual product binary and capture its one-time output without logging it.
     let output = tokio::task::spawn_blocking({
         let root = root.0.clone();
@@ -137,6 +142,12 @@ async fn provisions_and_serves_real_http_lifecycle_with_child_rows() {
         "spot-test-{}",
         RecordId::new_v7().to_string().replace('-', "")
     );
+    spot_cli::services::secrets::init_key_file(
+        &root.0.join(format!("keys/{second_site}.json")),
+        &second_site,
+    )
+    .await
+    .unwrap();
     let second_secret = spot_cli::new_site(&root.0, &second_site, "en")
         .await
         .unwrap()
@@ -401,18 +412,49 @@ async fn provisions_and_serves_real_http_lifecycle_with_child_rows() {
         .await
         .unwrap();
     // The journal's `doc_state` images (WP-JRN-02.T2) are not the lifecycle events checked here.
-    let events: Vec<_> = backend
-        .read_outbox(FeedPosition::START, 100)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|r| r.event.topic.as_str() != "doc_state")
-        .collect();
+    // The outbox publisher makes events readable on its own tick: wait for the four lifecycle
+    // events of this test (the vault and the sign-in stores write their own, as the login service).
+    let mut events = Vec::new();
+    for _ in 0..200 {
+        events = backend
+            .read_outbox(FeedPosition::START, 1000)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|r| {
+                matches!(
+                    r.event.topic.as_str(),
+                    "doc_created" | "doc_updated" | "doc_posted"
+                )
+            })
+            .filter(|r| {
+                serde_json::from_str::<Json>(&r.event.payload)
+                    .map(|p| p["meta"]["actor"]["component"] != "login_service")
+                    .unwrap_or(true)
+            })
+            .collect::<Vec<_>>();
+        if events.len() >= 4 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     let payloads: Vec<Json> = events
         .iter()
         .map(|e| serde_json::from_str(&e.event.payload).unwrap())
         .collect();
-    assert_eq!(payloads.len(), 4, "{payloads:?}");
+    let all_topics: Vec<_> = backend
+        .read_outbox(FeedPosition::START, 1000)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| {
+            (
+                r.event.topic.as_str().to_owned(),
+                r.event.payload.chars().take(160).collect::<String>(),
+            )
+        })
+        .collect();
+    assert_eq!(payloads.len(), 4, "{payloads:?} ALL {all_topics:#?}");
     assert_eq!(payloads[1]["meta"]["command_id"], "cli-smoke-create");
     assert_eq!(payloads[3]["meta"]["command_id"], "cli-smoke-post");
     let ops: Vec<_> = events.iter().map(|e| e.event.topic.as_str()).collect();

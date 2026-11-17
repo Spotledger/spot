@@ -54,12 +54,16 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx --no-install playwright install --with-deps chromium
+      # `dotnet` finds global.json from the working directory, not from the project: run both commands
+      # inside clients/avalonia, or the runner's preinstalled .NET 11 SDK is used and asks for the
+      # `wasm-tools-net10` workload (the nightly browser job failed with NETSDK1147 on 2026-11-13..17).
       - name: install the WebAssembly workload
+        working-directory: clients/avalonia
         run: dotnet workload install wasm-tools
       - name: publish the browser head (AOT, Release)
         run: |
           start=$(date +%s)
-          dotnet publish clients/avalonia/src/Spotledger.Client.Browser -c Release -o artifacts/browser-publish
+          (cd clients/avalonia && dotnet publish src/Spotledger.Client.Browser -c Release -o ../../artifacts/browser-publish)
           echo "publish wall clock: $(( $(date +%s) - start )) s"
       - name: verify the published folder
         run: |

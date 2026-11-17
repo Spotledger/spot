@@ -38,6 +38,17 @@ pub mod codes {
     /// A user id the directory does not know.
     pub const UNKNOWN_USER: &str = "sso.unknown_user";
 
+    // Audiences (WP-IAM-11.T8, ADR-083 section 2.3). The catalogue file is
+    // `sso_audience.toml`, and a catalogue file's name is its entries' prefix, so these three
+    // codes carry the `sso_audience.` prefix.
+    /// The provider's audience is not the audience of the listener asking for the sign-in, or
+    /// the user's type does not belong to the provider's audience.
+    pub const WRONG_AUDIENCE: &str = "sso_audience.wrong_audience";
+    /// A consumer-audience provider sets an option only a staff or partner provider may set.
+    pub const AUDIENCE_OPTION_CONFLICT: &str = "sso_audience.audience_option_conflict";
+    /// A consumer sign-in may never be linked to a directory user.
+    pub const CONSUMER_CANNOT_LINK_USER: &str = "sso_audience.consumer_cannot_link_user";
+
     /// The configured issuer is not a secure, canonical URL.
     pub const ISSUER_INVALID: &str = "sso.issuer_invalid";
     /// The client id is missing.
@@ -152,6 +163,14 @@ pub mod codes {
     pub const LOGOUT_TOKEN_MALFORMED_TIMES: &str = "sso.logout_token_malformed_times";
     /// The configured maximum logout-token lifetime is outside its bounds.
     pub const LOGOUT_LIFETIME_INVALID: &str = "sso.logout_lifetime_invalid";
+
+    // Pending and provider stores (WP-IAM-05.T9).
+    /// The pending-authorisation store could not answer, so the callback was refused.
+    pub const PENDING_STORE_UNAVAILABLE: &str = "sso.pending_store_unavailable";
+    /// The provider-configuration store could not answer.
+    pub const PROVIDER_STORE_UNAVAILABLE: &str = "sso.provider_store_unavailable";
+    /// A provider configuration does not validate and was not stored or served.
+    pub const PROVIDER_INVALID: &str = "sso.provider_invalid";
 
     // Replay store (WP-IAM-05.T5).
     /// The replay store could not answer, so the message was refused (fail closed).

@@ -20,6 +20,7 @@ fn every_code_the_relay_raises_is_catalogued_and_nothing_else_is() {
             offered: 3,
         },
         RelayError::EntryInvalid("x"),
+        RelayError::BatchTooLarge { bytes: 2, limit: 1 },
         RelayError::ConfigInvalid("x"),
         RelayError::ResumeRequired,
         RelayError::Store(StoreError::Backend {
@@ -28,6 +29,8 @@ fn every_code_the_relay_raises_is_catalogued_and_nothing_else_is() {
     ];
     let mut raised: Vec<&str> = all.iter().map(RelayError::code).collect();
     raised.sort_unstable();
+    // `BatchTooLarge` shares `entry_invalid` (a dedicated code needs the catalogue widened).
+    raised.dedup();
     let mut catalogued: Vec<&str> = CATALOGUE
         .lines()
         .filter_map(|line| line.strip_prefix("code = \""))

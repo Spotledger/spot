@@ -42,6 +42,11 @@ pub struct StreamEntry {
     /// The delivery lane. It must be a function of the record's entity, so a record's versions
     /// never swap places between lanes.
     pub lane: Lane,
+    /// The event deleted the record. The hub never asks the image source for such an entry: it
+    /// builds the tombstone itself from the entry's key and position, so a node cannot cause a
+    /// delete the hub's own stream did not record.
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 /// One bundle of a send queue, with the identity that makes a push idempotent.
@@ -54,6 +59,37 @@ pub struct QueuedBundle {
     pub redelivery: bool,
     /// The bundle, already redacted for the destination.
     pub bundle: Bundle,
+    /// The serve sequence: a per-destination number, strictly increasing and without gaps, that
+    /// the **queue** assigns when the item is first pushed (the relay pushes 0) and never changes.
+    /// It is what an acknowledgement trims by (`HubRelay::on_ack_served_at`), so a node can only
+    /// claim what it was sent. 0 on an item that has not been pushed.
+    #[serde(default)]
+    pub serve_seq: u64,
+    /// Set by `peek`, never stored: the serve sequence of the greatest item still queued below
+    /// this one (0 when there is none). The node settles this item's sequence into its
+    /// acknowledged prefix only when everything up to this number is settled, so an item the node
+    /// has not been sent (or has not applied) can never be skipped.
+    #[serde(default)]
+    pub serve_after: u64,
+    /// The lowest journal position of the stream entries this bundle answers for: its
+    /// transaction group spans `floor..=position`, and the entries the group folds into one
+    /// image per record are covered only when this bundle is applied. The journal prefix the hub
+    /// derives from an acknowledgement stays below it. 0 (an item stored before this field
+    /// existed) means the item's own position.
+    #[serde(default)]
+    pub floor: u64,
+}
+
+/// What a serve-sequence acknowledgement did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServedAck {
+    /// Items the acknowledgement removed from the destination's queue.
+    pub removed: usize,
+    /// The journal position the hub now knows the destination applied everything up to: the
+    /// position just below the oldest item still queued (the relay's cursor when none is), never
+    /// above the stream head and never behind what was acknowledged before. This is what the
+    /// acknowledgement ledger and the closure's acknowledged position use.
+    pub applied_prefix: u64,
 }
 
 /// What a push to the queue did.
@@ -84,6 +120,22 @@ pub struct RelayConfig {
     pub max_entities: usize,
     /// Closure bounds.
     pub limits: Limits,
+    /// Most keys one node pull request is answered for (default 200); the rest of a longer
+    /// request is answered `NotAvailable`.
+    #[serde(default = "default_max_pull_keys")]
+    pub max_pull_keys: usize,
+    /// Most keys one destination may have answered in one tick (default 1,000); a request that
+    /// would exceed it is refused whole (`sync_hub.pull_throttled`) and no work is done.
+    #[serde(default = "default_max_pull_keys_per_tick")]
+    pub max_pull_keys_per_tick: usize,
+}
+
+fn default_max_pull_keys() -> usize {
+    200
+}
+
+fn default_max_pull_keys_per_tick() -> usize {
+    1_000
 }
 
 impl RelayConfig {
@@ -98,6 +150,8 @@ impl RelayConfig {
             read_batch: 500,
             max_entities: 4096,
             limits: Limits::default(),
+            max_pull_keys: default_max_pull_keys(),
+            max_pull_keys_per_tick: default_max_pull_keys_per_tick(),
         }
     }
 
@@ -115,6 +169,8 @@ impl RelayConfig {
             || self.max_bundles_per_tick_per_dest == 0
             || self.read_batch == 0
             || self.max_entities == 0
+            || self.max_pull_keys == 0
+            || self.max_pull_keys_per_tick == 0
         {
             return Err(HubError::InvalidConfig {
                 reason: "every bound must be above zero",

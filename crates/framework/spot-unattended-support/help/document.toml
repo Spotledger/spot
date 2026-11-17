@@ -189,3 +189,10 @@ what_happened = "The name of this document type is generated, so it cannot be re
 why = "The information given did not meet a rule the system checks before it saves anything."
 what_to_do = ["Correct the document instead; the system names the amended copy itself.", "If it keeps happening, tell your administrator and quote the code document.name_not_renameable."]
 audience = "user"
+
+[[help]]
+code = "document.command_conflict"
+what_happened = "This command id was already used for a different request."
+why = "A command id names one request. The system answers a repeat of the same request with its first answer, and refuses a different request that reuses the id, so nothing is done twice or by mistake."
+what_to_do = ["Use a new command id for a new request, or repeat the original request unchanged to get its original answer.", "If it keeps happening, tell your administrator and quote the code document.command_conflict."]
+audience = "user"

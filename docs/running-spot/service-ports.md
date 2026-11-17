@@ -60,3 +60,63 @@ Ports are provided on the assembling build only. A reload keeps the running serv
 store to build from, so a module that needs a port builds its service only when
 `ctx.assembling()` is true. With `services.jobs.store = "memory"` the ports exist as well (tests
 use them) and the memory-store notice is unchanged.
+
+## Registration ports: report sources and internal schedules
+
+Two modules offer a port a later module uses to register something of its own. Both follow the
+rule above: the provider has the smaller `ORDER`, the port exists on the assembling build only
+(`ctx.port::<..>()` answers `None` on a reload, and a module skips quietly), and what is
+registered is per site: nothing is shared between sites.
+
+### `ReportSources` (module `report`, `ORDER` 1020)
+
+`services/report.rs` serves the reports apps ship as `<app>/reports/*.toml`. A service whose data
+is no DocType (the process engine's outcome tables) registers a report of its own from its
+`register`, with `ctx.port::<dyn ReportSources>()` and `register(ReportSource { .. })`:
+
+- the `ReportDef` (already validated by the caller);
+- a minimal in-memory **source schema** for the definition's base name: DocType-shaped
+  `spot_meta::Definition`s, enough for the report compiler. It is never persisted, never added to
+  the metadata the site serves and never visible to a `meta` route;
+- a `SourceExecutor` that answers the report engine's one storage query over the source's own data
+  and applies the caller's `Admission`;
+- a `SourceVisibility` hook, `admit(&AdmitRequest) -> Result<Admission, Denied>`, which returns
+  `Admission::All`, `Admission::Rows(keys)` (a row filter the executor applies; the engine never
+  interprets a key) or a refusal with a reason code;
+- `required`: whether a source that does not compile stops the site. Otherwise it is named in the
+  log and left out.
+
+The report engine stays the one runner: `report_run`, `report_list` and `report_describe` serve a
+source report exactly like a shipped one (the report's `roles`, the row cap, `truncated`, the
+Report-channel field guard on columns, the audit lines). The source's schema gets a permission
+engine of its own that lets the report's roles read it, since the site's engine knows nothing of
+it; which rows a caller sees is the hook's decision.
+
+**Fail closed.** A hook that returns an error, panics or takes longer than five seconds denies the
+run with the answer of a report that does not exist (`404 report.not_found`) and an audit line
+(`spot::audit::report`, `report source refused`) with the site, user, report and reason code. A
+denied source is absent from the list, never an empty result. A request can never name a source or
+an executor: only a registered report name resolves.
+
+**Registration rules.** A report name registered twice names both services. A source report named
+like a shipped one stops the start-up check naming both. The registry closes at the start-up
+check; a later registration is refused.
+
+### `InternalSchedules` (module `jobs`, `ORDER` 600)
+
+`services/jobs.rs` plans the schedules of app manifests. A service registers a schedule of its own
+with `ctx.port::<dyn InternalSchedules>()` and `register(InternalSchedule { .. })`: the service
+name, the schedule name, a six-field cron expression (seconds first, UTC), the missed-run policy,
+the queue (`default`, `short`, `long`), the budget and the handler.
+
+The job is called `<service>:<name>`. The scheduler plans it like a manifest schedule (the leader
+lease, a high-water mark per schedule, `enqueue_scheduled`), and the worker runs the handler from
+the same registry as manifest handlers, so the claim gate, the side-effect hold and the metrics
+apply unchanged. Every run writes an audit line (`spot::audit::internal_schedule`) naming the
+service, never a caller. A job name that a manifest schedule (its planned name or its step) or an
+earlier handler already uses stops the start-up check. The scheduler's health text shows internal
+schedules by name only.
+
+The missed-run policy is the scheduler's: `run_once` collapses missed runs into one, `catch_up(n)`
+runs up to `n`, and `skip` plans nothing for a firing that is due (see the open question in the
+task report: the manifest schedules use `skip`).

@@ -9,6 +9,7 @@
 //! authentication methods use spot-iam-access; key identity uses spot-signed-command.
 //! The two existing tier enums are explicitly mapped, without modifying either crate.
 mod attestation;
+mod consent;
 mod error;
 mod issue;
 mod log;
@@ -16,6 +17,7 @@ mod model;
 mod state;
 mod usage;
 pub use attestation::{KeyAttestation, OperatorAttestation, VendorAttestation};
+pub use consent::{ConsentRecord, MAX_RECORD_BYTES, check_consent, to_hex};
 pub use error::DeepError;
 pub use issue::{IssueContext, escalate, issue};
 pub use log::{AuditExecutor, ChainLog, DeepAccessEvent, SessionLog, SessionReport};

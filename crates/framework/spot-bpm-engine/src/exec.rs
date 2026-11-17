@@ -38,7 +38,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
         ran: &mut Vec<NodeId>,
     ) -> EngineResult<()> {
         let transition = dag_claim(&record.run, node, now).map_err(map_exec)?;
-        self.commit(record, CaseUpdate::new().with_transition(transition))
+        self.commit(record, CaseUpdate::new().with_transition(transition), now)
             .await?;
         self.advance(record, process, node, now, ran).await
     }
@@ -163,7 +163,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
 
         if !already_started {
             let started = Attempt::started(node.clone(), attempt, started_at, is_retry);
-            self.commit(record, CaseUpdate::new().with_attempt(started))
+            self.commit(record, CaseUpdate::new().with_attempt(started), now)
                 .await?;
         }
 
@@ -175,7 +175,15 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 node: node.to_string(),
                 kind: kind.token().to_owned(),
             })?;
-        let config = node_config(&process.compiled, node);
+        let mut config = node_config(&process.compiled, node);
+        // A Decision node's task names the process it belongs to (the inbox filters and shows
+        // it): the config of a node does not carry it, so the engine adds the pinned name.
+        if kind == NodeKind::Decision
+            && let Some(map) = config.as_object_mut()
+        {
+            map.entry("process")
+                .or_insert_with(|| Json::from(process.name()));
+        }
         let outgoing = outgoing_edges(&process.compiled, node);
         let deadline = self
             .deadline(record, process, node)
@@ -215,7 +223,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
         ran.push(node.clone());
 
         if variables != record.variables {
-            self.commit(record, CaseUpdate::new().with_variables(variables))
+            self.commit(record, CaseUpdate::new().with_variables(variables), now)
                 .await?;
         }
 
@@ -232,7 +240,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                     not_before: None,
                     is_retry,
                 };
-                self.commit(record, CaseUpdate::new().with_attempt(stored))
+                self.commit(record, CaseUpdate::new().with_attempt(stored), now)
                     .await?;
                 self.faults.check(&EffectPoint::AfterAttemptStored {
                     case: record.run.id.clone(),
@@ -258,6 +266,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 self.commit(
                     record,
                     CaseUpdate::new().with_attempt(stored).with_timer(timer),
+                    now,
                 )
                 .await?;
                 self.register_timer(record, node, attempt, &spec);
@@ -316,7 +325,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             now,
         )
         .map_err(map_exec)?;
-        self.commit(record, CaseUpdate::new().with_transition(transition))
+        self.commit(record, CaseUpdate::new().with_transition(transition), now)
             .await?;
         self.faults.check(&EffectPoint::AfterTransition {
             case: record.run.id.clone(),
@@ -350,7 +359,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             now,
         )
         .map_err(map_exec)?;
-        self.commit(record, CaseUpdate::new().with_transition(transition))
+        self.commit(record, CaseUpdate::new().with_transition(transition), now)
             .await?;
         self.faults.check(&EffectPoint::AfterTransition {
             case: record.run.id.clone(),
@@ -391,7 +400,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 not_before: Some(Instant::from_offset(at)),
                 is_retry,
             };
-            self.commit(record, CaseUpdate::new().with_attempt(stored))
+            self.commit(record, CaseUpdate::new().with_attempt(stored), now)
                 .await?;
             Ok(())
         } else {
@@ -406,7 +415,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 not_before: None,
                 is_retry,
             };
-            self.commit(record, CaseUpdate::new().with_attempt(stored))
+            self.commit(record, CaseUpdate::new().with_attempt(stored), now)
                 .await?;
             self.apply_failed(record, process, node, reason, now).await
         }
@@ -500,7 +509,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 not_before: None,
                 is_retry: false,
             };
-            self.commit(record, CaseUpdate::new().with_attempt(stored))
+            self.commit(record, CaseUpdate::new().with_attempt(stored), now)
                 .await?;
         }
         Ok(())
@@ -559,7 +568,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             not_before: None,
             is_retry,
         };
-        self.commit(record, CaseUpdate::new().with_attempt(done))
+        self.commit(record, CaseUpdate::new().with_attempt(done), now)
             .await?;
         let transition = dag_complete(
             &process.compiled.dag,
@@ -577,6 +586,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             CaseUpdate::new()
                 .with_transition(transition)
                 .clearing_timer(node.clone()),
+            now,
         )
         .await?;
         self.timers.clear(&record.run.id, node);
@@ -634,7 +644,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             attempt: record.run.node(node).map_or(1, |state| state.attempts),
             child: child_id,
         };
-        self.commit(record, CaseUpdate::new().with_child(link))
+        self.commit(record, CaseUpdate::new().with_child(link), now)
             .await?;
         self.await_child(record, process, node, now, ran).await
     }
@@ -678,7 +688,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                     not_before: None,
                     is_retry: false,
                 };
-                self.commit(record, CaseUpdate::new().with_attempt(stored))
+                self.commit(record, CaseUpdate::new().with_attempt(stored), now)
                     .await?;
                 ran.push(node.clone());
                 self.apply_done(record, process, node, output, Vec::new(), now)

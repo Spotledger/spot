@@ -119,3 +119,39 @@ explanation_key = "error.rule_graph.registry"
 params = []
 remedy = "Check the rule set's name and its source, then retry the registry operation."
 since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.failed"
+class = "none"
+summary = "The rule graph failed."
+explanation_key = "error.rule_graph.failed"
+params = []
+remedy = "Retry; report the code if it repeats."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.limit"
+class = "none"
+summary = "The rule graph hit a limit."
+explanation_key = "error.rule_graph.limit"
+params = []
+remedy = "Reduce the size of the query."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unknown"
+class = "none"
+summary = "The rule is not known."
+explanation_key = "error.rule_graph.unknown"
+params = []
+remedy = "Check the rule name."
+since = "0.1.0"
+
+[[entry]]
+code = "rule_graph.unsupported_field_fact"
+class = "none"
+summary = "The rule uses a field fact the graph does not support."
+explanation_key = "error.rule_graph.unsupported_field_fact"
+params = []
+remedy = "Use a supported field fact."
+since = "0.1.0"

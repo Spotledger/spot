@@ -101,6 +101,10 @@ pub(crate) struct Work<T> {
     pub(crate) trail: Trail,
     /// The documents written, for the `doc_state` events flushed before the commit.
     pub(crate) capture: CaptureSet,
+    /// The principal a batch resolved once for its one actor (see `create_batch`): the checks
+    /// inside the transaction (link reads, a step's loads, a nested write) use it instead of
+    /// resolving the same principal again, each time in a transaction of its own.
+    pub(crate) pinned: Option<(String, spot_permissions::Principal)>,
 }
 
 /// What the denial sink is told that the error alone does not say.
@@ -150,7 +154,26 @@ impl<T> Work<T> {
             method: None,
             trail: Trail::default(),
             capture: CaptureSet::default(),
+            pinned: None,
         }
+    }
+
+    /// Fixes the principal of `inv`'s actor for every check this transaction runs for that actor.
+    pub(crate) fn pin_principal(
+        &mut self,
+        inv: &spot_app_api::context::Invocation,
+        principal: &spot_permissions::Principal,
+    ) {
+        self.pinned = Some((inv.actor.principal_text(), principal.clone()));
+    }
+
+    /// The pinned principal, if it is the one of `inv`'s actor.
+    pub(crate) fn pinned_for(
+        &self,
+        inv: &spot_app_api::context::Invocation,
+    ) -> Option<spot_permissions::Principal> {
+        let (actor, principal) = self.pinned.as_ref()?;
+        (*actor == inv.actor.principal_text()).then(|| principal.clone())
     }
 
     /// Maps a storage error for the caller, and poisons the transaction when it cannot go on.

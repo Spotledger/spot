@@ -8,10 +8,9 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-# `RepairItem`: what the node's parking store pushes out for repair.
+# `RepairItem`: what the node's parking store pushes out for repair; `RecordKey` and `Position`
+# (re-exported by the node crate): the units a pull request names.
 spot-sync-node = { path = "../spot-sync-node" }
-# `RecordKey` and `Position`: the units a pull request names (spot-sync-node does not re-export them).
-spot-sync-closure = { path = "../spot-sync-closure" }
 # Requests and escalations are wire-shaped plain data.
 serde = { version = "1", features = ["derive"] }
 # Typed errors with stable `sync_repair_pull.*` codes.

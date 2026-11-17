@@ -4,6 +4,15 @@
 //! <tenant>/manifest/<generation>.json          one signed manifest per generation
 //! <tenant>/segments/<generation>/<first>-<last>.seg
 //! <tenant>/tail/<generation>/<batch_id>.chunk  remote-sync tail, compacted into segments
+//! ```
+//!
+//! A tail chunk is written once (`put_new`), never replaced, and deleted only after a signed
+//! manifest covers its whole range. Its bytes are version 2 (`SPOTJTL2`, AEAD lines and one MAC
+//! over the bytes **and this key**, ADR-061 Appendix A.2.2), so the generation and batch id in the
+//! name are authenticated; version 1 chunks are still read. The batch id is chosen by the relay
+//! at start as the highest id listed plus one (A.4); the object is at most 64 MiB (A.7).
+//!
+//! ```text
 //! <tenant>/snapshots/<generation>/<position>/  base images (a prefix, optionally with a name)
 //! <tenant>/blobs/<hash>                        content-addressed attachments
 //! ```

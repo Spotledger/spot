@@ -11,6 +11,8 @@
     <ProjectReference Include="../Spotledger.Client.Core/Spotledger.Client.Core.csproj" />
     <ProjectReference Include="../Spotledger.Client.Forms/Spotledger.Client.Forms.csproj" />
     <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Notifications/Spotledger.Client.Notifications.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Realtime/Spotledger.Client.Realtime.csproj" />
     <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
     <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
     <ProjectReference Include="../Spotledger.Client.Workspace/Spotledger.Client.Workspace.csproj" />

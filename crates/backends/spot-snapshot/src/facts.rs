@@ -193,7 +193,10 @@ pub fn catalogue_version_violation(
     manifest: &SnapshotManifest,
     restored_version: &str,
 ) -> Option<Violation> {
-    if manifest.catalogue_version == restored_version {
+    if manifest.catalogue_version == restored_version
+        || (manifest.catalogue_version == crate::manifest::UNRECORDED_CATALOGUE
+            && restored_version.is_empty())
+    {
         return None;
     }
     Some(Violation {
@@ -329,8 +332,7 @@ impl crate::restore::InvariantCheck for SystemTableCountsCheck {
 /// backend's pool is not used `PgBackend::checkout` is crate-private to
 /// `spot-postgres`); facts.rs builds its own one-off connections.
 async fn read_live_meta(backend: &spot_postgres::PgBackend, key: &str) -> SnapshotResult<String> {
-    let url = public_connection_url(backend.config());
-    let held = crate::conn::connect_url(&url).await?;
+    let held = crate::conn::raw_connect(backend.config()).await?;
     let rows = held
         .client
         .query("SELECT value FROM spot_meta WHERE key = $1", &[&key])
@@ -346,17 +348,6 @@ async fn read_live_meta(backend: &spot_postgres::PgBackend, key: &str) -> Snapsh
 async fn read_live_counts(
     backend: &spot_postgres::PgBackend,
 ) -> SnapshotResult<BTreeMap<String, u64>> {
-    let url = public_connection_url(backend.config());
-    let held = crate::conn::connect_url(&url).await?;
+    let held = crate::conn::raw_connect(backend.config()).await?;
     system_counts(&held.client).await
-}
-
-/// Rebuilds the credential-free URL of a config. The password of a live site rides
-/// the `PGPASSWORD` env of the connection builder (raw_connect reads the config), so
-/// the URL text itself never carries it.
-fn public_connection_url(config: &spot_postgres::PgConfig) -> String {
-    format!(
-        "postgres://{}@{}:{}/{}",
-        config.user, config.host, config.port, config.dbname
-    )
 }

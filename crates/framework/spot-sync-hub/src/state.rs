@@ -13,9 +13,10 @@ use std::collections::{BTreeMap, BTreeSet};
 /// destination, its holds, extras set, acknowledged prefix and the position it is caught up from.
 /// It holds record references, never record content.
 ///
-/// Serialisation note: the skew crate's `HoldSet` is keyed by `(entity, id)` tuples, so a text
-/// format that needs string map keys (JSON) cannot carry it; use a format that can (for example a
-/// binary one) or persist the snapshot through the storage layer's own encoder.
+/// Serialisation: plain serde data. The skew crate's `HoldSet` writes its maps as sorted
+/// sequences of `(entity, id, value)` entries, so the state round-trips as JSON as well as in a
+/// binary format; an operator can read, diff and restore it. Loading refuses a damaged hold set
+/// (`sync_skew.state_duplicate_key`, `sync_skew.state_disorder`, `sync_skew.state_over_limit`).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RelayState {
     /// The highest stream position processed.

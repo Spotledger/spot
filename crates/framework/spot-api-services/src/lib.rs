@@ -20,10 +20,13 @@ pub mod access;
 pub mod engine_resources;
 pub mod error;
 pub mod form_event;
+pub mod list_guard;
+pub mod lookup;
 pub mod meta_resources;
 pub mod permissions;
 pub mod query;
 pub mod resources;
+pub mod search;
 pub mod util;
 
 pub use access::{AccessControl, PrincipalSource, engine_for};
@@ -34,6 +37,8 @@ pub use error::ApiErrorExt;
 pub use form_event::{
     EngineFormEvents, EveryField, FieldChangedPlan, FormEvent, FormEventService, Limits,
 };
+pub use list_guard::ListFieldGuard;
+pub use lookup::EngineLookup;
 pub use meta_resources::{CurrentMeta, MetaResources, MetaSource};
 pub use permissions::PermissionResources;
 pub use resources::{Delegates, FunctionDelegate, ReportDelegate};

@@ -18,3 +18,9 @@ pub const SCHEMA_RETIRE_BLOCKED: &str = "sync_skew.schema_retire_blocked";
 pub const HOLDS_FULL: &str = "sync_skew.holds_full";
 /// An entry's major is retired for the whole fleet: a permanent hold, raised as `NODE_TOO_OLD`.
 pub const HOLD_RETIRED: &str = "sync_skew.hold_retired";
+/// A persisted hold set names one `(entity, id)` twice; it is refused, never merged.
+pub const STATE_DUPLICATE_KEY: &str = "sync_skew.state_duplicate_key";
+/// A persisted hub-side queue is not strictly ascending by position; it is refused.
+pub const STATE_DISORDER: &str = "sync_skew.state_disorder";
+/// A persisted hold set queues more entries than its limit; it is refused.
+pub const STATE_OVER_LIMIT: &str = "sync_skew.state_over_limit";

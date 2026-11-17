@@ -370,3 +370,46 @@ fn an_empty_snapshot_is_valid() {
         1
     );
 }
+
+#[test]
+fn one_part_loads_alone_and_is_verified_like_a_stream() {
+    let store = MemoryStore::new();
+    write(&store, "acme", 1, 7, 300, 2_000);
+    let all = read_all(&store, "acme", 1, 7);
+    let reader = block_on(SnapshotReader::open(&store, "acme", 1, 7, &KEY)).unwrap();
+    assert!(reader.part_count() >= 3, "parts: {}", reader.part_count());
+    // The parts, in order, are exactly the stream.
+    let mut joined: Vec<ImageRecord> = Vec::new();
+    for ordinal in 0..reader.part_count() {
+        let part = block_on(reader.part(ordinal)).unwrap();
+        assert_eq!(
+            u64::try_from(part.len()).ok(),
+            Some(reader.index().body.parts[ordinal].images)
+        );
+        joined.extend(part);
+    }
+    assert_eq!(joined, all);
+    // An ordinal past the end is an error, not a panic.
+    assert_eq!(
+        code(block_on(reader.part(reader.part_count()))),
+        "journal_snapshot.params_invalid"
+    );
+    assert_eq!(
+        code(block_on(reader.part(usize::MAX))),
+        "journal_snapshot.params_invalid"
+    );
+    // An altered part fails alone and names itself; its neighbours still load.
+    let target = "acme/snapshots/00000000000000000001/00000000000000000007/part-00000002.jsonl.zst";
+    let flipped = copy(&store, |key, mut bytes| {
+        if key == target {
+            bytes[3] ^= 0x01;
+        }
+        Some(bytes)
+    });
+    let reader = block_on(SnapshotReader::open(&flipped, "acme", 1, 7, &KEY)).unwrap();
+    assert!(block_on(reader.part(0)).is_ok());
+    let error = block_on(reader.part(1)).unwrap_err();
+    assert_eq!(error.code(), "journal_snapshot.part_invalid");
+    assert!(error.to_string().contains("part-00000002"));
+    assert!(block_on(reader.part(2)).is_ok());
+}

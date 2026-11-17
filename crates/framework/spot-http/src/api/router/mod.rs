@@ -17,8 +17,9 @@ use axum::Router;
 use axum::extract::Request;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{MethodRouter, delete, get, patch, post};
 use serde_json::Value as Json;
+use spot_core::Audience;
 use spot_storage_contract::{Name, RecordId, Version};
 
 use crate::request::RequestId;
@@ -31,11 +32,16 @@ use super::meta::DocTypeMeta;
 use super::ports::Ports;
 use super::print::PrintPort;
 use super::registry::Code;
+use super::routes as table;
 use super::service::{
     ApiError, AuthService, Credential, FieldIssue, LookupService, Message, MetaService, Page,
     PermissionService, RequestCtx, ResourceService, RevealService, WriteResult,
 };
 use middleware::header_credential;
+pub use middleware::{
+    DEFAULT_AUTH_LIMIT, DEFAULT_RATE_WINDOW, MAX_AUTH_LIMIT, MAX_RATE_WINDOW_SECS,
+    RATE_TABLE_CAPACITY, RateLimiter, RateLimits,
+};
 
 /// Largest body this layer reads (defensive; the server core enforces the configured limit
 /// before routing and maps chunked overruns itself).
@@ -70,6 +76,10 @@ pub struct ApiServices {
     /// `ApiServices::new` starts with the system clock; a host with one clock passes it with
     /// [`ApiServices::with_clock`], tests pass a manual one.
     pub clock: Arc<dyn spot_core::Clock>,
+    /// The limits of the public groups' rate class (default: 20 requests per 60 seconds per
+    /// client address). A host passes the configured values with
+    /// [`ApiServices::with_rate_limits`] (`ServerConfig::rate_limits`).
+    pub rate_limits: RateLimits,
 }
 
 impl ApiServices {
@@ -91,12 +101,20 @@ impl ApiServices {
             reveal: None,
             ports: Ports::new(),
             clock: Arc::new(spot_core::SystemClock::new()),
+            rate_limits: RateLimits::default(),
         }
     }
 
     /// Times the public groups' rate limits by `clock`.
     pub fn with_clock(mut self, clock: Arc<dyn spot_core::Clock>) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// Sets the limits of the public groups' rate class (see [`RateLimits`]). Without it the
+    /// defaults apply, so every existing caller keeps its behaviour.
+    pub fn with_rate_limits(mut self, rate_limits: RateLimits) -> Self {
+        self.rate_limits = rate_limits;
         self
     }
 
@@ -189,26 +207,164 @@ pub fn served_operations() -> std::collections::BTreeSet<&'static str> {
     served
 }
 
-/// Build the `/api/v1` router (every contract operation except realtime).
+/// Build the `/api/v1` router (every contract operation except realtime): the table's routes
+/// for the staff and partner audiences (the ERP listener). Equals
+/// `router_for(&[Audience::Staff, Audience::Partner], services)`.
 pub fn router(services: ApiServices) -> Router {
-    router_with(services, routes::REGISTRY).0
+    router_for(&[Audience::Staff, Audience::Partner], services)
+}
+
+/// The router of the table's routes whose marks intersect `audiences`, with the same layers and
+/// middleware order as [`router`]. A route that is not in [`table::route_table`] is not mounted
+/// (unmarked means absent); an empty `audiences` mounts nothing. A registered group is mounted
+/// only when every operation it serves is marked for one of `audiences`.
+pub fn router_for(audiences: &[Audience], services: ApiServices) -> Router {
+    build(services, routes::REGISTRY, Some(audiences)).0
 }
 
 /// [`router`] over an explicit list of route groups (tests register their own), and what was
 /// mounted. Every group sits behind the bearer check, like the hand-wired secured routes,
 /// except a group that declares `PUBLIC` (`routes::Public`): it is merged outside the bearer
-/// layer, behind the rate limit of its declared class instead.
+/// layer, behind the rate limit of its declared class instead. The hand-wired routes are all
+/// of the table's hand-wired entries (every audience); the groups are not filtered by audience.
 pub fn router_with(
     services: ApiServices,
     registrations: &[routes::Registration],
 ) -> (Router, routes::MountReport) {
-    let mounted = routes::mount(registrations, &services.ports, HAND_WIRED_SERVES);
+    build(services, registrations, None)
+}
+
+/// How a hand-wired route is layered.
+#[derive(Clone, Copy)]
+enum Layering {
+    /// Behind the bearer-presence middleware.
+    Secured,
+    /// Behind the bearer-presence and the `Idempotency-Key` middleware (commands).
+    Command,
+    /// No middleware (the login).
+    Open,
+}
+
+/// The one match from a table operation to its handler. `None` for an operation no hand-wired
+/// handler serves (the registered groups' operations, and any not yet routed).
+fn hand_wired(operation: &str) -> Option<(MethodRouter<SharedState>, Layering)> {
+    use Layering::{Command, Open, Secured};
+    Some(match operation {
+        "auth_login" => (post(auth::auth_login), Open),
+        "auth_logout" => (post(auth::auth_logout), Secured),
+        "auth_session" => (get(auth::auth_session), Secured),
+        "auth_permissions" => (get(permissions::auth_permissions), Secured),
+        "meta_get" => (get(resource::meta_get), Secured),
+        "lookup_search" => (post(lookup::lookup_search), Secured),
+        "resource_list" => (get(resource::resource_list), Secured),
+        "resource_create" => (post(resource::resource_create), Command),
+        "resource_query" => (post(resource::resource_query), Secured),
+        "resource_get" => (get(resource::resource_get), Secured),
+        "resource_update" => (patch(resource::resource_update), Secured),
+        "resource_delete" => (delete(resource::resource_delete), Secured),
+        "field_reveal" => (post(permissions::field_reveal), Secured),
+        "lifecycle_post" => (post(lifecycle::lifecycle_post), Command),
+        "lifecycle_cancel" => (post(lifecycle::lifecycle_cancel), Command),
+        "lifecycle_correct" => (post(lifecycle::lifecycle_correct), Command),
+        "lifecycle_rename" => (post(lifecycle::lifecycle_rename), Command),
+        "document_method_call" => (post(lifecycle::document_method_call), Command),
+        "function_call" => (post(lifecycle::function_call_post), Command),
+        "function_call_get" => (get(lifecycle::function_call_get), Secured),
+        "report_run" => (post(lifecycle::report_run), Secured),
+        // Files: not behind the JSON idempotency middleware (it buffers); the upload keeps
+        // the `Idempotency-Key` protocol itself.
+        "file_upload" => (post(files::file_upload), Secured),
+        "file_get" => (get(files::file_get), Secured),
+        // A read-only GET: no body, no Idempotency-Key; the service decides permission.
+        "print_get" => (get(print::print_get), Secured),
+        _ => return None,
+    })
+}
+
+/// Whether `operation` has a hand-wired handler (the test that the table and the handlers agree
+/// uses it).
+pub fn has_hand_wired_handler(operation: &str) -> bool {
+    hand_wired(operation).is_some()
+}
+
+/// The hand-wired routes of the table (those `audiences` allow, every one when `None`), in three
+/// routers by layering: secured, commands (idempotent) and open. Each table entry is one method
+/// on its path; axum merges the methods of one path.
+fn mount_hand_wired(
+    audiences: Option<&[Audience]>,
+    state: &SharedState,
+) -> (
+    Router<SharedState>,
+    Router<SharedState>,
+    Router<SharedState>,
+) {
+    let mut secured = Router::new();
+    let mut commands = Router::new();
+    let mut open = Router::new();
+    for entry in table::route_table() {
+        if let Some(wanted) = audiences
+            && !table::entry_allows(entry, wanted)
+        {
+            continue;
+        }
+        let Some((handler, layering)) = hand_wired(entry.operation) else {
+            continue;
+        };
+        // The 0.5.0 routes exist only when their service is wired. Reveal is not a command:
+        // the idempotency layer never sees it, so `Idempotency-Key` is ignored.
+        let wired = match entry.operation {
+            "auth_permissions" => state.permissions.is_some(),
+            "field_reveal" => state.reveal.is_some(),
+            _ => true,
+        };
+        if !wired {
+            continue;
+        }
+        match layering {
+            Layering::Secured => secured = secured.route(entry.path, handler),
+            Layering::Command => commands = commands.route(entry.path, handler),
+            Layering::Open => open = open.route(entry.path, handler),
+        }
+    }
+    (secured, commands, open)
+}
+
+/// The assembly behind [`router`], [`router_for`] and [`router_with`]. `audiences` is `None`
+/// for the unfiltered legacy seam, `Some` for a built-by-audience router.
+fn build(
+    services: ApiServices,
+    registrations: &[routes::Registration],
+    audiences: Option<&[Audience]>,
+) -> (Router, routes::MountReport) {
+    let allowed: Vec<routes::Registration> = registrations
+        .iter()
+        .filter(|registration| match audiences {
+            Some(wanted) => table::group_allowed(registration.serves, wanted),
+            None => true,
+        })
+        .copied()
+        .collect();
+    let mounted = routes::mount(&allowed, &services.ports, HAND_WIRED_SERVES);
     let report = mounted.report;
+    // The bearer layer also refuses a credential whose audience the route's mark does not list
+    // (ADR-083 Barrier 1). Strict (an unmarked secured route is a 500) for every router built
+    // from the table; the legacy `router_with` seam is lenient about unmarked test groups.
+    let gate = middleware::AuthGate::new(
+        services.auth.clone(),
+        services.clock.clone(),
+        audiences.is_some(),
+    );
     let registered = mounted
         .authenticated
-        .layer(axum::middleware::from_fn(middleware::auth_middleware));
+        .layer(axum::middleware::from_fn_with_state(
+            gate.clone(),
+            middleware::auth_middleware,
+        ));
     // One limiter for the router: one counter per rate class and client address.
-    let limiter = Arc::new(middleware::RateLimiter::new(services.clock.clone()));
+    let limiter = Arc::new(middleware::RateLimiter::with_limits(
+        services.clock.clone(),
+        services.rate_limits,
+    ));
     let mut public = Router::new();
     for (class, group) in mounted.public {
         public = public.merge(group.layer(axum::middleware::from_fn_with_state(
@@ -230,97 +386,22 @@ pub fn router_with(
         files: services.ports.get::<dyn FilesPort>(),
         print: services.ports.get::<dyn PrintPort>(),
     };
+    let (secured, commands, open) = mount_hand_wired(audiences, &state);
     // Commands that declare `Idempotency-Key` in the contract.
-    let commands = Router::new()
-        .route(
-            "/api/v1/resource/{doctype}",
-            post(resource::resource_create),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}/post",
-            post(lifecycle::lifecycle_post),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}/cancel",
-            post(lifecycle::lifecycle_cancel),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}/correct",
-            post(lifecycle::lifecycle_correct),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}/rename",
-            post(lifecycle::lifecycle_rename),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}/methods/{method}",
-            post(lifecycle::document_method_call),
-        )
-        .route(
-            "/api/v1/method/{app}/{module}/{function}",
-            post(lifecycle::function_call_post),
-        )
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            middleware::idempotency_middleware,
-        ));
-    let mut secured = Router::new()
-        .route("/api/v1/auth/logout", post(auth::auth_logout))
-        .route("/api/v1/auth/session", get(auth::auth_session))
-        .route("/api/v1/meta/{doctype}", get(resource::meta_get))
-        .route("/api/v1/resource/{doctype}", get(resource::resource_list))
-        .route(
-            "/api/v1/resource/{doctype}/query",
-            post(resource::resource_query),
-        )
-        .route(
-            "/api/v1/resource/{doctype}/{id}",
-            get(resource::resource_get)
-                .patch(resource::resource_update)
-                .delete(resource::resource_delete),
-        )
-        .route(
-            "/api/v1/method/{app}/{module}/{function}",
-            get(lifecycle::function_call_get),
-        )
-        .route("/api/v1/report/{report}/run", post(lifecycle::report_run))
-        .route(
-            "/api/v1/lookup/{doctype}/{field}",
-            post(lookup::lookup_search),
-        )
-        // Files: not behind the JSON idempotency middleware (it buffers); the upload keeps
-        // the `Idempotency-Key` protocol itself.
-        .route("/api/v1/files", post(files::file_upload))
-        .route("/api/v1/files/{id}", get(files::file_get))
-        // A read-only GET: no body, no Idempotency-Key; the service decides permission.
-        .route("/api/v1/print/{doctype}/{id}", get(print::print_get))
-        .merge(commands);
-    // The 0.5.0 routes exist only when their service is wired. Reveal is not a command: the
-    // idempotency layer never sees it, so `Idempotency-Key` is ignored.
-    if state.permissions.is_some() {
-        secured = secured.route(
-            "/api/v1/auth/permissions",
-            get(permissions::auth_permissions),
-        );
-    }
-    if state.reveal.is_some() {
-        secured = secured.route(
-            "/api/v1/resource/{doctype}/{id}/reveal",
-            post(permissions::field_reveal),
-        );
-    }
-    let secured = secured
-        .with_state(state.clone())
-        .layer(axum::middleware::from_fn(middleware::auth_middleware));
-    let unauthenticated = Router::new().route(
-        "/api/v1/auth/login",
-        post(auth::auth_login).with_state(state),
+    let commands = commands.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        middleware::idempotency_middleware,
+    ));
+    let secured = secured.merge(commands).with_state(state.clone()).layer(
+        axum::middleware::from_fn_with_state(gate, middleware::auth_middleware),
     );
+    let unauthenticated = open.with_state(state);
     (
         secured
             .merge(unauthenticated)
             .merge(registered)
-            .merge(public),
+            .merge(public)
+            .layer(axum::middleware::from_fn(table::stamp_route_mark)),
         report,
     )
 }
@@ -602,7 +683,7 @@ async fn prepare_meta(
     let mut map = BTreeMap::new();
     map.insert(parent.doctype.as_str().to_owned(), parent.clone());
     for field in &parent.fields {
-        if field.field_type == super::meta::FieldType::Table
+        if field.field_type.is_table()
             && let Some(child) = &field.child_doctype
             && !map.contains_key(child.as_str())
         {

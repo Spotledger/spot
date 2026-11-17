@@ -17,7 +17,7 @@
 //!   (`Customisations::stamp_revision`), so `meta().version() == version` whatever revision the
 //!   caller's customisations carried, and a new DocType, an adopted snapshot or a roll-back is
 //!   reflected too;
-//! - a local [`apply`](LiveMeta::apply) mints `current + 1`;
+//! - a local [`apply`](LiveMeta::apply) mints [`next_change_version`]: `current + 1`, and never 1;
 //! - the one exception is the starting snapshot [`Version::ZERO`]: `spot-meta` cannot build
 //!   metadata older than version 1, so it reports 1. The first local change therefore mints
 //!   version 2 (not 1), so the metadata version still rises on the first change; versions only
@@ -85,6 +85,21 @@ pub enum Adopt {
     Unchanged,
     /// A newer version was built, validated and swapped in.
     Applied(Version),
+}
+
+/// The version a node mints for its next change: the one after `current`, and **never 1**.
+///
+/// The starting snapshot `Version::ZERO` already reports metadata version 1 (`spot-meta` cannot
+/// report anything older), so a first change minted as version 1 would leave the served number
+/// unchanged over different content: a cache keyed on `meta().version()` (plans, permission sets,
+/// the metadata ETag) would not see it. Every path that mints a version for a change uses this one
+/// rule ([`LiveMeta::apply`] and the customisation service). A version announced by another node is
+/// adopted as announced, never lowered or re-numbered.
+///
+/// `None` when the `u64` space is exhausted: a version never wraps.
+#[must_use]
+pub fn next_change_version(current: Version) -> Option<Version> {
+    current.checked_next().map(|next| next.max(Version::new(2)))
 }
 
 /// The site's live metadata: one immutable [`Snapshot`] behind a lock-free pointer.
@@ -186,19 +201,16 @@ impl LiveMeta {
     /// announces the `(version, hash)` it actually built, not a later one a racing writer made.
     pub(crate) fn apply_inner(&self, change: MetaChange) -> LiveResult<Arc<Snapshot>> {
         let mut state = self.lock();
-        let next = self
-            .current
-            .load_full()
-            .version()
-            .checked_next()
-            .ok_or(LiveError::Exhausted)?;
+        let next =
+            next_change_version(self.current.load_full().version()).ok_or(LiveError::Exhausted)?;
         let mut definitions = state.definitions.clone();
         let mut customisations = state.customisations.clone();
         apply_change(&mut definitions, &mut customisations, change)?;
         // `Snapshot::build` stamps the metadata with the minted version, so the two always
-        // agree. The starting snapshot `Version::ZERO` reports metadata version 1, so the first
-        // local change mints 2 (not 1): the served number must rise on the first change too.
-        let version = next.max(Version::new(2));
+        // agree. The version is minted by [`next_change_version`]: never 1, because the starting
+        // snapshot `Version::ZERO` already reports metadata version 1, so the served number rises
+        // on the first change too.
+        let version = next;
         let snapshot = Arc::new(Snapshot::build(
             definitions.clone(),
             &customisations,

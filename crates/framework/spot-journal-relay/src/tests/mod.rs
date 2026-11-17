@@ -11,3 +11,6 @@ mod property_tests;
 mod refusal_tests;
 mod split_brain_tests;
 mod support;
+mod tail_tests;
+mod view_support;
+mod view_tests;

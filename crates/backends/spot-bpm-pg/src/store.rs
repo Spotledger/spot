@@ -7,16 +7,18 @@ use deadpool_postgres::{Object, Pool};
 use serde_json::Value as Json;
 use spot_app_api::AppResult;
 use spot_app_api::prelude::OffsetDateTime;
+use spot_bpm_engine::node_run_log::require_instant;
 use spot_bpm_engine::{
     Attempt, AttemptState, CaseFuture, CaseId, CaseRecord, CaseStore, CaseStoreFactory, CaseUpdate,
-    ChildLink, EngineError, EngineResult, TimerRecord,
+    ChildLink, EngineError, EngineResult, OpenNode, StoredEffect, TimerRecord, derive_node_runs,
 };
 use spot_dag::NodeId;
-use spot_dag_exec::Run;
+use spot_dag_exec::{NodeStatus, Run, Step};
 use tokio_postgres::{Client, Row, Transaction};
 
 use crate::convert;
 use crate::error;
+use crate::node_run_log;
 use crate::schema;
 use crate::sql;
 use crate::state;
@@ -80,7 +82,7 @@ impl PgCaseStore {
         schema::prepare(&self.pool).await
     }
 
-    async fn conn(&self) -> EngineResult<Object> {
+    pub(crate) async fn conn(&self) -> EngineResult<Object> {
         self.pool.get().await.map_err(error::pool)
     }
 
@@ -98,6 +100,52 @@ impl PgCaseStore {
         rows.iter().map(pair_from_row).collect()
     }
 
+    /// One page of the Cases `query.viewer` may see, newest first. The visibility is part of the
+    /// statement, so the cut and the next-page test never count a Case the viewer may not see.
+    ///
+    /// # Errors
+    /// A store failure.
+    pub async fn page_visible(
+        &self,
+        query: &VisibleCases<'_>,
+    ) -> EngineResult<Vec<(String, OffsetDateTime)>> {
+        let conn = self.conn().await?;
+        let (after_at, after_id) = match &query.after {
+            Some((at, id)) => (Some(*at), Some(id.as_str())),
+            None => (None, None),
+        };
+        let limit = i64::from(query.limit);
+        let rows = conn
+            .query(
+                sql::SELECT_VISIBLE_CASES,
+                &[
+                    &self.tenant,
+                    &query.sees_all,
+                    &query.viewer,
+                    &query.also_cases,
+                    &query.process,
+                    &query.status,
+                    &query.mine,
+                    &after_at,
+                    &after_id,
+                    &limit,
+                ],
+            )
+            .await
+            .map_err(error::pg)?;
+        rows.iter()
+            .map(|row| {
+                let id: String = row
+                    .try_get("case_id")
+                    .map_err(|e| error::corrupt(e.to_string()))?;
+                let at: OffsetDateTime = row
+                    .try_get("started_at")
+                    .map_err(|e| error::corrupt(e.to_string()))?;
+                Ok((id, at))
+            })
+            .collect()
+    }
+
     /// The nodes whose timer is due at or before `now`: the "timers due" lookup, served by
     /// `spot_bpm_node_outcome_due_idx`.
     ///
@@ -111,6 +159,27 @@ impl PgCaseStore {
             .map_err(error::pg)?;
         rows.iter().map(pair_from_row).collect()
     }
+}
+
+/// The question of [`PgCaseStore::page_visible`].
+#[derive(Debug)]
+pub struct VisibleCases<'a> {
+    /// The viewer's user id.
+    pub viewer: &'a str,
+    /// The Cases of the viewer's tasks.
+    pub also_cases: &'a [String],
+    /// The viewer sees every Case (holds the supervise permission).
+    pub sees_all: bool,
+    /// Only Cases of this process.
+    pub process: Option<&'a str>,
+    /// Only Cases with this status (`running`, `completed`, `failed` or `cancelled`).
+    pub status: Option<&'a str>,
+    /// Only the Cases the viewer started.
+    pub mine: bool,
+    /// The last Case of the previous page: its start instant and id.
+    pub after: Option<(OffsetDateTime, String)>,
+    /// The most Cases to return.
+    pub limit: u32,
 }
 
 /// A `(case, node)` pair from a two-column row.
@@ -138,6 +207,30 @@ struct NodeAux {
 /// Whether an attempt state is terminal, so a later non-terminal write never regresses it.
 fn is_terminal(state: AttemptState) -> bool {
     matches!(state, AttemptState::Done | AttemptState::Failed)
+}
+
+/// Whether the exactly-once guard keeps the stored attempt over the update's: the stored one is
+/// numbered higher, or it is the same attempt and already terminal. Nothing is then written for
+/// the update's attempt, so nothing is logged for it either.
+fn attempt_kept(map: &BTreeMap<NodeId, NodeAux>, update: &CaseUpdate) -> bool {
+    let Some(attempt) = &update.attempt else {
+        return false;
+    };
+    map.get(&attempt.node)
+        .and_then(|entry| entry.attempt.as_ref())
+        .is_some_and(|stored| {
+            attempt.attempt < stored.attempt
+                || (stored.attempt == attempt.attempt && is_terminal(stored.state))
+        })
+}
+
+/// The nodes of `run` that are running, with the attempt each is on: what a cancel closes.
+fn running_nodes(run: &Run) -> Vec<(NodeId, u32)> {
+    run.nodes
+        .iter()
+        .filter(|(_, state)| state.status == NodeStatus::Running)
+        .map(|(node, state)| (node.clone(), state.attempts))
+        .collect()
 }
 
 /// The node rows of one Case, keyed by node.
@@ -439,6 +532,9 @@ impl CaseStore for PgCaseStore {
         update: CaseUpdate,
     ) -> CaseFuture<'a, CaseRecord> {
         Box::pin(async move {
+            // Fail closed before anything is read or written: an attempt or a timer needs the
+            // instant the node-run log records.
+            require_instant(&update)?;
             let mut conn = self.conn().await?;
             let tx = conn.transaction().await.map_err(error::pg)?;
             let row = tx
@@ -463,6 +559,8 @@ impl CaseStore for PgCaseStore {
                 .transition
                 .as_ref()
                 .is_some_and(|transition| state::already_applied(&run, &transition.step));
+            let open_before = running_nodes(&run);
+            let kept_earlier_attempt = attempt_kept(&aux, &update);
             if !already {
                 if run.version != expected_version {
                     return Err(EngineError::VersionConflict {
@@ -479,6 +577,38 @@ impl CaseStore for PgCaseStore {
             if let Some(child) = &update.child {
                 children.insert(child.node.clone(), child.clone());
             }
+            // What the update did to the Case, for the node-run log (derived before any write).
+            let attempts: BTreeMap<NodeId, u32> = aux
+                .iter()
+                .filter_map(|(node, entry)| {
+                    entry
+                        .attempt
+                        .as_ref()
+                        .map(|attempt| (node.clone(), attempt.attempt))
+                })
+                .collect();
+            let cancelling = matches!(
+                update.transition.as_ref().map(|t| &t.step),
+                Some(Step::Cancel { .. })
+            );
+            let open = if cancelling && !already {
+                open_before
+                    .into_iter()
+                    .map(|(node, dag_attempt)| OpenNode {
+                        attempt: attempts.get(&node).copied().unwrap_or(dag_attempt),
+                        node,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let effect = StoredEffect {
+                kept_earlier_attempt,
+                transition_applied: update.transition.is_some() && !already,
+                open,
+                attempts,
+            };
+            let drafts = derive_node_runs(&update, &effect)?;
 
             let nodes = convert::nodes_to_json(&run.nodes)?;
             let taken = convert::taken_to_json(&run.taken)?;
@@ -517,6 +647,9 @@ impl CaseStore for PgCaseStore {
                 }
                 None => variables_from_tx(&tx, id).await?,
             };
+            // The log is written last: its counter-row lock is then held only for the instant
+            // between this insert and the commit, and the sequence follows commit order.
+            node_run_log::append(&tx, &self.tenant, &run, drafts).await?;
             tx.commit().await.map_err(error::pg)?;
             Ok(assemble(run, variables, aux, children, initiator))
         })

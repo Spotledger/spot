@@ -24,6 +24,7 @@ use crate::case::CaseRecord;
 use crate::engine::{EffectPoint, Engine, Faults, InMemoryEngine, StepReport};
 use crate::error::{EngineError, EngineResult};
 use crate::handler::{CaseId, HandlerRegistry, NodeCtx, NodeHandler, NodeKind, NodeOutcome};
+use crate::node_run_log::NodeRunLogFactory;
 use crate::store::InMemoryCaseStore;
 use crate::timer::InMemoryTimerPort;
 
@@ -449,6 +450,339 @@ impl Default for Harness {
     fn default() -> Self {
         Self::new(HandlerRegistry::logic_default())
     }
+}
+
+/// A failed contract check: the plain-language statement that did not hold.
+fn ensure(condition: bool, what: &str) -> EngineResult<()> {
+    if condition {
+        Ok(())
+    } else {
+        Err(EngineError::StoreFailed {
+            detail: format!("node-run log contract: {what}"),
+        })
+    }
+}
+
+/// The node-run log contract a backend must pass: the same checks run against the in-memory
+/// store and the PostgreSQL store (WP-BPM-11.T6).
+///
+/// It checks commit-order `seq`, per-Case order, that a rolled-back or refused commit and a
+/// replayed one leave no record, gap-free paging, the checkpoint compare-and-set, consumer-name
+/// validation and that one tenant never sees another's records or checkpoints.
+///
+/// # Errors
+/// [`EngineError::StoreFailed`] naming the first check that did not hold, or the store's own
+/// error when an operation that must succeed fails.
+pub async fn node_run_log_contract(factory: &dyn NodeRunLogFactory) -> EngineResult<()> {
+    use spot_dag::{CompiledDag, DagDefinition, Edge, JoinRule, Limits, Node, NodeId};
+    use spot_dag_exec::{Instant, NodeOutcome as DagOutcome, claim, complete};
+
+    use crate::case::{Attempt, AttemptState, CaseUpdate, TimerRecord};
+    use crate::node_run_log::{Checkpoint, LoggedState, LoggedWait, NodeRunSeq};
+
+    let invalid = |detail: String| EngineError::StoreFailed { detail };
+    let nid = |raw: &str| NodeId::new(raw).map_err(|e| invalid(e.to_string()));
+    let (n0, n1) = (nid("n0")?, nid("n1")?);
+    let nodes = vec![
+        Node::new(n0.clone(), "step", JoinRule::All, serde_json::Value::Null)
+            .map_err(|e| invalid(e.to_string()))?,
+        Node::new(n1.clone(), "step", JoinRule::All, serde_json::Value::Null)
+            .map_err(|e| invalid(e.to_string()))?,
+    ];
+    let edges = vec![Edge::new(n0.clone(), n1.clone(), None)];
+    let dag = CompiledDag::compile(
+        &DagDefinition::new("contract", 1, nodes, edges),
+        &Limits::new(),
+    )
+    .map_err(|e| invalid(format!("{e:?}")))?;
+    let published = spot_dag::Published {
+        version: dag.version(),
+        hash: dag.hash().clone(),
+    };
+    let t0 = default_now();
+    let at = |seconds: u64| Instant::from_offset(t0 + Duration::from_secs(seconds));
+
+    let a = factory.open("tenant_a");
+    let b = factory.open("tenant_b");
+    let case = CaseId::new("log_case").map_err(|e| invalid(e.to_string()))?;
+    let plan = spot_dag_exec::start(
+        &dag,
+        &published,
+        spot_dag_exec::RunId::new("log_case").map_err(|e| invalid(e.to_string()))?,
+        "log-key",
+        t0,
+    )
+    .map_err(|e| invalid(e.to_string()))?;
+    let mut record = a.create(CaseRecord::new(plan.run, None)).await?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 10).await?.is_empty(),
+        "a fresh store has an empty log",
+    )?;
+
+    // A claim logs `started` at the step's own instant.
+    let step = claim(&record.run, &n0, t0).map_err(|e| invalid(e.to_string()))?;
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new().with_transition(step),
+        )
+        .await?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 10).await?.len() == 1,
+        "a claim logs one record",
+    )?;
+
+    // A rolled-back commit (stale version) and a refused one (no instant) leave nothing.
+    let stale = CaseUpdate::new()
+        .with_attempt(Attempt::started(n0.clone(), 1, at(1), false))
+        .with_at(at(1));
+    ensure(
+        a.commit(&case, record.run.version + 9, stale)
+            .await
+            .is_err(),
+        "a stale version is refused",
+    )?;
+    let no_instant = CaseUpdate::new().with_attempt(Attempt::started(n0.clone(), 1, at(1), false));
+    ensure(
+        a.commit(&case, record.run.version, no_instant)
+            .await
+            .is_err(),
+        "an attempt without an instant is refused",
+    )?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 10).await?.len() == 1,
+        "refused commits leave no record",
+    )?;
+
+    // Done attempt, then the DAG completion: one `done` (the completion repeats the attempt).
+    let mut done = Attempt::started(n0.clone(), 1, at(0), false);
+    done.state = AttemptState::Done;
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new().with_attempt(done.clone()).with_at(at(5)),
+        )
+        .await?;
+    let finish = complete(
+        &dag,
+        &record.run,
+        &n0,
+        DagOutcome::Done {
+            output: None,
+            branches: Vec::new(),
+        },
+        t0 + Duration::from_secs(5),
+    )
+    .map_err(|e| invalid(e.to_string()))?;
+    let before_replay = record.run.version;
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new().with_transition(finish.clone()),
+        )
+        .await?;
+    // Replays: the same transition and the same attempt again.
+    a.commit(
+        &case,
+        before_replay,
+        CaseUpdate::new().with_transition(finish),
+    )
+    .await?;
+    a.commit(
+        &case,
+        record.run.version,
+        CaseUpdate::new().with_attempt(done).with_at(at(6)),
+    )
+    .await?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 10).await?.len() == 2,
+        "a replayed commit adds no record",
+    )?;
+
+    // n1: claim, a retry wait, attempt 2 started and done, then a human wait on another attempt.
+    let step = claim(&record.run, &n1, t0 + Duration::from_secs(10))
+        .map_err(|e| invalid(e.to_string()))?;
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new().with_transition(step),
+        )
+        .await?;
+    let mut retrying = Attempt::started(n1.clone(), 1, at(10), false);
+    retrying.state = AttemptState::Retrying;
+    retrying.failure = Some("integration.down: SECRET-TEXT".to_owned());
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new().with_attempt(retrying).with_at(at(11)),
+        )
+        .await?;
+    let second = Attempt::started(n1.clone(), 2, at(12), false);
+    record = a
+        .commit(
+            &case,
+            record.run.version,
+            CaseUpdate::new()
+                .with_attempt(second.clone())
+                .with_at(at(12)),
+        )
+        .await?;
+    let mut waiting = second;
+    waiting.state = AttemptState::Waiting;
+    let timer = TimerRecord {
+        node: n1.clone(),
+        attempt: 2,
+        due: None,
+        event: None,
+        human: Some("approve".to_owned()),
+    };
+    a.commit(
+        &case,
+        record.run.version,
+        CaseUpdate::new()
+            .with_attempt(waiting)
+            .with_timer(timer)
+            .with_at(at(13)),
+    )
+    .await?;
+
+    let all = a.list_after(NodeRunSeq(0), 1000).await?;
+    let shape: Vec<(String, u32, LoggedState)> = all
+        .iter()
+        .map(|r| (r.node.to_string(), r.attempt, r.state))
+        .collect();
+    ensure(
+        shape
+            == vec![
+                ("n0".to_owned(), 1, LoggedState::Started),
+                ("n0".to_owned(), 1, LoggedState::Done),
+                ("n1".to_owned(), 1, LoggedState::Started),
+                ("n1".to_owned(), 1, LoggedState::Waiting),
+                ("n1".to_owned(), 2, LoggedState::Started),
+                ("n1".to_owned(), 2, LoggedState::Waiting),
+            ],
+        "the log holds exactly the committed transitions in commit order",
+    )?;
+    ensure(
+        all.windows(2).all(|w| w[0].seq < w[1].seq),
+        "seq is strictly increasing",
+    )?;
+    ensure(
+        all[3].wait == Some(LoggedWait::IntegrationRetry) && all[3].is_retry,
+        "a retry is an integration_retry wait",
+    )?;
+    ensure(
+        all[5].wait == Some(LoggedWait::HumanTask) && all[5].human.as_deref() == Some("approve"),
+        "a human wait carries its task key",
+    )?;
+    ensure(
+        !format!("{all:?}").contains("SECRET-TEXT"),
+        "no record holds the plain-language failure text",
+    )?;
+    ensure(
+        all[1].at == at(5) && all[3].at == at(11),
+        "records carry the commit instants",
+    )?;
+    ensure(
+        all.iter()
+            .all(|r| r.dag_key == "contract" && r.dag_version == 1),
+        "records name the process",
+    )?;
+
+    // Paging by two follows the cursor with no gap and no repeat; a zero limit returns nothing.
+    let mut paged = Vec::new();
+    let mut cursor = NodeRunSeq(0);
+    loop {
+        let page = a.list_after(cursor, 2).await?;
+        ensure(page.len() <= 2, "a page respects its limit")?;
+        let Some(last) = page.last() else { break };
+        cursor = last.seq;
+        paged.extend(page);
+    }
+    ensure(paged == all, "paging has no gap and no repeat")?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 0).await?.is_empty(),
+        "a zero limit returns nothing",
+    )?;
+
+    // The checkpoint is a compare-and-set on its stored seq.
+    ensure(
+        a.load_checkpoint("insight").await?.is_none(),
+        "no checkpoint at first",
+    )?;
+    let first = Checkpoint {
+        seq: all[2].seq,
+        state: serde_json::json!({"n": 3}),
+    };
+    ensure(
+        a.save_checkpoint("insight", NodeRunSeq(0), first.clone())
+            .await?,
+        "the first save from 0 wins",
+    )?;
+    let stale = Checkpoint {
+        seq: all[5].seq,
+        state: serde_json::json!({"n": 6}),
+    };
+    ensure(
+        !a.save_checkpoint("insight", NodeRunSeq(0), stale).await?,
+        "a stale expected seq loses",
+    )?;
+    ensure(
+        a.load_checkpoint("insight").await? == Some(first),
+        "the stale save changed nothing",
+    )?;
+    ensure(
+        a.save_checkpoint(
+            "insight",
+            all[2].seq,
+            Checkpoint {
+                seq: all[5].seq,
+                state: serde_json::Value::Null,
+            },
+        )
+        .await?,
+        "the current expected seq wins",
+    )?;
+    ensure(
+        a.load_checkpoint("Bad Name").await.is_err(),
+        "an invalid consumer name is refused",
+    )?;
+
+    // Tenant isolation: B sees nothing of A, and B's prune and checkpoints do not touch A.
+    ensure(
+        b.list_after(NodeRunSeq(0), 1000).await?.is_empty(),
+        "another tenant's log is empty",
+    )?;
+    ensure(
+        b.load_checkpoint("insight").await?.is_none(),
+        "another tenant has no checkpoint",
+    )?;
+    ensure(
+        b.prune_before(NodeRunSeq(1000)).await? == 0,
+        "another tenant prunes nothing of ours",
+    )?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 1000).await?.len() == 6,
+        "our log survived",
+    )?;
+
+    // Prune deletes only records below the cut.
+    let removed = a.prune_before(all[3].seq).await?;
+    ensure(removed == 3, "prune removes the records below the cut")?;
+    ensure(
+        a.list_after(NodeRunSeq(0), 1000)
+            .await?
+            .first()
+            .map(|r| r.seq)
+            == Some(all[3].seq),
+        "the records at and above the cut remain",
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

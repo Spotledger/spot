@@ -54,15 +54,15 @@ An error prints its stable code (`permission.denied`, `document.not_found`) and 
 
 ## The maintenance gate
 
-While the site's maintenance gate is closed, `create`, `update`, `delete` and `call` are refused with `server.maintenance`. If the gate cannot be read, they are refused too: the console fails closed. Reads still work. The gate lives in the migration control schema (`spot_migration_control`); until the site's database has it, the console is read-only.
+While the site's maintenance gate is closed, `create`, `update`, `delete` and `call` are refused with `server.maintenance`. If the gate cannot be read, they are refused too: the console fails closed. Reads still work. The gate lives in the migration control schema (`spot_migration_control`). `spot new-site` and `spot migrate --apply` create it (a site with the schema and no gate row is open), so a database made before it gains it on its next `migrate --apply`; a dry run changes nothing. If the schema is ever missing again the console is read-only until `spot migrate --apply` restores it.
 
 ## Audit
 
 The audit chain is the site's hash-chained identity trail (`spot audit verify` checks it). The console writes, **before** each statement that changes data (and each `report`, and each read of a DocType that has protected fields), one record, and after it a second one with the outcome:
 
 - `kind` `console_create`, `console_update`, `console_delete`, `console_call`, `console_report` or `console_read` (the outcome record adds `_outcome`);
-- `path` is the channel, always `console`;
-- `user` is the application user's record id, `attempted` is the OS account name the process runs as, read from the operating system (the real uid, named through `/etc/passwd`, or `uid:N`); `USER` and `LOGNAME` are not consulted, so setting them changes nothing. On Windows it is `USERNAME`, which a process environment can change;
+- `channel` is `console` (its own field; `path` is the request path class and is not set);
+- `user` is the application user's record id, `os_user` is the OS account name the process runs as, read from the operating system (the real uid, named through `/etc/passwd`, or `uid:N`), redacted like a sign-in name and bounded; `USER` and `LOGNAME` are not consulted, so setting them changes nothing. On Windows it is the account `whoami.exe` reports for the process token, never `USERNAME`. `attempted` stays the presented sign-in name and is not set by the console. Both fields are absent from records written before they existed, and those records and their chain verify unchanged;
 - `reason` is the DocType, function or report, and in the outcome record its stable error code or `ok`.
 
 If the "before" record cannot be written, the statement is refused and nothing runs. Records carry no document value. The document engine's own audit and events apply as for the API.

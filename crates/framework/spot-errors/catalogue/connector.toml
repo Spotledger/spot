@@ -1,0 +1,136 @@
+# connector codes: the connector service of spot-cli (WP-INT-05.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "connector.disabled"
+class = "Internal"
+summary = "The connector is disabled, failed to load, or is in the dead-letter state, so the run was refused."
+explanation_key = "error.connector.disabled"
+params = []
+remedy = "Re-enable the connector or fix its definition, then run it again."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.busy"
+class = "Unavailable"
+summary = "The connector's concurrency cap is reached, so this run is retried later."
+explanation_key = "error.connector.busy"
+params = []
+remedy = "Wait for the running call to finish, or raise services.connectors.max_concurrent_runs."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.bundle_invalid"
+class = "none"
+summary = "The connector's bundle is missing, tampered with, revoked, or its definition or component is refused."
+explanation_key = "error.connector.bundle_invalid"
+params = []
+remedy = "Reinstall the connector from a signed bundle and check its definition."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.dead_letter"
+class = "Internal"
+summary = "The connector failed on its last attempt and waits for an operator."
+explanation_key = "error.connector.dead_letter"
+params = []
+remedy = "Fix the cause, then re-enable the connector."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.timeout"
+class = "Unavailable"
+summary = "A connector run outlived its deadline."
+explanation_key = "error.connector.timeout"
+params = []
+remedy = "Make the connector faster or raise its wall-clock limit within the site maximum."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.bad_job"
+class = "Internal"
+summary = "A connector run job does not name a connector and an operation."
+explanation_key = "error.connector.bad_job"
+params = []
+remedy = "Queue the run with the connector and operation names."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.store_failed"
+class = "none"
+summary = "The connector tables cannot be read or written."
+explanation_key = "error.connector.store_failed"
+params = []
+remedy = "Check the site database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.secret_unreadable"
+class = "none"
+summary = "A stored credential could not be sealed or opened with the site key."
+explanation_key = "error.connector.secret_unreadable"
+params = []
+remedy = "Write the credential again, or check the site's key file."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.not_found"
+class = "none"
+summary = "No connector has this name on the site."
+explanation_key = "error.connector.not_found"
+params = []
+remedy = "Create the connector first."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.deadline_exceeded"
+class = "none"
+summary = "The operation was refused: deadline exceeded."
+explanation_key = "error.connector.deadline_exceeded"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.input_invalid"
+class = "none"
+summary = "The operation was refused: input invalid."
+explanation_key = "error.connector.input_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.operation_unknown"
+class = "none"
+summary = "The operation was refused: operation unknown."
+explanation_key = "error.connector.operation_unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.replayed"
+class = "none"
+summary = "The operation was refused: replayed."
+explanation_key = "error.connector.replayed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.signature_invalid"
+class = "none"
+summary = "The operation was refused: signature invalid."
+explanation_key = "error.connector.signature_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "connector.upstream_failed"
+class = "none"
+summary = "The operation was refused: upstream failed."
+explanation_key = "error.connector.upstream_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

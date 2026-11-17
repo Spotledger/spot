@@ -21,6 +21,9 @@ spot-storage-contract = { path = "../../../contracts/storage" }
 # `DEFAULT_FIELD_NAMES`: the field names the platform treats as secret-bearing; a policy that
 # indexes one of them is refused unless it is listed under `restricted_ok`.
 spot-redact = { path = "../spot-redact" }
+# The field guard (WP-SEC-04.T7): `Channel::Search` needs the `report` right, so the retriever
+# asks it for every hit, and the indexer asks the protection source which fields are protected.
+spot-field-guard = { path = "../spot-field-guard" }
 # `IndexPolicy` is TOML-loadable with unknown keys an error.
 serde = { version = "1", features = ["derive"] }
 # `serde_json` renders a `Hits` value for the byte-for-byte "empty equals hidden" proof.

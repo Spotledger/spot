@@ -166,3 +166,39 @@ explanation_key = "error.desired_state.unknown_server"
 params = ["server"]
 remedy = "Widen the wave selectors so every server in the plan is scheduled, or remove its step."
 since = "0.1.0"
+
+[[entry]]
+code = "desired_state.invalid_layers"
+class = "none"
+summary = "The operation was refused: invalid layers."
+explanation_key = "error.desired_state.invalid_layers"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.desired_state.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.not_pending"
+class = "none"
+summary = "The operation was refused: not pending."
+explanation_key = "error.desired_state.not_pending"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "desired_state.nothing_to_do"
+class = "none"
+summary = "The operation was refused: nothing to do."
+explanation_key = "error.desired_state.nothing_to_do"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

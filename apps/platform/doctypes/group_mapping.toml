@@ -1,0 +1,77 @@
+name = "group_mapping"
+label = "Group Mapping"
+app = "platform"
+module = "identity"
+title_field = "idp_group"
+
+# One document per identity-provider group name (WP-IAM-06.T2, ADR-070 sections 7.2 and 7.3).
+# It holds both what SCIM knows of the group (its members) and what the group grants (the
+# role, with its scope). A group with no role grants nothing. The SCIM service writes it as the
+# system principal; an administrator edits the role and scope here, never the members.
+
+[[fields]]
+name = "idp_group"
+label = "IdP Group"
+type = "text"
+required = true
+unique = true
+max_chars = 254
+in_list_view = true
+description = "The group's name, exactly as the identity provider sends it."
+
+[[fields]]
+name = "role"
+label = "Role"
+type = "link"
+options = "role"
+index = true
+in_list_view = true
+description = "The role membership of this group gives, with source idp. Empty: the group grants nothing."
+
+[[fields]]
+name = "scope"
+label = "Scope"
+type = "json"
+description = "A JSON array of fixed restrictions on the role: {doctype, link, allowed, include_descendants}."
+
+[[fields]]
+name = "is_group"
+label = "Is SCIM Group"
+type = "bool"
+default = "false"
+read_only = true
+description = "Whether the identity provider has created this group through SCIM (otherwise the row is a mapping only)."
+
+[[fields]]
+name = "external_id"
+label = "External Id"
+type = "text"
+max_chars = 254
+read_only = true
+
+[[fields]]
+name = "members"
+label = "Members"
+type = "json"
+read_only = true
+description = "A JSON array of the user record ids that are members; written by SCIM only."
+
+[[fields]]
+name = "scim_version"
+label = "SCIM Version"
+type = "int"
+default = "1"
+read_only = true
+description = "The SCIM resource version: the ETag's source, bumped on every change."
+
+[[fields]]
+name = "scim_created_at"
+label = "SCIM Created At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "scim_updated_at"
+label = "SCIM Updated At"
+type = "datetime"
+read_only = true

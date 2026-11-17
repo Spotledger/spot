@@ -98,3 +98,12 @@ explanation_key = "error.l3.noted"
 params = []
 remedy = "Contract test only."
 since = "0.1.0"
+
+[[entry]]
+code = "l3.title_forbidden"
+class = "none"
+summary = "The operation was refused: title forbidden."
+explanation_key = "error.l3.title_forbidden"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

@@ -123,7 +123,7 @@ async fn body(check: SnapshotReady) -> (StatusCode, String) {
     (status, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fresh_snapshot_is_ok_and_ready() {
     let w = world();
     let check = SnapshotReady::new("acme", Arc::clone(&w.registry));
@@ -141,7 +141,7 @@ async fn fresh_snapshot_is_ok_and_ready() {
     assert_eq!(v["checks"][0]["name"], "partition:acme");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stale_snapshot_is_degraded_never_fails_readiness_and_never_leaks() {
     let w = world();
     w.trail.failing.store(true, Ordering::SeqCst);
@@ -167,7 +167,7 @@ async fn stale_snapshot_is_degraded_never_fails_readiness_and_never_leaks() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn recovery_is_seen_on_the_next_call_with_the_same_registry() {
     let w = world();
     let before = Arc::as_ptr(&w.registry);
@@ -192,7 +192,7 @@ fn a_site_without_partition_has_no_check() {
     assert!(host.registry("single").is_none());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn health_does_not_wait_on_a_blocked_store() {
     let w = world();
     *w.trail.gate.0.lock().unwrap() = true;

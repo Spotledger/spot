@@ -1,4 +1,13 @@
 //! Server assembly: builder, router, binding, connection loop, graceful shutdown.
+//!
+//! **Unmarked means absent.** Each listener serves one audience group (ADR-083 Barrier 2): a
+//! staff listener (every address in `ServerConfig::bind`, plus `listeners` marked `staff`) serves
+//! the router given to [`ServerBuilder::site_routes`]; a consumer listener serves only the router
+//! given to [`ServerBuilder::consumer_routes`]. The host (`spot-cli`, not yet wired) must build
+//! the consumer router with `api::router_for(&[Audience::Consumer], services)` and the staff one
+//! with `api::router(services)`; this crate only keeps the two apart. Both listeners run the same
+//! outer stack (request id, span, panic catcher, timeout, body limit, site resolution, with the
+//! same `fallback_site` handling).
 
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -16,8 +25,8 @@ use hyper_util::service::TowerToHyperService;
 use tokio::net::TcpStream;
 use tokio::sync::watch;
 
-use crate::config::ServerConfig;
 use crate::config::ServerLimits;
+use crate::config::{ListenerAudience, ServerConfig};
 use crate::error::ServerError;
 use crate::health::{ReadinessCheck, ReadyState, live_handler, ready_handler};
 use crate::middleware::{
@@ -37,6 +46,7 @@ pub struct ServerBuilder {
     config: ServerConfig,
     resolver: Arc<dyn SiteResolver>,
     site_routes: Router,
+    consumer_routes: Option<Router>,
     checks: Vec<Arc<dyn ReadinessCheck>>,
 }
 
@@ -56,13 +66,25 @@ impl ServerBuilder {
             config,
             resolver: Arc::new(resolver),
             site_routes: Router::new(),
+            consumer_routes: None,
             checks: Vec::new(),
         }
     }
 
-    /// Mounts the site routes (resource and method endpoints from WP-PLT-05).
+    /// Mounts the site routes (resource and method endpoints from WP-PLT-05). **Staff only**:
+    /// they are served on staff listeners and never on a consumer listener (SCIM and realtime
+    /// are mounted this way).
     pub fn site_routes(mut self, router: Router) -> Self {
         self.site_routes = router;
+        self
+    }
+
+    /// Supplies the router of the consumer listeners, built by the caller with
+    /// `api::router_for(&[Audience::Consumer], services)` plus anything consumer-safe. It is
+    /// never merged with the staff routes. Starting with a consumer listener and no consumer
+    /// router is refused.
+    pub fn consumer_routes(mut self, router: Router) -> Self {
+        self.consumer_routes = Some(router);
         self
     }
 
@@ -95,6 +117,21 @@ impl ServerBuilder {
     /// `http_body_util::Limited` stream); axum's built-in 2 MiB default is disabled so
     /// `max_body_bytes` is the only limit.
     fn assemble(&self, shutting_down: Arc<AtomicBool>) -> Router {
+        self.assemble_for(
+            self.site_routes.clone(),
+            shutting_down,
+            ListenerAudience::Staff,
+        )
+    }
+
+    /// [`assemble`](Self::assemble) over the routes of one audience group. On a consumer
+    /// listener the readiness body carries no check names (the staff body lists them).
+    fn assemble_for(
+        &self,
+        routes: Router,
+        shutting_down: Arc<AtomicBool>,
+        audience: ListenerAudience,
+    ) -> Router {
         let limits = Arc::new(ServerLimits {
             max_body_bytes: self.config.max_body_bytes,
             request_timeout: self.config.request_timeout,
@@ -116,9 +153,7 @@ impl ServerBuilder {
         // the handler: a panic or a 5xx is logged with the request id and the route template.
         // The request id and the panic catcher are outside it, and the panic catcher still
         // turns a caught panic into the `http.internal` envelope.
-        let sites = self
-            .site_routes
-            .clone()
+        let sites = routes
             .fallback(crate::site::unknown_route_fallback)
             .method_not_allowed_fallback(crate::site::method_not_allowed_fallback)
             .layer(TelemetryLayer::new())
@@ -129,9 +164,13 @@ impl ServerBuilder {
             ));
         // Health endpoints do not resolve a site, but they are requests like any other: they get
         // the access log, the metrics and the request id.
+        let ready = match audience {
+            ListenerAudience::Staff => get(ready_handler),
+            ListenerAudience::Consumer => get(consumer_ready_handler),
+        };
         let health = Router::new()
             .route("/api/health/live", get(live_handler))
-            .route("/api/health/ready", get(ready_handler))
+            .route("/api/health/ready", ready)
             .with_state(ready_state)
             .layer(TelemetryLayer::new())
             .layer(axum::middleware::from_fn(telemetry_fields_middleware));
@@ -160,13 +199,26 @@ impl ServerBuilder {
         self,
         shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     ) -> Result<ServerHandle, ServerError> {
+        // Everything that can be refused is refused before any socket is bound.
         self.config.validate()?;
+        let planned = self.config.all_listeners();
+        if planned
+            .iter()
+            .any(|l| l.audience == ListenerAudience::Consumer)
+            && self.consumer_routes.is_none()
+        {
+            return Err(ServerError::NoConsumerRouter);
+        }
         let shutting_down = Arc::new(AtomicBool::new(false));
-        let router = self.assemble(shutting_down.clone());
+        let staff_router = self.assemble(shutting_down.clone());
+        let consumer_router = self.consumer_routes.clone().map(|routes| {
+            self.assemble_for(routes, shutting_down.clone(), ListenerAudience::Consumer)
+        });
         let open_connections = Arc::new(AtomicUsize::new(0));
-        let mut listeners = Vec::with_capacity(self.config.bind.len());
-        let mut local_addrs = Vec::with_capacity(self.config.bind.len());
-        for address in &self.config.bind {
+        let mut listeners = Vec::with_capacity(planned.len());
+        let mut local_addrs = Vec::with_capacity(planned.len());
+        for planned_listener in &planned {
+            let address = &planned_listener.bind;
             let listener =
                 std::net::TcpListener::bind(address).map_err(|error| ServerError::BindFailed {
                     addr: *address,
@@ -184,14 +236,22 @@ impl ServerBuilder {
                     addr: *address,
                     source: error,
                 })?;
-            local_addrs.push(local);
-            listeners.push(listener);
+            let router = match planned_listener.audience {
+                ListenerAudience::Staff => staff_router.clone(),
+                // Checked above: a consumer listener implies a consumer router.
+                ListenerAudience::Consumer => match &consumer_router {
+                    Some(router) => router.clone(),
+                    None => return Err(ServerError::NoConsumerRouter),
+                },
+            };
+            tracing::info!(addr = %local, audience = ?planned_listener.audience, "listener bound");
+            local_addrs.push((local, planned_listener.audience));
+            listeners.push((listener, router));
         }
         let (closed_tx, _) = watch::channel(false);
         let grace = self.config.shutdown_grace;
         let task = tokio::spawn(run_server(
             listeners,
-            router,
             open_connections.clone(),
             shutting_down.clone(),
             closed_tx,
@@ -199,6 +259,7 @@ impl ServerBuilder {
             shutdown,
         ));
         Ok(ServerHandle {
+            plain_addrs: local_addrs.iter().map(|(addr, _)| *addr).collect(),
             local_addrs,
             open_connections,
             join: task,
@@ -218,6 +279,27 @@ impl ServerBuilder {
         self.start(shutdown).await?.join().await
     }
 }
+/// `GET /api/health/ready` on a consumer listener: the staff handler's answer (same status) with
+/// the check list emptied, so a consumer-side caller never learns which dependencies exist or
+/// why one failed.
+async fn consumer_ready_handler(
+    state: axum::extract::State<Arc<ReadyState>>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let response = ready_handler(state).await;
+    let status = response.status();
+    let state_text = if status.is_success() {
+        "ready"
+    } else {
+        "not_ready"
+    };
+    (
+        status,
+        axum::Json(serde_json::json!({ "status": state_text, "checks": [] })),
+    )
+        .into_response()
+}
+
 /// One counted connection: while any clone of the lease lives, [`ServerHandle::open_connections`]
 /// counts the connection.
 ///
@@ -254,15 +336,25 @@ impl ConnectionLease {
 /// The running server: bound addresses, the live connection count and the join hook.
 #[derive(Debug)]
 pub struct ServerHandle {
-    local_addrs: Vec<SocketAddr>,
+    local_addrs: Vec<(SocketAddr, ListenerAudience)>,
+    plain_addrs: Vec<SocketAddr>,
     open_connections: Arc<AtomicUsize>,
     join: tokio::task::JoinHandle<Result<(), ServerError>>,
 }
 
 impl ServerHandle {
-    /// The bound addresses, one per config entry.
+    /// Every bound address, one per config entry: the `bind` list first, then `listeners`.
     pub fn local_addrs(&self) -> &[SocketAddr] {
-        &self.local_addrs
+        &self.plain_addrs
+    }
+
+    /// The bound addresses of the listeners serving `audience`.
+    pub fn local_addrs_for(&self, audience: ListenerAudience) -> Vec<SocketAddr> {
+        self.local_addrs
+            .iter()
+            .filter(|(_, listener_audience)| *listener_audience == audience)
+            .map(|(addr, _)| *addr)
+            .collect()
     }
 
     /// Connections currently held, WebSockets included (an upgraded connection counts until
@@ -379,8 +471,7 @@ impl tower::Service<Request<Incoming>> for PeerService {
 /// The server loop: an accept loop per listener, one task per connection, and a driver that
 /// flips the site's readiness flag on shutdown and drains everything within the grace.
 async fn run_server(
-    listeners: Vec<std::net::TcpListener>,
-    router: Router,
+    listeners: Vec<(std::net::TcpListener, Router)>,
     open_connections: Arc<AtomicUsize>,
     shutting_down: Arc<AtomicBool>,
     closed_tx: watch::Sender<bool>,
@@ -388,12 +479,12 @@ async fn run_server(
     shutdown: impl std::future::Future<Output = ()>,
 ) -> Result<(), ServerError> {
     let mut accept_loops = Vec::with_capacity(listeners.len());
-    for listener in listeners {
+    for (listener, router) in listeners {
         let listener = tokio::net::TcpListener::from_std(listener)
             .map_err(|error| ServerError::ServerLoop(format!("listener setup failed: {error}")))?;
         accept_loops.push(tokio::spawn(accept_loop(
             listener,
-            router.clone(),
+            router,
             Arc::clone(&open_connections),
             closed_tx.subscribe(),
             grace,

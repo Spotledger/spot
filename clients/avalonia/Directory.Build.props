@@ -4,7 +4,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Pinned: `latest` follows the SDK feature band (rollForward latestFeature), so a newer hosted SDK adds analyzers (CA2026, CA2027, CA1830) that turn into errors under TreatWarningsAsErrors. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 </Project>

@@ -11,6 +11,7 @@ use spot_journal_store::{JournalStore, Layout, StoreError, TenantId};
 
 use crate::entry::{Entry, parse};
 use crate::error::RebuildError;
+use crate::options::EventClass;
 
 /// The code of a store failure.
 pub(crate) fn store_failed(error: &StoreError) -> RebuildError {
@@ -80,21 +81,29 @@ pub(crate) struct Feed<'a> {
     steps: &'a [Step],
     step: usize,
     entered: bool,
+    /// The generation of the position the feed is at: the base's, then each step's.
+    generation: Option<u64>,
     next_seq: u64,
     pending: VecDeque<SegmentSummary>,
     open: Option<OpenSegment>,
     peak: usize,
+    resolve: &'a dyn Fn(&str) -> (EventClass, bool),
 }
 
 impl<'a> Feed<'a> {
-    /// A feed over `steps`, whose first entry must be at `first_seq`.
+    /// A feed over `steps`, whose first entry must be at `first_seq` of the generation the base
+    /// is in (`base_generation`; `None` for an empty base). Positions start again at 1 in every
+    /// generation, so a step of a later generation must start at 1.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         store: &'a dyn JournalStore,
         tenant: &'a TenantId,
         source: &'a str,
         manifests: &'a Manifests,
         steps: &'a [Step],
+        base_generation: Option<u64>,
         first_seq: u64,
+        resolve: &'a dyn Fn(&str) -> (EventClass, bool),
     ) -> Self {
         Self {
             store,
@@ -104,10 +113,12 @@ impl<'a> Feed<'a> {
             steps,
             step: 0,
             entered: false,
+            generation: base_generation,
             next_seq: first_seq,
             pending: VecDeque::new(),
             open: None,
             peak: 0,
+            resolve,
         }
     }
 
@@ -125,6 +136,11 @@ impl<'a> Feed<'a> {
             };
             let generation = step.generation();
             if !self.entered {
+                if self.generation.is_some_and(|held| held != generation) {
+                    // A later generation: its positions start again at the beginning.
+                    self.next_seq = 1;
+                }
+                self.generation = Some(generation);
                 if step.first_seq() != self.next_seq {
                     return Err(RebuildError::PositionGap {
                         generation,
@@ -181,7 +197,12 @@ impl<'a> Feed<'a> {
                             found: entry.position.seq,
                         });
                     }
-                    batch.push(parse(&entry.line, entry.position, self.source)?);
+                    batch.push(parse(
+                        &entry.line,
+                        entry.position,
+                        self.source,
+                        self.resolve,
+                    )?);
                     self.next_seq = self.next_seq.saturating_add(1);
                 }
                 self.peak = self.peak.max(batch.len());

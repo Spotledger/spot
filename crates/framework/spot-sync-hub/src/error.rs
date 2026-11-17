@@ -20,6 +20,8 @@ pub const DUPLICATE_DESTINATION: &str = "sync_hub.duplicate_destination";
 pub const PREFIX_REGRESSED: &str = "sync_hub.prefix_regressed";
 /// An acknowledged prefix is beyond what the hub has processed; the ack is ignored.
 pub const PREFIX_AHEAD: &str = "sync_hub.prefix_ahead_of_stream";
+/// An acknowledgement of a serve sequence the queue never assigned.
+pub const SERVE_ACK_AHEAD: &str = "sync_hub.serve_ack_ahead";
 /// An acknowledged prefix is above the newest position the hub's own stream holds.
 pub const ACK_BEYOND_HEAD: &str = "sync_hub.ack_beyond_head";
 /// A node's stamp cannot be placed on the hub timeline; the document is refused.
@@ -40,6 +42,10 @@ pub const QUEUE_FAILED: &str = "sync_hub.queue_failed";
 pub const IMAGE_MISSING: &str = "sync_hub.image_missing";
 /// Entries withheld because a record their closure needs is held ("dependency held").
 pub const HELD_BY_DEPENDENCY: &str = "sync_hub.held_by_dependency";
+/// A destination asked for more keys in one tick than the relay answers; nothing was done.
+pub const PULL_THROTTLED: &str = "sync_hub.pull_throttled";
+/// A scoped re-send named a scope other than the one the hub registered for the destination.
+pub const RESEND_SCOPE_MISMATCH: &str = "sync_hub.resend_scope_mismatch";
 
 /// Why the relay could not do what it was asked.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -81,6 +87,20 @@ pub enum HubError {
         prefix: u64,
         /// The highest position the hub has processed.
         cursor: u64,
+    },
+    /// The acknowledged serve sequence is above the newest one the hub assigned to the destination.
+    /// Its code is [`PREFIX_AHEAD`], the catalogue entry for a claim of something the hub never
+    /// sent (a dedicated entry is a follow-up outside this task's owned paths).
+    #[error(
+        "The destination {dest} acknowledged serve sequence {claimed}, past the {issued} the hub assigned."
+    )]
+    ServeAckAhead {
+        /// The destination id.
+        dest: String,
+        /// The serve sequence reported.
+        claimed: u64,
+        /// The newest serve sequence the hub assigned to the destination.
+        issued: u64,
     },
     /// The acknowledged prefix is above the newest position the hub's own stream holds.
     #[error(
@@ -169,6 +189,25 @@ pub enum HubError {
         /// The record id.
         id: String,
     },
+    /// A destination pulled more keys in one tick than the relay answers.
+    #[error(
+        "The destination {dest} asked for more records than the {limit} the hub answers in one \
+         tick; the request was not served."
+    )]
+    PullThrottled {
+        /// The destination id.
+        dest: String,
+        /// The configured bound (`RelayConfig::max_pull_keys_per_tick`).
+        limit: usize,
+    },
+    /// A scoped re-send does not name the destination's registered scope.
+    #[error(
+        "The scoped re-send asked for by {dest} does not match its registered scope; nothing was re-sent."
+    )]
+    ResendScopeMismatch {
+        /// The destination id. The scope the node named is never put in the message.
+        dest: String,
+    },
     /// The closure for a destination could not be built.
     #[error("{0}")]
     Closure(ClosureError),
@@ -194,6 +233,7 @@ impl HubError {
             Self::DuplicateDestination { .. } => DUPLICATE_DESTINATION,
             Self::PrefixRegressed { .. } => PREFIX_REGRESSED,
             Self::PrefixAhead { .. } => PREFIX_AHEAD,
+            Self::ServeAckAhead { .. } => SERVE_ACK_AHEAD,
             Self::AckBeyondHead { .. } => ACK_BEYOND_HEAD,
             Self::StampRejected { .. } => STAMP_REJECTED,
             Self::StreamFailed { .. } => STREAM_FAILED,
@@ -203,6 +243,8 @@ impl HubError {
             Self::LaneNotEntity { .. } => LANE_NOT_ENTITY,
             Self::QueueFailed { .. } => QUEUE_FAILED,
             Self::ImageMissing { .. } => IMAGE_MISSING,
+            Self::PullThrottled { .. } => PULL_THROTTLED,
+            Self::ResendScopeMismatch { .. } => RESEND_SCOPE_MISMATCH,
             Self::Closure(e) => e.code(),
             Self::Ack(e) => e.code(),
             Self::Freshness(e) => e.code(),

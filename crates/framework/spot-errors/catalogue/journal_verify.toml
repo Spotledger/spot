@@ -161,3 +161,12 @@ explanation_key = "error.journal_verify.newer_generation_present"
 params = []
 remedy = "The pinned generation is stale: confirm the newer generation against the recorded forks, then update the expected generation; if no fork was recorded, treat it as a writer that is not accounted for."
 since = "0.1.0"
+
+[[entry]]
+code = "journal_verify.finding"
+class = "none"
+summary = "The operation was refused: finding."
+explanation_key = "error.journal_verify.finding"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

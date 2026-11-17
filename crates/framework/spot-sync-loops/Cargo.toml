@@ -1,0 +1,13 @@
+[package]
+name = "spot-sync-loops"
+description = "The periodic sync loops (WP-RTB-02.T6, ADR-067): independently-failing steps with their own intervals and bounded cost, the obligation and node-liveness steps over traits, the condition sink seam, and the calm/amber/red summary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

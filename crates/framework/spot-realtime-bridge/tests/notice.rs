@@ -2,7 +2,8 @@
 //! commits becomes a `notification` event in the addressee's `user:<id>` room, carrying the
 //! notice's own `data`; the ADR-25 boundary refuses every other shape (counted, never sent,
 //! never logged); a redelivery keeps the event id; a resync reaches the room; and the topic
-//! literal and the stored `{user, payload}` shape agree with the document engine's.
+//! literal and the stored `{user, payload}` shape agree with the document engine's; and a
+//! floating-point number is refused like any other malformed notice (a decimal is a string, ADR-12).
 
 mod support;
 
@@ -312,6 +313,86 @@ async fn payloads_outside_the_boundary_are_refused_counted_and_not_sent() {
     assert_eq!(second.mapping.outbox_notices_rejected, 0);
     assert_eq!(second.mapping.outbox_published, 0);
     assert!(captured(&mut w).await.is_empty());
+}
+
+/// A body parsed from text, so `1.5` and `1e3` are floating-point numbers exactly as a stored
+/// payload document would hold them.
+fn parsed(text: &str) -> serde_json::Value {
+    serde_json::from_str(text).unwrap_or_else(|error| panic!("fixture {text}: {error}"))
+}
+
+#[tokio::test]
+async fn a_floating_point_number_in_a_notice_is_refused_like_any_malformed_notice() {
+    let parts = stand();
+    let greta = user_text(9);
+
+    // Delivered: integers (positive, negative, zero), a decimal as a string, null and a boolean,
+    // an integer inside an array.
+    let ok = parsed(
+        r#"{"count": 3, "delta": -2, "zero": 0, "total": "12.50", "none": null, "late": false, "ids": [1, 2, 3]}"#,
+    );
+    push_notice(&parts, 1, &greta, &ok);
+    // Refused: a float, a float written in exponent form, a float inside an array, and 0.0.
+    push_notice(&parts, 2, &greta, &parsed(r#"{"amount": 1.5}"#));
+    push_notice(&parts, 3, &greta, &parsed(r#"{"amount": 1e3}"#));
+    push_notice(&parts, 4, &greta, &parsed(r#"{"amounts": [1, 2.5, 3]}"#));
+    push_notice(&parts, 5, &greta, &parsed(r#"{"amount": 0.0}"#));
+
+    let mut w = watcher(&parts.bus, &parts.site, "w");
+    w.join(&Room::user(&greta).must(), None).await.must();
+
+    let outcome = run(&parts).await;
+    assert_eq!(
+        outcome.mapping.outbox_notices_rejected, 4,
+        "each float notice is counted with the other malformed notices"
+    );
+    assert_eq!(
+        outcome.mapping.outbox_published, 1,
+        "only the integer and string notice is sent"
+    );
+    assert_eq!(
+        outcome.position.outbox,
+        FeedPosition::new(1, 5),
+        "refused entries are consumed, as every refusal is"
+    );
+    let events = captured(&mut w).await;
+    assert_eq!(events.len(), 1, "no float notice is ever sent: {events:?}");
+    assert_eq!(events[0].2["data"], ok);
+    assert_eq!(
+        events[0].2["data"]["total"], "12.50",
+        "a decimal travels as a string and arrives untouched"
+    );
+
+    // A second run re-reads nothing: the refusal is counted once.
+    let second = run(&parts).await;
+    assert_eq!(second.mapping.outbox_notices_rejected, 0);
+    assert_eq!(second.mapping.outbox_published, 0);
+}
+
+#[tokio::test]
+async fn the_size_and_string_bounds_are_unchanged_by_the_integer_rule() {
+    let parts = stand();
+    let greta = user_text(9);
+    // Exactly 256 bytes is still a legal string; 257 is not; integers do not change the size rule.
+    push_notice(
+        &parts,
+        1,
+        &greta,
+        &serde_json::json!({"note": "n".repeat(256), "n": 1}),
+    );
+    push_notice(
+        &parts,
+        2,
+        &greta,
+        &serde_json::json!({"note": "n".repeat(257)}),
+    );
+    push_notice(&parts, 3, &greta, &wide_body(20));
+    let mut w = watcher(&parts.bus, &parts.site, "w");
+    w.join(&Room::user(&greta).must(), None).await.must();
+    let outcome = run(&parts).await;
+    assert_eq!(outcome.mapping.outbox_published, 1);
+    assert_eq!(outcome.mapping.outbox_notices_rejected, 2);
+    assert_eq!(captured(&mut w).await.len(), 1);
 }
 
 #[tokio::test]

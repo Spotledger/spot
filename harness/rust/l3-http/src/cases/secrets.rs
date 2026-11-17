@@ -43,7 +43,7 @@ async fn until_status(fixture: &Fixture, want: impl Fn(u16) -> bool) -> Result<u
 }
 
 async fn an_unusable_key_file_makes_the_site_unavailable() -> CaseResult {
-    let Some(mut fixture) = Fixture::start().await else {
+    let Some(mut fixture) = Fixture::start_secondary().await else {
         return Err(failure!("no PostgreSQL for the case's own fixture"));
     };
     let result = run(&fixture).await;
@@ -55,6 +55,10 @@ async fn run(fixture: &Fixture) -> CaseResult {
     let common = fixture.root().join("common.toml");
     let original = std::fs::read_to_string(&common)
         .map_err(|e| failure!("cannot read the fixture's common.toml: {e}"))?;
+    let original = crate::fixture::strip_tables(
+        &original,
+        &["services.secrets", "services.signin_throttle"],
+    );
     let keys = fixture.root().join("keys");
     let kek = keys.join(format!("{}.json", fixture.site()));
     let with_table = |kek_file: &std::path::Path| {
@@ -64,10 +68,16 @@ async fn run(fixture: &Fixture) -> CaseResult {
         )
     };
 
+    // (The fixture made the key file; this case starts without it.)
+    // The key file's content is kept: sessions are sealed under its key, and a freshly generated
+    // file is a different key under which the sessions that exist could not be opened (the site
+    // would answer `auth.session_expired` for every one of them, correctly).
+    let kept = std::fs::read(&kek).map_err(|e| failure!("cannot read the fixture's key file: {e}"))?;
+    let _ = std::fs::remove_file(&kek);
     // 1. The table names a key file that is not there: the site answers 503 and nothing else.
     std::fs::write(&common, with_table(&kek))
         .map_err(|e| failure!("cannot write common.toml: {e}"))?;
-    spot_cli::request_reload(fixture.root(), fixture.site())
+    tokio::task::block_in_place(|| spot_cli::request_reload_and_wait(fixture.root(), fixture.site()))
         .map_err(|e| failure!("reload request: {e}"))?;
     until_status(fixture, |status| status == 503).await?;
     let admin = fixture.admin();
@@ -92,11 +102,15 @@ async fn run(fixture: &Fixture) -> CaseResult {
         ));
     }
 
-    // 2. The operator creates the key file (as `spot secrets init` does) and reloads: it serves.
-    spot_cli::services::secrets::init_key_file(&kek, fixture.site())
-        .await
-        .map_err(|e| failure!("cannot create the key file: {e}"))?;
-    spot_cli::request_reload(fixture.root(), fixture.site())
+    // 2. The operator puts the key file back (from the backup of the key) and reloads: it serves.
+    std::fs::write(&kek, &kept).map_err(|e| failure!("cannot restore the key file: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&kek, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| failure!("cannot restrict the key file: {e}"))?;
+    }
+    tokio::task::block_in_place(|| spot_cli::request_reload_and_wait(fixture.root(), fixture.site()))
         .map_err(|e| failure!("reload request: {e}"))?;
     until_status(fixture, |status| status != 503).await?;
     let me = fixture.admin().session().await?;

@@ -27,6 +27,11 @@
 //! is `on` (the documented restore path, and the only way a superuser may edit the table). The
 //! chain itself makes any edit that slips through detectable ([`VerifyJob`]).
 //!
+//! The four tables of the lane appender's state follow the same least-privilege rule: the role may
+//! append to the event and document indexes but never update or delete them, and may move the
+//! bookmark and the site checkpoint forward; the grant table is in the README and in `sql.rs`.
+//! [`verify`] reports it as `appender_tables` and `appender_grants`.
+//!
 //! # Creating the tables through the migrator
 //!
 //! [`TABLE_DDL`] holds the two `CREATE TABLE IF NOT EXISTS` statements, one per table, in the
@@ -39,11 +44,18 @@
 //! # The durable appender state
 //!
 //! [`PgAppenderStore`] implements `spot_doc_audit::AppenderStore` (the lane appender's bookmarks,
-//! event-id index, document index and site checkpoint) over the shared blocking
-//! `spot_pg_bridge::Bridge`, scoped by site. [`APPENDER_TABLE_DDL`] holds its four tables in the
-//! migrator's shape and [`verify_appender`] reports, read-only, whether they are present.
-//! The trait is synchronous and cannot return an error, so a failure is latched and the store
-//! fails closed; see the [`PgAppenderStore`] documentation.
+//! event-id index, document index and site checkpoint) over a `deadpool_postgres::Pool`, scoped by
+//! site. [`APPENDER_TABLE_DDL`] holds its four tables in the migrator's shape and
+//! [`verify_appender`] reports, read-only, whether they are present. The port is async and
+//! fallible: a failed call is returned as `docaudit.appender_state`, the appender ends the drain
+//! and the job retries; see the [`PgAppenderStore`] documentation. The production store must commit
+//! the chain entry and the event index together; WP-SEC-06.T7 closes that window by recovery.
+//!
+//! # Refused operations
+//!
+//! [`PgDenialWriter`] implements `spot_doc_audit::DenialWriter`: it writes one `sys_doc_audit`
+//! outbox event per refused operation in a transaction of its own, for one site, with no value and
+//! no message in the event. The audit denial sink drives it after the operation has rolled back.
 //!
 //! # No payload is logged
 //!
@@ -53,6 +65,7 @@
 mod appender;
 mod appender_sql;
 mod appender_verify;
+mod denial;
 mod digest;
 mod error;
 mod guard;
@@ -62,16 +75,17 @@ mod sink;
 mod sql;
 mod store;
 
-pub use appender::{DEFAULT_DEADLINE, PgAppenderStore, poison_position};
+pub use appender::{DEFAULT_DEADLINE, PgAppenderStore};
 pub use appender_sql::{
     APPENDER_TABLE_DDL, BOOKMARK_TABLE, BOOKMARK_TABLE_DDL, DOC_INDEX_TABLE, DOC_INDEX_TABLE_DDL,
     EVENT_INDEX_TABLE, EVENT_INDEX_TABLE_DDL, SITE_CHECKPOINT_TABLE, SITE_CHECKPOINT_TABLE_DDL,
 };
 pub use appender_verify::{AppenderTables, verify_appender};
+pub use denial::PgDenialWriter;
 pub use digest::{Digest, DigestEntry, VerifyStatus, digest};
 pub use error::{
-    APPENDER_TABLES_MISSING, EVENT_CONFLICT, Error, PROTECTION_INCOMPLETE, Result, TABLES_MISSING,
-    UNAVAILABLE,
+    APPENDER_TABLES_MISSING, EVENT_CONFLICT, Error, PROTECTION_INCOMPLETE, Result, SITE_MISMATCH,
+    TABLES_MISSING, UNAVAILABLE,
 };
 pub use guard::{Protection, install_guard, verify};
 pub use job::{ChainBroken, VerifyJob, VerifyOutcome};

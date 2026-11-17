@@ -126,7 +126,7 @@ async fn run(args: &[&str], root: &std::path::Path) -> (Exit, String, String) {
 
 // --- the bundle itself ------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn planted_secrets_never_reach_the_bundle() {
     let root = temp_root("secrets");
     plant_secrets(&root);
@@ -163,7 +163,7 @@ async fn planted_secrets_never_reach_the_bundle() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_bundle_lists_every_file_and_its_byte_count() {
     let root = temp_root("listing");
     plant_secrets(&root);
@@ -184,7 +184,7 @@ async fn the_bundle_lists_every_file_and_its_byte_count() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_bundle_contains_no_database_dump_or_document_data() {
     let root = temp_root("nodb");
     plant_secrets(&root);
@@ -210,7 +210,7 @@ async fn the_bundle_contains_no_database_dump_or_document_data() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_include_list_narrows_the_categories() {
     let root = temp_root("include");
     plant_secrets(&root);
@@ -234,7 +234,7 @@ async fn an_include_list_narrows_the_categories() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unknown_include_category_is_a_usage_refusal() {
     let root = temp_root("bad-include");
     let out_path = root.parent().unwrap().join("bundle-bad.zip");
@@ -255,7 +255,7 @@ async fn an_unknown_include_category_is_a_usage_refusal() {
     assert!(!out_path.exists());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_bundle_refuses_to_write_inside_the_data_directory() {
     let root = temp_root("datadir");
     let inside = root.join("sites").join("dump.zip");
@@ -270,7 +270,7 @@ async fn the_bundle_refuses_to_write_inside_the_data_directory() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_bundle_file_is_private_to_the_user() {
     use std::os::unix::fs::PermissionsExt;
     let root = temp_root("perm");
@@ -287,7 +287,7 @@ async fn the_bundle_file_is_private_to_the_user() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn since_skips_an_old_log_file_but_keeps_other_categories() {
     let root = temp_root("since");
     plant_secrets(&root);
@@ -320,7 +320,7 @@ async fn since_skips_an_old_log_file_but_keeps_other_categories() {
     let _ = std::fs::remove_file(&out_path);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bad_since_value_is_a_usage_refusal() {
     let root = temp_root("bad-since");
     let out_path = root.parent().unwrap().join("bundle-bad-since.zip");
@@ -342,7 +342,7 @@ async fn a_bad_since_value_is_a_usage_refusal() {
 
 // --- consent ------------------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn consent_defaults_to_off_and_round_trips_on_and_off() {
     let root = temp_root("consent");
     let (exit, stdout, _) = run(&["support", "consent", "status"], &root).await;
@@ -368,7 +368,7 @@ async fn consent_defaults_to_off_and_round_trips_on_and_off() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_consent_file_is_private_to_the_user() {
     use std::os::unix::fs::PermissionsExt;
     let root = temp_root("consent-perm");
@@ -384,7 +384,7 @@ async fn the_consent_file_is_private_to_the_user() {
 
 // --- help-code ------------------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn help_code_explains_a_known_code_offline() {
     let root = temp_root("help-known");
     let (exit, stdout, _) = run(&["support", "help-code", "login.store_failed"], &root).await;
@@ -393,7 +393,7 @@ async fn help_code_explains_a_known_code_offline() {
     assert!(stdout.to_lowercase().contains("backend"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn help_code_refuses_a_code_with_no_offline_help() {
     let root = temp_root("help-unknown");
     let (exit, _, stderr) = run(&["support", "help-code", "not.a.real.code"], &root).await;
@@ -403,7 +403,7 @@ async fn help_code_refuses_a_code_with_no_offline_help() {
 
 // --- security hardening (review) -------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_bundle_refuses_to_overwrite_an_existing_file() {
     let root = temp_root("overwrite");
     plant_secrets(&root);
@@ -425,7 +425,7 @@ async fn the_bundle_refuses_to_overwrite_an_existing_file() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_out_symlink_is_refused_and_the_target_is_untouched() {
     use std::os::unix::fs::symlink;
     let root = temp_root("out-symlink");
@@ -463,7 +463,7 @@ async fn an_out_symlink_is_refused_and_the_target_is_untouched() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_symlinked_log_is_never_copied_into_the_bundle() {
     use std::os::unix::fs::symlink;
     let root = temp_root("log-symlink");
@@ -505,7 +505,7 @@ async fn a_symlinked_log_is_never_copied_into_the_bundle() {
     let _ = std::fs::remove_dir_all(&outside_dir);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hex_and_base64_secret_forms_planted_in_config_never_leak() {
     let root = temp_root("hex-base64");
     // A 32-byte hex secret (embedded in the connection URL) and a base64-looking secret,
@@ -615,7 +615,7 @@ async fn bundle_text(label: &str, log_line: &str) -> (String, Vec<(String, Strin
     (whole, entries)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_config_secret_repeated_in_a_log_line_is_redacted() {
     let (whole, entries) = bundle_text(
         "cfglog",
@@ -632,7 +632,7 @@ async fn a_config_secret_repeated_in_a_log_line_is_redacted() {
     assert!(log.1.contains("boot ok signing with"), "{}", log.1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hex_and_base64_forms_of_a_config_secret_in_a_log_are_redacted() {
     let line = format!(
         "a={} b={} c={}",
@@ -649,7 +649,7 @@ async fn hex_and_base64_forms_of_a_config_secret_in_a_log_are_redacted() {
     assert!(!whole.contains(&b64_of(JWT_SECRET_CANARY)), "{whole}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ip_addresses_in_a_log_are_redacted_but_loopback_stays() {
     let (whole, _) = bundle_text(
         "ips",

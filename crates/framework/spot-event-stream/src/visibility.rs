@@ -28,6 +28,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value as Json};
 use spot_app_api::Document;
+use spot_app_api::document::ChildRow;
 use spot_app_api::prelude::Decimal;
 use spot_field_guard::{Channel, FieldGuard};
 use spot_permissions::{Action, DocFacts, PermissionEngine, Principal};
@@ -145,13 +146,25 @@ impl Visibility for PermissionVisibility {
     ) -> Result<(), StreamError> {
         let principal = self.principals.principal(owner);
         let facts = self.doc_facts(subject);
-        let mut doc = match document_from_json(&subject.entity, &subject.id, data) {
-            Ok(doc) => doc,
+        // The payload's table fields carry child rows: each is judged on its own DocType.
+        let tables = match self.guard.table_fields(&subject.entity) {
+            Ok(tables) => tables,
             Err(e) => {
                 data.clear();
-                return Err(e);
+                return Err(StreamError::Permission {
+                    code: e.code(),
+                    message: e.to_string(),
+                });
             }
         };
+        let (mut doc, anonymous) =
+            match document_from_json(&subject.entity, &subject.id, data, &tables) {
+                Ok(done) => done,
+                Err(e) => {
+                    data.clear();
+                    return Err(e);
+                }
+            };
         match self.guard.redact(
             Channel::Export,
             &principal,
@@ -160,7 +173,7 @@ impl Visibility for PermissionVisibility {
             &mut doc,
         ) {
             Ok(()) => {
-                *data = json_from_document(&doc);
+                *data = json_from_document(&doc, &anonymous);
                 Ok(())
             }
             Err(e) => {
@@ -177,32 +190,111 @@ impl Visibility for PermissionVisibility {
 /// Builds a [`Document`] from an event payload's JSON object. A key that is not a storage name,
 /// or a value that cannot be represented, drops the field rather than the whole event.
 ///
-/// Nested objects and arrays are kept as a JSON field (`Value::Json`), so a nested protected
-/// field is guarded as part of the field it lives in; the event payload's own value encoding
-/// keeps decimals as strings, which round-trips unchanged.
+/// A table field (one of `tables`) whose value is an array of objects becomes child rows, so the
+/// guard judges each column on the child DocType's own facts; the second value names the rows
+/// the payload gave no id (the guard needs one, the output must not invent one). Any other
+/// nested object or array is kept as a JSON field (`Value::Json`), guarded as part of the field
+/// it lives in; the event payload's own value encoding keeps decimals as strings, which
+/// round-trips unchanged.
 fn document_from_json(
     doctype: &str,
     id: &RecordId,
     data: &Map<String, Json>,
-) -> Result<Document, StreamError> {
+    tables: &std::collections::BTreeSet<String>,
+) -> Result<(Document, BTreeMap<Name, Vec<bool>>), StreamError> {
     let name = Name::new(doctype).map_err(|_| StreamError::Permission {
         code: spot_field_guard::error::UNKNOWN_DOCTYPE,
         message: "the subject entity is not a storage name".to_owned(),
     })?;
     let mut doc = Document::new(name, *id);
+    let mut anonymous: BTreeMap<Name, Vec<bool>> = BTreeMap::new();
     for (key, value) in data {
-        if let Ok(field) = Name::new(key) {
-            doc.set(field, json_to_value(value));
+        let Ok(field) = Name::new(key) else {
+            continue;
+        };
+        if tables.contains(key)
+            && let Json::Array(rows) = value
+            && rows.iter().all(Json::is_object)
+        {
+            let mut flags = Vec::with_capacity(rows.len());
+            for (index, row) in rows.iter().enumerate() {
+                let Json::Object(object) = row else {
+                    continue;
+                };
+                let given = object
+                    .get("id")
+                    .and_then(Json::as_str)
+                    .and_then(parse_record_id);
+                flags.push(given.is_none());
+                let mut fields = BTreeMap::new();
+                for (column, cell) in object {
+                    if column == "id" && given.is_some() {
+                        continue;
+                    }
+                    if let Ok(column) = Name::new(column) {
+                        fields.insert(column, json_to_value(cell));
+                    }
+                }
+                doc.rows_mut(field.clone()).push(ChildRow {
+                    id: given.unwrap_or_else(|| synthetic_row_id(index)),
+                    fields,
+                });
+            }
+            anonymous.insert(field, flags);
+            continue;
         }
+        doc.set(field, json_to_value(value));
     }
-    Ok(doc)
+    Ok((doc, anonymous))
+}
+
+/// The record id written as its hyphenated text, or `None` when `text` is not one.
+fn parse_record_id(text: &str) -> Option<RecordId> {
+    let hex: String = text.chars().filter(|c| *c != '-').collect();
+    if hex.len() != 32 || text.len() != 36 || !hex.is_ascii() {
+        return None;
+    }
+    let mut bytes = [0u8; 16];
+    for (i, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).ok()?;
+    }
+    let id = RecordId::from_bytes(bytes).ok()?;
+    (id.to_string() == text.to_ascii_lowercase()).then_some(id)
+}
+
+/// A record id for a payload row that carried none (the guard needs one; it is never output).
+fn synthetic_row_id(index: usize) -> RecordId {
+    let mut bytes = [0u8; 16];
+    bytes[6] = 0x70;
+    bytes[8] = 0x80;
+    bytes[14] = (index >> 8) as u8;
+    bytes[15] = index as u8;
+    RecordId::from_bytes(bytes).unwrap_or_else(|_| RecordId::new_v7())
 }
 
 /// Serialises a redacted [`Document`] back to the payload's JSON object.
-fn json_from_document(doc: &Document) -> Map<String, Json> {
+fn json_from_document(doc: &Document, anonymous: &BTreeMap<Name, Vec<bool>>) -> Map<String, Json> {
     let mut out = Map::new();
     for (name, value) in doc.fields() {
         out.insert(name.as_str().to_owned(), value_to_json(value));
+    }
+    for (table, rows) in doc.tables() {
+        let flags = anonymous.get(table);
+        let rows: Vec<Json> = rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| {
+                let mut object = Map::new();
+                if !flags.and_then(|f| f.get(index)).copied().unwrap_or(false) {
+                    object.insert("id".to_owned(), Json::String(row.id.to_string()));
+                }
+                for (column, value) in &row.fields {
+                    object.insert(column.as_str().to_owned(), value_to_json(value));
+                }
+                Json::Object(object)
+            })
+            .collect();
+        out.insert(table.as_str().to_owned(), Json::Array(rows));
     }
     out
 }

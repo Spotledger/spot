@@ -60,7 +60,7 @@ async fn seeding_twice_gives_one_administrator() {
     let mut tx = backend.begin(catalog.clone(), options()).await.unwrap();
     let first = seed(&mut tx, &params).await.unwrap();
     tx.commit().await.unwrap();
-    assert_eq!(first.written, 6, "four roles, the user and the assignment");
+    assert_eq!(first.written, 7, "five roles, the user and the assignment");
 
     let mut tx = backend.begin(catalog.clone(), options()).await.unwrap();
     let second = seed(&mut tx, &params).await.unwrap();
@@ -69,7 +69,7 @@ async fn seeding_twice_gives_one_administrator() {
     assert_eq!(second.administrator, first.administrator);
 
     assert_eq!(count(&backend, &catalog, doctype::USER).await, 1);
-    assert_eq!(count(&backend, &catalog, doctype::ROLE).await, 4);
+    assert_eq!(count(&backend, &catalog, doctype::ROLE).await, 5);
     assert_eq!(count(&backend, &catalog, doctype::ROLE_ASSIGNMENT).await, 1);
 }
 
@@ -126,6 +126,7 @@ async fn the_administrator_has_no_credential_and_holds_the_tenant_administrator_
     assert_eq!(
         names,
         [
+            role::INTEGRATION_MANAGER,
             role::SYSTEM_MANAGER,
             role::TENANT_ADMINISTRATOR,
             role::USER_MANAGER,

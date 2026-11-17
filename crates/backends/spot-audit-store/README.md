@@ -18,6 +18,25 @@ human review digest.
   `SELECT, INSERT` on `spot_audit_chain` and `SELECT, INSERT, UPDATE` on `spot_audit_checkpoint`. It is
   explicitly **denied** `UPDATE, DELETE, TRUNCATE` on `spot_audit_chain`.
 
+### The six tables and the grants of `spot_audit_app` (WP-AI-11.T7)
+
+`prepare` and `install_guard` cover the two chain tables and the four tables of the lane appender's
+durable state. `PUBLIC` holds nothing on any of them, and `DELETE` and `TRUNCATE` are granted on none.
+
+| table | privileges of `spot_audit_app` | why |
+| --- | --- | --- |
+| `spot_audit_chain` | `SELECT, INSERT` | read and append the chain, never rewrite it |
+| `spot_audit_checkpoint` | `SELECT, INSERT, UPDATE` | the signed checkpoint pointer moves forward |
+| `spot_audit_bookmark` | `SELECT, INSERT, UPDATE` | a lane's outbox bookmark moves forward |
+| `spot_audit_site_checkpoint` | `SELECT, INSERT, UPDATE` | the signed site checkpoint moves forward |
+| `spot_audit_event_index` | `SELECT, INSERT` | append-only: it decides which events are chained; a rewritten row could chain an event twice or skip one |
+| `spot_audit_doc_index` | `SELECT, INSERT` | append-only: the document history is read from it |
+
+`install_guard` needs all six tables (a host that runs the audit chain always runs the appender) and
+fails with `auditstore.tables_missing`, naming the missing ones, before it changes anything.
+`verify` reports `appender_tables` and `appender_grants`; a widened grant (for example `UPDATE` on the
+event index, or any right for `PUBLIC`) makes it incomplete and `install_guard` revokes it again.
+
 Databases created before the `spot_` prefix hold `audit_chain` and `audit_checkpoint`. `prepare`
 renames them, with their constraint names and the guard trigger and function, in the one
 advisory-locked transaction that also creates anything missing: every row stays in place (the rename

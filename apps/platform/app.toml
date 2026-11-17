@@ -6,3 +6,13 @@
 name = "platform"
 version = "0.1.0"
 title = "Platform"
+
+# The function service drops the rate-limit buckets that have been idle for a while (WP-PLT-17.T6).
+# The registry also bounds itself when a call finds too many buckets; this is the timetable that
+# keeps the memory flat between calls. The job is registered by the host's function service.
+[[schedules]]
+name = "function_evict_idle"
+cron = "0 */5 * * * *"
+step = "platform:function_evict_idle"
+queue = "short"
+budget_ms = 30000

@@ -1,0 +1,46 @@
+# quarantine_host codes: quarantine administration (WP-RTB-03.T3). One [[entry]] per code.
+
+[[entry]]
+code = "quarantine_host.forbidden"
+class = "none"
+summary = "The caller may not discard quarantine items, or the permission check failed."
+explanation_key = "error.quarantine_host.forbidden"
+params = []
+remedy = "Ask for the sync.quarantine.discard permission."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine_host.reason_required"
+class = "none"
+summary = "A discard needs a reason code."
+explanation_key = "error.quarantine_host.reason_required"
+params = []
+remedy = "Give a reason code."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine_host.not_found"
+class = "none"
+summary = "No such quarantine item."
+explanation_key = "error.quarantine_host.not_found"
+params = []
+remedy = "Check the item id."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine_host.wrong_state"
+class = "none"
+summary = "The item is not in a state this action applies to."
+explanation_key = "error.quarantine_host.wrong_state"
+params = []
+remedy = "Check the item's state."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine_host.unavailable"
+class = "none"
+summary = "The quarantine store could not answer, so nothing was listed or changed."
+explanation_key = "error.quarantine_host.unavailable"
+params = []
+remedy = "Check that the database is reachable and try again. An unavailable store is never shown as an empty queue."
+since = "0.1.0"

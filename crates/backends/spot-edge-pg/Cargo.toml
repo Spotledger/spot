@@ -30,6 +30,8 @@ uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
 # Instants are arguments, never read from a clock (ADR-077).
 time = { version = "0.3.55", default-features = false, features = ["std"] }
 thiserror = "2"
+# The pause between two pages of the verify scan (it leaves the pool to the requests being served).
+tokio = { version = "1", default-features = false, features = ["time"] }
 
 [dev-dependencies]
 # The effective metadata the tests compile a catalog and an edge schema from.

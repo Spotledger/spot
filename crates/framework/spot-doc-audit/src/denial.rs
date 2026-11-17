@@ -39,12 +39,38 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use spot_app_api::BoxFuture;
 use spot_document::engine::{Denial, DenialSink};
 
-use crate::error::DENIAL_NOT_RECORDED;
+use crate::error::{DENIAL_NOT_RECORDED, DocAuditError};
 use crate::event::{
     ActorRef, AuditSource, DocAuditEvent, DocOperation, EventExtra, OUTCOME_DENIED,
 };
 use crate::participant::operation_for;
 use crate::step::{AuditWriter, is_audit_off, micros};
+
+/// Where an [`AuditDenialSink`] writes a denial event, asynchronously (WP-SEC-06.T5).
+///
+/// The synchronous [`AuditWriter`] is bound to a caller's transaction; a denial happens after the
+/// operation's transaction has rolled back, so the sink needs a writer that can open **its own
+/// transaction** and await it. An implementation never receives the business transaction: it
+/// begins one, writes the one event and commits.
+///
+/// The event holds no value and no message. An implementation must not put the cause of a
+/// failure into its error either (it can name a value): the sink keeps only the fact.
+pub trait DenialWriter: Send + Sync {
+    /// Writes `event` in a transaction of its own; the business transaction is gone.
+    ///
+    /// # Errors
+    /// [`DocAuditError::OutboxWrite`] when the event could not be written; the sink counts it as
+    /// not recorded and never lets it change the operation's error.
+    fn write<'a>(&'a self, event: &'a DocAuditEvent) -> BoxFuture<'a, Result<(), DocAuditError>>;
+}
+
+/// How the sink reaches the outbox.
+enum Writer {
+    /// The synchronous writer of [`AuditDenialSink::new`].
+    Sync(Arc<dyn AuditWriter>),
+    /// The async writer of [`AuditDenialSink::with_denial_writer`].
+    Async(Arc<dyn DenialWriter>),
+}
 
 /// The default bound on denial writes in flight at once.
 pub const DEFAULT_MAX_IN_FLIGHT: usize = 8;
@@ -105,7 +131,7 @@ impl DenialStats {
 
 /// Records every refused operation as a `denied` audit event.
 pub struct AuditDenialSink {
-    writer: Arc<dyn AuditWriter>,
+    writer: Writer,
     stats: Arc<DenialStats>,
     source: AuditSource,
     node: Option<String>,
@@ -118,6 +144,19 @@ impl AuditDenialSink {
     /// into `stats`.
     #[must_use]
     pub fn new(writer: Arc<dyn AuditWriter>, stats: Arc<DenialStats>) -> Self {
+        Self::with_writer(Writer::Sync(writer), stats)
+    }
+
+    /// A sink writing through the async `writer`, which opens its own transaction per event, and
+    /// counting into `stats`. The write is awaited **inside** the in-flight slot, so the bound
+    /// counts real in-flight writes; a failed, panicking or timed-out write releases the slot and
+    /// counts as not recorded.
+    #[must_use]
+    pub fn with_denial_writer(writer: Arc<dyn DenialWriter>, stats: Arc<DenialStats>) -> Self {
+        Self::with_writer(Writer::Async(writer), stats)
+    }
+
+    fn with_writer(writer: Writer, stats: Arc<DenialStats>) -> Self {
         Self {
             writer,
             stats,
@@ -224,12 +263,22 @@ impl AuditDenialSink {
     }
 
     /// Writes one prepared event, bounded; counts the outcome.
-    fn record(&self, event: &DocAuditEvent) {
+    ///
+    /// The slot is held for the whole write, awaited. If this future is dropped before the write
+    /// finishes (the engine's denial timeout) or the writer panics, the [`Unfinished`] guard
+    /// counts the denial as not recorded and the [`Slot`] guard releases the slot.
+    async fn record(&self, event: &DocAuditEvent) {
         let Some(_slot) = self.acquire() else {
             self.stats.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         };
-        match self.writer.write(event) {
+        let mut unfinished = Unfinished::new(&self.stats);
+        let result = match &self.writer {
+            Writer::Sync(writer) => writer.write(event),
+            Writer::Async(writer) => writer.write(event).await,
+        };
+        unfinished.finish();
+        match result {
             Ok(()) => {
                 self.stats.recorded.fetch_add(1, Ordering::Relaxed);
             }
@@ -245,9 +294,34 @@ impl DenialSink for AuditDenialSink {
         let event = self.build(denial);
         Box::pin(async move {
             if let Some(event) = event {
-                self.record(&event);
+                self.record(&event).await;
             }
         })
+    }
+}
+
+/// Counts a denial as not recorded when dropped without [`Unfinished::finish`]: the write was
+/// cut off (timeout) or the writer panicked.
+struct Unfinished<'a> {
+    stats: &'a DenialStats,
+    done: bool,
+}
+
+impl<'a> Unfinished<'a> {
+    fn new(stats: &'a DenialStats) -> Self {
+        Self { stats, done: false }
+    }
+
+    fn finish(&mut self) {
+        self.done = true;
+    }
+}
+
+impl Drop for Unfinished<'_> {
+    fn drop(&mut self) {
+        if !self.done {
+            self.stats.failed();
+        }
     }
 }
 

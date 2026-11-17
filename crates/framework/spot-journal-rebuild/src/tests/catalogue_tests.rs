@@ -66,6 +66,11 @@ fn every_error() -> Vec<RebuildError> {
             code: "c",
         },
         RebuildError::SinkFailed { reason: s() },
+        RebuildError::UnknownTopic {
+            generation: 1,
+            seq: 1,
+            topic: s(),
+        },
         RebuildError::Cancelled { processed: 1 },
     ]
 }

@@ -24,7 +24,9 @@ use crate::package::PackagedBackup;
 use crate::retention::plan;
 use crate::site::{AlertSink, HealthSink, InvariantRunner, MediaNotifier, ScratchSite};
 use crate::target::BackupTarget;
-use crate::verify::{VerifyReport, alert_for, condition_for, full, quick, require_scratch};
+use crate::verify::{
+    VerifyReport, alert_for, condition_for, full, full_with_provider, quick, require_scratch,
+};
 
 /// A boxed future for the producer port.
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
@@ -36,6 +38,12 @@ pub trait BackupProducer: Send + Sync {
     /// # Errors
     /// [`BackupError`] when the snapshot provider or packaging fails.
     fn produce<'a>(&'a self, request: &'a BackupRequest) -> BoxFuture<'a, Result<PackagedBackup>>;
+
+    /// The key provider this producer encrypts with, if any. `Full` verification
+    /// decrypts through it. The default is `None`: a plain producer.
+    fn key_provider(&self) -> Option<&dyn spot_secrets::KeyProvider> {
+        None
+    }
 }
 
 /// The record of which backups are verified and which an open restore references.
@@ -54,6 +62,26 @@ pub trait BackupLedger: Send + Sync {
 
     /// Removes a record.
     fn remove(&self, id: &str);
+
+    /// Like [`BackupLedger::upsert`] but reports a persistence failure. The default
+    /// calls `upsert` and returns `Ok`, so in-memory ledgers and existing fakes are
+    /// unchanged; a durable ledger overrides it.
+    ///
+    /// # Errors
+    /// [`BackupError::LedgerWriteFailed`] when a durable ledger cannot persist.
+    fn try_upsert(&self, record: BackupRecord) -> Result<()> {
+        self.upsert(record);
+        Ok(())
+    }
+
+    /// Like [`BackupLedger::remove`] but reports a persistence failure.
+    ///
+    /// # Errors
+    /// [`BackupError::LedgerWriteFailed`] when a durable ledger cannot persist.
+    fn try_remove(&self, id: &str) -> Result<()> {
+        self.remove(id);
+        Ok(())
+    }
 }
 
 /// An in-memory ledger for hosts whose durable ledger is not wired yet and for tests.
@@ -190,13 +218,31 @@ impl BackupRunner<'_> {
 
         let packaged = self.producer.produce(&request).await?;
 
+        // A job that asks for encryption must receive an encrypted package. Anything
+        // else (no provider wired) fails before a byte reaches the target, and the
+        // plaintext package is removed.
+        if let Some(wanted) = &job.encrypt
+            && packaged.manifest.encryption.as_ref() != Some(wanted)
+        {
+            let _ = std::fs::remove_file(packaged.package.path());
+            return Err(BackupError::EncryptionUnavailable {
+                reason: "the job asks for encryption but no key provider encrypted the package"
+                    .to_owned(),
+            });
+        }
+
         // Verify before publishing: a target is handed bytes only once the package
         // passed its quick checks. Full verification runs against the same bytes.
         let verification = match job.verify {
             VerifyMode::Quick => quick(&packaged.package),
             VerifyMode::Full => {
                 let (scratch, invariants) = require_scratch(self.scratch, self.invariants)?;
-                full(&packaged.package, scratch, invariants).await?
+                match self.producer.key_provider() {
+                    Some(provider) => {
+                        full_with_provider(&packaged.package, provider, scratch, invariants).await?
+                    }
+                    None => full(&packaged.package, scratch, invariants).await?,
+                }
             }
         };
 
@@ -236,7 +282,7 @@ impl BackupRunner<'_> {
             sequence,
             open_restore: false,
         };
-        self.ledger.upsert(record);
+        self.ledger.try_upsert(record)?;
         if !verification.ok {
             self.raise_verification_failure(&stored, &verification);
             let invariants_failed = verification
@@ -318,7 +364,7 @@ impl BackupRunner<'_> {
                 continue;
             }
             self.target.delete(&id)?;
-            self.ledger.remove(&id);
+            self.ledger.try_remove(&id)?;
             deleted.push(id);
         }
         Ok(deleted)
@@ -434,7 +480,8 @@ impl BackupProducer for SnapshotProducer {
                 parent_digest: request.job.parent_digest.clone(),
                 verify: request.job.verify,
                 target: request.job.target.to_string(),
-                encryption: request.job.encrypt.clone(),
+                // The sealing step (`encrypting`) sets this once the payload is encrypted.
+                encryption: None,
             };
             let packaged =
                 crate::package::build_from_dir(manifest, outcome.snapshot.dir(), &self.work_dir)?;

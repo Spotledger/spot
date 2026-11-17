@@ -1,0 +1,8 @@
+# Spotledger package repository (installed by spot-repo-keys). The archive key
+# is pinned with Signed-By; nothing here turns signature checking off.
+Types: deb
+URIs: @BASEURL@/deb
+Suites: @CHANNEL@
+Components: main
+Enabled: @ENABLED@
+Signed-By: /usr/share/keyrings/spot-archive-keyring.gpg

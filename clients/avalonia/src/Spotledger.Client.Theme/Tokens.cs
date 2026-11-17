@@ -83,4 +83,9 @@ public static class Tokens
     public const string TokenSpace7 = "Space.7";
     public const string TokenSpace8 = "Space.8";
     public const string TokenSpace9 = "Space.9";
+    public const string TokenToastCornerRadius = "Toast.CornerRadius";
+    public const string TokenToastDuration = "Toast.Duration";
+    public const string TokenToastElevation = "Toast.Elevation";
+    public const string TokenToastMaxWidth = "Toast.MaxWidth";
+    public const string TokenToastOffset = "Toast.Offset";
 }

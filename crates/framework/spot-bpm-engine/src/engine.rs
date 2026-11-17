@@ -458,7 +458,7 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
             not_before: None,
             is_retry: record.attempt(node).is_some_and(|a| a.is_retry),
         };
-        self.commit(&mut record, CaseUpdate::new().with_attempt(stored))
+        self.commit(&mut record, CaseUpdate::new().with_attempt(stored), now)
             .await?;
         self.apply_done(&mut record, &process, node, payload, Vec::new(), now)
             .await?;
@@ -493,7 +493,9 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
                 .commit(
                     &case,
                     version,
-                    CaseUpdate::new().with_transition(transition),
+                    CaseUpdate::new()
+                        .with_transition(transition)
+                        .with_at(Instant::from_offset(now)),
                 )
                 .await?;
             self.timers.cancel_case(&record.run.id);
@@ -554,9 +556,11 @@ impl<S: CaseStore + 'static, T: TimerPort + 'static> Engine<S, T> {
         &self,
         record: &mut CaseRecord,
         update: CaseUpdate,
+        now: OffsetDateTime,
     ) -> EngineResult<()> {
         let id = record.run.id.clone();
         let version = record.run.version;
+        let update = update.with_at(Instant::from_offset(now));
         *record = self.store.commit(&id, version, update).await?;
         Ok(())
     }

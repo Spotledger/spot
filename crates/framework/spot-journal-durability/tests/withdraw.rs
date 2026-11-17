@@ -3,6 +3,10 @@
 
 use spot_journal_durability::*;
 
+fn p(seq: Seq) -> Position {
+    Position::new(1, seq)
+}
+
 fn cfg() -> GateConfig {
     GateConfig {
         rpo_grace_millis: 60_000,
@@ -31,7 +35,7 @@ fn commit(g: &mut AckGate, now: u64, seq: Seq, id: &str) -> Vec<Output> {
     g.handle(
         now,
         Event::LocalCommitDurable {
-            seq,
+            position: p(seq),
             command_id: id.into(),
         },
     )
@@ -41,7 +45,7 @@ fn fail(g: &mut AckGate, now: u64, seq: Seq, id: &str) -> Vec<Output> {
     g.handle(
         now,
         Event::LocalCommitFailed {
-            seq,
+            position: p(seq),
             command_id: id.into(),
         },
     )
@@ -52,7 +56,7 @@ fn chunk(g: &mut AckGate, now: u64, up_to: Seq) -> Vec<Output> {
         now,
         Event::ChunkDurable {
             batch: BatchId(up_to),
-            up_to_seq: up_to,
+            up_to: p(up_to),
         },
     )
 }
@@ -60,13 +64,25 @@ fn chunk(g: &mut AckGate, now: u64, up_to: Seq) -> Vec<Output> {
 #[test]
 fn a_waiting_commit_is_withdrawn_and_never_acknowledged() {
     let mut g = remote();
-    assert_eq!(commit(&mut g, 0, 1, "a"), vec![Output::Wait { seq: 1 }]);
-    assert_eq!(fail(&mut g, 1, 1, "a"), vec![Output::Withdrawn { seq: 1 }]);
+    assert_eq!(
+        commit(&mut g, 0, 1, "a"),
+        vec![Output::Wait { position: p(1) }]
+    );
+    assert_eq!(
+        fail(&mut g, 1, 1, "a"),
+        vec![Output::Withdrawn { position: p(1) }]
+    );
     assert_eq!(g.pending_count(), 0);
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Withdrawn { seq: 1 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Withdrawn { position: p(1) })
+    );
     // The chunk that covers it later acknowledges nothing.
     assert!(chunk(&mut g, 2, 1).is_empty());
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Withdrawn { seq: 1 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Withdrawn { position: p(1) })
+    );
     assert_eq!(g.rejected_events(), 0);
 }
 
@@ -75,13 +91,16 @@ fn an_outcome_unknown_commit_is_withdrawn() {
     let mut g = remote();
     commit(&mut g, 0, 1, "a");
     let out = g.handle(40_000, Event::Tick);
-    assert_eq!(out, vec![Output::CommitOutcomeUnknown { seq: 1 }]);
+    assert_eq!(out, vec![Output::CommitOutcomeUnknown { position: p(1) }]);
     assert_eq!(
         fail(&mut g, 40_001, 1, "a"),
-        vec![Output::Withdrawn { seq: 1 }]
+        vec![Output::Withdrawn { position: p(1) }]
     );
     assert!(chunk(&mut g, 40_002, 1).is_empty());
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Withdrawn { seq: 1 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Withdrawn { position: p(1) })
+    );
 }
 
 #[test]
@@ -90,16 +109,19 @@ fn an_acknowledged_commit_is_never_taken_back() {
     assert_eq!(
         commit(&mut g, 0, 1, "a"),
         vec![Output::Ack {
-            seq: 1,
+            position: p(1),
             basis: AckBasis::Local
         }]
     );
     assert!(fail(&mut g, 1, 1, "a").is_empty());
     assert_eq!(g.rejected_events(), 1);
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Committed { seq: 1 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Committed { position: p(1) })
+    );
     assert_eq!(
         g.admit("a"),
-        Admission::Existing(CommandOutcome::Committed { seq: 1 })
+        Admission::Existing(CommandOutcome::Committed { position: p(1) })
     );
 }
 
@@ -110,7 +132,10 @@ fn a_chunk_acknowledged_commit_is_not_withdrawn_either() {
     assert_eq!(chunk(&mut g, 1, 1).len(), 1);
     assert!(fail(&mut g, 2, 1, "a").is_empty());
     assert_eq!(g.rejected_events(), 1);
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Committed { seq: 1 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Committed { position: p(1) })
+    );
 }
 
 #[test]
@@ -119,7 +144,10 @@ fn an_unknown_sequence_number_is_ignored_and_counted() {
     assert!(fail(&mut g, 0, 7, "ghost").is_empty());
     assert_eq!(g.rejected_events(), 1);
     // The gate did not move: the first real commit is still welcome.
-    assert_eq!(commit(&mut g, 1, 1, "a"), vec![Output::Wait { seq: 1 }]);
+    assert_eq!(
+        commit(&mut g, 1, 1, "a"),
+        vec![Output::Wait { position: p(1) }]
+    );
     // A matching sequence number with a different command id is refused the same way.
     assert!(fail(&mut g, 2, 1, "other").is_empty());
     assert_eq!(g.rejected_events(), 2);
@@ -141,25 +169,46 @@ fn a_withdrawn_command_may_commit_again_with_a_new_sequence_number() {
     commit(&mut g, 0, 1, "a");
     fail(&mut g, 1, 1, "a");
     assert_eq!(g.admit("a"), Admission::Proceed);
-    // The withdrawn number is consumed: reusing it is ignored.
-    assert!(commit(&mut g, 2, 1, "a").is_empty());
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Withdrawn { seq: 1 }));
+    // The withdrawn number is consumed: reusing it is refused with a typed error.
+    assert_eq!(
+        commit(&mut g, 2, 1, "a"),
+        vec![Output::Rejected {
+            position: p(1),
+            error: DurabilityError::OutOfOrder {
+                position: p(1),
+                last: p(1)
+            }
+        }]
+    );
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Withdrawn { position: p(1) })
+    );
     // The next number works and answers the retry.
-    assert_eq!(commit(&mut g, 3, 2, "a"), vec![Output::Wait { seq: 2 }]);
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Pending { seq: 2 }));
+    assert_eq!(
+        commit(&mut g, 3, 2, "a"),
+        vec![Output::Wait { position: p(2) }]
+    );
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Pending { position: p(2) })
+    );
     assert_eq!(
         g.admit("a"),
-        Admission::Existing(CommandOutcome::Pending { seq: 2 })
+        Admission::Existing(CommandOutcome::Pending { position: p(2) })
     );
     let out = chunk(&mut g, 4, 2);
     assert_eq!(
         out,
         vec![Output::Ack {
-            seq: 2,
+            position: p(2),
             basis: AckBasis::Chunk
         }]
     );
-    assert_eq!(g.outcome("a"), Some(CommandOutcome::Committed { seq: 2 }));
+    assert_eq!(
+        g.outcome("a"),
+        Some(CommandOutcome::Committed { position: p(2) })
+    );
 }
 
 #[test]
@@ -174,11 +223,11 @@ fn a_withdrawn_commit_between_two_others_leaves_them_alone() {
         out,
         vec![
             Output::Ack {
-                seq: 1,
+                position: p(1),
                 basis: AckBasis::Chunk
             },
             Output::Ack {
-                seq: 3,
+                position: p(3),
                 basis: AckBasis::Chunk
             }
         ]
@@ -216,11 +265,15 @@ fn pruning_keeps_the_retried_command_mapping() {
     chunk(&mut r, 5, 3);
     // The old withdrawn record was pruned; the retry's mapping survived or went with its own seq,
     // but never points at a pruned entry.
-    assert!(matches!(
-        r.outcome("a"),
-        None | Some(CommandOutcome::Committed { seq: 2 })
-    ));
-    assert_eq!(r.outcome("b"), Some(CommandOutcome::Committed { seq: 3 }));
+    assert!(match r.outcome("a") {
+        None => true,
+        Some(CommandOutcome::Committed { position }) => position == p(2),
+        Some(_) => false,
+    });
+    assert_eq!(
+        r.outcome("b"),
+        Some(CommandOutcome::Committed { position: p(3) })
+    );
 }
 
 #[test]

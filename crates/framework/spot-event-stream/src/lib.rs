@@ -25,6 +25,15 @@
 //!   guard, on [`Channel::Export`](spot_field_guard::Channel::Export) because a data
 //!   subscription carries values).
 //!
+//! # Selectors: topics, classes, entities (WP-JRN-09.T1)
+//!
+//! A consumer selects by topic ([`TopicSelector`]), by **class** ([`StreamClass`]: `state`,
+//! `domain`, `audit`; default `domain` and `audit`) and, for `state`, by **entity**. The class of
+//! a topic comes from the events registry; an unregistered platform topic is dropped and counted
+//! ([`Batch::unclassified`]), an app topic without an entry is `domain`. `state` and `audit` are
+//! reserved: naming either needs the owner's stream right, and the right is re-read on every
+//! pull. The selector runs before the filter, the read filter and the field guard.
+//!
 //! # Delivery level D1
 //!
 //! At-least-once, resumable, nothing lost. A message may arrive more than once, so the receiver
@@ -63,7 +72,7 @@ pub use error::{CODES, StreamError};
 pub use position::{
     encode_position, is_start, parse_position, position_from_feed, position_to_feed,
 };
-pub use spec::{ConsumerSpec, MAX_PARTITIONS, PayloadMode, Start, TopicSelector};
+pub use spec::{ConsumerSpec, MAX_PARTITIONS, PayloadMode, Start, StreamClass, TopicSelector};
 pub use store::{
     ConsumerRecord, ConsumerStore, InMemoryConsumerStore, RegisterOutcome, SharedStore,
 };

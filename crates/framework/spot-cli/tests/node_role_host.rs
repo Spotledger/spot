@@ -23,6 +23,35 @@ use common::{Env, Started};
 /// This file's node id (equal to `[partition] node` in every edge test).
 const NODE: &str = "edge-a";
 
+/// The `[services.sync_hub.tls]` table of a hub site and the certificate files it names, made
+/// inside the site's configuration root (a hub listener needs mutual TLS to start).
+const HUB_TLS: &str =
+    "[services.sync_hub.tls]\ncert = \"hub.pem\"\nkey = \"hub.key\"\nclient_ca = \"ca.pem\"\n";
+
+fn write_hub_tls(env: &Env) {
+    use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "node role test CA");
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = ca_params.self_signed(&ca_key).unwrap();
+    let issuer = Issuer::new(ca_params, ca_key);
+    let key = KeyPair::generate().unwrap();
+    let leaf = CertificateParams::new(vec!["localhost".to_owned()])
+        .unwrap()
+        .signed_by(&key, &issuer)
+        .unwrap();
+    let root = &env.root.0;
+    std::fs::write(root.join("hub.pem"), leaf.pem()).unwrap();
+    std::fs::write(root.join("ca.pem"), ca.pem()).unwrap();
+    let key_path = root.join("hub.key");
+    std::fs::write(&key_path, key.serialize_pem()).unwrap();
+    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+}
+
 /// Rewrites `common.toml`'s `[services.node_role]` table.
 fn set_role(env: &Env, toml: &str) {
     env.write_common(&["'sample'"], toml);
@@ -91,12 +120,15 @@ async fn a_hub_without_listen_is_refused_and_starts_nothing() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_hub_with_listen_starts_and_is_ready() {
-    let Some(env) =
-        Env::new("[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:17443\"\n").await
+    let Some(env) = Env::new(&format!(
+        "[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:17443\"\n{HUB_TLS}"
+    ))
+    .await
     else {
         eprintln!("skipped: no SPOT_TEST_PG_URL");
         return;
     };
+    write_hub_tls(&env);
     env.site();
     let (status, started) = site_status(&env).await;
     assert_ne!(status, 503, "the site must have started");
@@ -389,11 +421,14 @@ async fn a_standalone_answers_501_on_hub_only_routes_and_a_hub_does_not() {
 
     // A hub leaves the routes to the hub services (WP-RTB-02): the layer is not installed, so
     // nothing here answers 501 on its behalf.
-    let Some(env) =
-        Env::new("[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:17446\"\n").await
+    let Some(env) = Env::new(&format!(
+        "[services.node_role]\nrole = \"hub\"\nlisten = \"0.0.0.0:17446\"\n{HUB_TLS}"
+    ))
+    .await
     else {
         return;
     };
+    write_hub_tls(&env);
     let secret = env.site();
     let started = common::start(&env).await;
     let secret = common::admin(started.addr, &env.site, &secret).await;

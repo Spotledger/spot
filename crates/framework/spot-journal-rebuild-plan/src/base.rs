@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{FIRST_POSITION, ForkInfo, Generation, JournalCatalog, Position};
+use crate::catalog::{ForkInfo, Generation, JournalCatalog, Position};
 use crate::error::PlanError;
 
 /// What a rebuild restores before it applies any segment (ADR-061 s6).
@@ -24,8 +24,11 @@ pub enum Base {
     Backup {
         /// The position the backup holds every record as of.
         position: Position,
+        /// The generation that position belongs to: the backup's own, or the one the planner
+        /// found for it in the live history.
+        generation: Generation,
     },
-    /// Nothing: the segments apply from [`FIRST_POSITION`].
+    /// Nothing: the segments apply from [`crate::FIRST_POSITION`] of the first live generation.
     Empty,
 }
 
@@ -36,20 +39,20 @@ impl Base {
     #[must_use]
     pub fn position(&self) -> Position {
         match self {
-            Self::Snapshot { position, .. } | Self::Backup { position } => *position,
+            Self::Snapshot { position, .. } | Self::Backup { position, .. } => *position,
             Self::Empty => 0,
         }
     }
 
-    /// The generation the base holds its records in, when it knows one.
-    ///
-    /// A backup does not carry a generation; the planner takes the generation of the live range
-    /// that covers its position.
+    /// The generation the base holds its records in, when it has one: a snapshot's, or the
+    /// backup's (named by the caller or found by the planner). An empty base has none.
     #[must_use]
     pub fn generation(&self) -> Option<Generation> {
         match self {
-            Self::Snapshot { generation, .. } => Some(*generation),
-            Self::Backup { .. } | Self::Empty => None,
+            Self::Snapshot { generation, .. } | Self::Backup { generation, .. } => {
+                Some(*generation)
+            }
+            Self::Empty => None,
         }
     }
 }
@@ -81,7 +84,8 @@ pub(crate) struct AbandonedRegion {
 /// ranges a fork abandoned.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LiveChain {
-    /// The live ranges, sorted by first position, contiguous where they touch.
+    /// The live ranges, sorted by `(generation, first position)`: each generation's positions
+    /// restart at 1, so the journal's order is the generation first.
     pub(crate) ranges: Vec<LiveRange>,
     /// The ranges a fork abandoned, in catalogue order of the forks.
     pub(crate) abandoned: Vec<AbandonedRegion>,
@@ -89,10 +93,10 @@ pub(crate) struct LiveChain {
     pub(crate) forks: Vec<(Generation, Position)>,
     /// The current generation: the highest one a segment or a fork names.
     pub(crate) current_generation: Generation,
-    /// The first position the live history holds.
-    pub(crate) start: Position,
-    /// The last position the live history holds.
-    pub(crate) end: Position,
+    /// The first position the live history holds, with its generation.
+    pub(crate) start: (Generation, Position),
+    /// The last position the live history holds, with its generation.
+    pub(crate) end: (Generation, Position),
 }
 
 impl LiveChain {
@@ -160,19 +164,17 @@ impl LiveChain {
             }
             live = kept;
         }
-        live.sort_by_key(|r| (r.first_seq, r.generation));
+        live.sort_by_key(|r| (r.generation, r.first_seq));
         for pair in live.windows(2) {
-            if pair[1].first_seq <= pair[0].last_seq {
-                return Err(PlanError::SegmentsInconsistent {
-                    generation: pair[1].generation,
-                    position: pair[1].first_seq,
-                });
-            }
-        }
-        for pair in live.windows(2) {
-            if pair[1].generation != pair[0].generation
-                && !forks.contains(&(pair[1].generation, pair[0].last_seq))
-            {
+            if pair[1].generation == pair[0].generation {
+                if pair[1].first_seq <= pair[0].last_seq {
+                    return Err(PlanError::SegmentsInconsistent {
+                        generation: pair[1].generation,
+                        position: pair[1].first_seq,
+                    });
+                }
+            } else if !forks.contains(&(pair[1].generation, pair[0].last_seq)) {
+                // A generation is entered only at the position the previous one is cut at.
                 return Err(PlanError::UnrecordedFork {
                     generation: pair[1].generation,
                     position: pair[1].first_seq,
@@ -190,8 +192,8 @@ impl LiveChain {
             .max()
             .unwrap_or(first.generation);
         Ok(Self {
-            start: first.first_seq,
-            end: last.last_seq,
+            start: (first.generation, first.first_seq),
+            end: (last.generation, last.last_seq),
             current_generation,
             ranges: live,
             abandoned,
@@ -206,52 +208,74 @@ impl LiveChain {
 
     /// The refusal for a position the live history does not hold: a fork explains some of those
     /// positions, and the rest are a coverage gap.
-    pub(crate) fn classify_missing(&self, position: Position) -> PlanError {
+    pub(crate) fn classify_missing(&self, generation: Generation, position: Position) -> PlanError {
         for region in &self.abandoned {
-            if region.first_seq <= position && position <= region.last_seq {
+            if region.generation == generation
+                && region.first_seq <= position
+                && position <= region.last_seq
+            {
                 return PlanError::TargetInsideAbandonedGeneration {
                     generation: region.generation,
                     position,
                 };
             }
         }
-        PlanError::GapAt { position }
-    }
-
-    /// The refusal for a target the live history does not reach.
-    pub(crate) fn classify_target(&self, position: Position) -> PlanError {
-        let explained = self
-            .abandoned
-            .iter()
-            .any(|r| r.first_seq <= position && position <= r.last_seq);
-        if explained {
-            self.classify_missing(position)
-        } else {
-            PlanError::TargetBeyondEnd {
-                end: self.end,
-                position,
-            }
+        PlanError::GapAt {
+            generation,
+            position,
         }
     }
 
-    /// The first live range that ends after `position`, if any: the range the walk starts in.
-    pub(crate) fn first_range_after(&self, position: Position) -> usize {
+    /// The refusal for a target the live history does not reach, or reaches only as an ancestor.
+    pub(crate) fn classify_target(&self, generation: Generation, position: Position) -> PlanError {
+        let explained = self.abandoned.iter().any(|r| {
+            r.generation == generation && r.first_seq <= position && position <= r.last_seq
+        });
+        if explained {
+            return self.classify_missing(generation, position);
+        }
+        if (generation, position) > self.end {
+            return PlanError::TargetBeyondEnd {
+                generation,
+                end_generation: self.end.0,
+                end: self.end.1,
+                position,
+            };
+        }
+        let live = self.ranges.iter().any(|r| {
+            r.generation == generation && r.first_seq <= position && position <= r.last_seq
+        });
+        if live && generation < self.end.0 {
+            return PlanError::TargetBeforeFork {
+                generation,
+                position,
+                current_generation: self.end.0,
+            };
+        }
+        PlanError::GapAt {
+            generation,
+            position,
+        }
+    }
+
+    /// The index of the first live range that ends after `(generation, position)`: the range the
+    /// walk starts in.
+    pub(crate) fn first_range_after(&self, generation: Generation, position: Position) -> usize {
         self.ranges
             .iter()
-            .position(|r| r.last_seq > position)
+            .position(|r| (r.generation, r.last_seq) > (generation, position))
             .unwrap_or(self.ranges.len())
     }
 
-    /// The generation the base's position belongs to: the range that covers it, or the range
-    /// that starts right after it, or `None` when the position is before the live history.
-    pub(crate) fn generation_at(&self, position: Position) -> Option<Generation> {
-        if position < FIRST_POSITION {
-            return None;
-        }
-        self.ranges
+    /// The generations whose live ranges cover `position`, oldest first.
+    pub(crate) fn generations_covering(&self, position: Position) -> Vec<Generation> {
+        let mut found: Vec<Generation> = self
+            .ranges
             .iter()
-            .find(|r| r.first_seq <= position && position <= r.last_seq)
-            .or_else(|| self.ranges.iter().find(|r| r.first_seq > position))
+            .filter(|r| r.first_seq <= position && position <= r.last_seq)
             .map(|r| r.generation)
+            .collect();
+        found.dedup();
+        found
     }
 }

@@ -95,6 +95,7 @@ pub struct StoredUser {
     pub email: Option<String>,
     pub full_name: String,
     pub state: UserState,
+    pub user_type: spot_iam_directory::UserType,
     pub password_hash: Option<String>,
     pub totp_base32: Option<String>,
     pub recovery: Vec<[u8; 32]>,
@@ -109,6 +110,7 @@ impl StoredUser {
             email: None,
             full_name: user_name.to_owned(),
             state,
+            user_type: spot_iam_directory::UserType::Internal,
             password_hash: None,
             totp_base32: None,
             recovery: Vec::new(),
@@ -151,6 +153,7 @@ impl StoredUser {
             email: self.email.clone(),
             full_name: self.full_name.clone(),
             state: self.state,
+            user_type: self.user_type,
             password_hash,
             totp_secret,
             recovery_digests,
@@ -299,6 +302,7 @@ impl KeyStore for MemKeyStore {
                         owner: stored.owner,
                         state: stored.state,
                         expires_at: stored.expires_at,
+                        scim_only: false,
                     })
                 })
                 .transpose()
@@ -374,6 +378,14 @@ pub struct Fixture {
 }
 
 pub fn fixture_at(clock: ManualClock, config: LoginConfig) -> Fixture {
+    fixture_admitted(clock, config, Arc::new(spot_login::AllowAll))
+}
+
+pub fn fixture_admitted(
+    clock: ManualClock,
+    config: LoginConfig,
+    admission: Arc<dyn spot_login::SignInAdmission>,
+) -> Fixture {
     let dir = Arc::new(MemDirectory::default());
     let keys = Arc::new(MemKeyStore::default());
     let events = Arc::new(MemEvents::default());
@@ -390,6 +402,7 @@ pub fn fixture_at(clock: ManualClock, config: LoginConfig) -> Fixture {
         events.clone(),
         clock.clone(),
         hasher.clone(),
+        admission,
     )));
     Fixture {
         service,
@@ -422,4 +435,51 @@ pub fn throttle_config(backoff_after: u32, lockout_after: u32) -> ThrottleConfig
         backoff_cap: Duration::from_secs(900),
         lockout_duration: Duration::from_secs(1800),
     }
+}
+
+/// A coordinator throttle over a fresh in-process coordinator on `clock`, with `per_account`
+/// attempts per hour per account name and limits on the other dimensions that no test reaches
+/// unless it means to (`per_source` per hour per source). Returns the admission and the
+/// coordinator, so a test can share one coordinator between two services.
+pub async fn coordinator_admission(
+    clock: Arc<ManualClock>,
+    per_account: u64,
+    per_source: u64,
+) -> (
+    Arc<spot_login::CoordinatorAdmission>,
+    Arc<spot_coordinator::InProcessCoordinator>,
+) {
+    let coordinator = ok(spot_coordinator::InProcessCoordinator::start(
+        Arc::new(spot_coordinator::InMemoryPresence::new()),
+        ok(spot_coordinator::NodeId::new("node-1")),
+        clock as Arc<dyn spot_core::Clock>,
+    )
+    .await);
+    let admission = admission_over(coordinator.clone(), per_account, per_source);
+    (admission, coordinator)
+}
+
+/// Admission over an existing coordinator (so two services can share it, or a test can pass a
+/// coordinator that fails).
+pub fn admission_over(
+    coordinator: Arc<dyn spot_coordinator::Coordinator>,
+    per_account: u64,
+    per_source: u64,
+) -> Arc<spot_login::CoordinatorAdmission> {
+    let hour = Duration::from_secs(3_600);
+    let limit = |capacity| spot_coordinator::RateLimit {
+        capacity,
+        per: hour,
+    };
+    let policy = ok(spot_throttle_coordinator::ThrottlePolicy::new(
+        limit(per_account),
+        limit(per_source),
+        limit(1_000_000),
+        limit(per_source.max(1_000_000)),
+    ));
+    let salt = ok(spot_throttle_coordinator::ThrottleSalt::new(
+        b"test-salt-0123456789abcdef",
+    ));
+    let throttle = spot_throttle_coordinator::CoordinatorThrottle::new(coordinator, salt, policy);
+    Arc::new(spot_login::CoordinatorAdmission::new(Arc::new(throttle)))
 }

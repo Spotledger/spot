@@ -1,5 +1,7 @@
 //! Repair settings. Every number is a setting (ADR-061 to ADR-067 starting values), never hidden.
 
+use spot_sync_node::DEFAULT_MAX_TENANTS;
+
 use crate::error::RepairError;
 
 /// The bounds and timings of the repair loop. Times are milliseconds.
@@ -17,9 +19,16 @@ pub struct RepairConfig {
     pub escalate_keys: usize,
     /// A key missing this long raises `CLOSURE_UNRESOLVED`.
     pub raise_after_ms: u64,
-    /// Most distinct missing keys tracked; the oldest is dropped (counted) beyond it and the
-    /// loop escalates, so a dropped key is still repaired by the scoped re-send.
+    /// Most distinct missing keys tracked per node (all tenants together); beyond it the oldest
+    /// key of the tenant with the most tracked keys is dropped (counted) and that tenant
+    /// escalates, so a dropped key is still repaired by the scoped re-send.
     pub max_tracked: usize,
+    /// Out-of-scope keys remembered per tenant so each is reported once until it is seen
+    /// applied; beyond it the oldest is forgotten (it may be reported again later, counted).
+    pub max_out_of_scope: usize,
+    /// Tenants the loop keeps state for; a miss of a further tenant is refused (counted) and
+    /// reported, never tracked.
+    pub max_tenants: usize,
     /// Seed of the deterministic backoff jitter.
     pub jitter_seed: u64,
 }
@@ -34,6 +43,8 @@ impl Default for RepairConfig {
             escalate_keys: 500,
             raise_after_ms: 600_000,
             max_tracked: 100_000,
+            max_out_of_scope: 1_000,
+            max_tenants: DEFAULT_MAX_TENANTS,
             jitter_seed: 0,
         }
     }
@@ -55,7 +66,12 @@ impl RepairConfig {
         if self.max_interval_ms < self.ask_interval_ms {
             return bad("max_interval_ms is below ask_interval_ms");
         }
-        if self.max_asks_per_key == 0 || self.escalate_keys == 0 || self.max_tracked == 0 {
+        if self.max_asks_per_key == 0
+            || self.escalate_keys == 0
+            || self.max_tracked == 0
+            || self.max_out_of_scope == 0
+            || self.max_tenants == 0
+        {
             return bad("a bound is zero");
         }
         Ok(())

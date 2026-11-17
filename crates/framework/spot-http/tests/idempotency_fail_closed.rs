@@ -516,24 +516,25 @@ fn upload_request(key: &str, bytes: &[u8]) -> Request<Body> {
         .must()
 }
 
-/// The paths of the commands group, read from the router source: the `Router::new()` that
-/// ends in `idempotency_middleware`.
+/// The paths of the commands group: the hand-wired operations the router source layers as
+/// `Command` (they sit behind `idempotency_middleware`), with their paths from the route table.
 fn commands_group_paths() -> Vec<String> {
     let source = include_str!("../src/api/router/mod.rs");
-    let start = source
-        .find("let commands = Router::new()")
-        .expect("the commands group is declared in router/mod.rs");
-    let end = source[start..]
-        .find("middleware::idempotency_middleware")
-        .expect("the commands group carries the idempotency layer")
-        + start;
     let mut paths = Vec::new();
-    let mut rest = &source[start..end];
-    while let Some(at) = rest.find("\"/api/v1/") {
-        let tail = &rest[at + 1..];
-        let close = tail.find('"').expect("a closed string");
-        paths.push(tail[..close].to_owned());
-        rest = &tail[close + 1..];
+    for line in source.lines() {
+        let line = line.trim();
+        if !line.ends_with("Command),") {
+            continue;
+        }
+        let Some(rest) = line.strip_prefix('"') else {
+            continue;
+        };
+        let operation = &rest[..rest.find('"').expect("a closed string")];
+        let entry = spot_http::api::route_table()
+            .iter()
+            .find(|e| e.operation == operation)
+            .expect("a Command route is in the table");
+        paths.push(entry.path.to_owned());
     }
     paths.sort();
     paths

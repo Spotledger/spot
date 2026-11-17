@@ -8,6 +8,11 @@ use tokio_postgres::IsolationLevel;
 use super::publish::Log;
 use super::{db, sql};
 use crate::PgBackend;
+
+// The outbox barrier lives in its own file; it is declared here because the feed's `mod.rs` is
+// not part of this task's files.
+#[path = "ship_barrier.rs"]
+mod ship_barrier;
 use crate::schema::names::{META_TABLE, quote};
 
 /// What [`cleanup`] removed.
@@ -17,6 +22,12 @@ pub struct Cleanup {
     pub outbox_events: u64,
     /// Change entries removed.
     pub changes: u64,
+    /// Outbox entries older than the retention that were **kept** because the journal shipper
+    /// has not made them durable yet (`feed.pruning_blocked_by_journal`, WP-RTB-01.T3). Zero
+    /// when no shipper is configured.
+    pub held_back_events: u64,
+    /// The age in seconds of the oldest of those entries (0 when none is held back).
+    pub held_back_seconds: u64,
 }
 
 /// The retention in force: how long published entries are kept at least. Default 7 days.
@@ -87,11 +98,33 @@ pub async fn cleanup(backend: &PgBackend) -> StorageResult<Cleanup> {
         )
         .await
         .map_err(db)?;
-        let statement = match log {
-            Log::Outbox => sql::PRUNE_OUTBOX,
-            Log::Changes => sql::PRUNE_CHANGES,
+        let removed: i64 = match log {
+            Log::Outbox => match ship_barrier::barrier(&tx).await? {
+                // A shipper is configured: nothing above what it shipped is pruned, whatever
+                // its age (the journal would have a silent gap).
+                Some(shipped) => {
+                    let removed: i64 = tx
+                        .query_one(ship_barrier::PRUNE_OUTBOX_BARRIERED, &[&secs, &shipped])
+                        .await
+                        .map_err(db)?
+                        .get(0);
+                    let (count, age) = ship_barrier::held_back(&tx, shipped, secs).await?;
+                    out.held_back_events = count;
+                    out.held_back_seconds = age;
+                    removed
+                }
+                None => tx
+                    .query_one(sql::PRUNE_OUTBOX, &[&secs])
+                    .await
+                    .map_err(db)?
+                    .get(0),
+            },
+            Log::Changes => tx
+                .query_one(sql::PRUNE_CHANGES, &[&secs])
+                .await
+                .map_err(db)?
+                .get(0),
         };
-        let removed: i64 = tx.query_one(statement, &[&secs]).await.map_err(db)?.get(0);
         tx.commit().await.map_err(db)?;
         let removed = u64::try_from(removed).unwrap_or(0);
         match log {

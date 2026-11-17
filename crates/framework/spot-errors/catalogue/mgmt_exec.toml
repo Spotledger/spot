@@ -1,0 +1,100 @@
+# mgmt_exec codes: the site-side executors of the journal and sync management operations in spot-cli (WP-RTB-04.T3, ADR-061, ADR-062): why an operation did not run or could not complete. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "mgmt_exec.denied"
+class = "none"
+summary = "The caller's principal does not hold a permission this operation needs on this site; the operation was not performed."
+explanation_key = "error.mgmt_exec.denied"
+params = []
+remedy = "Ask a tenant administrator for the permission of the operation's family (journal.admin, sync.admin, sync.node.enrol, journal.erase_subject)."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.not_found"
+class = "none"
+summary = "The audience of the signed command is not a site of this host, or the thing named does not exist."
+explanation_key = "error.mgmt_exec.not_found"
+params = []
+remedy = "Check the site name the command is addressed to."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.site_running"
+class = "none"
+summary = "The operation needs the site stopped (journal.rebuild.run, sync.role.change) and the site is running; the executor never stops it."
+explanation_key = "error.mgmt_exec.site_running"
+params = []
+remedy = "Run the offline path on the node itself: stop the site and use the rebuild or role entry point of the CLI."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.busy"
+class = "none"
+summary = "Another destructive operation is running on this site; only one runs at a time."
+explanation_key = "error.mgmt_exec.busy"
+params = []
+remedy = "Wait for the running operation to finish and send the command again."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.rate_limited"
+class = "none"
+summary = "The principal sent more commands in a minute than the limit allows; the refusal is counted, not audited one by one."
+explanation_key = "error.mgmt_exec.rate_limited"
+params = []
+remedy = "Slow down; the limit is services.mgmt_exec.rate_per_minute."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.plan_hash_differs"
+class = "none"
+summary = "The plan the rebuild would run is not the one that was confirmed, so nothing ran."
+explanation_key = "error.mgmt_exec.plan_hash_differs"
+params = []
+remedy = "Plan again, read the new plan and confirm its hash."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.audit_unwritable"
+class = "none"
+summary = "The audit record of the operation could not be written; a destructive operation was not performed, and any other change is reported as unaudited."
+explanation_key = "error.mgmt_exec.audit_unwritable"
+params = []
+remedy = "Check the site's database and outbox, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.external_grant_too_long"
+class = "none"
+summary = "An external reader's grant of more than seven days needs the Tenant Administrator role."
+explanation_key = "error.mgmt_exec.external_grant_too_long"
+params = []
+remedy = "Ask for seven days or fewer, or have an administrator grant it."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.service_failed"
+class = "none"
+summary = "The service under the executor failed; its own code is in its own audit record."
+explanation_key = "error.mgmt_exec.service_failed"
+params = []
+remedy = "Read the operation's audit record and the service's status."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.conflict"
+class = "none"
+summary = "The state does not allow the operation now."
+explanation_key = "error.mgmt_exec.conflict"
+params = []
+remedy = "Read the reason, change the state it names and send the command again."
+since = "0.1.0"
+
+[[entry]]
+code = "mgmt_exec.unavailable"
+class = "none"
+summary = "A service under the executor is unreachable, so the operation did not complete."
+explanation_key = "error.mgmt_exec.unavailable"
+params = []
+remedy = "Check the service named by the operation and retry."
+since = "0.1.0"

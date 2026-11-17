@@ -1,0 +1,76 @@
+[package]
+name = "spot-control-plane"
+description = "The control plane service (WP-CTL-01.T6, ADR-098): the deployable and the module seam. Two mutual-TLS listeners (operator and tenant host/agent) with separate CAs and routers, signed-command intake shared with the management API crate, the host certificate authority, the module registry, health and audit. It never reads tenant business data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "spot_control_plane"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-control-plane"
+path = "src/main.rs"
+
+[dependencies]
+spot-tenant-move = { path = "../spot-tenant-move" }
+spot-tenancy-pg = { path = "../../backends/spot-tenancy-pg" }
+spot-tenancy-adapters = { path = "../spot-tenancy-adapters" }
+spot-tenancy = { path = "../spot-tenancy" }
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+spot-settings = { path = "../spot-settings" }
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+spot-license = { path = "../spot-license", features = ["issue"] }
+spot-fleet-rollout = { path = "../spot-fleet-rollout" }
+spot-fleet-health = { path = "../spot-fleet-health" }
+spot-desired-state = { path = "../spot-desired-state" }
+spot-deploy-wizard = { path = "../spot-deploy-wizard" }
+spot-cloud-backup = { path = "../spot-cloud-backup" }
+spot-break-glass = { path = "../spot-break-glass" }
+spot-agent-runtime = { path = "../spot-agent-runtime" }
+rand = { version = "0.9", features = ["os_rng"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+spot-core = { path = "../spot-core" }
+# Verification pieces, wire envelope, TLS listener and audit port: used as a library, not copied.
+spot-mgmt-api = { path = "../spot-mgmt-api" }
+spot-signed-command = { path = "../spot-signed-command" }
+spot-signed-command-pg = { path = "../../backends/spot-signed-command-pg" }
+# The control database: the pool (the stores of the modules take `deadpool_postgres::Pool`).
+spot-postgres = { path = "../../backends/spot-postgres" }
+# The libraries the modules serve (usage today; tenancy, licensing, health, moves, rollouts, links
+# and support follow as separate module files and add their lines here when they land).
+spot-metering = { path = "../spot-metering" }
+spot-metering-pg = { path = "../../backends/spot-metering-pg" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+axum = { version = "0.8.9", features = ["http2"] }
+tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+# The host certificate authority: issues short-lived client certificates.
+rcgen = "0.14"
+time = "0.3"
+x509-parser = "0.18"
+sha2 = "0.10"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+spot-rehearsal = { path = "../spot-rehearsal" }
+tower = { version = "0.5", features = ["util"] }
+rcgen = "0.14"
+base64 = "0.22"
+tokio-postgres = "0.7"
+deadpool-postgres = "0.14"
+tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time", "io-util"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+spot-signed-command = { path = "../spot-signed-command", features = ["testing"] }
+
+[lints]
+workspace = true

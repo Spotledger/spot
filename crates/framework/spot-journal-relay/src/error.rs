@@ -36,12 +36,21 @@ pub enum RelayError {
         offered: u64,
     },
     /// An entry or a batch is not acceptable by itself (empty batch, wrong generation, a line
-    /// that is not one line of UTF-8 or is too large).
+    /// that is not one line of UTF-8 or is too large, a batch too large for one chunk).
     #[error("the batch is invalid: {0}")]
     EntryInvalid(&'static str),
     /// The relay configuration is unusable.
     #[error("the relay configuration is invalid: {0}")]
     ConfigInvalid(&'static str),
+    /// A `remote-sync` batch would make a tail chunk larger than the 64 MiB limit (ADR-061 A.7).
+    /// Nothing was written; a batch is never split, because it is the unit of acknowledgement.
+    #[error("the batch would make a tail chunk of {bytes} bytes, over the {limit} byte limit")]
+    BatchTooLarge {
+        /// The size the chunk reached when the encoder stopped.
+        bytes: u64,
+        /// The limit.
+        limit: u64,
+    },
     /// An earlier call failed part-way, so the relay does not know what the store holds. Call
     /// `resume` before anything else.
     #[error("an earlier call failed part-way: resume the relay before appending")]
@@ -60,7 +69,7 @@ impl RelayError {
             Self::SplitBrain { .. } => "journal_relay.split_brain",
             Self::EntryOutOfOrder { .. } => "journal_relay.entry_out_of_order",
             Self::BatchGap { .. } => "journal_relay.batch_gap",
-            Self::EntryInvalid(_) => "journal_relay.entry_invalid",
+            Self::EntryInvalid(_) | Self::BatchTooLarge { .. } => "journal_relay.entry_invalid",
             Self::ConfigInvalid(_) => "journal_relay.config_invalid",
             Self::ResumeRequired => "journal_relay.resume_required",
             Self::Store(_) => "journal_relay.store_failed",

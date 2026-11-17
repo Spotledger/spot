@@ -17,6 +17,11 @@
 // then measures the three signed-in operations. The startup, download and
 // memory measures stay signed-out and unchanged. Needs SPOT_BUDGETS_STUB=1 or
 // CI=true (run.sh sets the former).
+//
+// WP-UI-09.T9: the sign-in uses `window.spotBrowser.signIn` when the build has it (the page is
+// loaded with ?testSignIn=1 for that) and falls back to the keyboard path; the result records
+// which one signed in (`signInMethod`). `browser.tabs.memory` is measured after the sign-in and
+// the signed-in operations, and fails unless every requested tab opened.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -243,6 +248,21 @@ async function keySamples(page) {
   return page.evaluate(() => globalThis.__spotProbe.keysStop());
 }
 
+// The page URL in stub mode: the build's test sign-in hook only exists when the URL carries
+// ?testSignIn=1 (WP-UI-09.T8). Without a stub the URL is left exactly as it was.
+export function pageUrlFor(baseUrl, stub) {
+  if (!stub) return baseUrl;
+  const url = new URL(baseUrl);
+  url.searchParams.set('testSignIn', '1');
+  return url.toString();
+}
+
+// The failure for a memory sample taken from a page that could not open every tab: a result for a
+// different quantity (an emptier shell) must not pass the budget.
+export function shortTabsMessage(opened, wanted) {
+  return `memory: opened ${opened} of ${wanted} tabs`;
+}
+
 async function memorySample(page) {
   let opened = 0;
   for (let index = 0; index < TABS / 2; index += 1) {
@@ -312,13 +332,27 @@ async function signInFixture(stub) {
   if (good.status !== 200) throw new Error(`the stub refused its own credential (${good.status})`);
 }
 
+// Hook path: true when the build has `signIn` and it returned true. A missing function or a
+// `false` answer falls back to the keyboard. The pair comes from the stub module, never copied.
+async function signInThroughHook(page, stub) {
+  return page.evaluate(async ([url, user, password]) => {
+    const shell = globalThis.spotBrowser;
+    if (!shell || typeof shell.signIn !== 'function') return false;
+    try {
+      return (await shell.signIn(url, user, password)) === true;
+    } catch {
+      return false;
+    }
+  }, [stub.url, TEST_USER, TEST_PASSWORD]);
+}
+
 async function ensureSignedIn(page, stub, run) {
-  if (fixture) {
-    await signInFixture(stub);
-    return;
-  }
+  if (fixture) await signInFixture(stub);
+  if (await signInThroughHook(page, stub)) return 'hook';
+  if (fixture) return 'keyboard';
   try {
     await signInThroughShell(page, stub);
+    return 'keyboard';
   } catch (error) {
     const shot = path.join(outDir, `sign-in-failure-run-${run}.png`);
     await page.screenshot({ path: shot }).catch(() => {});
@@ -330,6 +364,7 @@ async function runMemory(page, result, wanted) {
   if (!wanted.has('browser.tabs.memory')) return;
   try {
     const memory = await memorySample(page);
+    if (memory.opened < TABS) throw new Error(shortTabsMessage(memory.opened, TABS));
     if (!(memory.total > 0)) throw new Error('the page reported no memory');
     result.measures['browser.tabs.memory'] = [memory.total];
     result.notes.memory = memory;
@@ -356,6 +391,7 @@ async function runOnce(run, baseUrl, stub) {
     errors: {},
     notes: {},
   };
+  const pageUrl = pageUrlFor(baseUrl, stub);
   const launchArgs = buildLaunchArgs(gl);
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spot-budgets-profile-'));
   let context;
@@ -388,7 +424,7 @@ async function runOnce(run, baseUrl, stub) {
       await emulate(cdp, profileName);
       let cold;
       try {
-        cold = await measureLoad(page, wire, () => page.goto(baseUrl, { waitUntil: 'commit', timeout: timeoutMs }));
+        cold = await measureLoad(page, wire, () => page.goto(pageUrl, { waitUntil: 'commit', timeout: timeoutMs }));
         if (wanted.has('browser.startup.cold')) result.measures['browser.startup.cold'] = [cold.readyMs];
         if (wanted.has('browser.download.compressed')) {
           if (!(cold.bytes > 0)) throw new Error('no bytes were counted on the cold load');
@@ -411,23 +447,24 @@ async function runOnce(run, baseUrl, stub) {
     }
 
     const operations = OPERATIONS.filter((id) => wanted.has(id));
+    let signInError = null;
     if (operations.length) {
       await emulate(cdp, 'local');
       if (stub) {
         const needsPage = !STARTUP.some((id) => wanted.has(id));
         if (needsPage) {
-          await page.goto(baseUrl, { waitUntil: 'commit', timeout: timeoutMs });
+          await page.goto(pageUrl, { waitUntil: 'commit', timeout: timeoutMs });
           await waitForShell(page);
         }
-        // Memory stays signed-out, as before this task: measure it first.
-        await runMemory(page, result, wanted);
-        if (SIGNED_IN_OPERATIONS.some((id) => wanted.has(id))) {
+        // Memory needs open tabs, so it is measured after the sign-in and the signed-in operations.
+        if (SIGNED_IN_OPERATIONS.some((id) => wanted.has(id)) || wanted.has('browser.tabs.memory')) {
           try {
-            await ensureSignedIn(page, stub, run);
+            result.signInMethod = await ensureSignedIn(page, stub, run);
             result.notes.signedIn = true;
           } catch (error) {
+            signInError = String(error.message || error);
             for (const id of SIGNED_IN_OPERATIONS.filter((op) => wanted.has(op))) {
-              result.errors[id] = String(error.message || error);
+              result.errors[id] = signInError;
             }
           }
         }
@@ -466,7 +503,13 @@ async function runOnce(run, baseUrl, stub) {
           result.errors['browser.child-edit.key'] = String(error.message || error);
         }
       }
-      if (!stub) await runMemory(page, result, wanted);
+      // Signed-out against a real build there is no session, so no tabs open: the measure is skipped
+      // and its result is missing (the gate fails a missing result). The fixture is always signed in.
+      if (signInError) {
+        if (wanted.has('browser.tabs.memory')) result.errors['browser.tabs.memory'] = signInError;
+      } else if (stub || fixture) {
+        await runMemory(page, result, wanted);
+      }
     }
   } catch (error) {
     result.error = String((error && error.stack) || error);

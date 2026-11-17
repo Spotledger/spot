@@ -22,6 +22,9 @@ spot-conditions = { path = "../spot-conditions" }
 spot-sync-freshness = { path = "../spot-sync-freshness" }
 # Catch-up planning over a scoped gap (`scope_for_node`, `plan`).
 spot-sync-catchup = { path = "../spot-sync-catchup" }
+# The node side of the repair pull: `PullRequest` and `ScopedResend` are the request types the hub
+# answers (types only; the loop itself runs on the node). The test run also drives the real loop.
+spot-sync-repair-pull = { path = "../spot-sync-repair-pull" }
 # Stable serde on every public type so the relay state can be persisted by the caller.
 serde = { version = "1", features = ["derive"] }
 # Typed errors with stable `sync_hub.*` codes.

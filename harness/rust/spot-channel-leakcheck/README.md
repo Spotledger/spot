@@ -19,7 +19,15 @@ a principal who *may* see the value does, so a clean result cannot be an empty o
 | `Export` | `export_never_leaks` (`tests/export.rs`) | `spot-bulk-data` (`ExportPlan`, `ExportStream`, CSV and NDJSON, child parts) | covered |
 | `Report` | `report_never_leaks` (`tests/report.rs`) | `spot-reports` (`Compiler`, `ReportRunner::run`) | covered; one finding, see below |
 | `Version` | `version_history_never_leaks` (`tests/version.rs`) | `spot-doc-audit` (`build_event`, `LaneAppender`, `DocAudit::history`, `GuardMasker::redact_diff`) | covered |
-| `Print`, `ListColumn`, `LinkTitle`, `Search`, `Notification`, `Journal`, `ApiScim` | none | none calls the guard yet | `pending(reason, task)` in `src/lib.rs`; `tests/coverage.rs` prints them |
+| `ListColumn` | `list_column_never_leaks` (`tests/list_column.rs`) | `spot-api-services` (`EngineResources::list` over the real `Engine`, `PermissionAuthorizer` and `with_field_guard`) | covered |
+| `LinkTitle` | `link_title_never_leaks` (`tests/link_title.rs`) | `spot-api-services` (`EngineLookup::search`, the platform link seam, over the real `Engine`) | covered |
+| `Search` | `search_never_leaks` (`tests/search.rs`) | `spot-retrieval` (`Indexer::pump_once` with `with_protection`, `Retriever::search` with `with_search_guard`) | covered |
+| `Notification` | `notification_never_leaks` (`tests/notification.rs`) | `spot-realtime-bridge` (`FeedPump::pump_once` with `with_notification_guard`, `recipient_names`) | covered |
+| `Journal` | `journal_never_leaks` (`tests/journal.rs`) | `spot-journal-relay` (`Relay::append_batch`, `seal_now`, `open_views`, `JournalViewer::view_line`: names only, never a value) | covered |
+| `ApiScim` | `api_scim_never_leaks` (`tests/api_scim.rs`) | `spot-iam-scim` (`handle_guarded`: single resource, list, `PATCH` and `POST` answers, filter and `sortBy` refusal) | covered |
+| `Print` | `print_never_leaks` (`tests/print.rs`) | `spot-http` (`GuardedPrintPort::render`: loads as the caller, `guard_document` with `Channel::Print`, then renders; PDF bytes and HTML) | covered |
+
+Two more producers of `Export` are covered by extra files of the same channel (found by the coverage test's source scan): `tests/export_incremental.rs` (`spot-bulk-data` incremental extraction: a protected-only change, a field that became protected, a right revoked before the extract, tombstones) and `tests/event_stream.rs` (`spot-event-stream` data subscription: JSON frames, SSE frames, resuming after a revocation, the audit records).
 
 Other files: `tests/inference.rs` (a filter, sort, group or aggregate on a protected field is
 refused, with a 100-sample timing check), `tests/system.rs` (jobs, sync and migrations: manifest,

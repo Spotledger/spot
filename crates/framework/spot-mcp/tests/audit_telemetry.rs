@@ -90,8 +90,14 @@ fn write_call(id: i64) -> String {
     )
 }
 
+/// The tests that capture the log hold this: a subscriber installed by one test must not meet the
+/// events of another (the call-site interest cache is process-wide).
+static LOG_CAPTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn a_failing_sink_raises_one_alert_and_moves_the_exported_metrics() {
+    let _serial = LOG_CAPTURE.lock().unwrap_or_else(|p| p.into_inner());
     // Rendering installs the process-wide recorder, so it comes before the first counter.
     let before = spot_telemetry::render_prometheus();
     let buf = Buf::default();
@@ -100,6 +106,9 @@ async fn a_failing_sink_raises_one_alert_and_moves_the_exported_metrics() {
         .with_ansi(false)
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
+    // Another test of this binary may have run an event of the same call site under a
+    // different subscriber, which caches "never" for it: look again under this one.
+    tracing::callsite::rebuild_interest_cache();
 
     let alerts = Arc::new(TelemetryAlerts::new());
     let (server, _m) = server_with_sink(
@@ -146,7 +155,9 @@ async fn a_failing_sink_raises_one_alert_and_moves_the_exported_metrics() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn dropped_records_are_exported() {
+    let _serial = LOG_CAPTURE.lock().unwrap_or_else(|p| p.into_inner());
     // Rendering installs the process-wide recorder, so it comes before the first counter.
     let before = spot_telemetry::render_prometheus();
     let (server, _m) = server_with_sink(
@@ -173,12 +184,16 @@ async fn dropped_records_are_exported() {
 
 #[test]
 fn identical_alerts_are_limited_to_one_per_ten_seconds_and_counted() {
+    let _serial = LOG_CAPTURE.lock().unwrap_or_else(|p| p.into_inner());
     let buf = Buf::default();
     let subscriber = tracing_subscriber::fmt()
         .with_writer(buf.clone())
         .with_ansi(false)
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
+    // Another test of this binary may have run an event of the same call site under a
+    // different subscriber, which caches "never" for it: look again under this one.
+    tracing::callsite::rebuild_interest_cache();
     let alerts = TelemetryAlerts::new();
     let events = |buf: &Buf| {
         String::from_utf8(buf.0.lock().unwrap().clone())

@@ -66,8 +66,12 @@ impl AuditStore for PgAuditStore {
     fn head<'a>(&'a self, site: &'a str) -> StoreFuture<'a, Option<ChainEntry>> {
         Box::pin(async move {
             let client = self.client("head").await.map_err(to_audit)?;
+            let statement = client
+                .prepare_cached(sql::HEAD_SQL)
+                .await
+                .map_err(|e| to_audit(db("head", &e)))?;
             let row = client
-                .query_opt(sql::HEAD_SQL, &[&site])
+                .query_opt(&statement, &[&site])
                 .await
                 .map_err(|e| to_audit(db("head", &e)))?;
             row.as_ref().map(entry_of).transpose()
@@ -127,13 +131,104 @@ impl AuditStore for PgAuditStore {
         })
     }
 
+    fn append_many_if_head<'a>(
+        &'a self,
+        site: &'a str,
+        expected_seq: u64,
+        entries: Vec<ChainEntry>,
+    ) -> StoreFuture<'a, AppendOutcome> {
+        Box::pin(async move {
+            let Some(first) = entries.first() else {
+                return Ok(AppendOutcome::Appended);
+            };
+            let mut next = expected_seq;
+            for entry in &entries {
+                next = next.saturating_add(1);
+                if entry.seq != next {
+                    return Err(AuditError::Store(
+                        "the entries are not consecutive after the head".to_owned(),
+                    ));
+                }
+            }
+            let to_i64 = |value: u64| {
+                i64::try_from(value).map_err(|_| {
+                    to_audit(Error::unavailable("a sequence number does not fit bigint"))
+                })
+            };
+            let expected = to_i64(expected_seq)?;
+            let mut seqs = Vec::with_capacity(entries.len());
+            let mut prevs = Vec::with_capacity(entries.len());
+            let mut hashes = Vec::with_capacity(entries.len());
+            let mut records = Vec::with_capacity(entries.len());
+            let mut times = Vec::with_capacity(entries.len());
+            for entry in &entries {
+                seqs.push(to_i64(entry.seq)?);
+                prevs.push(entry.prev_hash.to_vec());
+                hashes.push(entry.hash.to_vec());
+                records.push(serde_json::to_string(&entry.record).map_err(|_| {
+                    to_audit(Error::unavailable("the record could not be encoded"))
+                })?);
+                times.push(entry.record.at);
+            }
+            let first_prev = first.prev_hash.to_vec();
+            let client = self.client("append").await.map_err(to_audit)?;
+            let statement = client
+                .prepare_cached(sql::APPEND_MANY_SQL)
+                .await
+                .map_err(|e| to_audit(db("append", &e)))?;
+            let rows = match client
+                .query(
+                    &statement,
+                    &[
+                        &site,
+                        &seqs,
+                        &prevs,
+                        &hashes,
+                        &records,
+                        &times,
+                        &expected,
+                        &sql::genesis(site),
+                        &first_prev,
+                    ],
+                )
+                .await
+            {
+                Ok(rows) => rows,
+                // Another writer took the same sequence numbers first.
+                Err(e) if e.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) => {
+                    return Ok(AppendOutcome::HeadMoved);
+                }
+                Err(e) => return Err(to_audit(db("append", &e))),
+            };
+            if !rows.is_empty() {
+                return Ok(AppendOutcome::Appended);
+            }
+            let head = self.head(site).await?;
+            let head_seq = head.as_ref().map_or(0, |h| h.seq);
+            if head_seq != expected_seq {
+                return Ok(AppendOutcome::HeadMoved);
+            }
+            Err(AuditError::Store(
+                "the entry does not extend the head".to_owned(),
+            ))
+        })
+    }
+
+    fn batches_appends(&self) -> bool {
+        true
+    }
+
     fn range<'a>(&'a self, site: &'a str, from: u64, to: u64) -> StoreFuture<'a, Vec<ChainEntry>> {
         Box::pin(async move {
             let client = self.client("range").await.map_err(to_audit)?;
             let from = i64::try_from(from).unwrap_or(i64::MIN);
             let to = i64::try_from(to).unwrap_or(i64::MAX);
+            let statement = client
+                .prepare_cached(sql::RANGE_SQL)
+                .await
+                .map_err(|e| to_audit(db("range", &e)))?;
             let rows = client
-                .query(sql::RANGE_SQL, &[&site, &from, &to])
+                .query(&statement, &[&site, &from, &to])
                 .await
                 .map_err(|e| to_audit(db("range", &e)))?;
             rows.iter().map(entry_of).collect()

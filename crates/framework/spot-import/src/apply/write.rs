@@ -14,8 +14,8 @@ use spot_app_api::error::{AppError, ErrorClass};
 use spot_app_api::prelude::{CommandId, RecordId, Value, Version};
 
 use super::{
-    ApplyMode, ApplyOptions, ApplyOutcome, ApplySummary, CreatedDocument, ImportItem, ProgressSink,
-    SpoolEntry, StopReason,
+    ApplyMode, ApplyOptions, ApplyOutcome, ApplySummary, BatchCreate, CreatedDocument, ImportItem,
+    ProgressSink, SpoolEntry, StopReason,
 };
 use crate::error::{
     CONFIG_COMMAND_ID, DUPLICATE_KEY, IDEMPOTENCY_CONFLICT, KEY_MISSING, KEY_NOT_FOUND,
@@ -34,6 +34,19 @@ pub(super) async fn apply_as_it_streams(
     progress: &mut dyn ProgressSink,
     mut summary: ApplySummary,
 ) -> ApplyOutcome {
+    if !summary.dry_run
+        && let Some((batcher, size)) = options.batcher()
+    {
+        return apply_in_batches(
+            (service, batcher, size),
+            inv,
+            items,
+            options,
+            progress,
+            summary,
+        )
+        .await;
+    }
     let every = options.progress_every.max(1);
     let mut seen = 0u64;
     let mut failed_at = None;
@@ -88,6 +101,171 @@ pub(super) async fn apply_as_it_streams(
     }
     progress.progress(seen, None);
     finish(summary, failed_at)
+}
+
+/// What the stream gave, in file order, for one batch.
+enum Entry {
+    /// A row problem (the stream's, the conversion's or the permission probe's).
+    Failed(ImportRowError),
+    /// The next [`PendingCreate`] of the batch.
+    Create,
+}
+
+/// One batch of the stream: its entries in file order and the documents to create.
+#[derive(Default)]
+struct Chunk {
+    entries: Vec<Entry>,
+    pending: Vec<PendingCreate>,
+    /// Row problems among the entries (for the error limit).
+    problems: u64,
+}
+
+/// [`ImportPolicy::SkipBadRows`] with a host that creates documents in batches: pull up to
+/// `size` entries from the stream, create the documents in one call, then record the answers in
+/// file order, exactly as the one-by-one path does (see the module docs).
+async fn apply_in_batches(
+    (service, batcher, size): (&dyn DocumentService, &dyn BatchCreate, usize),
+    inv: &Invocation,
+    items: impl Iterator<Item = ImportItem>,
+    options: &ApplyOptions,
+    progress: &mut dyn ProgressSink,
+    mut summary: ApplySummary,
+) -> ApplyOutcome {
+    let every = options.progress_every.max(1);
+    let mut seen = 0u64;
+    let mut reported = 0u64;
+    let mut failed_at = None;
+    let mut chunk = Chunk::default();
+    let mut fatal = None;
+    let mut gather_stop = None;
+
+    for item in items {
+        if options.cancel.is_cancelled() {
+            gather_stop = Some(StopReason::Cancelled);
+            break;
+        }
+        if options.max_errors > 0 && summary.failed + chunk.problems >= options.max_errors {
+            gather_stop = Some(StopReason::TooManyErrors);
+            break;
+        }
+        seen += 1;
+        match item {
+            ImportItem::Error(entry) => {
+                chunk.problems += 1;
+                chunk.entries.push(Entry::Failed(entry));
+            }
+            ImportItem::Fatal(error) => {
+                fatal = Some(fatal_note(&error));
+                break;
+            }
+            ImportItem::Document(document) => {
+                let row = first_row(&document);
+                let planned = match build_one(options, &document) {
+                    Ok(built) => {
+                        let doctype = built.doctype().as_str().to_owned();
+                        plan(service, inv, &doctype, &built, row, options).await
+                    }
+                    Err(entry) => Err(entry),
+                };
+                match planned {
+                    Ok(Plan::Create(document)) => {
+                        chunk.pending.push(PendingCreate { row, document });
+                        chunk.entries.push(Entry::Create);
+                    }
+                    Ok(Plan::Skip | Plan::Update { .. }) => {}
+                    Err(entry) => {
+                        chunk.problems += 1;
+                        chunk.entries.push(Entry::Failed(entry));
+                    }
+                }
+            }
+        }
+        if chunk.entries.len() >= size {
+            write_chunk(
+                (service, batcher),
+                inv,
+                std::mem::take(&mut chunk),
+                options,
+                &mut summary,
+                &mut failed_at,
+            )
+            .await;
+            if seen - reported >= every {
+                progress.progress(seen, None);
+                reported = seen;
+            }
+            if summary.stopped.is_some() {
+                break;
+            }
+        }
+    }
+    if summary.stopped.is_none() {
+        write_chunk(
+            (service, batcher),
+            inv,
+            chunk,
+            options,
+            &mut summary,
+            &mut failed_at,
+        )
+        .await;
+    }
+    if summary.stopped.is_none() {
+        if let Some(entry) = fatal {
+            summary.errors.push(entry);
+            summary.stopped = Some(StopReason::StreamFailed);
+        } else {
+            summary.stopped = gather_stop;
+        }
+    }
+    progress.progress(seen, None);
+    finish(summary, failed_at)
+}
+
+/// Creates a chunk's documents in one host call and records every answer in file order. The
+/// first refused write stops the run; later documents of the chunk that the host did commit are
+/// counted (they exist), and later row problems are not reported (the run never got to them).
+async fn write_chunk(
+    (service, batcher): (&dyn DocumentService, &dyn BatchCreate),
+    inv: &Invocation,
+    chunk: Chunk,
+    options: &ApplyOptions,
+    summary: &mut ApplySummary,
+    failed_at: &mut Option<u64>,
+) {
+    if chunk.entries.is_empty() {
+        return;
+    }
+    let mut results = create_batch(service, batcher, inv, &chunk.pending, options, summary)
+        .await
+        .into_iter();
+    let mut stopped_by_write = false;
+    for entry in chunk.entries {
+        match entry {
+            Entry::Failed(error) => {
+                if !stopped_by_write {
+                    summary.failed += 1;
+                    summary.errors.push(error);
+                }
+            }
+            Entry::Create => match results.next() {
+                Some(Ok(())) | None => {}
+                Some(Err(ApplyError::Row(error))) => {
+                    summary.failed += 1;
+                    summary.errors.push(error);
+                }
+                Some(Err(ApplyError::Write(error, reason))) => {
+                    summary.failed += 1;
+                    if !stopped_by_write {
+                        stopped_by_write = true;
+                        *failed_at = Some(error.row);
+                        summary.stopped = Some(reason);
+                    }
+                    summary.errors.push(error);
+                }
+            },
+        }
+    }
 }
 
 /// [`ImportPolicy::AllOrNothing`] for a real write: validate and spool the whole stream first,
@@ -167,7 +345,41 @@ pub(super) async fn apply_refusing_writes(
     let total = options.spool.len() as u64;
     let mut done = 0u64;
     let mut failed_at = None;
-    while let Some(entry) = options.spool.pop() {
+    if let Some((batcher, size)) = options.batcher() {
+        while !options.spool.is_empty() {
+            if let Some(reason) = stop_reason(options, &summary) {
+                summary.stopped = Some(reason);
+                break;
+            }
+            let pending: Vec<PendingCreate> = std::iter::from_fn(|| options.spool.pop())
+                .take(size)
+                .map(|entry| PendingCreate {
+                    row: entry.row,
+                    document: entry.document,
+                })
+                .collect();
+            let count = pending.len() as u64;
+            let rows: Vec<u64> = pending.iter().map(|entry| entry.row).collect();
+            let results =
+                create_batch(service, batcher, inv, &pending, options, &mut summary).await;
+            for (row, result) in rows.into_iter().zip(results) {
+                if let Err(ApplyError::Row(entry) | ApplyError::Write(entry, _)) = result {
+                    summary.failed += 1;
+                    failed_at.get_or_insert(row);
+                    summary.errors.push(entry);
+                    summary.stopped = Some(StopReason::WriteFailed);
+                }
+            }
+            done += count;
+            progress.progress(done, Some(total));
+            if summary.stopped.is_some() {
+                break;
+            }
+        }
+    }
+    while options.batcher().is_none()
+        && let Some(entry) = options.spool.pop()
+    {
         if let Some(reason) = stop_reason(options, &summary) {
             summary.stopped = Some(reason);
             break;
@@ -333,19 +545,51 @@ async fn create_one(
     options: &ApplyOptions,
     summary: &mut ApplySummary,
 ) -> Result<(), ApplyError> {
-    let command_id = command_text(inv, 'c', doctype, &options.batch_label, row);
-    let call = match invocation_with_id(inv, &command_id) {
-        Ok(call) => call,
-        Err(error) => {
-            return Err(ApplyError::Write(
-                row_error(row, &error),
-                StopReason::Configuration,
-            ));
-        }
-    };
+    let (command_id, call) = create_call(inv, doctype, row, options)?;
     let sent = document.clone();
-    let created = match service.create(&call, document).await {
-        Ok(Outcome { value, .. }) => value,
+    let created = service
+        .create(&call, document)
+        .await
+        .map(|Outcome { value, .. }| value);
+    finish_create(
+        service, inv, doctype, row, &sent, created, command_id, options, summary,
+    )
+    .await
+}
+
+/// The command id and the invocation that carries it, for creating the document of `row`.
+fn create_call(
+    inv: &Invocation,
+    doctype: &str,
+    row: u64,
+    options: &ApplyOptions,
+) -> Result<(String, Invocation), ApplyError> {
+    let command_id = command_text(inv, 'c', doctype, &options.batch_label, row);
+    match invocation_with_id(inv, &command_id) {
+        Ok(call) => Ok((command_id, call)),
+        Err(error) => Err(ApplyError::Write(
+            row_error(row, &error),
+            StopReason::Configuration,
+        )),
+    }
+}
+
+/// What a create's answer means: the document it returned is checked against what was sent,
+/// counted, recorded for a rollback and (when asked) posted.
+#[allow(clippy::too_many_arguments)]
+async fn finish_create(
+    service: &dyn DocumentService,
+    inv: &Invocation,
+    doctype: &str,
+    row: u64,
+    sent: &Document,
+    created: Result<Document, AppError>,
+    command_id: String,
+    options: &ApplyOptions,
+    summary: &mut ApplySummary,
+) -> Result<(), ApplyError> {
+    let created = match created {
+        Ok(value) => value,
         Err(error) => {
             return Err(ApplyError::Write(
                 row_error(row, &error),
@@ -355,7 +599,7 @@ async fn create_one(
     };
     // The engine answers a command id it has already committed with the first result. If that
     // result is not this import's document, the id was someone else's: nothing was created.
-    if !holds_imported_values(&created, &sent) {
+    if !holds_imported_values(&created, sent) {
         return Err(ApplyError::Write(
             note(
                 row,
@@ -396,6 +640,80 @@ async fn create_one(
         }
     }
     Ok(())
+}
+
+/// One document waiting for the next batched create.
+struct PendingCreate {
+    row: u64,
+    document: Document,
+}
+
+/// Creates `pending` through the host's batch writer, one result per document in order. Each
+/// document goes through the same checks as a lone create ([`finish_create`]); a document the
+/// host refused does not stop the ones after it from being counted, because the host committed
+/// them in the same transaction.
+async fn create_batch(
+    service: &dyn DocumentService,
+    batcher: &dyn BatchCreate,
+    inv: &Invocation,
+    pending: &[PendingCreate],
+    options: &ApplyOptions,
+    summary: &mut ApplySummary,
+) -> Vec<Result<(), ApplyError>> {
+    let mut results = Vec::with_capacity(pending.len());
+    let mut calls = Vec::with_capacity(pending.len());
+    let mut ids = Vec::with_capacity(pending.len());
+    let mut sendable = Vec::with_capacity(pending.len());
+    for (index, entry) in pending.iter().enumerate() {
+        let doctype = entry.document.doctype().as_str();
+        match create_call(inv, doctype, entry.row, options) {
+            Ok((command_id, call)) => {
+                calls.push((call, entry.document.clone()));
+                ids.push(command_id);
+                sendable.push(index);
+                results.push(None);
+            }
+            Err(error) => results.push(Some(Err(error))),
+        }
+    }
+    let mut answers = if calls.is_empty() {
+        Vec::new()
+    } else {
+        batcher.create_many(calls).await
+    };
+    // A host that answers with the wrong number of results broke the trait's contract: never
+    // guess which documents were written.
+    if answers.len() != sendable.len() {
+        let message = "the host's batch create answered a different number of results than documents sent; the batch is treated as failed";
+        answers = sendable
+            .iter()
+            .map(|_| {
+                Err(AppError::new(
+                    ErrorClass::Internal,
+                    crate::error::CONFIG_COMMAND_ID,
+                    message,
+                ))
+            })
+            .collect();
+    }
+    for ((index, command_id), answer) in sendable.into_iter().zip(ids).zip(answers) {
+        let entry = &pending[index];
+        let doctype = entry.document.doctype().as_str();
+        let outcome = finish_create(
+            service,
+            inv,
+            doctype,
+            entry.row,
+            &entry.document,
+            answer.map(|Outcome { value, .. }| value),
+            command_id,
+            options,
+            summary,
+        )
+        .await;
+        results[index] = Some(outcome);
+    }
+    results.into_iter().flatten().collect()
 }
 
 /// Decides what one document does: create, update, or nothing.

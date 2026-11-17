@@ -18,6 +18,9 @@ spot-permissions = { path = "../spot-permissions" }
 spot-storage-contract = { path = "../../../contracts/storage" }
 # Lifecycle and identity topic vocabularies and the payload documents (actor, changed fields).
 spot-events-contract = { path = "../../../contracts/events" }
+# The field guard (WP-SEC-04.T8): `ProtectionSource` for the names a room payload may carry,
+# `FieldGuard::visible_names` for a payload built for one recipient.
+spot-field-guard = { path = "../spot-field-guard" }
 # Typed `rtbridge.*` codes.
 thiserror = "2"
 # One warn line on a feed failure/resync; payloads are plain `serde_json::json!` values.

@@ -215,6 +215,8 @@ async fn prepare_builds_tables_types_collation_links_and_indexes() {
         [
             ("catalog_version".to_owned(), "1".to_owned()),
             ("collation".to_owned(), "en".to_owned()),
+            // The command ledger (WP-STO-09).
+            ("command_ledger_schema".to_owned(), "1".to_owned()),
             // The outbox and change feed (WP-STO-08.T1).
             ("feed_generation".to_owned(), "1".to_owned()),
             ("feed_schema".to_owned(), "1".to_owned()),

@@ -96,7 +96,9 @@ fn provisioning() -> Exclusions {
             )
             .unwrap();
     }
-    out
+    // A session's later versions (touch, rotation, end) are written to storage directly.
+    out.local("session", "platform", "login_session_updates_write_storage")
+        .unwrap()
 }
 
 /// Publishes both logs, then waits out the lag so the next pass can judge.
@@ -111,7 +113,7 @@ async fn count(backend: &PgBackend, head: &str, tail: &str) -> i64 {
     client.query_one(&sql, &[]).await.unwrap().get(0)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_hundred_mixed_operations_leave_no_finding() {
     let mut cluster = Cluster::new();
     if cluster.add_node(spec("cap-a")).await.is_none() {
@@ -242,12 +244,23 @@ async fn two_hundred_mixed_operations_leave_no_finding() {
     );
 
     let backend = backend_of(node);
-    publish(&backend).await;
-    let report = CaptureGate::new()
-        .with_exclusions(provisioning())
-        .run_once(&backend.pool())
-        .await
-        .unwrap();
+    // A background write (a session touch) can land after the last operation: look again, up
+    // to 30 seconds, until the feed has caught up with the tables.
+    let mut report;
+    let mut tries = 0;
+    loop {
+        publish(&backend).await;
+        report = CaptureGate::new()
+            .with_exclusions(provisioning())
+            .run_once(&backend.pool())
+            .await
+            .unwrap();
+        tries += 1;
+        if report.is_clean() || tries >= 30 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
     assert!(
         report.feed_entries > 100,
         "{} feed entries",
@@ -265,7 +278,7 @@ async fn two_hundred_mixed_operations_leave_no_finding() {
     assert_eq!(report.count(FindingKind::MissingStateEvent), 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bypass_in_one_site_raises_only_that_sites_condition() {
     let mut cluster = Cluster::new();
     if cluster.add_node(spec("cap-x")).await.is_none() {

@@ -172,3 +172,48 @@ explanation_key = "error.bpm_versioning.guard_required"
 params = []
 remedy = "Publish through publish_guarded with a PublishCheck instead of the unguarded publish."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_changed"
+class = "none"
+summary = "The Case changed since the migration plan was made."
+explanation_key = "error.bpm_versioning.case_changed"
+params = []
+remedy = "Plan the migration again for the Case's current state."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_mid_node"
+class = "none"
+summary = "The Case is in the middle of a node and cannot be migrated now."
+explanation_key = "error.bpm_versioning.case_mid_node"
+params = []
+remedy = "Wait for the node to finish and migrate the Case then."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_not_found"
+class = "none"
+summary = "The Case to migrate does not exist."
+explanation_key = "error.bpm_versioning.case_not_found"
+params = []
+remedy = "Check the Case id."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_not_on_version"
+class = "none"
+summary = "The Case is not on the version the migration starts from."
+explanation_key = "error.bpm_versioning.case_not_on_version"
+params = []
+remedy = "Plan the migration from the version the Case is on."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_waiting"
+class = "none"
+summary = "The Case is waiting and cannot be migrated now."
+explanation_key = "error.bpm_versioning.case_waiting"
+params = []
+remedy = "Migrate the Case when it is not waiting."
+since = "0.1.0"

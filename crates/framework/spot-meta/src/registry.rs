@@ -395,6 +395,19 @@ impl Registry {
         })
     }
 
+    /// A registry that serves `meta` as it is: no customisations of its own. For a reader that
+    /// holds an already merged [`EffectiveMeta`] (whose definitions carry the engine-managed
+    /// fields, which a rebuild from them would refuse as reserved names).
+    #[must_use]
+    pub fn from_effective(meta: Arc<EffectiveMeta>) -> Self {
+        Self {
+            definitions: meta.definitions.clone(),
+            customisations: Customisations::new(),
+            options: BuildOptions::new(),
+            current: meta,
+        }
+    }
+
     /// The current effective metadata.
     pub fn effective(&self) -> Arc<EffectiveMeta> {
         Arc::clone(&self.current)

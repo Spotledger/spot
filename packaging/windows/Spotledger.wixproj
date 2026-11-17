@@ -1,0 +1,20 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <!-- Spotledger.msi (WP-PRD-03.T4). Built on a Windows runner by tools/windows-packaging/build_msi.py:
+       dotnet build packaging/windows/Spotledger.wixproj -c Release
+         -p:ProductVersion=X.Y.Z -p:PayloadDir=<dir> -p:BuildKind=release|dev-unsigned
+       PayloadDir holds server\ (spot.exe, spot-winsvc.exe, ...), agent\ (spot-agent.exe, ...)
+       and postgres\ (the bundled PostgreSQL files). No certificate is in this tree. -->
+  <PropertyGroup>
+    <OutputName>Spotledger</OutputName>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.0.0</ProductVersion>
+    <BuildKind Condition="'$(BuildKind)' == ''">dev-unsigned</BuildKind>
+    <PayloadDir Condition="'$(PayloadDir)' == ''">payload</PayloadDir>
+    <DefineConstants>ProductVersion=$(ProductVersion);PayloadDir=$(PayloadDir);BuildKind=$(BuildKind)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+</Project>

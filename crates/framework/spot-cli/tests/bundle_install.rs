@@ -294,7 +294,7 @@ fn a_signed_bundle_verifies_and_unpacks_safely() {
     bundle_install::install(&f.dir, &loaded(&f), &path, &Issue::at(NOW)).unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_good_bundle_passes_the_gate_and_stops_only_at_the_database() {
     let f = Fixture::new("gate", true);
     let path = f.good();
@@ -305,7 +305,7 @@ async fn a_good_bundle_passes_the_gate_and_stops_only_at_the_database() {
     assert!(f.dir.join("apps").join(NAME).join("app.toml").is_file());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_altered_payload_is_refused() {
     let f = Fixture::new("payload", true);
     let cert = certificate("acme", 100, 1200, &root_key());
@@ -316,7 +316,7 @@ async fn an_altered_payload_is_refused() {
     f.refused(&path, "cli.bundle_signature_invalid").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_flipped_signature_is_refused() {
     let f = Fixture::new("flipped", true);
     let bytes = f.pack("hello");
@@ -336,7 +336,7 @@ async fn a_flipped_signature_is_refused() {
     f.refused(&path, "cli.bundle_signature_invalid").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_publisher_the_site_does_not_trust_is_refused() {
     let f = Fixture::new("stranger", true);
     let bytes = f.pack("hello");
@@ -346,7 +346,7 @@ async fn a_publisher_the_site_does_not_trust_is_refused() {
     f.refused(&path, "cli.bundle_untrusted_publisher").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_revoked_publisher_key_is_refused() {
     let f = Fixture::new("revoked", true);
     f.pin(&root_key(), &list(Some(&publisher_key())));
@@ -354,7 +354,7 @@ async fn a_revoked_publisher_key_is_refused() {
     f.refused(&path, "cli.bundle_revoked").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_expired_certificate_is_refused() {
     let f = Fixture::new("expired", true);
     let bytes = f.pack("hello");
@@ -364,7 +364,7 @@ async fn an_expired_certificate_is_refused() {
     f.refused(&path, "cli.bundle_certificate_expired").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unsigned_bundle_is_refused_when_signing_is_required() {
     let f = Fixture::new("unsigned", true);
     let path = f.place(&f.pack("hello"), None, None);
@@ -391,7 +391,7 @@ fn an_unsigned_bundle_installs_only_on_an_explicit_development_site() {
     assert!(!g.dir.join("apps").join(NAME).join("app.toml").exists());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_site_that_pins_no_root_trusts_nobody() {
     let f = Fixture::new("noroot", true);
     let path = f.good();
@@ -399,7 +399,7 @@ async fn a_site_that_pins_no_root_trusts_nobody() {
     f.refused(&path, "cli.bundle_no_trust").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bundle_with_a_parent_directory_entry_is_refused() {
     let f = Fixture::new("escape", true);
     let bytes = stored_zip(&[("../evil.toml", b"x"), ("manifest.toml", b"x")]);
@@ -408,7 +408,7 @@ async fn a_bundle_with_a_parent_directory_entry_is_refused() {
     f.refused(&path, "cli.bundle_unsafe_path").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_plain_directory_is_refused_when_signing_is_required() {
     let f = Fixture::new("dir", true);
     let app = f.dir.join("apps").join(NAME);
@@ -422,7 +422,7 @@ async fn a_plain_directory_is_refused_when_signing_is_required() {
     assert_eq!(f.audit_lines().len(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_refused_reset_is_audited_with_its_reason() {
     let f = Fixture::new("reset", true);
     let before = f.snapshot();

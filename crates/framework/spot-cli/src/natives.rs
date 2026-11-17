@@ -245,7 +245,88 @@ pub fn register_function_fn(
     register_function_with(app, module, name, spec, Arc::new(ClosureFunction(handler)));
 }
 
-/// Every native function of this process, in address order.
+/// Every native function of this process, in address order: the sample app's own
+/// ([`sample_functions`]) and every one registered with [`register_function`], a registered
+/// function replacing a built-in one of the same address.
 pub fn function_handlers() -> Vec<NativeFunction> {
-    function_table().values().cloned().collect()
+    let mut all: BTreeMap<FunctionKeyParts, NativeFunction> = sample_functions()
+        .into_iter()
+        .map(|f| ((f.app.clone(), f.module.clone(), f.name.clone()), f))
+        .collect();
+    all.extend(function_table().clone());
+    all.into_values().collect()
+}
+
+/// The functions the sample app declares in its manifest (`apps/sample/app.toml`), so a stock
+/// `spot serve` of the sample answers them (WP-PLT-17.T4).
+///
+/// They touch no document: a native handler is given a user id and nothing wider, and a function
+/// that read or wrote documents would have to do so through a service the host hands it. Each one
+/// is derived from its arguments and the caller's user id only.
+///
+/// - `sample/profile/whoami` (GET): the caller's user id and the site.
+/// - `sample/profile/greet` (POST): builds a greeting from `name` (required text) and `formal`
+///   (optional boolean); limited to 20 calls per ten minutes per caller.
+/// - `sample/public/ping` (GET, guest): `{"ok": true}`, under the site's guest limit.
+fn sample_functions() -> Vec<NativeFunction> {
+    fn make(
+        module: &str,
+        name: &str,
+        spec: FunctionSpec,
+        handler: impl Fn(FunctionCall) -> FunctionCallFuture + Send + Sync + 'static,
+    ) -> NativeFunction {
+        NativeFunction {
+            app: "sample".to_owned(),
+            module: module.to_owned(),
+            name: name.to_owned(),
+            spec,
+            handler: Arc::new(ClosureFunction(handler)),
+        }
+    }
+    vec![
+        make("profile", "whoami", FunctionSpec::default(), |call| {
+            Box::pin(async move { Ok(serde_json::json!({"user": call.user, "site": call.tenant})) })
+        }),
+        make(
+            "profile",
+            "greet",
+            FunctionSpec {
+                limit: Some((20, std::time::Duration::from_secs(600))),
+                arguments: Some(serde_json::json!({
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "formal": {"type": "boolean"}
+                    }
+                })),
+            },
+            |call| {
+                Box::pin(async move {
+                    let name = call.args["name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .trim()
+                        .to_owned();
+                    if name.is_empty() {
+                        return Err(FunctionFailure {
+                            code: "sample.name_required".to_owned(),
+                            message: "the name must not be empty".to_owned(),
+                            denied: false,
+                        });
+                    }
+                    let formal = call.args["formal"].as_bool().unwrap_or(false);
+                    let greeting = if formal {
+                        format!("Good day, {name}.")
+                    } else {
+                        format!("Hello, {name}!")
+                    };
+                    Ok(serde_json::json!({"greeting": greeting}))
+                })
+            },
+        ),
+        make("public", "ping", FunctionSpec::default(), |_| {
+            Box::pin(async { Ok(serde_json::json!({"ok": true})) })
+        }),
+    ]
 }

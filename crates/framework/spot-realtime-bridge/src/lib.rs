@@ -47,6 +47,14 @@
 //! WebSocket session layer of the host binary), because `spot-realtime` keeps membership
 //! inside its subscriptions; this trait method is the decision, the session executes it.
 //!
+//! # Field protection (WP-SEC-04.T8)
+//!
+//! A realtime payload is a doorbell: kind, DocType, id, version and field **names**, never a
+//! value. [`FeedPump::with_notification_guard`] keeps the name of a protected field out of every
+//! shared room payload and holds a user notice to names and ids ([`names`]). To see what
+//! changed, a client fetches the document through the normal read path
+//! (`GET /api/v1/resource/{doctype}/{id}`), where each field is subject to its own permission.
+//!
 //! # Event identity and redelivery
 //!
 //! Every published event's payload carries its `event_id`: a change-feed entry's id is
@@ -56,6 +64,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod names;
 pub mod pump;
 
 pub use auth::{

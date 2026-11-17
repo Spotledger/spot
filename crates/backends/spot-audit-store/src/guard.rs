@@ -9,6 +9,8 @@
 
 use deadpool_postgres::Pool;
 
+use crate::appender_sql::APPENDER_COLUMNS;
+use crate::appender_verify::verify_appender;
 use crate::error::{Error, PROTECTION_INCOMPLETE, Result, TABLES_MISSING, db, pool};
 use crate::sql::{PREPARE_LOCK, apply_guard};
 
@@ -29,6 +31,14 @@ pub struct Protection {
     /// The role holds none of `UPDATE`, `DELETE`, `TRUNCATE` on the chain (directly, through
     /// membership or through `PUBLIC`). False when the chain or the role is missing.
     pub role_cannot_rewrite: bool,
+    /// The four appender tables (`spot_audit_bookmark`, `spot_audit_event_index`,
+    /// `spot_audit_doc_index`, `spot_audit_site_checkpoint`) exist with the expected columns.
+    pub appender_tables: bool,
+    /// The role holds exactly the appender privileges (see the grant table in `sql.rs`): `SELECT,
+    /// INSERT, UPDATE` on the bookmark and site checkpoint tables, `SELECT, INSERT` on the two
+    /// index tables, no `DELETE` or `TRUNCATE` anywhere, and `PUBLIC` holds nothing on any of the
+    /// six tables. False when a table or the role is missing.
+    pub appender_grants: bool,
 }
 
 impl Protection {
@@ -48,6 +58,8 @@ impl Protection {
             (self.truncate_trigger, "spot_audit_chain_no_truncate"),
             (self.role, "spot_audit_app"),
             (self.role_cannot_rewrite, "spot_audit_app restrictions"),
+            (self.appender_tables, "spot_audit_appender_tables"),
+            (self.appender_grants, "spot_audit_appender_grants"),
         ]
         .into_iter()
         .filter_map(|(present, name)| (!present).then_some(name))
@@ -95,18 +107,34 @@ pub async fn install_guard(db_pool: &Pool) -> Result<()> {
     tx.batch_execute(PREPARE_LOCK)
         .await
         .map_err(|e| db("install guard lock", &e))?;
-    for name in [crate::CHAIN_TABLE, crate::CHECKPOINT_TABLE] {
+    // A host that runs the audit chain always runs the appender (the audit participant installs
+    // both), so all six tables must exist. Nothing is changed when any is missing.
+    let mut missing: Vec<&str> = Vec::new();
+    for name in [crate::CHAIN_TABLE, crate::CHECKPOINT_TABLE]
+        .into_iter()
+        .chain(APPENDER_COLUMNS.iter().map(|(table, _)| *table))
+    {
         let found: bool = tx
             .query_one(TABLE_EXISTS, &[&name])
             .await
             .map_err(|e| db("install guard look-up", &e))?
             .get(0);
         if !found {
-            return Err(Error::new(
-                TABLES_MISSING,
-                format!("the table `{name}` does not exist; run the migration plan first"),
-            ));
+            missing.push(name);
         }
+    }
+    if !missing.is_empty() {
+        return Err(Error::new(
+            TABLES_MISSING,
+            format!(
+                "the table(s) {} do not exist; run the migration plan first",
+                missing
+                    .iter()
+                    .map(|name| format!("`{name}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
     }
     apply_guard(&tx, "install guard").await?;
     tx.commit().await.map_err(|e| db("install guard", &e))
@@ -123,7 +151,17 @@ pub async fn verify(db_pool: &Pool) -> Result<Protection> {
         .query_one(VERIFY_SQL, &[])
         .await
         .map_err(|e| db("verify", &e))?;
+    drop(client);
+    let appender_tables = verify_appender(db_pool).await?.is_complete();
+    let client = db_pool.get().await.map_err(|e| pool("verify", &e))?;
+    let appender_grants: bool = client
+        .query_one(VERIFY_APPENDER_GRANTS_SQL, &[])
+        .await
+        .map_err(|e| db("verify", &e))?
+        .get(0);
     Ok(Protection {
+        appender_tables,
+        appender_grants,
         chain_table: row.get(0),
         checkpoint_table: row.get(1),
         rewrite_trigger: row.get(2),
@@ -162,3 +200,48 @@ SELECT \
                  OR has_table_privilege('spot_audit_app', rel.chain, 'TRUNCATE')) \
        ELSE false END \
 FROM rel";
+
+/// The appender grants, read-only: true only when every table and the role exist and the role
+/// holds exactly what the grant table in `sql.rs` says (checked with `has_table_privilege`, which
+/// includes membership and `PUBLIC`), and `PUBLIC` itself holds no privilege on any of the six
+/// tables (`aclexplode` reports `PUBLIC` as grantee 0). A `CASE` guards the privilege checks, so a
+/// missing table or role reports false instead of raising.
+const VERIFY_APPENDER_GRANTS_SQL: &str = "\
+WITH t AS (\
+  SELECT to_regclass(quote_ident(current_schema()) || '.spot_audit_chain') AS chain, \
+         to_regclass(quote_ident(current_schema()) || '.spot_audit_checkpoint') AS cp, \
+         to_regclass(quote_ident(current_schema()) || '.spot_audit_bookmark') AS bm, \
+         to_regclass(quote_ident(current_schema()) || '.spot_audit_event_index') AS ev, \
+         to_regclass(quote_ident(current_schema()) || '.spot_audit_doc_index') AS doc, \
+         to_regclass(quote_ident(current_schema()) || '.spot_audit_site_checkpoint') AS sc) \
+SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spot_audit_app') \
+             AND t.chain IS NOT NULL AND t.cp IS NOT NULL AND t.bm IS NOT NULL \
+             AND t.ev IS NOT NULL AND t.doc IS NOT NULL AND t.sc IS NOT NULL \
+       THEN \
+         has_table_privilege('spot_audit_app', t.bm, 'SELECT') \
+         AND has_table_privilege('spot_audit_app', t.bm, 'INSERT') \
+         AND has_table_privilege('spot_audit_app', t.bm, 'UPDATE') \
+         AND NOT has_table_privilege('spot_audit_app', t.bm, 'DELETE') \
+         AND NOT has_table_privilege('spot_audit_app', t.bm, 'TRUNCATE') \
+         AND has_table_privilege('spot_audit_app', t.sc, 'SELECT') \
+         AND has_table_privilege('spot_audit_app', t.sc, 'INSERT') \
+         AND has_table_privilege('spot_audit_app', t.sc, 'UPDATE') \
+         AND NOT has_table_privilege('spot_audit_app', t.sc, 'DELETE') \
+         AND NOT has_table_privilege('spot_audit_app', t.sc, 'TRUNCATE') \
+         AND has_table_privilege('spot_audit_app', t.ev, 'SELECT') \
+         AND has_table_privilege('spot_audit_app', t.ev, 'INSERT') \
+         AND NOT has_table_privilege('spot_audit_app', t.ev, 'UPDATE') \
+         AND NOT has_table_privilege('spot_audit_app', t.ev, 'DELETE') \
+         AND NOT has_table_privilege('spot_audit_app', t.ev, 'TRUNCATE') \
+         AND has_table_privilege('spot_audit_app', t.doc, 'SELECT') \
+         AND has_table_privilege('spot_audit_app', t.doc, 'INSERT') \
+         AND NOT has_table_privilege('spot_audit_app', t.doc, 'UPDATE') \
+         AND NOT has_table_privilege('spot_audit_app', t.doc, 'DELETE') \
+         AND NOT has_table_privilege('spot_audit_app', t.doc, 'TRUNCATE') \
+         AND NOT EXISTS (\
+           SELECT 1 FROM pg_class c \
+           CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) a \
+           WHERE c.oid = ANY (ARRAY[t.chain::oid, t.cp::oid, t.bm::oid, t.ev::oid, t.doc::oid, t.sc::oid]) \
+             AND a.grantee = 0) \
+       ELSE false END \
+FROM t";

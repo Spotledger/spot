@@ -144,7 +144,7 @@ async fn wait_for_a_tick() {
     tokio::time::sleep(Duration::from_millis(1_500)).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_raise_is_still_open_after_the_host_restarts() {
     let Some(env) = env().await else { return };
     let clock = fixed_clock();
@@ -171,7 +171,7 @@ async fn a_raise_is_still_open_after_the_host_restarts() {
     let _ = stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_restarted_condition_escalates_on_its_original_schedule() {
     let Some(env) = env().await else { return };
     let clock = fixed_clock();
@@ -201,7 +201,7 @@ async fn a_restarted_condition_escalates_on_its_original_schedule() {
     let _ = stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_clear_writes_sys_condition_cleared_and_opens_nothing_after_a_restart() {
     let Some(env) = env().await else { return };
     let clock = fixed_clock();
@@ -244,7 +244,7 @@ async fn a_clear_writes_sys_condition_cleared_and_opens_nothing_after_a_restart(
     let _ = stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_raise_works_from_memory_while_the_store_is_down_and_lands_once_it_returns() {
     let Some(env) = env().await else { return };
     let clock = fixed_clock();
@@ -315,7 +315,7 @@ async fn a_raise_works_from_memory_while_the_store_is_down_and_lands_once_it_ret
     let _ = stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_sites_never_see_each_others_conditions() {
     let Some(a) = env().await else { return };
     let Some(b) = env().await else { return };

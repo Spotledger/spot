@@ -235,7 +235,13 @@ pub(crate) async fn body_limit_middleware(
     // `Next` expects while the handler still sees a streaming body.
     let body = axum::body::Body::new(http_body_util::Limited::new(body, max));
     let response = next.run(Request::from_parts(parts, body)).await;
-    if response.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE {
+    // Only the extractor's own rejection (plain text or none) is rewritten: a handler that
+    // answers 413 with its own envelope (an import limit, a SCIM `tooLarge`) keeps it.
+    let plain = response
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .is_none_or(|v| v.to_str().is_ok_and(|t| t.starts_with("text/plain")));
+    if response.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE && plain {
         tracing::warn!(
             request_id = %request_id,
             limit = limits.max_body_bytes,

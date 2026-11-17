@@ -10,24 +10,25 @@
 //! equality on the blind index — and never by a plain-text column: the table holds no form of
 //! the token and no form of its digest that a reader could resolve.
 //!
-//! # End reasons
+//! # End reasons and the source digest (WP-PLT-02.T10)
 //!
-//! The platform app's `session.state` is a three-value select (`active`, `ended`, `expired`) and
-//! there is no column for an end reason. This store uses the two ended values for the two
-//! distinctions the schema can carry: a session ended on purpose (logout, password change, an
-//! administrator) is `ended`; one the *system* ended because a newer sign-in crossed the
-//! per-user cap is `expired`. Expiry by the clock is never written (it is derived from the
-//! window, half-open), so `expired` unambiguously means "evicted". A dedicated `ended_reason`
-//! column would let every reason round-trip; the report lists it as an open question.
+//! `session.state` stays the three-value select (`active`, `ended`, `expired`) and
+//! `session.end_reason` carries the finer cause (`sign_out`, `idle`, `absolute`,
+//! `revoked_by_user`, `revoked_by_admin`, `leaver`, `sso_logout`, `password_change`). A revoke
+//! writes both in one update; the first end stands. The clock-derived ends (`idle`, `absolute`)
+//! are never written by the store (expiry is derived from the window, half-open), but a caller
+//! may pass them as a reason and they round-trip. A session ended before the column existed has
+//! no reason and reads back as before (`ended` is a plain end, `expired` an eviction).
 //!
-//! The `session` DocType also has no column for the source digest, so [`SessionStore::list_for_user`]
-//! and [`SessionStore::active_sources`] answer with the zero digest. That is a display loss, not
-//! a leak: the salted digest was never going to be shown back.
+//! `session.source_digest` is the keyed digest of the client network and agent hint, written at
+//! creation as base16 and never the address. A session created before the column existed has
+//! none and reads back as the zero digest, "unknown source".
 
 use std::sync::Arc;
 
 use spot_app_api::Document;
 use spot_auth::TokenDigest;
+use spot_core::Audience;
 use spot_platform_app::doctype::SESSION;
 use spot_secrets::SecretString;
 use spot_sessions::error::InternalReason;
@@ -112,17 +113,27 @@ impl<B: StorageBackend> StorageSessionStore<B> {
             .ok_or_else(|| SessionError::StoreFailed("session: no user".to_owned()))?;
         let user = UserKey::new(user_text)
             .map_err(|reason| SessionError::StoreFailed(format!("session: {reason}")))?;
+        // A stored audience that is missing or unknown makes the session invalid: it answers as
+        // an unknown digest does (the same as an expired one), never as a default audience.
+        let audience = Self::text_at(fields, "audience")
+            .as_deref()
+            .and_then(Audience::parse)
+            .ok_or_else(Self::unknown)?;
         Ok(SessionRecord {
             id: id.to_string(),
             user,
+            audience,
             token_digest: digest,
             created: Self::at(fields, "created_at")?,
             last_seen: Self::at(fields, "last_seen")?,
             idle_expires: Self::at(fields, "idle_expires_at")?,
             absolute_expires: Self::at(fields, "absolute_expires_at")?,
             client: decode_client(Self::text_at(fields, "client_info")),
-            source: SourceHash::from_bytes(&[0u8; 32]).map_err(SessionError::StoreFailed)?,
-            state: decode_state(Self::text_at(fields, "state"))?,
+            source: decode_source(Self::text_at(fields, "source_digest"))?,
+            state: decode_state(
+                Self::text_at(fields, "state"),
+                Self::text_at(fields, "end_reason"),
+            )?,
         })
     }
 
@@ -240,7 +251,7 @@ impl<B: StorageBackend> StorageSessionStore<B> {
 
     fn state_fields(fields: &Fields) -> Result<(SessionState, i64, i64), SessionError> {
         Ok((
-            decode_state(Self::text_at(fields, "state"))?,
+            decode_state(Self::text_at(fields, "state"), None)?,
             Self::at(fields, "idle_expires_at")?,
             Self::at(fields, "absolute_expires_at")?,
         ))
@@ -262,6 +273,12 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
             doc.set(Self::column("user")?, Value::Id(user));
             doc.set(Self::column("state")?, Value::Text("active".to_owned()));
             doc.set(Self::column("method")?, Value::Text("password".to_owned()));
+            // Chosen once, here, by the issuing service; nothing rewrites it afterwards (touch,
+            // rotation and revocation update other columns only).
+            doc.set(
+                Self::column("audience")?,
+                Value::Text(session.audience.as_str().to_owned()),
+            );
             let date = |seconds: i64| -> Result<Value, SessionError> {
                 instant(seconds)
                     .map(Value::DateTime)
@@ -276,6 +293,10 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
             doc.set(
                 Self::column("absolute_expires_at")?,
                 date(session.absolute_expires)?,
+            );
+            doc.set(
+                Self::column("source_digest")?,
+                Value::Text(hex(session.source.as_bytes())),
             );
             if let Some(label) = encode_client(&session.client) {
                 doc.set(Self::column("client_info")?, Value::Text(label));
@@ -456,7 +477,7 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
                 return Ok(RevokeReport { revoked: 0 });
             };
             if !matches!(
-                decode_state(Self::text_at(&loaded.data.fields, "state"))?,
+                decode_state(Self::text_at(&loaded.data.fields, "state"), None)?,
                 SessionState::Active
             ) {
                 // Ended already: the first end stands (idempotent revoke).
@@ -467,6 +488,10 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
                 .data
                 .fields
                 .insert(Self::column("state")?, Value::Text(encode_state(&reason)));
+            loaded.data.fields.insert(
+                Self::column("end_reason")?,
+                Value::Text(encode_end_reason(&reason).to_owned()),
+            );
             let updated = tx.update(&loaded.data, loaded.version).await;
             match updated {
                 Ok(_) => {
@@ -564,6 +589,8 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
                     id: id.to_string(),
                     user: UserKey::new("00000000-0000-0000-0000-000000000000")
                         .map_err(|reason| SessionError::StoreFailed(reason.to_string()))?,
+                    // A placeholder for `purgeable`, which reads only the window and the state.
+                    audience: Audience::Staff,
                     token_digest: TokenDigest::from_bytes(&[0u8; 32])
                         .map_err(|reason| SessionError::StoreFailed(reason.to_string()))?,
                     created: 0,
@@ -638,7 +665,19 @@ impl<B: StorageBackend> SessionStore for StorageSessionStore<B> {
     }
 }
 
-/// The stored `state` text of an end reason: the two ended values the select has.
+/// The stored `end_reason` values, as the platform app's select declares them.
+const END_REASONS: [&str; 8] = [
+    "sign_out",
+    "idle",
+    "absolute",
+    "revoked_by_user",
+    "revoked_by_admin",
+    "leaver",
+    "sso_logout",
+    "password_change",
+];
+
+/// The stored `state` text of an end reason: an eviction is `expired`, every other end `ended`.
 fn encode_state(reason: &str) -> String {
     if reason == SessionEndReason::Evicted.to_string() {
         "expired".to_owned()
@@ -647,22 +686,69 @@ fn encode_state(reason: &str) -> String {
     }
 }
 
-/// The domain state of a stored `state` text.
-fn decode_state(stored: Option<String>) -> Result<SessionState, SessionError> {
-    match stored.as_deref() {
-        Some("active") => Ok(SessionState::Active),
-        Some("ended") => Ok(SessionState::Revoked {
-            reason: SessionEndReason::Ended,
-        }),
-        // Never written for a clock expiry (that stays derived), so it is the eviction the
-        // schema can record.
-        Some("expired") => Ok(SessionState::Revoked {
-            reason: SessionEndReason::Evicted,
-        }),
-        _ => Err(SessionError::StoreFailed(
-            "session: unreadable state".to_owned(),
-        )),
+/// The stored `end_reason` of a revoke reason (the `Display` text of a
+/// [`SessionEndReason`]).
+///
+/// A user's logout and a rotation are `sign_out`; a password change is `password_change`; a
+/// deactivation is `leaver`; an eviction (the user's own newer sign-in crossed the cap) is
+/// `revoked_by_user`. A free-form administrator reason is `revoked_by_admin`, unless it already
+/// names one of the eight causes.
+fn encode_end_reason(reason: &str) -> &'static str {
+    match reason {
+        "ended" | "rotated" => "sign_out",
+        "password_changed" => "password_change",
+        "deactivated" => "leaver",
+        "evicted" => "revoked_by_user",
+        other => END_REASONS
+            .iter()
+            .copied()
+            .find(|known| *known == other)
+            .unwrap_or("revoked_by_admin"),
     }
+}
+
+/// The domain state of a stored `state` text and its optional `end_reason`. With no reason the
+/// state alone decides (a session ended before the column existed).
+fn decode_state(
+    stored: Option<String>,
+    end_reason: Option<String>,
+) -> Result<SessionState, SessionError> {
+    let reason = match stored.as_deref() {
+        Some("active") => return Ok(SessionState::Active),
+        // Never written for a clock expiry (that stays derived), so it is the eviction.
+        Some("expired") => SessionEndReason::Evicted,
+        Some("ended") => match end_reason.as_deref() {
+            None | Some("sign_out" | "revoked_by_user") => SessionEndReason::Ended,
+            Some("password_change") => SessionEndReason::PasswordChanged,
+            Some("leaver") => SessionEndReason::Deactivated,
+            Some(other) if END_REASONS.contains(&other) => {
+                SessionEndReason::Other(other.to_owned())
+            }
+            Some(_) => {
+                return Err(SessionError::StoreFailed(
+                    "session: unreadable end_reason".to_owned(),
+                ));
+            }
+        },
+        _ => {
+            return Err(SessionError::StoreFailed(
+                "session: unreadable state".to_owned(),
+            ));
+        }
+    };
+    Ok(SessionState::Revoked { reason })
+}
+
+/// The source digest of a stored base16 text; a missing one is the zero digest ("unknown
+/// source"), a malformed one is a store failure (never a quiet zero).
+fn decode_source(stored: Option<String>) -> Result<SourceHash, SessionError> {
+    let bytes = match stored {
+        None => vec![0u8; 32],
+        Some(text) => unhex(&text).ok_or_else(|| {
+            SessionError::StoreFailed("session: source_digest is not base16".to_owned())
+        })?,
+    };
+    SourceHash::from_bytes(&bytes).map_err(SessionError::StoreFailed)
 }
 
 /// The device and client labels as one bounded text column.
@@ -699,7 +785,9 @@ fn decode_client(stored: Option<String>) -> ClientInfo {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use super::{decode_client, decode_state, encode_client, encode_state};
+    use super::{
+        decode_client, decode_source, decode_state, encode_client, encode_end_reason, encode_state,
+    };
     use spot_sessions::model::SessionEndReason;
     use spot_sessions::{ClientInfo, SessionState};
 
@@ -716,16 +804,81 @@ mod tests {
     }
 
     #[test]
-    fn eviction_is_the_only_system_end_the_schema_can_hold() {
+    fn every_end_has_a_reason_that_round_trips() {
         assert_eq!(encode_state("evicted"), "expired");
         assert_eq!(encode_state("password_changed"), "ended");
+        for (reason, stored, state) in [
+            ("ended", "sign_out", SessionEndReason::Ended),
+            (
+                "password_changed",
+                "password_change",
+                SessionEndReason::PasswordChanged,
+            ),
+            ("deactivated", "leaver", SessionEndReason::Deactivated),
+            (
+                "sso_logout",
+                "sso_logout",
+                SessionEndReason::Other("sso_logout".to_owned()),
+            ),
+            (
+                "revoked_by_admin",
+                "revoked_by_admin",
+                SessionEndReason::Other("revoked_by_admin".to_owned()),
+            ),
+            (
+                "some free text",
+                "revoked_by_admin",
+                SessionEndReason::Other("revoked_by_admin".to_owned()),
+            ),
+            ("idle", "idle", SessionEndReason::Other("idle".to_owned())),
+            (
+                "absolute",
+                "absolute",
+                SessionEndReason::Other("absolute".to_owned()),
+            ),
+        ] {
+            assert_eq!(encode_end_reason(reason), stored, "{reason}");
+            assert_eq!(
+                decode_state(Some("ended".to_owned()), Some(stored.to_owned())).expect("known"),
+                SessionState::Revoked { reason: state },
+                "{reason}"
+            );
+        }
+        assert_eq!(encode_end_reason("evicted"), "revoked_by_user");
         assert_eq!(
-            decode_state(Some("expired".to_owned())).expect("known state"),
+            decode_state(
+                Some("expired".to_owned()),
+                Some("revoked_by_user".to_owned())
+            )
+            .expect("known"),
             SessionState::Revoked {
                 reason: SessionEndReason::Evicted
             }
         );
-        assert!(decode_state(Some("gone".to_owned())).is_err());
-        assert!(decode_state(None).is_err());
+    }
+
+    #[test]
+    fn a_session_ended_before_the_column_existed_still_reads() {
+        assert_eq!(
+            decode_state(Some("ended".to_owned()), None).expect("known state"),
+            SessionState::Revoked {
+                reason: SessionEndReason::Ended
+            }
+        );
+        assert!(decode_state(Some("gone".to_owned()), None).is_err());
+        assert!(decode_state(None, None).is_err());
+        assert!(decode_state(Some("ended".to_owned()), Some("nonsense".to_owned())).is_err());
+    }
+
+    #[test]
+    fn a_missing_source_digest_is_the_zero_digest_and_a_bad_one_is_refused() {
+        assert_eq!(decode_source(None).expect("zero").as_bytes(), &[0u8; 32]);
+        assert!(decode_source(Some("zz".to_owned())).is_err());
+        assert!(decode_source(Some("0102".to_owned())).is_err());
+        let text = "ab".repeat(32);
+        assert_eq!(
+            decode_source(Some(text)).expect("32 bytes").as_bytes(),
+            &[0xab; 32]
+        );
     }
 }

@@ -216,7 +216,7 @@ fn a_built_in_that_fails_keeps_its_own_code_not_the_unknown_name_code() {
 
 // --- running ---------------------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_registered_command_gets_parsed_arguments_a_writer_and_the_clock() {
     let regs = [HELLO, REFUSE, FAIL];
     let matches = registered()
@@ -232,7 +232,7 @@ async fn a_registered_command_gets_parsed_arguments_a_writer_and_the_clock() {
     assert_eq!(err.text(), "");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_derive_command_is_not_taken_by_the_registry() {
     let matches = registered()
         .try_get_matches_from(["spot", "check"])
@@ -245,7 +245,7 @@ async fn a_derive_command_is_not_taken_by_the_registry() {
     assert_eq!(out.text(), "");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn refused_is_2_and_failed_is_3_and_ok_is_0() {
     let regs = [HELLO, REFUSE, FAIL];
     let (mut ctx, out, err) = ctx("/nonexistent-spot-root");
@@ -276,7 +276,7 @@ async fn refused_is_2_and_failed_is_3_and_ok_is_0() {
     assert_eq!(Exit::Usage.code(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_context_loads_lazily_and_a_missing_root_is_an_error_not_a_panic() {
     let (mut ctx, _, _) = ctx("/nonexistent-spot-root");
     assert_eq!(ctx.root(), std::path::Path::new("/nonexistent-spot-root"));

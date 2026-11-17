@@ -135,3 +135,21 @@ explanation_key = "error.bpm_tasks.auto_approve_with_segregation"
 params = ["node"]
 remedy = "Remove the automatic approval from the SLA, or remove `distinct_from_creator` and the duty from the node."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.no_runtime"
+class = "none"
+summary = "A Decision node cannot run because no multi-thread runtime exists."
+explanation_key = "error.bpm_tasks.no_runtime"
+params = []
+remedy = "Run the host on a multi-thread runtime."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks.thread_failed"
+class = "none"
+summary = "A Decision node's thread could not run or panicked."
+explanation_key = "error.bpm_tasks.thread_failed"
+params = []
+remedy = "Start the Decision again; if it repeats, report the code to support."
+since = "0.1.0"

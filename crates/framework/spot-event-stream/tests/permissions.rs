@@ -49,7 +49,8 @@ fn engine() -> PermissionEngine {
             RoleGrant {
                 doctype: "task".into(),
                 role: Role("Reader".into()),
-                rights: Rights::new([Right::Read]),
+                // The stream projects through `Channel::Export`, which needs `report`.
+                rights: Rights::new([Right::Read, Right::Report]),
                 if_owner: false,
             },
             RoleGrant {
@@ -159,9 +160,11 @@ fn ids_only_spec(name: &str, owner: &str) -> ConsumerSpec {
     ConsumerSpec {
         name: name.to_owned(),
         owner: owner.to_owned(),
-        topics: vec![TopicSelector::Prefix("doc".to_owned())],
+        topics: vec![TopicSelector::Prefix("task".to_owned())],
         filter: None,
         partitions: 1,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::IdsOnly,
         start: Start::FromBeginning,
     }
@@ -251,7 +254,7 @@ async fn a_fields_consumer_never_sees_a_protected_value() {
     let record = support::record(
         0,
         1,
-        "doc_created",
+        "task_created",
         "task",
         rid(1),
         1,
@@ -328,4 +331,94 @@ async fn a_skipped_event_names_no_subject() {
 fn the_stream_channel_is_export() {
     assert_eq!(Channel::Export.as_str(), "export");
     assert!(Channel::Export.carries_values());
+}
+
+// `state` events (WP-JRN-09.T1): the field guard and the read filter apply to the image.
+
+fn state_spec(name: &str, owner: &str) -> ConsumerSpec {
+    let mut spec = ids_only_spec(name, owner);
+    spec.topics = vec![TopicSelector::Exact("doc_state".to_owned())];
+    spec.classes = Some(BTreeSet::from([spot_event_stream::StreamClass::State]));
+    spec.payload_mode = PayloadMode::Fields;
+    spec
+}
+
+fn state_record(seq: u64, id: RecordId, secret: &str) -> spot_storage_contract::OutboxRecord {
+    support::record(
+        0,
+        seq,
+        "doc_state",
+        "task",
+        id,
+        1,
+        serde_json::json!({
+            "entity_schema": 1,
+            "op": "update",
+            "image": {"status": "Open", "iban": secret}
+        }),
+    )
+}
+
+#[tokio::test]
+async fn a_state_image_never_carries_a_field_the_owner_may_not_read() {
+    let engine = engine();
+    let secret = "GB82WEST12345698765432";
+    let docs: Vec<(RecordId, &str)> = vec![(rid(1), "u_reader"), (rid(2), "u_reader")];
+    let principals: Vec<(&str, Principal)> = vec![
+        ("u_reader", Principal::with_roles("u_reader", &["Reader"])),
+        (
+            "u_field",
+            Principal::with_roles("u_field", &["Reporter", "FieldReader"]),
+        ),
+        ("u_none", Principal::with_roles("u_none", &[])),
+    ];
+    let vis = visibility(&engine, principals, &docs);
+    let f = fixture_full(
+        vis,
+        Arc::new(spot_event_stream::AllowAllStreamRights),
+        BIG,
+        ParkPolicy::default(),
+    )
+    .await;
+    f.feed.push(state_record(1, rid(1), secret));
+
+    // May read the record, not the field: the image has the field removed.
+    f.engine
+        .register(state_spec("reader", "u_reader"), &Principal::system())
+        .await
+        .unwrap();
+    let lease = f.engine.acquire("reader").await.unwrap();
+    let batch = f.engine.pull(&lease, 0, None, false).await.unwrap();
+    assert_eq!(batch.events.len(), 1);
+    let image = batch.events[0].data["image"].as_object().unwrap();
+    assert_eq!(image.get("status").unwrap(), "Open");
+    assert!(
+        !image.contains_key("iban"),
+        "a protected field reached the reader"
+    );
+    let frames: Vec<Output> = batch
+        .events
+        .iter()
+        .map(|e| Output::Bytes(spot_event_stream::sse::frame("reader", e)))
+        .collect();
+    assert_no_leak(&Corpus::standard().only(&["iban"]), &frames);
+
+    // With the field grant the value is there.
+    f.engine
+        .register(state_spec("field", "u_field"), &Principal::system())
+        .await
+        .unwrap();
+    let lease = f.engine.acquire("field").await.unwrap();
+    let batch = f.engine.pull(&lease, 0, None, false).await.unwrap();
+    assert_eq!(batch.events[0].data["image"]["iban"], secret);
+
+    // May not read the record at all: the event is not delivered, and is counted as skipped.
+    f.engine
+        .register(state_spec("none", "u_none"), &Principal::system())
+        .await
+        .unwrap();
+    let lease = f.engine.acquire("none").await.unwrap();
+    let batch = f.engine.pull(&lease, 0, None, false).await.unwrap();
+    assert!(batch.events.is_empty());
+    assert_eq!(batch.skipped, 1);
 }

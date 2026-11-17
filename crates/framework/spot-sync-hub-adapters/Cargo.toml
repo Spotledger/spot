@@ -31,6 +31,13 @@ spot-storage-contract = { path = "../../../contracts/storage" }
 spot-sync-obligations = { path = "../spot-sync-obligations" }
 spot-sync-skew = { path = "../spot-sync-skew" }
 proptest = "1"
+# End-to-end test (WP-SYN-02.T10): the tenant-keyed ledger the relay feeds, read back by the test
+# (`AckLedger`, `MemoryStore`, `NodeStateStore`).
+spot-sync-acks = { path = "../spot-sync-acks" }
+# `MemorySink`: the ledger's audit sink in that test (the ledger type is generic over it).
+spot-conditions = { path = "../spot-conditions" }
+# `MandatoryEvent`, named in the signature of the test's `AckBook` wrapper around the shared ledger.
+spot-sync-freshness = { path = "../spot-sync-freshness" }
 
 [lints]
 workspace = true

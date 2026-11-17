@@ -89,7 +89,8 @@ impl AuditParticipant {
 
     /// Names the DocTypes this participant audits, so
     /// [`checked_participants`](crate::checked_participants) can look for an audit step on them.
-    /// The controller registry cannot list its DocTypes, so the host says which to check.
+    /// A participant that names none (or `*`) is treated as auditing every DocType, so the check
+    /// refuses any registry that holds an audit step.
     #[must_use]
     pub fn with_doctypes<I, S>(mut self, doctypes: I) -> Self
     where

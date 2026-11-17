@@ -27,31 +27,29 @@ use spot_app_api::context::Actor;
 use spot_auth::ApiKey;
 use spot_core::{SiteId, SystemClock};
 use spot_document::engine::{Engine, V7Ids};
-use spot_http::api::lookup::{LookupPage, LookupRequest};
-use spot_http::api::service::{
-    ApiError, BoxFuture, Credential, LoginBody, LookupService, RequestCtx,
-};
+use spot_http::api::service::{ApiError, Credential, LoginBody, RequestCtx};
 use spot_http::api::{
     idempotency::MemoryIdempotencyStore,
+    ports::link_inbound::LinkInboundPort,
     registry::Code,
-    router::{ApiServices, router},
+    router::{ApiServices, router_for, router_with, routes},
 };
 use spot_http::health::{CheckResult, ReadinessCheck};
 use spot_http::request::RequestId;
 use spot_http::site::SiteContext;
-use spot_http::{ServerBuilder, ServerHandle, StaticSites};
+use spot_http::{ListenerAudience, ServerBuilder, ServerHandle, StaticSites};
 use spot_login::LoginConfig;
 use spot_postgres::PgBackend;
 use spot_storage_contract::{HealthStatus, RecordId, StorageBackend};
 use tower::ServiceExt;
 
-use crate::services::{self, Level, Services};
+use crate::services::{self, CheckFuture, Level, RunFuture, Service, Services};
 
 use crate::gate;
 use crate::live::{LivePermissions, LiveReady, LiveResources, SiteLive};
-use crate::login::{self, Credentials, LoginStores, SiteAuth, SiteDirectory};
+use crate::login::{self, Credentials, LoginStores, SiteAuth};
 use crate::permissions::{self, GuardedEngine};
-use crate::{Error, Result, appdir, apps, config, error, users};
+use crate::{Error, Result, config, error, users};
 
 tokio::task_local! {
     /// The principal dispatch authenticated for the request currently running.
@@ -86,21 +84,48 @@ impl ReadinessCheck for StorageReady {
     }
 }
 
-struct NotConfigured;
+/// The capture invariant's line of `/api/health/ready` (`capture_invariant:<site>`, WP-JRN-02.T7):
+/// the service's own readiness text. It is always `ok`: the service is optional and must never
+/// stop trading, so three failed passes in a row render as `degraded: ...` (readiness stays 200),
+/// never as a failing check. It reads in-memory counters only, so it never waits on the store.
+struct CaptureReady {
+    name: String,
+    site: String,
+}
 
-impl LookupService for NotConfigured {
-    fn search<'a>(
-        &'a self,
-        _: &'a RequestCtx,
-        _: &'a str,
-        _: &'a str,
-        _: &'a LookupRequest,
-    ) -> BoxFuture<'a, std::result::Result<LookupPage, ApiError>> {
+impl CaptureReady {
+    fn new(site: &str) -> Self {
+        Self {
+            name: format!("capture_invariant:{site}"),
+            site: site.to_owned(),
+        }
+    }
+}
+
+impl ReadinessCheck for CaptureReady {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn check(&self) -> std::pin::Pin<Box<dyn Future<Output = CheckResult> + Send + '_>> {
         Box::pin(async {
-            Err(ApiError::new(
-                Code::ApiInvalidRequest,
-                "No lookup provider is configured.",
-            ))
+            let Some(service) = services::capture_invariant::hosted(&self.site) else {
+                // Stopped (the site is shutting down): not a reason to leave rotation.
+                return CheckResult {
+                    ok: true,
+                    detail: "degraded: capture_invariant: stopped".to_owned(),
+                };
+            };
+            let text = service.readiness_text();
+            let degraded =
+                service.failures() >= services::capture_invariant::DEGRADED_AFTER_FAILURES;
+            CheckResult {
+                ok: true,
+                detail: if degraded {
+                    format!("degraded: {text}")
+                } else {
+                    text
+                },
+            }
         })
     }
 }
@@ -109,6 +134,8 @@ impl LookupService for NotConfigured {
 enum SiteRuntime {
     Ready {
         router: Router,
+        /// The router of the consumer listeners (`router_for(&[Audience::Consumer], ..)`).
+        consumer: Router,
         /// The realtime socket route, authenticated by its own first message.
         realtime: Option<Router>,
         auth: Arc<SiteAuth>,
@@ -117,6 +144,8 @@ enum SiteRuntime {
         principals: Arc<dyn PrincipalSource>,
         /// The routes modules declared reachable without a session.
         open: Arc<services::OpenPaths>,
+        /// The site's function service serves guest functions (calls with no credential).
+        guest_functions: bool,
     },
     Unavailable {
         detail: String,
@@ -180,6 +209,9 @@ pub struct Running {
     /// Every site's service assembly, stopped after the server finished draining.
     services: Vec<Services>,
     lives: BTreeMap<String, Arc<SiteLive>>,
+    /// The lock that tells the operator commands a host serves this root (released when the
+    /// host is dropped). `None` when another host of this root already holds it.
+    _serving: Option<std::fs::File>,
 }
 
 impl Running {
@@ -354,6 +386,9 @@ pub async fn start_with_modules(
     if loaded.sites.is_empty() {
         return Err(Error("no sites configured".into()));
     }
+    // An invalid listener, address overlap or rate-limit setting stops the start before any site
+    // is built or any socket bound; the error names the key (`ServerError::InvalidSetting`).
+    loaded.server.validate().map_err(error)?;
     for notice in loaded
         .sites
         .iter()
@@ -399,6 +434,7 @@ pub async fn start_with_modules(
     let mut readiness = Vec::new();
     let mut participant_checks = Vec::new();
     let mut storage_checks = Vec::new();
+    let mut capture_checks = Vec::new();
     let mut live_checks = Vec::new();
     let mut snapshot_checks = Vec::new();
     let mut assemblies: Vec<Services> = Vec::new();
@@ -435,14 +471,26 @@ pub async fn start_with_modules(
                         backend,
                     });
                 }
+                // A site that hosts the capture invariant (`[services.capture_invariant]
+                // enabled`) shows its text; a site without it shows no line.
+                if services::capture_invariant::hosted(&site.site).is_some() {
+                    capture_checks.push(CaptureReady::new(&site.site));
+                }
                 readiness.push(assembly.health_check());
                 // What the site's participants are, and whether it is a partitioned node: `ok`
                 // always, because a site that cannot check ownership refuses to start instead.
-                participant_checks.push(services::participants::ParticipantsReady::new(
-                    &site.site,
-                    site.partition.as_ref(),
-                    &participant_names,
-                ));
+                participant_checks.push(
+                    services::participants::ParticipantsReady::new(
+                        &site.site,
+                        site.partition.as_ref(),
+                        &participant_names,
+                    )
+                    .with_audit(
+                        lives[&site.site]
+                            .doc_audit()
+                            .map(|host| host as Arc<dyn crate::audit::doc::AuditReport>),
+                    ),
+                );
                 live_checks.push(LiveReady::new(&site.site, lives[&site.site].clone()));
                 // A partitioned site also reports its ownership snapshot (stale is `degraded:`).
                 snapshot_checks.extend(partitions.readiness(site));
@@ -475,7 +523,29 @@ pub async fn start_with_modules(
         }
     }
     let runtimes: RuntimeMap = Arc::new(RwLock::new(runtimes));
-    let mut builder = ServerBuilder::new(loaded.server, {
+    // The listeners: staff listeners (`bind`, and `listeners` marked staff) serve the staff
+    // router, consumer listeners the consumer router. Listener changes need a restart (a reload
+    // swaps the site runtimes behind the listeners, never the listeners). While no route is
+    // marked for consumers, a consumer listener has nothing to serve: it is not started, and
+    // that is said once.
+    let mut server = loaded.server;
+    let consumer_wanted = server
+        .listeners
+        .iter()
+        .any(|l| l.audience == ListenerAudience::Consumer);
+    let consumer_routes_exist = spot_http::api::routes::route_table()
+        .iter()
+        .any(|entry| entry.audiences.contains(&spot_core::Audience::Consumer));
+    if consumer_wanted && !consumer_routes_exist {
+        server
+            .listeners
+            .retain(|l| l.audience != ListenerAudience::Consumer);
+        tracing::info!(
+            "the configured consumer listeners are not started: no route is marked for consumers yet"
+        );
+    }
+    let serves_consumers = consumer_wanted && consumer_routes_exist;
+    let mut builder = ServerBuilder::new(server, {
         let mut resolver = StaticSites::new();
         for site in &loaded.sites {
             let id = SiteId::new(&site.site).map_err(error)?;
@@ -490,6 +560,9 @@ pub async fn start_with_modules(
         builder = builder.readiness_check(check);
     }
     for check in readiness {
+        builder = builder.readiness_check(check);
+    }
+    for check in capture_checks {
         builder = builder.readiness_check(check);
     }
     for check in participant_checks {
@@ -526,11 +599,22 @@ pub async fn start_with_modules(
             }),
         )
     };
-    let handle = builder
-        .site_routes(dispatch)
-        .start(shutdown)
-        .await
-        .map_err(error)?;
+    let mut builder = builder.site_routes(dispatch);
+    if serves_consumers {
+        let consumer_dispatch = {
+            let runtimes = runtimes.clone();
+            Router::new().route(
+                "/{*path}",
+                any(move |request: Request| {
+                    let runtimes = runtimes.clone();
+                    async move { consumer_dispatch(request, runtimes).await }
+                }),
+            )
+        };
+        builder = builder.consumer_routes(consumer_dispatch);
+    }
+    let handle = builder.start(shutdown).await.map_err(error)?;
+    let serving = take_serving_lock(root);
     spawn_reload(
         root.to_path_buf(),
         dev,
@@ -547,7 +631,54 @@ pub async fn start_with_modules(
         ops,
         services: assemblies,
         lives,
+        _serving: serving,
     })
+}
+
+/// The file whose exclusive lock a serving host holds.
+fn serving_path(root: &Path) -> PathBuf {
+    root.join("host.running")
+}
+
+/// Takes the serving lock of `root`, so `spot add-user`, `set-password` and the like can tell a
+/// host is running and wait for it to reload. A second host on the same root does not get it.
+fn take_serving_lock(root: &Path) -> Option<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(serving_path(root))
+        .ok()?;
+    file.try_lock().ok()?;
+    Some(file)
+}
+
+/// Whether a host holds the serving lock of `root`.
+fn host_serving(root: &Path) -> bool {
+    let Ok(file) = std::fs::OpenOptions::new()
+        .write(true)
+        .open(serving_path(root))
+    else {
+        return false;
+    };
+    match file.try_lock() {
+        Ok(()) => false,
+        Err(std::fs::TryLockError::WouldBlock) => true,
+        Err(std::fs::TryLockError::Error(_)) => false,
+    }
+}
+
+fn nanos(at: std::time::SystemTime) -> u128 {
+    at.duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos())
+}
+
+/// Records, per site, the reload marker the host has now acted on.
+fn acknowledge_reloads(root: &Path, stamps: &BTreeMap<String, std::time::SystemTime>) {
+    for (site, stamp) in stamps {
+        let path = root.join("sites").join(site).join("reload.ack");
+        let _ = std::fs::write(path, nanos(*stamp).to_string());
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -637,6 +768,11 @@ async fn build_site(
         attach_slot.clone(),
         live.clone(),
     );
+    // `[services.idempotency]`, parsed once: the HTTP store's options and the command ledger's
+    // retention (`ledger.retention`). Validated for every site, so an invalid section never
+    // starts anywhere.
+    let idempotency_settings = idempotency_settings(&site.site, loaded)?;
+    let ledger_policy = ledger_policy(&site.site, &idempotency_settings.ledger.retention)?;
     let engine = Engine::new(
         backend.clone(),
         permission.meta.clone(),
@@ -650,7 +786,10 @@ async fn build_site(
     .with_app_permissions(Arc::new(spot_app_permissions::SnapshotAppPermissions::new(
         permission.authorizer.clone(),
     )))
-    .with_controllers(installed.controllers.clone());
+    .with_controllers(installed.controllers.clone())
+    // The command ledger (WP-DOC-04.T8) with the site's retention policy (WP-PLT-05.T9): read
+    // here, before the engine serves a write, so an invalid section refuses the start.
+    .with_command_ledger(ledger_policy);
     let engine = match &secrets {
         Some(host) => engine.with_secrets(host.vault()),
         None => engine,
@@ -666,12 +805,26 @@ async fn build_site(
     let partitions: Option<Arc<dyn spot_partition::PartitionRegistry>> = partitions
         .for_site(site, &backend, loaded.common.postgres.pool_max_size)?
         .map(|registry| registry as Arc<dyn spot_partition::PartitionRegistry>);
+    // The document audit (WP-PRD-01.T22): the masker of this metadata generation, the lane
+    // appenders over the chain and appender tables, the denial sink and the counters. A site whose
+    // audit cannot be built does not serve: audit is never silently off.
+    let audit_clock: Arc<dyn spot_app_api::prelude::Clock> = clock.clone();
+    let masker =
+        crate::audit::doc::masker_for(&permission.meta, &permission.decision, &audit_clock)?;
+    let doc_audit = crate::audit::doc::DocAuditHost::new(
+        &site_id,
+        &backend,
+        permission.catalog.clone(),
+        audit_clock.clone(),
+        &loaded.common.audit,
+        masker.clone(),
+    )?;
+    engine.set_denial_sink(
+        doc_audit.denial_sink(site.partition.as_ref().map(|profile| profile.node.as_str())),
+    );
+    live.set_doc_audit(doc_audit);
     let deps = services::participants::Deps {
-        // No audit chain yet: `spot-audit-store` publishes no DDL the migrator can plan and no
-        // durable appender store, so an audit event written here would never be chained and would
-        // be pruned with the feed retention. The site installs no audit participant and readiness
-        // says `docaudit: off`; see the task's open questions.
-        audit: None,
+        audit: Some(services::participants::Audit::new(&permission.meta, masker)),
         controllers: controllers.clone(),
         // A site with no `[partition]` gets `None` and installs no owner check; one with a
         // profile that somehow has no registry is refused (`cli.partition_registry_missing`).
@@ -679,26 +832,36 @@ async fn build_site(
         meta: meta_source,
     };
     let participants = services::participants::build(&site_id, site, &deps)?;
+    live.remember_participants(participants.participants.clone());
     live.set_participants_factory({
         let live = live.clone();
         let site = site.clone();
         let site_id = site_id.clone();
-        Arc::new(move |meta: &Arc<spot_meta::EffectiveMeta>| {
-            let new_deps = services::participants::Deps {
-                audit: None,
-                controllers: controllers.clone(),
-                partitions: partitions.clone(),
-                meta: live_meta_source(&live, meta),
-            };
-            services::participants::build(&site_id, &site, &new_deps)
-                .map(|installed| installed.participants)
-                .map_err(|e| e.to_string())
-        })
+        let audit_clock = audit_clock.clone();
+        Arc::new(
+            move |meta: &Arc<spot_meta::EffectiveMeta>,
+                  decision: &Arc<spot_permissions::PermissionEngine>| {
+                // The masker of the new generation, over the new metadata and its decision.
+                let masker = crate::audit::doc::masker_for(meta, decision, &audit_clock)
+                    .map_err(|e| e.to_string())?;
+                let new_deps = services::participants::Deps {
+                    audit: Some(services::participants::Audit::new(meta, masker)),
+                    controllers: controllers.clone(),
+                    partitions: partitions.clone(),
+                    meta: live_meta_source(&live, meta),
+                };
+                services::participants::build(&site_id, &site, &new_deps)
+                    .map(|installed| installed.participants)
+                    .map_err(|e| e.to_string())
+            },
+        )
     });
     let participant_names = participants.names.clone();
     engine.set_participants(participants.participants);
     engine.prepare().await.map_err(error)?;
     let engine = Arc::new(engine);
+    // The same engine, for the ledger prune and for the entry points' class handles.
+    let ledger_engine = Arc::clone(&engine);
     live.attach(
         permission.meta.clone(),
         permission.model.clone(),
@@ -708,12 +871,10 @@ async fn build_site(
         permission.authorizer.clone(),
         permission.principals.clone(),
     );
+    // The one-time secrets of the site file. The sign-in service itself is built after the
+    // modules registered, because the sign-in storage and the throttle are ports they provide
+    // (WP-IAM-11.T24); the engine is attached above, before any module registers.
     let credentials = Arc::new(Credentials::load(root, site, clock.clone())?);
-    let directory = Arc::new(SiteDirectory::new(
-        backend.clone(),
-        permission.catalog.clone(),
-        credentials.clone(),
-    ));
     let keys = SiteKeys::new(site.api_keys.clone());
     let mut keys = keys;
     let dev_token = if dev {
@@ -734,15 +895,6 @@ async fn build_site(
     } else {
         None
     };
-    let auth = Arc::new(SiteAuth::new(
-        options.login_config(),
-        directory,
-        credentials,
-        keys.into_inner(),
-        clock.clone(),
-        stores,
-    )?);
-    live.set_auth(auth.clone());
     let guarded = Arc::new(GuardedEngine::new(
         engine,
         permission.authorizer.clone(),
@@ -751,12 +903,12 @@ async fn build_site(
     // Files: one service per site for the life of the process (the memory provider keeps its
     // bytes in it); it asks the running site for the engine and the sign-in service.
     let files = {
-        let settings = files_settings(root, loaded, site, live, &backend, &clock)?;
+        let settings = services::files::files_settings(root, loaded, site, live, &backend, &clock)?;
         live.files_with(|| services::files::Files::new(&settings))
     };
     attach_slot.fill(files.clone());
     // Print: the template folder, the fonts and the renderer, built once per site.
-    let printing = print_settings(root, loaded, site, live, &clock)
+    let printing = services::print::print_settings(root, loaded, site, live, &clock)
         .map(|settings| live.print_with(|| services::print::Printing::new(&settings)));
     // Realtime: one hub per site that outlives a reload; its route is mounted outside the
     // bearer check because a socket authenticates with its first message.
@@ -796,6 +948,11 @@ async fn build_site(
     ctx.as_module("host", 0);
     // The parts the modules that start after the host may use.
     ctx.provide(files.clone())?;
+    // The engine seen through a command-ledger retention class: a module that writes documents
+    // asks for its class by name (`ledger_classes::BPM`, ...) and never passes a duration.
+    ctx.provide(Arc::new(ledger_classes::EntryEngines::new(Arc::clone(
+        &ledger_engine,
+    ))))?;
     if let Some(hub) = &realtime {
         ctx.provide(hub.clone())?;
     }
@@ -803,7 +960,89 @@ async fn build_site(
         ctx.provide(host.clone())?;
     }
     let extra = crate::live::extra_modules();
-    services::register_all(&mut ctx, &[builtin(), services::REGISTRY, &extra, modules]).await?;
+    // The cluster-redis plugin, built once and before every module (WP-PLT-19.T3). Its registry
+    // entry runs at 1000, after jobs (600) and metadata (300), which build their coordinator and
+    // bus first; so with `[services.cluster_redis] enabled = true` in the `cluster` profile the
+    // host connects here, provides the coordinator, cache, bus and status as ports, adds the
+    // supervisor, and leaves the module's own entry out of the table (one connection, one
+    // `Status`, never a second coordinator). A bad setting or an unreachable server stops the
+    // site: nothing falls back to PostgreSQL leases. Disabled, or another profile: the table is
+    // untouched.
+    let redis_early = if with_services && loaded.common.services.profile == "cluster" {
+        let settings: services::cluster_redis::Settings =
+            ctx.settings_or_default(services::cluster_redis::NAME)?;
+        if settings.enabled {
+            let site_id = SiteId::new(&site.site).map_err(error)?;
+            let parts = services::cluster_redis::build(&settings, &site_id, clock.clone()).await?;
+            ctx.as_module(
+                services::cluster_redis::NAME,
+                services::cluster_redis::ORDER,
+            );
+            ctx.provide(parts.coordinator)?;
+            ctx.provide(parts.cache)?;
+            ctx.provide(parts.bus)?;
+            ctx.provide(parts.status)?;
+            ctx.add(parts.service);
+            ctx.as_module("host", 0);
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    let table: Vec<services::Registration> = services::REGISTRY
+        .iter()
+        .filter(|r| !(redis_early && r.name == services::cluster_redis::NAME))
+        .copied()
+        .collect();
+    services::register_all(&mut ctx, &[builtin(), table.as_slice(), &extra, modules]).await?;
+    // The sign-in service, built now because the throttle module (`signin_throttle`) provides the
+    // admission port while it registers. Nothing before this point calls `live.auth()` except
+    // inside a request or a readiness probe, so a request cannot reach a half-built site.
+    // Production passes the coordinator admission, wrapped so every refusal is audited; a site
+    // whose throttle is not hosted does not start, because without it nobody could be admitted
+    // safely (fail closed, ADR-083 task 7).
+    let storage = ctx.port::<login::SiteStorage>().ok_or_else(|| {
+        Error(format!(
+            "site `{}`: the sign-in stores are not hosted (see [services.login_stores]), so nobody can sign in; refusing to start",
+            site.site
+        ))
+    })?;
+    let admission = ctx
+        .port::<dyn spot_login::SignInAdmission>()
+        .ok_or_else(|| {
+            Error(format!(
+                "site `{}`: the sign-in throttle is not hosted (see [services.signin_throttle] and [services.secrets]), so no sign-in can be admitted; refusing to start",
+                site.site
+            ))
+        })?;
+    let admission: Arc<dyn spot_login::SignInAdmission> =
+        Arc::new(crate::audit::AuditedAdmission::new(
+            Arc::new(PortAdmission(admission)),
+            stores.recorder.clone(),
+        ));
+    let signin = ctx
+        .port::<services::signin_throttle::SigninThrottle>()
+        .ok_or_else(|| {
+            Error(format!(
+                "site `{}`: the sign-in throttle handle is not hosted, so password changes cannot be admitted; refusing to start",
+                site.site
+            ))
+        })?;
+    let auth = Arc::new(
+        SiteAuth::new(
+            options.login_config(),
+            &storage,
+            credentials,
+            keys.into_inner(),
+            clock.clone(),
+            stores,
+            admission,
+        )?
+        .with_signin_throttle(signin),
+    );
+    live.set_auth(auth.clone());
     // The function and report delegates a hosting module provided (WP-PRD-01.T48). They are read
     // here, after every module registered and before the router is built, because the resource
     // adapter takes them at construction; absent stays absent, and the adapter then answers
@@ -817,31 +1056,103 @@ async fn build_site(
     }
     // Metadata is read per request from what the site serves now, so a DocType made while
     // the server runs is served by the very next request.
-    let services = ApiServices::new(
-        Arc::new(MetaResources::live(live.meta_source())),
-        Arc::new(LiveResources {
-            live: live.clone(),
-            engine: guarded,
-            clock: clock.clone(),
-            actor: Arc::new(|_| actor()),
-            delegates,
-        }),
-        Arc::new(NotConfigured),
-        auth.clone(),
-        Arc::new(MemoryIdempotencyStore::new(Arc::clone(&clock))),
+    // The Idempotency-Key store: the site's own PostgreSQL table, or the in-memory
+    // store for the dev switch and for a site that says so.
+    let idempotency = idempotency_store(
+        &mut ctx,
+        &site.site,
+        dev,
+        &backend,
+        &clock,
+        loaded.server.request_timeout,
+        &idempotency_settings,
     )
-    .with_permissions(Arc::new(LivePermissions {
+    .await?;
+    // The command ledger's prune: once at start, then every ten minutes, stopped on shutdown.
+    ctx.add(Arc::new(CommandLedgerPrune {
+        site: site.site.clone(),
+        engine: Arc::clone(&ledger_engine),
+        clock: Arc::clone(&clock),
+    }));
+    let meta_service = Arc::new(MetaResources::live(live.meta_source()));
+    let resources = Arc::new(LiveResources {
+        live: live.clone(),
+        engine: guarded.clone(),
+        clock: clock.clone(),
+        actor: Arc::new(|_| actor()),
+        delegates,
+        principals: permission.principals.clone(),
+    });
+    // The link lookup, with the title behind the field guard (WP-SEC-04.T14).
+    let lookup = Arc::new(crate::live::LiveLookup {
+        live: live.clone(),
+        engine: guarded.clone(),
+        clock: clock.clone(),
+        actor: Arc::new(|_| actor()),
+        principals: permission.principals.clone(),
+    });
+    let permissions = Arc::new(LivePermissions {
         live: live.clone(),
         principals: permission.principals.clone(),
         clock: clock.clone(),
         actor: Arc::new(|_| actor()),
-    }))
-    .with_files(files);
-    let services = match &printing {
-        Some(printing) => services.with_print(printing.clone()),
-        None => services,
+    });
+    // The configured public-route rate limits go on every router (WP-PRD-01.T53); the server
+    // refuses an invalid value before it binds (`ServerError::InvalidSetting`).
+    let rate_limits = loaded.server.rate_limits();
+    // The report catalogue port a hosting module provided (WP-PLT-14.T5): the route registry
+    // mounts `report_list` and `report_describe` once, behind the router's bearer layer. Absent
+    // stays absent (the group is skipped and the operations answer as unserved ones do), and a
+    // site with `services.report.enabled = false` provides none.
+    let report_catalogue = ctx.port::<dyn spot_http::api::ports::report::ReportCatalogPort>();
+    // The session port a hosting module provided (WP-IAM-07.T3): the route registry mounts
+    // `auth_session_list` and `auth_session_end` once, behind the router's bearer layer. Absent
+    // stays absent, and a site with `services.session.enabled = false` provides none.
+    let session_port = ctx.port::<dyn spot_http::api::ports::session::SessionPort>();
+    // One services bundle per audience router: a router consumes its bundle, and the two share
+    // every service behind it.
+    let make_services = || {
+        let services = ApiServices::new(
+            meta_service.clone(),
+            resources.clone(),
+            lookup.clone(),
+            auth.clone(),
+            idempotency.clone(),
+        )
+        .with_permissions(permissions.clone())
+        .with_files(files.clone())
+        .with_rate_limits(rate_limits);
+        let services = match &report_catalogue {
+            Some(catalogue) => services
+                .with_port::<dyn spot_http::api::ports::report::ReportCatalogPort>(
+                    catalogue.clone(),
+                ),
+            None => services,
+        };
+        let services = match &session_port {
+            Some(sessions) => services
+                .with_port::<dyn spot_http::api::ports::session::SessionPort>(sessions.clone()),
+            None => services,
+        };
+        match &printing {
+            Some(printing) => services.with_print(printing.clone()),
+            None => services,
+        }
     };
-    let site_router = router(services);
+    // The ports a service provided for a registry route group go into the API ports; a group that
+    // is left out is logged and named in readiness (WP-CTL-11.T5).
+    let services = forward_ports(make_services(), &ctx);
+    // The consumer audience's router: only the routes the table marks for consumers (none yet),
+    // and none of the module routes, realtime or open paths, which are staff surfaces.
+    let consumer_router = router_for(
+        &[spot_core::Audience::Consumer],
+        forward_ports(make_services(), &ctx),
+    );
+    let (site_router, mounted) = router_with(services, routes::REGISTRY);
+    let mut degraded = live.degraded();
+    degraded.extend(skipped_group_notes(&mounted));
+    live.set_degraded(degraded);
+    let guest_functions = ctx.port::<services::function::GuestFunctions>().is_some();
     let assembled = ctx.finish(site_router);
     // One access-log line, one span and the cost counters per request.
     let site_router = assembled
@@ -850,15 +1161,148 @@ async fn build_site(
     Ok((
         SiteRuntime::Ready {
             router: site_router,
+            consumer: consumer_router,
             realtime: realtime.as_ref().map(|hub| hub.router()),
             auth,
             dev_token,
             principals: permission.principals.clone(),
             open: assembled.open,
+            guest_functions,
         },
         assembled.assembly,
         participant_names,
     ))
+}
+
+/// How the route group of a registry entry reaches a site. This is the audit of WP-CTL-11.T5:
+/// every group in `spot_http::api::router::routes::REGISTRY` appears here, so a new group cannot
+/// be added without deciding how its port gets in (`tests/host_ports.rs` fails for a group that
+/// is not listed).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GroupServing {
+    /// The host forwards the port a service provided ([`forward_ports`]); the registry mounts the
+    /// group. Absent while that service is off, and then named in readiness.
+    Forwarded,
+    /// The providing service builds its own `Ports`, mounts the group itself and merges the
+    /// router into the site (`ctx.router_layer`): forwarding its port as well would mount every
+    /// route twice. The registry pass skips it by design.
+    Service,
+    /// No service hosts a provider of the group's port yet: the group is not served.
+    NoProvider,
+}
+
+/// The audit table: the registry group, and how its port reaches the site.
+const GROUPS: &[(&str, GroupServing)] = &[
+    // Mounted by services/apps.rs.
+    ("apps", GroupServing::Service),
+    // Mounted by services/connectors.rs.
+    ("connectors", GroupServing::Service),
+    // `dyn ConsumerSessions`: no service provides it yet.
+    ("consumer_renew", GroupServing::NoProvider),
+    // `dyn EventStreamPort`: services/events.rs.
+    ("events", GroupServing::Service),
+    // Mounted by services/graph.rs.
+    ("graph", GroupServing::Service),
+    // Mounted by services/identity_admin.rs and services/key_admin.rs.
+    ("identity", GroupServing::Service),
+    // Mounted by services/import.rs.
+    ("import", GroupServing::Service),
+    // Mounted by services/invitations.rs.
+    ("invitation_accept", GroupServing::Service),
+    // Mounted by services/journal_access.rs.
+    ("journal_access", GroupServing::Service),
+    // `dyn LinkInboundPort`: services/link_external.rs provides it with `ctx.provide`.
+    ("link_inbound", GroupServing::Forwarded),
+    // `dyn NoticeSource`: no service provides it yet.
+    ("notices", GroupServing::NoProvider),
+    // no service provides it yet.
+    ("occupancy", GroupServing::NoProvider),
+    // `dyn ProcessPort` and `dyn IdempotencyStore`: services/process_api.rs.
+    ("process", GroupServing::Service),
+    // Mounted by services/process_versions.rs.
+    ("process_version", GroupServing::Service),
+    // `dyn ReportCatalogPort`: services/report.rs.
+    ("report", GroupServing::Service),
+    // `dyn ScimPort`: services/scim.rs.
+    ("scim", GroupServing::Service),
+    // `dyn SessionPort`: services/session.rs.
+    ("session", GroupServing::Service),
+    // Mounted by services/sso.rs.
+    ("sso", GroupServing::Service),
+    // Mounted by services/sso_admin.rs.
+    ("sso_admin", GroupServing::Service),
+    // `dyn TaskPort`: no service provides it yet.
+    ("task", GroupServing::NoProvider),
+    // `dyn WebhookPort`: services/process_triggers.rs.
+    ("webhook", GroupServing::Service),
+    // Mounted by services/webhook_secret.rs.
+    ("webhook_secret", GroupServing::Service),
+];
+
+/// Puts into the API `Ports` the ports a service provided for a group the registry mounts (the
+/// [`GroupServing::Forwarded`] rows of [`GROUPS`]). A port nobody provided stays absent, so its
+/// group is skipped and the path is not served.
+fn forward_ports(services: ApiServices, ctx: &services::SiteCtx<'_>) -> ApiServices {
+    match ctx.port::<dyn LinkInboundPort>() {
+        Some(port) => services.with_port::<dyn LinkInboundPort>(port),
+        None => services,
+    }
+}
+
+/// One line of readiness for each registry group that was skipped and ought to be served, and a
+/// log line for each group left out. Never a value: group names and port type names only.
+fn skipped_group_notes(report: &routes::MountReport) -> Vec<String> {
+    let mut notes = Vec::new();
+    for (group, reason) in &report.skipped {
+        let serving = GROUPS
+            .iter()
+            .find(|(name, _)| name == group)
+            .map(|(_, serving)| *serving);
+        let why = match reason {
+            routes::SkipReason::MissingPort(port) => {
+                format!("its port `{port}` is not provided")
+            }
+            routes::SkipReason::ServesNothing => "it serves no operation".to_owned(),
+            routes::SkipReason::DuplicateOperation(operation) => {
+                format!("operation `{operation}` is already served")
+            }
+        };
+        match serving {
+            Some(GroupServing::Service) => {
+                tracing::debug!(group = *group, "route group is mounted by its own service");
+            }
+            Some(GroupServing::NoProvider) => {
+                tracing::info!(group = *group, reason = %why, "route group not served: no service provides its port");
+            }
+            Some(GroupServing::Forwarded) => {
+                tracing::info!(group = *group, reason = %why, "route group not served");
+                notes.push(format!("api group `{group}` is not served: {why}"));
+            }
+            None => {
+                tracing::warn!(group = *group, reason = %why, "route group is not classified in host.rs, so its port is not forwarded");
+                notes.push(format!(
+                    "api group `{group}` is not served: {why} (not classified in host.rs)"
+                ));
+            }
+        }
+    }
+    notes
+}
+
+/// The throttle's admission port as a sized type, so `AuditedAdmission` (generic over a sized
+/// admission) can wrap it.
+struct PortAdmission(Arc<dyn spot_login::SignInAdmission>);
+
+impl spot_login::SignInAdmission for PortAdmission {
+    fn admit<'a>(
+        &'a self,
+        attempt: spot_login::SignInAttempt<'a>,
+    ) -> spot_login::BoxFuture<
+        'a,
+        std::result::Result<spot_login::Admission, spot_login::AdmissionError>,
+    > {
+        self.0.admit(attempt)
+    }
 }
 
 /// A small wrapper so dev can push a verifier before the store is built.
@@ -893,46 +1337,6 @@ const BUILTIN: &[services::Registration] = &[
         order: 200,
         register: reg_auth,
     },
-    services::Registration {
-        name: "metadata",
-        order: 300,
-        register: reg_metadata,
-    },
-    services::Registration {
-        name: "customise",
-        order: 400,
-        register: reg_customise,
-    },
-    services::Registration {
-        name: "jobs",
-        order: 600,
-        register: reg_jobs,
-    },
-    services::Registration {
-        name: "mail",
-        order: 700,
-        register: reg_mail,
-    },
-    services::Registration {
-        name: "realtime",
-        order: 800,
-        register: reg_realtime,
-    },
-    services::Registration {
-        name: "files",
-        order: 900,
-        register: reg_files,
-    },
-    services::Registration {
-        name: "print",
-        order: 900,
-        register: reg_print,
-    },
-    services::Registration {
-        name: "telemetry",
-        order: 900,
-        register: reg_telemetry,
-    },
 ];
 
 fn builtin() -> &'static [services::Registration] {
@@ -949,14 +1353,6 @@ macro_rules! register_fn {
 
 register_fn!(reg_storage, storage);
 register_fn!(reg_auth, auth);
-register_fn!(reg_metadata, metadata);
-register_fn!(reg_customise, customise);
-register_fn!(reg_jobs, jobs);
-register_fn!(reg_mail, mail);
-register_fn!(reg_realtime, realtime);
-register_fn!(reg_files, files);
-register_fn!(reg_print, print);
-register_fn!(reg_telemetry, telemetry);
 
 /// Storage: the pool answers, or the site cannot serve a single request.
 async fn storage(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
@@ -973,322 +1369,558 @@ async fn storage(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
     Ok(())
 }
 
-/// Authentication: at least one credential exists, or nobody can sign in.
+/// Authentication. Credentials live in the site database since WP-PLT-02.T8 (`login_stores`
+/// imports the staged ones from `site.toml` and removes them from the file), so an empty site
+/// file is the normal state after the first start: this check no longer counts the file. The
+/// sign-in stores' own required check (`login_stores`) covers a store that does not answer, so
+/// nobody can sign in only when that check fails.
 async fn auth(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    let site = ctx.env()?.site;
-    let keys = site.api_keys.len();
-    let credentials = site.credentials.len();
     ctx.add(services::Idle::new("auth", Level::Required, move || {
-        Box::pin(async move {
-            if keys + credentials == 0 {
-                return Err("no API key and no password verifier is configured".into());
-            }
-            Ok(())
-        })
+        Box::pin(async move { Ok(()) })
     }));
     Ok(())
 }
 
-/// Metadata: the live snapshot, its version store and the additive schema plan. Adopting a
-/// new version rebuilds the site runtime through this marker, which is the same path
-/// `spot reload` takes. Provides the `LiveMetadata` port.
-async fn metadata(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    if !ctx.assembling() {
-        return Ok(());
-    }
-    let env = *ctx.env()?;
-    let catalog = crate::schema::catalog(&env.permission.meta)?;
-    let notify: Arc<dyn Fn() + Send + Sync> = {
-        let root = env.root.to_path_buf();
-        let name = env.site.site.clone();
-        Arc::new(move || {
-            if let Err(e) = request_reload(&root, &name) {
-                eprintln!("metadata reload refused for site `{name}`: {e}");
-            }
-        })
+/// How often the prune of expired Idempotency-Key rows runs (and once at start).
+const IDEMPOTENCY_PRUNE_EVERY: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// `[services.idempotency]` of a site (WP-PLT-05.T8): where the HTTP `Idempotency-Key` rows live
+/// and how long a stored response is replayed.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+struct IdempotencySettings {
+    /// Keep the keys in memory on a production site too: they do not survive a restart
+    ///, so a site that sets this says so in writing.
+    allow_memory_idempotency: bool,
+    /// How long a stored response is replayed.
+    retention: RetentionSettings,
+    /// The document engine's command ledger (WP-PLT-05.T9).
+    ledger: LedgerSettings,
+}
+
+/// `[services.idempotency.ledger]`: the command ledger of the document engine.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+struct LedgerSettings {
+    /// `[services.idempotency.ledger.retention]`: `default` (7 days), `max` (30 days) and
+    /// `[...retention.classes]`, a duration per caller class.
+    retention: RetentionSettings,
+}
+
+/// `[services.idempotency.retention]`: durations like `"24h"` or `"7d"`; absent keys take the
+/// documented defaults (24 hours, capped at 7 days).
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+struct RetentionSettings {
+    default: Option<String>,
+    max: Option<String>,
+    classes: BTreeMap<String, String>,
+}
+
+/// A whole number of seconds, minutes, hours, days or weeks (`"90s"`, `"15m"`, `"24h"`, `"7d"`,
+/// `"2w"`). Zero, a missing unit, text and an overflow are `None`.
+fn retention_duration(text: &str) -> Option<std::time::Duration> {
+    let text = text.trim();
+    let (digits, unit) = text.split_at(text.find(|c: char| !c.is_ascii_digit())?);
+    let count: u64 = digits.parse().ok()?;
+    let unit = match unit {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3_600,
+        "d" => 86_400,
+        "w" => 604_800,
+        _ => return None,
     };
-    let metadata = services::metadata::LiveMetadata::new(services::metadata::Settings {
-        root: env.root.to_path_buf(),
-        loaded: env.loaded.clone(),
-        site: env.site.clone(),
-        backend: Some(env.backend.clone()),
-        catalog: Some(catalog),
-        notify,
-        clock: Arc::clone(ctx.clock()),
-    })
-    .await?;
-    ctx.add(metadata.clone());
-    ctx.provide(metadata)
+    count
+        .checked_mul(unit)
+        .filter(|secs| *secs > 0)
+        .map(std::time::Duration::from_secs)
 }
 
-/// Runtime customisation: DocTypes, custom fields and property overrides made while the
-/// site runs, served at once and followed by the other nodes. Its check recovers a change a
-/// crash left half done, before the site accepts a request.
-async fn customise(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    if !ctx.assembling() {
-        return Ok(());
-    }
-    let env = *ctx.env()?;
-    let metadata = ctx.require_port::<services::metadata::LiveMetadata>()?;
-    let service = services::customise::Customise::new(services::customise::Settings {
-        live: env.live.clone(),
-        metadata,
-        backend: env.backend.clone(),
-        catalog: env.permission.catalog.clone(),
-        principals: env.permission.principals.clone(),
-        site: env.site.site.clone(),
-        poll: std::time::Duration::from_millis(env.loaded.common.services.metadata.poll_ms),
-    })?;
-    ctx.add(service);
-    Ok(())
-}
-
-/// Jobs, intake and schedules. The queue and the coordinator are durable: jobs live in the
-/// site's database (a killed node loses none), and the cluster profile coordinates through
-/// the database too. The single-node profile keeps the in-process coordinator, which
-/// refuses a second node in this process, and may run the memory store when `common.toml`
-/// says so.
-///
-/// The worker needs every handler the other modules contribute (mail adds `send_mail`), so the
-/// services are built in a finaliser that runs after all modules registered, and placed at
-/// this module's order.
-async fn jobs(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    if !ctx.assembling() {
-        return Ok(());
-    }
-    let env = *ctx.env()?;
-    let (root, loaded, site, backend) = (env.root, env.loaded, env.site, env.backend);
-    let clock = Arc::clone(ctx.clock());
-    let services_config = &loaded.common.services;
-    let node = process_node(&site.site);
-    let coordinator: Arc<dyn spot_coordinator::Coordinator> =
-        if services_config.profile == "cluster" {
-            let coordinator = spot_coordinator_pg::PgCoordinator::new(
-                backend.pool(),
-                spot_coordinator_pg::PgCoordinatorConfig::default(),
-            );
-            coordinator.prepare().await.map_err(error)?;
-            Arc::new(coordinator)
-        } else {
-            let node_id = spot_coordinator::NodeId::new(node.clone()).map_err(error)?;
-            spot_coordinator::InProcessCoordinator::start(
-                Arc::new(spot_coordinator::InMemoryPresence::new()),
-                node_id,
-                Arc::clone(&clock),
-            )
-            .await
-            .map_err(error)?
-        };
-    // Lease events and the held gauge on `/metrics`, only when that service is on.
-    let coordinator: Arc<dyn spot_coordinator::Coordinator> = if services_config.metrics.enabled {
-        Arc::new(services::metered_coordinator::MeteredCoordinator::new(
-            coordinator,
+/// The retention policy of `site`: a refused setting stops the start and names the site and the
+/// key, never a value of a request; a class longer than `max` is clamped and logged once.
+fn retention_policy(
+    site: &str,
+    settings: &RetentionSettings,
+) -> Result<spot_idempotency_pg::RetentionPolicy> {
+    let bad = |key: &str| {
+        Error(format!(
+            "site `{site}`: services.idempotency.retention.{key} is not a valid duration \
+             (a whole number with s, m, h, d or w, like \"24h\")"
         ))
-    } else {
-        coordinator
     };
-    let store: Arc<dyn spot_jobs::JobStore> = if services_config.jobs.store == "postgres" {
-        let store = spot_jobs_pg::PgJobStore::new(backend.pool());
-        store.prepare().await.map_err(error)?;
-        Arc::new(store)
-    } else {
-        services::jobs::Settings::memory_store()
+    let one = |key: &str, text: &Option<String>, fallback: std::time::Duration| match text {
+        Some(text) => retention_duration(text).ok_or_else(|| bad(key)),
+        None => Ok(fallback),
     };
-    let schedules = manifest_schedules(root, loaded, site)?;
-    // The narrow ports later modules take (job submit, outbox lease, system reader); each is
-    // built from this site's own store, coordinator, feed and engine.
-    services::ports::provide(
-        ctx,
-        services::ports::PortParts {
-            site: SiteId::new(&site.site).map_err(error)?,
-            store: Arc::clone(&store),
-            queues: services_config.jobs.queues.clone(),
-            clock: Arc::clone(&clock),
-            coordinator: Arc::clone(&coordinator),
-            feed: backend.clone(),
-            node: node.clone(),
-            ttl: std::time::Duration::from_millis(services_config.jobs.lease_ttl_ms),
-            loader: Arc::new(services::ports::LiveLoader(Arc::clone(env.live))),
-        },
+    let default = one(
+        "default",
+        &settings.default,
+        spot_idempotency_pg::DEFAULT_RETENTION,
     )?;
-    let settings = services::jobs::Settings {
-        site: SiteId::new(&site.site).map_err(error)?,
-        backend: backend.clone(),
-        store,
-        queues: services_config.jobs.queues.clone(),
-        intake_interval: std::time::Duration::from_millis(services_config.jobs.intake_poll_ms),
-        grace: std::time::Duration::from_millis(services_config.jobs.grace_ms),
-        node,
-        clock: Arc::clone(&clock),
-        coordinator,
-        consumer_ttl: std::time::Duration::from_millis(services_config.jobs.lease_ttl_ms),
-        schedules,
-        tick_interval: std::time::Duration::from_millis(services_config.scheduler.tick_ms),
-        lease_ttl: std::time::Duration::from_millis(services_config.scheduler.lease_ttl_ms),
-    };
-    crate::natives::add_job_handlers(ctx.job_handlers());
-    ctx.finally(move |ctx| {
-        let handlers = Arc::new(ctx.take_job_handlers());
-        ctx.add(services::jobs::Jobs::new(&settings, handlers));
-        ctx.add(services::jobs::Scheduling::new(&settings));
-        Ok(())
-    });
-    Ok(())
-}
-
-/// Mail: the sender over the site's settings, the site's file store and (with the durable
-/// job store) the site's PostgreSQL sent log. Optional, so a server that cannot be reached
-/// degrades the site, not stops it.
-///
-/// The sent log is PostgreSQL's by default whenever the job store is: a restart between the
-/// server's acceptance and the job's completion must not send a message twice. The table is
-/// `spot_mail_sent_log`, a platform table `spot migrate` knows; `prepare()` creates it when
-/// missing and is safe to repeat.
-async fn mail(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    if !ctx.assembling() {
-        return Ok(());
+    let max = one(
+        "max",
+        &settings.max,
+        spot_idempotency_pg::DEFAULT_MAX_RETENTION,
+    )?;
+    let mut classes = BTreeMap::new();
+    for (name, text) in &settings.classes {
+        let keep = retention_duration(text).ok_or_else(|| bad(&format!("classes.{name}")))?;
+        classes.insert(name.clone(), keep);
     }
-    let env = *ctx.env()?;
-    let (site, backend, live) = (env.site, env.backend, env.live);
-    let services_config = &env.loaded.common.services;
-    tracing::info!(
-        site = %site.site,
-        "{}",
-        services_config
-            .mail
-            .sent_log_description(&services_config.jobs.store)
-    );
-    let sent_log: Option<Arc<dyn spot_mail_queue::SentLog>> = if services_config
-        .mail
-        .sent_log_in_postgres(&services_config.jobs.store)
-    {
-        let log = spot_mail_queue_pg::PgSentLog::new(backend.pool());
-        log.prepare().await.map_err(error)?;
-        Some(Arc::new(log))
-    } else {
-        None
-    };
-    let files = ctx.require_port::<services::files::Files>()?;
-    let mail_site = SiteId::new(&site.site).map_err(error)?;
-    let clock = Arc::clone(ctx.clock());
-    let mail = live.mail_with(|| {
-        if sent_log.is_none() {
-            // Once per process (this closure runs for the first build only).
-            tracing::warn!(
-                site = %site.site,
-                "the mail sent log is in memory: a restart can send an accepted message again \
-                 (use the PostgreSQL job store, or services.mail.sent_log = \"postgres\")"
+    let policy =
+        spot_idempotency_pg::RetentionPolicy::new(default, max, classes.clone()).map_err(|e| {
+            Error(format!(
+                "site `{site}`: services.idempotency.retention: {e}"
+            ))
+        })?;
+    for (name, keep) in &classes {
+        if *keep > max {
+            tracing::info!(
+                site,
+                class = %name,
+                max_secs = max.as_secs(),
+                "the retention of an idempotency class was clamped to the maximum"
             );
         }
-        services::mail::Mail::new(services::mail::Settings {
-            site: mail_site,
-            mail: services_config.mail.clone(),
-            files: files.store(),
-            sent_log,
-            clock,
-        })
-    });
-    mail.register(ctx.job_handlers());
-    ctx.add(mail.service());
-    Ok(())
-}
-
-/// Realtime: optional, so a feed that cannot be read degrades the site, not stops it.
-async fn realtime(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    if let Some(hub) = ctx.env()?.live.realtime() {
-        ctx.add(hub.service());
     }
-    Ok(())
+    Ok(policy)
 }
 
-/// Files: the provider's folder takes writes; the cluster profile cannot serve without it.
-async fn files(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    let env = *ctx.env()?;
-    let settings = files_settings(
-        env.root,
-        env.loaded,
-        env.site,
-        env.live,
-        env.backend,
-        ctx.clock(),
-    )?;
-    ctx.add(services::files::FilesCheck::new(&settings));
-    // The in-process committed step can be lost to a crash between commit and step: re-apply it
-    // for documents that name a file still pending. Best effort; the next start tries again.
-    if let Some(files) = env.live.files()
-        && let Err(error) = files.reconcile_attachments().await
-    {
-        tracing::warn!(error = %error, "the attach reconcile at start failed");
-    }
-    Ok(())
-}
-
-/// Print: optional, so a renderer that cannot make a page degrades the site, not stops it.
-async fn print(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    let live = ctx.env()?.live;
-    ctx.add(services::print::PrintCheck::new(
-        live.print(),
-        Arc::clone(ctx.clock()),
-    ));
-    Ok(())
-}
-
-/// Metrics: the `/metrics` route (when enabled) and the optional recorder service, so a
-/// recorder that cannot install degrades the site, not stops it.
-async fn telemetry(ctx: &mut services::SiteCtx<'_>) -> Result<()> {
-    let metrics = ctx.env()?.loaded.common.services.metrics.clone();
-    if metrics.enabled {
-        ctx.router_layer(|router| router.merge(services::telemetry::router()));
-    }
-    ctx.add(services::telemetry::Telemetry::new(
-        metrics.enabled,
-        metrics.require_auth,
-    ));
-    Ok(())
-}
-/// What the file service of `site` is built from.
-fn files_settings(
-    root: &Path,
-    loaded: &config::Loaded,
-    site: &config::Site,
-    live: &Arc<SiteLive>,
+/// The Idempotency-Key store of one site: `PgIdempotencyStore` on the site's own pool (table
+/// prepared here; a failure stops the start naming the site and a recorded security finding), with the prune
+/// service added; or `MemoryIdempotencyStore` for the dev switch and for a site that sets
+/// `allow_memory_idempotency = true`.
+async fn idempotency_store(
+    ctx: &mut services::SiteCtx<'_>,
+    site: &str,
+    dev: bool,
     backend: &PgBackend,
     clock: &Arc<dyn spot_core::Clock>,
-) -> Result<services::files::Settings> {
-    let files = &loaded.common.services.files;
-    Ok(services::files::Settings {
-        site: SiteId::new(&site.site).map_err(error)?,
-        live: live.clone(),
-        backend: backend.clone(),
-        clock: clock.clone(),
-        provider: files.provider.clone(),
-        root: root.join("sites").join(&site.site).join(&files.root),
-        max_bytes: files.max_bytes,
-        required: loaded.common.services.profile == "cluster",
+    request_timeout: std::time::Duration,
+    settings: &IdempotencySettings,
+) -> Result<Arc<dyn spot_http::api::idempotency::IdempotencyStore>> {
+    // Validated for every site, so an invalid section never starts anywhere.
+    let retention = retention_policy(site, &settings.retention)?;
+    if dev || settings.allow_memory_idempotency {
+        tracing::warn!(
+            site,
+            "Idempotency-Keys are kept in memory and do not survive a restart"
+        );
+        return Ok(Arc::new(MemoryIdempotencyStore::new(Arc::clone(clock))));
+    }
+    // A pending reservation outlives the longest request: twice the request timeout, at least
+    // 120 seconds.
+    let lease = (request_timeout * 2).max(std::time::Duration::from_secs(120));
+    let config = spot_idempotency_pg::PgIdempotencyConfig::new(lease, retention);
+    let store =
+        spot_idempotency_pg::PgIdempotencyStore::new(backend.pool(), Arc::clone(clock), config)
+            .map_err(|e| {
+                Error(format!(
+                    "site `{site}`: the idempotency store cannot start: {e}"
+                ))
+            })?;
+    store.prepare().await.map_err(|_| {
+        Error(format!(
+            "site `{site}`: the idempotency table cannot be created"
+        ))
+    })?;
+    let store = Arc::new(store);
+    ctx.add(Arc::new(IdempotencyPrune {
+        store: store.clone(),
+    }));
+    Ok(store)
+}
+
+/// Deletes expired Idempotency-Key rows: once at start, then every ten minutes. The store runs
+/// no timer of its own, so the host owns this one and stops it on shutdown.
+struct IdempotencyPrune {
+    store: Arc<dyn spot_http::api::idempotency::IdempotencyStore>,
+}
+
+impl IdempotencyPrune {
+    /// Rounds of 1,000 rows, at most ten per tick.
+    async fn rounds(&self) {
+        for _ in 0..10 {
+            match self.store.prune(1_000).await {
+                Ok(deleted) if deleted >= 1_000 => continue,
+                Ok(_) => break,
+                Err(_) => {
+                    tracing::warn!(
+                        "the idempotency prune could not run; the next tick tries again"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+}
+
+impl Service for IdempotencyPrune {
+    fn name(&self) -> &'static str {
+        "idempotency"
+    }
+
+    fn level(&self) -> Level {
+        Level::Optional
+    }
+
+    fn check(&self) -> CheckFuture<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn run(&self, stop: tokio::sync::watch::Receiver<bool>) -> RunFuture<'_> {
+        Box::pin(async move {
+            let mut stop = stop;
+            let mut tick = tokio::time::interval(IDEMPOTENCY_PRUNE_EVERY);
+            loop {
+                tokio::select! {
+                    _ = tick.tick() => self.rounds().await,
+                    _ = stop.changed() => break,
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+/// The retention classes the host gives the entry points (WP-PLT-05.T9). A site may add any
+/// other class name in its configuration; these are the ones the platform itself uses. The
+/// entry points that take their handle from here are wired by the tasks that own those modules
+/// (jobs, scripts, BPM, import), so some items have no caller yet.
+#[allow(dead_code)]
+pub(crate) mod ledger_classes {
+    use std::sync::Arc;
+
+    use spot_app_api::context::{DocumentService, Invocation, Outcome};
+    use spot_app_api::prelude::{RecordId, Version};
+    use spot_app_api::{AppResult, BoxFuture, DocTypeDef, Document, DocumentPatch};
+    use spot_document::engine::Engine;
+    use spot_postgres::PgBackend;
+
+    /// The native API router.
+    pub(crate) const HTTP_API: &str = "http_api";
+    /// The BPM Document node.
+    pub(crate) const BPM: &str = "bpm";
+    /// The import back half.
+    pub(crate) const IMPORT: &str = "import";
+    /// The job runner.
+    pub(crate) const JOBS: &str = "jobs";
+    /// The script runtime.
+    pub(crate) const SCRIPTS: &str = "scripts";
+
+    /// The site's engine, from which each entry point takes a handle under its own class. A
+    /// class the site's policy does not know records under the default retention (the engine
+    /// decides that). The host never passes a duration, only the class name.
+    pub(crate) struct EntryEngines {
+        engine: Arc<Engine<PgBackend>>,
+    }
+
+    impl EntryEngines {
+        pub(crate) fn new(engine: Arc<Engine<PgBackend>>) -> Self {
+            Self { engine }
+        }
+
+        /// The document service every write of which is recorded under `class`.
+        pub(crate) fn service(&self, class: &'static str) -> Arc<ClassedEngine> {
+            Arc::new(ClassedEngine {
+                engine: Arc::clone(&self.engine),
+                class,
+            })
+        }
+    }
+
+    /// An owned handle on the engine under one retention class: `Engine::for_class` borrows the
+    /// engine, an entry point that outlives the call needs one that does not.
+    pub(crate) struct ClassedEngine {
+        engine: Arc<Engine<PgBackend>>,
+        class: &'static str,
+    }
+
+    impl ClassedEngine {
+        /// The retention class of this handle.
+        pub(crate) fn class(&self) -> &'static str {
+            self.class
+        }
+    }
+
+    impl DocumentService for ClassedEngine {
+        fn meta<'a>(&'a self, doctype: &'a str) -> BoxFuture<'a, AppResult<Arc<DocTypeDef>>> {
+            Box::pin(self.engine.meta(doctype))
+        }
+
+        fn load<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(self.engine.load(inv, doctype, id))
+        }
+
+        fn create<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doc: Document,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move { self.engine.for_class(self.class).create(inv, doc).await })
+        }
+
+        fn update<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            patch: DocumentPatch,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .update(inv, doctype, id, patch, expected)
+                    .await
+            })
+        }
+
+        fn post<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .post(inv, doctype, id, expected)
+                    .await
+            })
+        }
+
+        fn cancel<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .cancel(inv, doctype, id, expected)
+                    .await
+            })
+        }
+
+        fn correct<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .correct(inv, doctype, id, expected)
+                    .await
+            })
+        }
+
+        fn delete<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<()>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .delete(inv, doctype, id, expected)
+                    .await
+            })
+        }
+
+        fn rename<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            new_name: &'a str,
+            expected: Version,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(async move {
+                self.engine
+                    .for_class(self.class)
+                    .rename(inv, doctype, id, new_name, expected)
+                    .await
+            })
+        }
+
+        fn call_method<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            doctype: &'a str,
+            id: RecordId,
+            method: &'a str,
+            args: serde_json::Value,
+            expected: Option<Version>,
+        ) -> BoxFuture<'a, AppResult<Outcome<(Document, serde_json::Value)>>> {
+            Box::pin(
+                self.engine
+                    .call_method(inv, doctype, id, method, args, expected),
+            )
+        }
+
+        fn field_changed<'a>(
+            &'a self,
+            inv: &'a Invocation,
+            draft: Document,
+            field: &'a str,
+        ) -> BoxFuture<'a, AppResult<Outcome<Document>>> {
+            Box::pin(self.engine.field_changed(inv, draft, field))
+        }
+    }
+}
+
+/// `[services.idempotency]` of `site`, decoded once. An error names the table and, for an
+/// unknown or missing key, the key; it never echoes a value.
+fn idempotency_settings(site: &str, loaded: &config::Loaded) -> Result<IdempotencySettings> {
+    let Some(table) = loaded.common.services.services_extra.get("idempotency") else {
+        return Ok(IdempotencySettings::default());
+    };
+    table.clone().try_into::<IdempotencySettings>().map_err(|e| {
+        let message = e.message();
+        if message.starts_with("unknown field") || message.starts_with("missing field") {
+            Error(format!("site `{site}`: services.idempotency: {message}"))
+        } else {
+            Error(format!(
+                "site `{site}`: services.idempotency: a setting has the wrong type or an invalid value"
+            ))
+        }
     })
 }
 
-/// What the print service of `site` is built from; `None` when printing is switched off.
-fn print_settings(
-    root: &Path,
-    loaded: &config::Loaded,
-    site: &config::Site,
-    live: &Arc<SiteLive>,
-    clock: &Arc<dyn spot_core::Clock>,
-) -> Option<services::print::Settings> {
-    let print = &loaded.common.services.print;
-    if !print.enabled {
-        return None;
+/// A caller class name: a lowercase letter, then lowercase letters, digits and `_`, at most 48.
+fn class_name_is_valid(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && name.len() <= 48
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// The command ledger's retention policy of `site` (`[services.idempotency.ledger.retention]`).
+///
+/// A refused setting stops the start and names the site and the key, never a value; a class
+/// longer than `max` is clamped by the engine and logged once at `info`. Durations use the
+/// host's own parser ([`retention_duration`]): zero, text, a missing unit and an overflow refuse.
+fn ledger_policy(
+    site: &str,
+    settings: &RetentionSettings,
+) -> Result<spot_document::engine::RetentionPolicy> {
+    let at = |name: &str| format!("site `{site}`: services.idempotency.ledger.retention.{name}");
+    let bad = |name: &str| {
+        Error(format!(
+            "{} is not a valid duration (a whole number above zero with s, m, h, d or w, like \"7d\")",
+            at(name)
+        ))
+    };
+    let one = |name: &str, text: &Option<String>, fallback: std::time::Duration| match text {
+        Some(text) => retention_duration(text).ok_or_else(|| bad(name)),
+        None => Ok(fallback),
+    };
+    let default = one(
+        "default",
+        &settings.default,
+        spot_document::engine::DEFAULT_RETENTION,
+    )?;
+    let max = one(
+        "max",
+        &settings.max,
+        spot_document::engine::DEFAULT_MAX_RETENTION,
+    )?;
+    let mut classes = BTreeMap::new();
+    for (name, text) in &settings.classes {
+        if !class_name_is_valid(name) {
+            return Err(Error(format!(
+                "{} is not a valid class name (lowercase letters, digits and _, starting with a letter)",
+                at(&format!("classes.{name}"))
+            )));
+        }
+        let keep = retention_duration(text).ok_or_else(|| bad(&format!("classes.{name}")))?;
+        classes.insert(name.clone(), keep);
     }
-    Some(services::print::Settings {
-        site: SiteId::new(&site.site).ok()?,
-        live: live.clone(),
-        clock: clock.clone(),
-        templates: root
-            .join("sites")
-            .join(&site.site)
-            .join(&print.template_root),
-    })
+    let policy =
+        spot_document::engine::RetentionPolicy::new(default, max, classes).map_err(|e| {
+            Error(format!(
+                "site `{site}`: services.idempotency.ledger.retention: {e}"
+            ))
+        })?;
+    for name in policy.clamped_classes() {
+        tracing::info!(
+            site,
+            class = %name,
+            max_secs = max.as_secs(),
+            "the command ledger retention of a class was clamped to the maximum"
+        );
+    }
+    Ok(policy)
+}
+
+/// Deletes command ledger rows whose own `retain_until` has passed: once at start, then every
+/// ten minutes from the host's `Clock` (never the system clock). The engine runs no timer of its
+/// own, so the host owns this one and stops it on shutdown.
+struct CommandLedgerPrune {
+    site: String,
+    engine: Arc<Engine<PgBackend>>,
+    clock: Arc<dyn spot_core::Clock>,
+}
+
+impl CommandLedgerPrune {
+    /// One prune. `prune_commands` is a single call (it does not batch), so one per tick.
+    async fn once(&self) {
+        match self.engine.prune_commands(self.clock.now_utc()).await {
+            Ok(0) => {}
+            Ok(pruned) => {
+                tracing::debug!(site = %self.site, pruned, "expired command ledger rows were removed");
+            }
+            Err(_) => {
+                tracing::warn!(
+                    site = %self.site,
+                    "the command ledger prune could not run; the next tick tries again"
+                );
+            }
+        }
+    }
+}
+
+impl Service for CommandLedgerPrune {
+    fn name(&self) -> &'static str {
+        "command_ledger"
+    }
+
+    fn level(&self) -> Level {
+        Level::Optional
+    }
+
+    fn check(&self) -> CheckFuture<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn run(&self, stop: tokio::sync::watch::Receiver<bool>) -> RunFuture<'_> {
+        Box::pin(async move {
+            let mut stop = stop;
+            let mut tick = tokio::time::interval(IDEMPOTENCY_PRUNE_EVERY);
+            loop {
+                tokio::select! {
+                    _ = tick.tick() => self.once().await,
+                    _ = stop.changed() => break,
+                }
+            }
+            Ok(())
+        })
+    }
 }
 
 /// Where edge sync reads the effective metadata: the site's live handle, which every swap points
@@ -1307,45 +1939,42 @@ fn live_meta_source(
     })
 }
 
-/// This host's identity in leases and worker claims: the site, and a random part chosen at
-/// every start, so a second host on the same site never shares a holder name with this one
-/// (not even inside one process).
-fn process_node(site: &str) -> String {
-    let id = spot_storage_contract::RecordId::new_v7().to_string();
-    let part = id.rsplit('-').next().unwrap_or(&id);
-    format!("node-{site}-{part}")
-}
-
-/// Every manifest schedule of the site's installed apps, with the policy a missed run gets.
-fn manifest_schedules(
-    root: &Path,
-    loaded: &config::Loaded,
-    site: &config::Site,
-) -> Result<
-    Vec<(
-        Arc<spot_scheduler::Schedule>,
-        spot_scheduler::MissedRunPolicy,
-    )>,
-> {
-    let catalogue = apps::catalogue(root, loaded)?;
-    let mut schedules = Vec::new();
-    for app in &site.apps {
-        let Some(source) = catalogue.iter().find(|source| &source.name == app) else {
-            continue;
-        };
-        let manifest = appdir::manifest(&source.dir)?;
-        let zone = spot_scheduler::TimeZone::parse("UTC")
-            .map_err(|e| Error(format!("{}: {e}", source.dir.display())))?;
-        for sub in &manifest.schedules {
-            let schedule = spot_scheduler::Schedule::new(sub, zone.clone())
-                .map_err(|e| Error(format!("{}: {e}", source.dir.display())))?;
-            // A run missed while no node led is skipped, not replayed: a catch-up burst on a
-            // restarted node is worse than one missed tick for every schedule this platform
-            // ships today.
-            schedules.push((Arc::new(schedule), spot_scheduler::MissedRunPolicy::Skip));
+/// A request on a consumer listener: the site's consumer router and nothing else. The staff
+/// special cases of [`dispatch`] (sign-in, password change, realtime, metrics, the open paths and
+/// the module routes) do not exist here: a path the consumer router does not mount is the
+/// unserved envelope, whatever the staff router would have done with it.
+async fn consumer_dispatch(request: Request, runtimes: RuntimeMap) -> Response {
+    let context = request.extensions().get::<SiteContext>().cloned();
+    let request_id = context
+        .as_ref()
+        .map(|c| c.request_id.clone())
+        .or_else(|| request.extensions().get::<RequestId>().cloned())
+        .unwrap_or_else(RequestId::generate);
+    let Some(context) = context else {
+        return unavailable(
+            "the site context is missing",
+            &request_id,
+            "site_unavailable",
+        );
+    };
+    let runtime = {
+        let guard = runtimes
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.get(context.site.as_str()).cloned()
+    };
+    match runtime {
+        Some(SiteRuntime::Ready { consumer, .. }) => {
+            match consumer.oneshot(scrubbed(request)).await {
+                Ok(response) => response,
+                Err(never) => match never {},
+            }
         }
+        Some(SiteRuntime::Unavailable { detail }) => {
+            unavailable(&detail, &request_id, "site_unavailable")
+        }
+        None => unavailable("no such site", &request_id, "site_unavailable"),
     }
-    Ok(schedules)
 }
 
 async fn dispatch(
@@ -1375,14 +2004,16 @@ async fn dispatch(
     let Some(runtime) = runtime else {
         return unavailable("no such site", &request_id, "site_unavailable");
     };
-    let (router, auth, dev_token, principals) = match runtime {
+    let (router, auth, dev_token, principals, guest_functions) = match runtime {
         SiteRuntime::Ready {
             router,
+            consumer: _,
             realtime,
             auth,
             dev_token,
             principals,
             open,
+            guest_functions,
         } => {
             // A socket authenticates with its first message, so the upgrade itself carries no
             // bearer. Nothing else passes this way, and the route refuses anything that is
@@ -1403,7 +2034,7 @@ async fn dispatch(
                 Ok(response) => return response,
                 Err(request) => *request,
             };
-            (router, auth, dev_token, principals)
+            (router, auth, dev_token, principals, guest_functions)
         }
         SiteRuntime::Unavailable { detail } => {
             return unavailable(&detail, &request_id, "site_unavailable");
@@ -1418,6 +2049,14 @@ async fn dispatch(
     if request.uri().path() == "/metrics" && metrics.enabled && !metrics.require_auth {
         return services::telemetry::metrics().await;
     }
+    // The SCIM endpoint authenticates every request itself, as a SCIM key, and answers in the
+    // SCIM error format: the native credential check below does not run in front of it.
+    if crate::audit::PathClass::of_path(request.uri().path()) == crate::audit::PathClass::Scim {
+        return match router.oneshot(scrubbed(request)).await {
+            Ok(response) => response,
+            Err(never) => match never {},
+        };
+    }
     // The dev credential is the one exception to the password-change gate below: it exists only
     // under `--dev` on loopback, lives in memory, and is never the one-time secret.
     let mut dev_credential = false;
@@ -1430,6 +2069,18 @@ async fn dispatch(
         dev_credential = true;
     }
     let Some(ctx) = request_ctx(&context, request.headers()) else {
+        // A function call that carries no `Authorization` header at all goes on to the router
+        // with no actor: the function service dispatches it as an anonymous caller, which
+        // reaches only functions declared `guest` (WP-PLT-17.T3). A header that is present but
+        // is not a usable bearer credential is never a guest: it is refused here, as before.
+        if guest_functions && is_anonymous_function_call(&request) {
+            let mut request = scrubbed(request);
+            request.extensions_mut().insert(spot_http::api::GuestCall);
+            return match router.oneshot(request).await {
+                Ok(response) => response,
+                Err(never) => match never {},
+            };
+        }
         return render(ApiError::from_code(Code::AuthRequired), &request_id);
     };
     let path_class = crate::audit::PathClass::of_path(request.uri().path());
@@ -1483,6 +2134,24 @@ async fn dispatch(
             }
         })
         .await
+}
+
+/// Whether `request` is `GET|POST /api/v1/method/{app}/{module}/{function}` with no
+/// `Authorization` header: the one request that may proceed with no credential (a guest function
+/// call). Any header, even an empty or malformed one, makes it a request with a credential that
+/// has to resolve.
+fn is_anonymous_function_call(request: &Request) -> bool {
+    if request.headers().contains_key(header::AUTHORIZATION) {
+        return false;
+    }
+    if !matches!(request.method().as_str(), "GET" | "POST") {
+        return false;
+    }
+    let Some(rest) = request.uri().path().strip_prefix("/api/v1/method/") else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('/').collect();
+    parts.len() == 3 && parts.iter().all(|part| !part.is_empty())
 }
 
 /// `request` with every extension dropped except the site context and the request id, the only
@@ -1540,25 +2209,39 @@ fn language_of(headers: &HeaderMap) -> Option<String> {
 }
 
 fn render(error: ApiError, request_id: &RequestId) -> Response {
-    (
+    // A throttled or temporarily unavailable answer says when to come back: whole seconds, at
+    // least one (a `Retry-After: 0` invites a hot retry loop).
+    let wait = spot_http::api::storage_error::retry_after_secs(&error);
+    let mut response = (
         error.status(),
         axum::Json(error.to_envelope_json(request_id.as_str())),
+    )
+        .into_response();
+    if let Some(seconds) = wait {
+        response.headers_mut().insert(
+            header::RETRY_AFTER,
+            axum::http::HeaderValue::from(seconds.max(1)),
+        );
+    }
+    response
+}
+
+fn unavailable(_detail: &str, request_id: &RequestId, reason: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        axum::Json(unavailable_body(request_id.as_str(), reason)),
     )
         .into_response()
 }
 
-fn unavailable(_detail: &str, request_id: &RequestId, reason: &str) -> Response {
-    // The reason a site is unavailable (a configuration or database error) goes to the operator
-    // at start-up and on reload; it never reaches an unauthenticated client.
-    let body = json!({
-        "error": {
-            "code": "server.unavailable",
-            "message": "This site is not available.",
-            "details": { "reason": reason },
-        },
-        "request_id": request_id.as_str(),
-    });
-    (StatusCode::SERVICE_UNAVAILABLE, axum::Json(body)).into_response()
+/// The envelope of [`unavailable`]: rendered by `ApiError` like every other error, so
+/// `retryable` is the registry's and `request_id` is inside `error`. The reason a site is
+/// unavailable (a configuration or database error) goes to the operator at start-up and on
+/// reload; an unauthenticated client only ever sees the fixed `reason` token.
+fn unavailable_body(request_id: &str, reason: &str) -> Json {
+    ApiError::new(Code::ServerUnavailable, "This site is not available.")
+        .detail("reason", json!(reason))
+        .to_envelope_json(request_id)
 }
 
 fn peer_source(request: &Request) -> String {
@@ -1855,6 +2538,7 @@ async fn reload(
     for site_live in lives.values() {
         site_live.commit();
     }
+    acknowledge_reloads(root, &stamps);
     *seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = stamps;
 }
 
@@ -1873,4 +2557,94 @@ pub fn request_reload(root: &Path, site: &str) -> Result<()> {
     writeln!(file, "{}", time::OffsetDateTime::now_utc())?;
     file.sync_all()?;
     Ok(())
+}
+
+/// [`request_reload`], then waits (up to ten seconds) until a host that serves `root` has reloaded
+/// the site, so a credential an operator command changed is usable when the command returns.
+/// Returns at once when no host serves the root.
+pub fn request_reload_and_wait(root: &Path, site: &str) -> Result<()> {
+    request_reload(root, site)?;
+    if !host_serving(root) {
+        return Ok(());
+    }
+    let dir = root.join("sites").join(site);
+    let Some(wanted) = std::fs::metadata(dir.join("reload"))
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .map(nanos)
+    else {
+        return Ok(());
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        let acked = std::fs::read_to_string(dir.join("reload.ack"))
+            .ok()
+            .and_then(|text| text.trim().parse::<u128>().ok());
+        if acked.is_some_and(|at| at >= wanted) {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod envelope_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The keys inside `error`, apart from the optional ones.
+    fn required_keys(body: &Json) -> BTreeSet<String> {
+        body["error"]
+            .as_object()
+            .expect("an error object")
+            .keys()
+            .filter(|k| !matches!(k.as_str(), "details" | "fields" | "explanation"))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn the_site_unavailable_body_is_the_envelope_with_the_fixed_reason() {
+        let body = unavailable_body("req-1", "site_unavailable");
+        let error = body["error"].as_object().expect("an error object");
+        assert_eq!(error["code"], "server.unavailable");
+        assert_eq!(error["message"], "This site is not available.");
+        assert_eq!(
+            error["retryable"],
+            ApiError::from_code(Code::ServerUnavailable).retryable()
+        );
+        assert_eq!(error["request_id"], "req-1");
+        assert_eq!(error["details"]["reason"], "site_unavailable");
+        assert!(
+            body.get("request_id").is_none(),
+            "no top-level request_id: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_three_hand_built_refusals_share_one_error_shape() {
+        let telemetry = services::telemetry::refusal("req-1");
+        let bytes = axum::body::to_bytes(telemetry.into_body(), 1 << 16)
+            .await
+            .expect("a body");
+        let telemetry: Json = serde_json::from_slice(&bytes).expect("json");
+        let gate = gate::refusal_body("req-1");
+        let unavailable = unavailable_body("req-1", "site_unavailable");
+        let shape = required_keys(&telemetry);
+        assert_eq!(
+            required_keys(&gate),
+            shape,
+            "gate::refusal drifted from the envelope"
+        );
+        assert_eq!(
+            required_keys(&unavailable),
+            shape,
+            "unavailable drifted from the envelope"
+        );
+        for key in ["code", "message", "retryable", "request_id"] {
+            assert!(shape.contains(key), "{key}");
+        }
+    }
 }

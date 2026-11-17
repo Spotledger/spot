@@ -20,8 +20,10 @@ pub enum PlanError {
     #[error("no verified snapshot, backup or segment range covers the start of the target")]
     NoBase,
     /// The journal does not cover a position between the base and the target.
-    #[error("the journal does not cover position {position}")]
+    #[error("the journal does not cover position {position} of generation {generation}")]
     GapAt {
+        /// The generation the missing position belongs to.
+        generation: Generation,
         /// The first position missing between the base and the target.
         position: Position,
     },
@@ -36,11 +38,36 @@ pub enum PlanError {
         position: Position,
     },
     /// The target is after the last position the journal holds.
-    #[error("the target position {position} is after the end of the journal at {end}")]
+    #[error(
+        "the target position {position} of generation {generation} is after the end of the journal at {end} of generation {end_generation}"
+    )]
     TargetBeyondEnd {
+        /// The generation the target names.
+        generation: Generation,
+        /// The generation the journal ends in.
+        end_generation: Generation,
         /// The end of the journal: the last position it can rebuild to.
         end: Position,
         /// The position that was asked for.
+        position: Position,
+    },
+    /// The target lies in a generation that a later generation continued past: a point-in-time
+    /// rebuild to it would branch from an ancestor, which the manifest chain cannot record.
+    #[error(
+        "position {position} of generation {generation} is before the fork into generation {current_generation}, so a point-in-time rebuild cannot target it"
+    )]
+    TargetBeforeFork {
+        /// The generation the target names.
+        generation: Generation,
+        /// The position within it.
+        position: Position,
+        /// The generation the live history ends in.
+        current_generation: Generation,
+    },
+    /// A backup carries no generation and two generations hold its position.
+    #[error("backup position {position} is held by more than one generation; name the generation")]
+    BackupAmbiguous {
+        /// The backup's position.
         position: Position,
     },
     /// A segment range is reversed, so it holds no position.
@@ -88,6 +115,8 @@ impl PlanError {
             Self::SegmentRangeInvalid { .. } => "journal_rebuild_plan.segment_range_invalid",
             Self::SegmentsInconsistent { .. } => "journal_rebuild_plan.segments_inconsistent",
             Self::UnrecordedFork { .. } => "journal_rebuild_plan.unrecorded_fork",
+            Self::TargetBeforeFork { .. } => "journal_rebuild_plan.target_before_fork",
+            Self::BackupAmbiguous { .. } => "journal_rebuild_plan.backup_ambiguous",
         }
     }
 }

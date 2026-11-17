@@ -1021,3 +1021,128 @@ explanation_key = "error.sso.saml.slo_endpoint_missing"
 params = []
 remedy = "Set the service provider's single-logout URL before accepting IdP-initiated logout."
 since = "0.1.0"
+
+[[entry]]
+code = "sso.pending_store_unavailable"
+class = "none"
+summary = "The sign-in could not be checked and was refused."
+explanation_key = "error.sso.pending_store_unavailable"
+params = []
+remedy = "The pending-authorisation store is unavailable; restore it and the user may start the sign-in again."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.provider_store_unavailable"
+class = "none"
+summary = "The identity provider settings could not be read."
+explanation_key = "error.sso.provider_store_unavailable"
+params = []
+remedy = "The provider-configuration store is unavailable; restore it and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.provider_invalid"
+class = "none"
+summary = "The identity provider settings are not valid."
+explanation_key = "error.sso.provider_invalid"
+params = []
+remedy = "Correct the provider configuration so that it passes validation, then save it again."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.logout_rejected"
+class = "none"
+summary = "The operation was refused: logout rejected."
+explanation_key = "error.sso.logout_rejected"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.not_allowed"
+class = "none"
+summary = "The operation was refused: not allowed."
+explanation_key = "error.sso.not_allowed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.provider_not_found"
+class = "none"
+summary = "The operation was refused: provider not found."
+explanation_key = "error.sso.provider_not_found"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.provider_unavailable"
+class = "none"
+summary = "The operation was refused: provider unavailable."
+explanation_key = "error.sso.provider_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.request_invalid"
+class = "none"
+summary = "The operation was refused: request invalid."
+explanation_key = "error.sso.request_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.sign_in_failed"
+class = "none"
+summary = "The operation was refused: sign in failed."
+explanation_key = "error.sso.sign_in_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.state_invalid"
+class = "none"
+summary = "The operation was refused: state invalid."
+explanation_key = "error.sso.state_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.would_lock_out"
+class = "none"
+summary = "The operation was refused: would lock out."
+explanation_key = "error.sso.would_lock_out"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.begun"
+class = "none"
+summary = "A single sign-on attempt was started."
+explanation_key = "error.sso.begun"
+params = []
+remedy = "None: this is the audit outcome of a sign-in that began, never an error."
+since = "0.1.0"
+
+[[entry]]
+code = "sso.signed_in"
+class = "none"
+summary = "A single sign-on attempt succeeded."
+explanation_key = "error.sso.signed_in"
+params = []
+remedy = "None: this is the audit outcome of a sign-in that succeeded, never an error."
+since = "0.1.0"
+[[entry]]
+code = "sso.logout_accepted"
+class = "none"
+summary = "A verified single logout was accepted."
+explanation_key = "error.sso.logout_accepted"
+params = []
+remedy = "None: this is the audit outcome of an accepted logout (with the number of sessions ended), never an error."
+since = "0.1.0"

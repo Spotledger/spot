@@ -1,0 +1,41 @@
+[package]
+name = "spot-promotion-pg"
+description = "The PostgreSQL PromotionStore (WP-ALM-04.T6, ADR-082 class C): promotions as versioned snapshots in the control schema, keyed by tenant, reached through the shared blocking spot-pg-bridge, with an optimistic revision so a stale save is refused"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `PromotionStore` trait this crate implements, the snapshot and the stable `promotion.*` errors.
+spot-promotion = { path = "../../framework/spot-promotion" }
+# `RunId`: the promotion id the store is keyed by.
+spot-migration-audit = { path = "../../framework/spot-migration-audit" }
+# `Limits` and `SectionRegistry`: how a stored pre-image archive is opened again.
+spot-custom-bundle = { path = "../../framework/spot-custom-bundle" }
+# `TenantId`: every statement is scoped to the tenant the store was built for.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool the bridge borrows; the constructor checks the bridge configuration against its size.
+deadpool-postgres = "0.14"
+# The driver: statements run on the connection the bridge hands to the closure.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+# The constructor refuses a current-thread runtime; no runtime is created here.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# The snapshot is stored as a jsonb document.
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The promotion fixtures: environment addresses, the approval store and the fake sites.
+spot-environments = { path = "../../framework/spot-environments" }
+spot-migration-approval = { path = "../../framework/spot-migration-approval" }
+semver = "1"
+futures = "0.3"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

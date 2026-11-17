@@ -89,8 +89,18 @@ fn shape(result: &Result<Session, ApiError>) -> (String, Vec<String>) {
 }
 
 // B1: a locked real account and an unknown name answer identically, attempt for attempt.
+//
+// The unknown name has no row to hold a counter (the in-process map is gone): the
+// coordinator's account bucket counts it, with the same capacity as the lock threshold.
 async fn case_unknown_name_is_throttled_like_a_real_account<B: StorageBackend>(rig: st::Rig<B>) {
-    let service = service(&rig);
+    let (admission, _coordinator) =
+        common::coordinator_admission(rig.clock.clone(), 3, 1_000).await;
+    let service = Arc::new(rig.service_admitted(
+        config(),
+        Arc::new(MemEvents::default()),
+        Arc::new(CountingHasher::new()),
+        admission,
+    ));
     let id = rig.user("ada", "active").await;
     rig.set_password(id, PASSWORD).await;
     for attempt in 0..6 {
@@ -281,5 +291,61 @@ async fn one_totp_step_has_one_winner_on_the_fake_backend() {
 async fn one_totp_step_has_one_winner_on_postgres() {
     if let Some(rig) = st::postgres_at(at(NOW)).await {
         case_one_totp_step_has_one_winner(rig).await;
+    }
+}
+
+// B1b: the account counter (backoff after two failures, lock at the third) engages for a name
+// that belongs to nobody exactly as for a real account, with no admission bucket to hide behind.
+// Before the counters of an unknown name were kept, the real account backed off on its third
+// attempt and the unknown name went on answering "wrong credentials": a way to tell which names
+// exist.
+async fn case_unknown_name_backs_off_and_locks_like_a_real_account<B: StorageBackend>(
+    rig: st::Rig<B>,
+) {
+    let mut cfg = config();
+    cfg.throttle.backoff_after = 2;
+    let service = Arc::new(rig.service_with(
+        cfg,
+        Arc::new(MemEvents::default()),
+        Arc::new(CountingHasher::new()),
+    ));
+    let id = rig.user("ada", "active").await;
+    rig.set_password(id, PASSWORD).await;
+    let mut codes = Vec::new();
+    for attempt in 0..5 {
+        let real = login(&service, attempt * 2, "ada", "not the password").await;
+        let unknown = login(&service, attempt * 2 + 1, "nosuchuser", "not the password").await;
+        assert_eq!(
+            shape(&real),
+            shape(&unknown),
+            "attempt {attempt}: a real account and an unknown name answered differently"
+        );
+        codes.push(shape(&unknown).0);
+    }
+    assert_eq!(
+        &codes[..2],
+        ["auth.invalid_credentials", "auth.invalid_credentials"],
+        "{codes:?}"
+    );
+    assert!(
+        codes[2..].iter().all(|code| code == "api.rate_limited"),
+        "the unknown name never backed off or locked: {codes:?}"
+    );
+    // The right password does not lift it, for either.
+    let real = login(&service, 100, "ada", PASSWORD).await;
+    let unknown = login(&service, 101, "nosuchuser", PASSWORD).await;
+    assert_eq!(shape(&real), shape(&unknown));
+    assert_eq!(shape(&unknown).0, "api.rate_limited");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_name_backs_off_and_locks_like_a_real_account_on_the_fake_backend() {
+    case_unknown_name_backs_off_and_locks_like_a_real_account(st::fake_at(at(NOW)).await).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_name_backs_off_and_locks_like_a_real_account_on_postgres() {
+    if let Some(rig) = st::postgres_at(at(NOW)).await {
+        case_unknown_name_backs_off_and_locks_like_a_real_account(rig).await;
     }
 }

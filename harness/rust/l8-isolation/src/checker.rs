@@ -559,6 +559,13 @@ fn detect_g1b(model: &VersionModel, found: &mut Findings) {
 }
 
 fn detect_stale(model: &VersionModel, found: &mut Findings) {
+    // The model keeps only the first few stale reads (as witnesses) and counts the rest.
+    let uncounted = model
+        .stale_read_total
+        .saturating_sub(model.stale_reads.len() as u64);
+    for _ in 0..uncounted {
+        found.count_only(AnomalyClass::StaleRead);
+    }
     for s in &model.stale_reads {
         found.push(Anomaly {
             class: AnomalyClass::StaleRead,

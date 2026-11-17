@@ -19,6 +19,7 @@ use std::fmt;
 use std::time::Duration;
 
 use spot_auth::TokenDigest;
+use spot_core::Audience;
 
 pub(crate) use crate::crypto::{fill_os_random, sha256_concat};
 
@@ -319,6 +320,12 @@ pub struct Session {
     pub id: String,
     /// Who the session belongs to.
     pub user: UserKey,
+    /// Who the session is for (ADR-083 Barrier 1), decided once by [`SessionManager::start`]
+    /// from the issuing service and the user's type. Nothing changes it afterwards: touch,
+    /// rotation and revocation keep it. There is no default.
+    ///
+    /// [`SessionManager::start`]: crate::manager::SessionManager::start
+    pub audience: Audience,
     /// The stored verifier for the session token; the token text never reaches storage.
     pub token_digest: TokenDigest,
     /// The unix-seconds instant the session started.
@@ -342,6 +349,7 @@ impl Clone for Session {
         Self {
             id: self.id.clone(),
             user: self.user.clone(),
+            audience: self.audience,
             // The digest copy: from its 32 exposed bytes, the same path a storage layer
             // takes; the bytes are the at-rest form by design.
             token_digest: match TokenDigest::from_bytes(self.token_digest.as_bytes()) {
@@ -365,6 +373,7 @@ impl PartialEq for Session {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
             && self.user == other.user
+            && self.audience == other.audience
             && self.token_digest.matches(&other.token_digest)
             && self.created == other.created
             && self.last_seen == other.last_seen
@@ -447,6 +456,7 @@ mod tests {
                 Ok(key) => key,
                 Err(reason) => panic!("{reason}"),
             },
+            audience: Audience::Staff,
             token_digest: crate::tests_support::digest_of("t"),
             created: 100,
             last_seen: 100,

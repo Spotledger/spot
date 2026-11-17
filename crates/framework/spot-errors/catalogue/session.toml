@@ -106,3 +106,12 @@ explanation_key = "error.session.store_failed"
 params = []
 remedy = "Retry; if the backend keeps failing, check its connection and health checks."
 since = "0.1.0"
+
+[[entry]]
+code = "session.none"
+class = "none"
+summary = "The agent holds no support session for this call."
+explanation_key = "error.session.none"
+params = []
+remedy = "Open a support session first."
+since = "0.1.0"

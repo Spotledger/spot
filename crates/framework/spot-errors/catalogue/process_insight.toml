@@ -1,0 +1,64 @@
+# process_insight process insight fold codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "process_insight.lease_failed"
+class = "none"
+summary = "The insight fold could not take its lease."
+explanation_key = "error.process_insight.lease_failed"
+params = []
+remedy = "Retry on the next tick."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.lease_lost"
+class = "none"
+summary = "The insight fold lost its lease while running."
+explanation_key = "error.process_insight.lease_lost"
+params = []
+remedy = "Retry on the next tick."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.state_corrupt"
+class = "none"
+summary = "The stored insight state could not be read."
+explanation_key = "error.process_insight.state_corrupt"
+params = []
+remedy = "Rebuild the insight state from the event log."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.store_failed"
+class = "none"
+summary = "The insight store failed."
+explanation_key = "error.process_insight.store_failed"
+params = []
+remedy = "Check the database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.wrong_site"
+class = "none"
+summary = "The insight batch belongs to another site."
+explanation_key = "error.process_insight.wrong_site"
+params = []
+remedy = "Send the batch to its own site."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.site"
+class = "none"
+summary = "The operation was refused: site."
+explanation_key = "error.process_insight.site"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "process_insight.throughput_unavailable"
+class = "none"
+summary = "The operation was refused: throughput unavailable."
+explanation_key = "error.process_insight.throughput_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

@@ -129,6 +129,107 @@ async fn verify_reports_missing_and_orphan_edges_and_repair_cleans_them() {
 }
 
 #[tokio::test]
+async fn a_scan_in_small_pages_sees_every_document_and_every_orphan_once() {
+    let Some(env) = env().await else {
+        return;
+    };
+    let p = party(&env);
+    let mut invoices = Vec::new();
+    for _ in 0..5 {
+        invoices.push(invoice(&env, p.id));
+    }
+    let mut docs: Vec<&_> = vec![&p];
+    docs.extend(invoices.iter());
+    seed(&env, &docs).await;
+    // Every invoice but the first two has its edge; the first two are `missing`.
+    for inv in &invoices[2..] {
+        store_edge(&env, &invoice_party_edge(inv.id, p.id)).await;
+    }
+    // Three orphans, more than one page of two.
+    let client = env.db.raw_client().await;
+    for _ in 0..3 {
+        let owner = RecordId::new_v7();
+        client
+            .execute(
+                "INSERT INTO spot_graph_edge (edge_type, owner_entity, owner_id, from_entity, \
+                 from_id, to_entity, to_id, properties) VALUES ($1, 'invoice', $2, 'invoice', \
+                 $2, 'party', $3, '{}'::jsonb)",
+                &[
+                    &spot_graph_model::EdgeTypeId::of("invoice.party")
+                        .as_str()
+                        .to_owned(),
+                    &uuid(owner),
+                    &uuid(p.id),
+                ],
+            )
+            .await
+            .unwrap();
+    }
+    let job = EdgeVerifyJob::new(env.backend.clone(), env.catalog.clone(), env.schema())
+        .with_page_size(2)
+        .with_pause(std::time::Duration::from_millis(1));
+    let report = job.run(instant(1_700_000_000), "paged").await.unwrap();
+    let missing = report
+        .entries
+        .iter()
+        .filter(|e| e.kind == DriftKind::Missing)
+        .count();
+    let extra = report
+        .entries
+        .iter()
+        .filter(|e| e.kind == DriftKind::Extra)
+        .count();
+    assert_eq!((missing, extra), (2, 3), "{:?}", report.entries);
+    assert!(report.checked_documents >= 6);
+    // The same answer as one big page.
+    let whole = verify(&env, "whole").await;
+    assert_eq!(whole.entries.len(), report.entries.len());
+    assert_eq!(whole.checked_documents, report.checked_documents);
+}
+
+#[tokio::test]
+async fn a_large_report_round_trips_and_a_discarded_report_is_gone() {
+    let Some(env) = env().await else {
+        return;
+    };
+    let p = party(&env);
+    // More documents than one 500-entry insert chunk, none with an edge: every one is missing.
+    let invoices: Vec<_> = (0..1_100).map(|_| invoice(&env, p.id)).collect();
+    let mut docs: Vec<&_> = vec![&p];
+    docs.extend(invoices.iter());
+    seed(&env, &docs).await;
+    let job = EdgeVerifyJob::new(env.backend.clone(), env.catalog.clone(), env.schema())
+        .with_page_size(300);
+    let report = job.run(instant(1_700_000_000), "large").await.unwrap();
+    assert_eq!(report.entries.len(), 1_100, "one missing edge per invoice");
+
+    let mut tx = env.begin("edge_read_report").await;
+    let stored = read_report(&mut tx, "large").await.unwrap();
+    tx.rollback().await.unwrap();
+    assert_eq!(stored.entries, report.entries);
+
+    let fixed = EdgeRepair::new(env.backend.clone(), env.catalog.clone())
+        .with_batch_size(400)
+        .with_pause(std::time::Duration::from_millis(1))
+        .repair(instant(1_700_000_100), "large")
+        .await
+        .unwrap();
+    assert_eq!(fixed.added, 1_100);
+    assert!(
+        job.run(instant(1_700_000_200), "after")
+            .await
+            .unwrap()
+            .is_clean()
+    );
+
+    job.discard_report("large").await.unwrap();
+    let mut tx = env.begin("edge_read_report").await;
+    assert!(read_report(&mut tx, "large").await.is_err());
+    tx.rollback().await.unwrap();
+    assert_eq!(env.count("spot_edge_drift_entry").await, 0);
+}
+
+#[tokio::test]
 async fn verify_reports_a_property_mismatch_and_repair_updates_it() {
     let Some(env) = env().await else {
         return;

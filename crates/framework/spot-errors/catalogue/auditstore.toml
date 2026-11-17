@@ -45,3 +45,12 @@ explanation_key = "error.auditstore.appender_tables_missing"
 params = []
 remedy = "Run the migration (spot migrate) so the audit appender tables exist, then start the site again."
 since = "0.1.0"
+
+[[entry]]
+code = "auditstore.site_mismatch"
+class = "none"
+summary = "A denial event for one site was handed to the denial writer of another site, so it was refused and nothing was written."
+explanation_key = "error.auditstore.site_mismatch"
+params = []
+remedy = "Report it to the platform team: a site's audit must be wired to that site's own denial writer; the refused event was not recorded anywhere."
+since = "0.1.0"

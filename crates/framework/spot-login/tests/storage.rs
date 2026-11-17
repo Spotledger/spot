@@ -183,7 +183,13 @@ async fn case_no_credential_elsewhere<B: StorageBackend>(rig: st::Rig<B>) {
         .await;
     let signed_in = rig
         .manager(SessionPolicy::DEFAULT)
-        .start(st::user_key(id), "10.0.0.1", st::client(), 1_000_000)
+        .start(
+            st::user_key(id),
+            spot_core::Audience::Staff,
+            "10.0.0.1",
+            st::client(),
+            1_000_000,
+        )
         .await
         .expect("a session starts");
     let session_row_id = st::record_id(&signed_in.session.id);
@@ -290,7 +296,13 @@ async fn case_granularity<B: StorageBackend>(rig: st::Rig<B>) {
     let store = rig.stores.session_store();
     let started = rig
         .manager(SessionPolicy::DEFAULT)
-        .start(st::user_key(id), "10.0.0.1", st::client(), 1_000_000)
+        .start(
+            st::user_key(id),
+            spot_core::Audience::Staff,
+            "10.0.0.1",
+            st::client(),
+            1_000_000,
+        )
         .await
         .expect("a session starts");
     let session_row_id = st::record_id(&started.session.id);
@@ -486,4 +498,61 @@ fn the_public_api_holds_no_path_to_the_capability() {
         issued, 1,
         "the capability must be obtained exactly once, at construction"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The audience is stored with the session, and a stored audience that cannot be read is invalid
+// ---------------------------------------------------------------------------------------------
+
+async fn case_audience<B: StorageBackend>(rig: st::Rig<B>) {
+    let id = rig.user("alice", "active").await;
+    let store = rig.stores.session_store();
+    let started = rig
+        .manager(SessionPolicy::DEFAULT)
+        .start(
+            st::user_key(id),
+            spot_core::Audience::Partner,
+            "10.0.0.1",
+            st::client(),
+            1_000_000,
+        )
+        .await
+        .expect("a session starts");
+    assert_eq!(started.session.audience, spot_core::Audience::Partner);
+    let found = store
+        .find_by_digest(&started.session.token_digest)
+        .await
+        .expect("a lookup")
+        .expect("the session is found");
+    assert_eq!(found.audience, spot_core::Audience::Partner);
+
+    // An audience nobody can read is an invalid session (the answer of an unknown digest), never
+    // a default audience.
+    let row_id = st::record_id(&started.session.id);
+    for unreadable in ["admin", "Staff", ""] {
+        rig.poke(
+            st::SESSION,
+            row_id,
+            "audience",
+            Value::Text(unreadable.to_owned()),
+        )
+        .await;
+        let result = store.find_by_digest(&started.session.token_digest).await;
+        assert!(
+            matches!(result, Err(spot_sessions::SessionError::Invalid { .. })),
+            "{unreadable:?} must make the session invalid, got {result:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_audience_is_stored_and_an_unreadable_one_is_invalid_on_the_fake_backend() {
+    case_audience(st::fake().await).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_audience_is_stored_and_an_unreadable_one_is_invalid_on_postgres() {
+    if let Some(rig) = st::postgres().await {
+        case_audience(rig).await;
+    }
 }

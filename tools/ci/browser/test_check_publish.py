@@ -58,6 +58,53 @@ class CheckPublish(unittest.TestCase):
         # the .gz files are not extra.
         self.assertEqual(report["compressed_total_bytes"], 123 + (self.root / "assets.json").stat().st_size)
 
+    def aot_build(self, native_size):
+        files = dict(GOOD)
+        files["_framework/dotnet.native.wasm"] = b"n" * native_size
+        files["_framework/dotnet.native.wasm.br"] = b"b" * 10
+        make_build(self.root, files)
+
+    def test_aot_expected_and_small_native_wasm_fails(self):
+        self.aot_build(7_500)
+        errors, report = cp.check(self.root, None, None, expect_aot=True)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("interpreted", errors[0])
+        self.assertIn("RunAOTCompilation", errors[0])
+        self.assertIn("_framework/dotnet.native.wasm", errors[0])
+        self.assertNotIn(str(self.root), errors[0])
+        self.assertEqual(report["native_wasm_bytes"], 7_500)
+
+    def test_aot_expected_and_large_native_wasm_passes(self):
+        self.aot_build(cp.AOT_FLOOR_BYTES)
+        errors, _ = cp.check(self.root, None, None, expect_aot=True)
+        self.assertEqual(errors, [])
+
+    def test_aot_expected_and_native_wasm_missing_fails(self):
+        make_build(self.root, GOOD)
+        errors, _ = cp.check(self.root, None, None, expect_aot=True)
+        self.assertEqual(errors, ["AOT expected but no dotnet.native.wasm in the publish folder"])
+
+    def test_flag_absent_small_native_wasm_passes(self):
+        self.aot_build(7_500)
+        errors, report = cp.check(self.root, None, None)
+        self.assertEqual(errors, [])
+        self.assertNotIn("expect_aot", report)
+
+    def test_fingerprinted_native_wasm_name_is_recognised(self):
+        files = dict(GOOD)
+        files["_framework/dotnet.native.abc123.wasm"] = b"n" * 100
+        files["_framework/dotnet.native.abc123.wasm.br"] = b"b"
+        make_build(self.root, files)
+        errors, _ = cp.check(self.root, None, None, expect_aot=True)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("dotnet.native.abc123.wasm", errors[0])
+
+    def test_main_expect_aot_exit_code(self):
+        self.aot_build(100)
+        base = [str(self.root), "--budgets", str(self.budgets), "--linker-roots", str(self.roots)]
+        self.assertEqual(cp.main(base), 0)
+        self.assertEqual(cp.main(base + ["--expect-aot"]), 1)
+
     def test_missing_manifest(self):
         errors, _ = self.run_check()
         self.assertTrue(any("assets.json is missing" in e for e in errors))

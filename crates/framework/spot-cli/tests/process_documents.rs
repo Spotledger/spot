@@ -34,8 +34,8 @@ use spot_bpm_pg::{FencedTimerPort, PgCaseStore};
 use spot_cli::services::ports::{JobSpec, JobSubmit, PortFuture};
 use spot_cli::services::process::ProcessHost;
 use spot_cli::services::process_documents::{
-    ConfiguredPrincipals, EngineCaseAuthors, HostDocumentOps, PgAfterCaseFile, PgPrincipalAudit,
-    PrincipalConfig,
+    ConfiguredAuthorPrincipals, ConfiguredPrincipals, EngineCaseAuthors, HostDocumentOps,
+    PgAfterCaseFile, PgPrincipalAudit, PrincipalConfig,
 };
 use spot_core::{Clock, SystemClock};
 use spot_dag::NodeId;
@@ -989,6 +989,295 @@ async fn a_crash_between_the_document_commit_and_its_edge_settles_on_the_one_doc
         1,
         "the missing edge is now written: {entries:?}"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The publish guard resolves a real user's role assignments (WP-BPM-04.T8).
+//
+// These use a real `Snapshot::build_with_apps` permission engine and a fake `PrincipalSource`
+// that behaves like `StoragePrincipals::resolve` (active, unexpired assignments only; a storage
+// error resolves to a principal with no assignments), so they need no PostgreSQL. The
+// real-database variants (assignment rows in a site's storage) run in the compile bundle.
+// ---------------------------------------------------------------------------------------------
+
+const PUBLISH: &str = "process_publish_service_principal";
+
+/// One assignment a fake source holds: its role names and an optional expiry (unix seconds).
+#[derive(Clone)]
+struct FakeAssignment {
+    id: String,
+    roles: Vec<String>,
+    expires_at: Option<i64>,
+}
+
+/// A principal source over an in-memory assignment table, with the clock fixed at `now()`.
+#[derive(Default)]
+struct FakeSource {
+    rows: std::sync::Mutex<std::collections::BTreeMap<String, Vec<FakeAssignment>>>,
+    broken: std::sync::atomic::AtomicBool,
+}
+
+impl FakeSource {
+    fn assign(&self, user: &RecordId, roles: &[&str], expires_at: Option<i64>) {
+        let mut rows = self.rows.lock().unwrap();
+        let list = rows.entry(user.to_string()).or_default();
+        let id = format!("a{}", list.len() + 1);
+        list.push(FakeAssignment {
+            id,
+            roles: roles.iter().map(|r| (*r).to_owned()).collect(),
+            expires_at,
+        });
+    }
+
+    fn revoke_all(&self, user: &RecordId) {
+        self.rows.lock().unwrap().remove(&user.to_string());
+    }
+
+    fn break_storage(&self) {
+        self.broken.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl spot_document::engine::PrincipalSource for FakeSource {
+    fn resolve<'a>(
+        &'a self,
+        user: &'a RecordId,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Principal> + Send + 'a>> {
+        Box::pin(async move {
+            // A storage error is swallowed into an empty assignment list, as `StoragePrincipals`
+            // does: the principal exists but holds nothing.
+            let assignments = if self.broken.load(std::sync::atomic::Ordering::SeqCst) {
+                Vec::new()
+            } else {
+                self.rows
+                    .lock()
+                    .unwrap()
+                    .get(&user.to_string())
+                    .map(|list| {
+                        list.iter()
+                            .filter(|a| a.expires_at.is_none_or(|at| at > now().unix_timestamp()))
+                            .map(|a| spot_permissions::AssignmentContext {
+                                id: a.id.clone(),
+                                roles: a
+                                    .roles
+                                    .iter()
+                                    .map(|r| spot_permissions::Role(r.clone()))
+                                    .collect(),
+                                scope: Vec::new(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            Principal::user(&user.to_string(), assignments)
+        })
+    }
+}
+
+/// A permission engine where role `publisher` holds `process_publish_service_principal`.
+fn publish_engine() -> Arc<PermissionEngine> {
+    let name = spot_permissions::AppPermissionName::parse(PUBLISH).unwrap();
+    let mut catalogue = spot_permissions::AppPermissionCatalogue::new();
+    catalogue
+        .insert(
+            name.clone(),
+            spot_permissions::AppPermissionDecl {
+                app: "bpm".to_owned(),
+                title: "Publish".to_owned(),
+                description: "Publish a service-principal process".to_owned(),
+            },
+        )
+        .unwrap();
+    let grants = [spot_permissions::AppPermissionGrant {
+        role: spot_permissions::Role("publisher".to_owned()),
+        permission: name,
+    }];
+    let snapshot =
+        Snapshot::build_with_apps(&meta(), &Model::default(), &catalogue, &grants).unwrap();
+    Arc::new(PermissionEngine::new(Arc::new(snapshot)))
+}
+
+fn publish_site() -> SiteId {
+    SiteId::new("bpm.test").unwrap()
+}
+
+/// The guard a site builds in `register`, with `svc_ledger` allow-listed for `users`.
+fn publish_guard(
+    site: &SiteId,
+    source: &Arc<FakeSource>,
+    users: &[&RecordId],
+) -> spot_bpm_documents::PublishGuard {
+    let robot = RecordId::new_v7();
+    let configs = vec![PrincipalConfig {
+        name: "svc_ledger".to_owned(),
+        user: robot.to_string(),
+        grants: users.iter().map(|u| format!("user:{u}")).collect(),
+    }];
+    let registry = Arc::new(ConfiguredPrincipals::parse(&configs).unwrap());
+    let authors = Arc::new(ConfiguredAuthorPrincipals::new(
+        site.clone(),
+        Arc::clone(source) as Arc<dyn spot_document::engine::PrincipalSource>,
+    ));
+    let permission = Arc::new(spot_bpm_documents::IamPublishPermission::new(
+        site.clone(),
+        publish_engine(),
+        authors,
+    ));
+    spot_bpm_documents::PublishGuard::new(registry, permission)
+}
+
+fn check(
+    guard: &spot_bpm_documents::PublishGuard,
+    site: &SiteId,
+    author: &spot_bpm_documents::ProcessAuthor,
+) -> Vec<spot_bpm_documents::PublishViolation> {
+    let node = NodeId::new("pay").unwrap();
+    let kind = NodeKind::Document;
+    let config = json!({ "principal": "svc_ledger" });
+    spot_cli::services::process_documents::check_publish(
+        guard,
+        site,
+        author,
+        &[spot_bpm_documents::GuardedNode {
+            node: &node,
+            kind: &kind,
+            config: &config,
+        }],
+    )
+}
+
+fn user_author(user: &RecordId) -> spot_bpm_documents::ProcessAuthor {
+    spot_bpm_documents::ProcessAuthor::User(user.to_string())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_user_holding_the_publish_role_passes_the_guard() {
+    let site = publish_site();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["publisher"], None);
+    let guard = publish_guard(&site, &source, &[&user]);
+    let violations = check(&guard, &site, &user_author(&user));
+    assert!(violations.is_empty(), "{violations:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_user_without_the_role_is_refused_with_the_node_and_rule_only() {
+    let site = publish_site();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["clerk"], None);
+    let guard = publish_guard(&site, &source, &[&user]);
+    let violations = check(&guard, &site, &user_author(&user));
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].node.as_str(), "pay");
+    assert_eq!(
+        violations[0].code,
+        spot_bpm_documents::codes::PRINCIPAL_NOT_PERMITTED
+    );
+    // The reason names no user id, no role and no permission value.
+    assert!(!violations[0].reason.contains(&user.to_string()));
+    assert!(!violations[0].reason.contains("clerk"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_expired_assignment_is_refused() {
+    let site = publish_site();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["publisher"], Some(now().unix_timestamp() - 1));
+    let guard = publish_guard(&site, &source, &[&user]);
+    let violations = check(&guard, &site, &user_author(&user));
+    // The node is refused for both reasons: the author lacks the permission and may not use the
+    // principal.
+    assert!(!violations.is_empty(), "{violations:?}");
+    assert!(
+        violations
+            .iter()
+            .all(|v| v.code == "bpm_documents.principal_not_permitted"),
+        "{violations:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_revoked_assignment_is_seen_on_the_next_check_without_a_restart() {
+    let site = publish_site();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["publisher"], None);
+    let guard = publish_guard(&site, &source, &[&user]);
+    assert!(check(&guard, &site, &user_author(&user)).is_empty());
+    source.revoke_all(&user);
+    assert_eq!(check(&guard, &site, &user_author(&user)).len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn another_sites_roles_do_not_grant_here() {
+    let site_a = publish_site();
+    let site_b = SiteId::new("other.site").unwrap();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["publisher"], None);
+    let guard = publish_guard(&site_a, &source, &[&user]);
+    // Site A's guard asked about site B refuses, and the resolver does not even look the user up.
+    assert_eq!(check(&guard, &site_b, &user_author(&user)).len(), 1);
+    let authors = ConfiguredAuthorPrincipals::new(
+        site_a.clone(),
+        Arc::clone(&source) as Arc<dyn spot_document::engine::PrincipalSource>,
+    );
+    use spot_bpm_documents::AuthorPrincipals as _;
+    assert_eq!(authors.principal_of(&site_b, &user_author(&user)), Ok(None));
+    // Site B's own source holds no assignment for this user: its guard refuses too.
+    let source_b = Arc::new(FakeSource::default());
+    let guard_b = publish_guard(&site_b, &source_b, &[&user]);
+    assert_eq!(check(&guard_b, &site_b, &user_author(&user)).len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn platform_process_and_malformed_authors_resolve_to_nothing() {
+    use spot_bpm_documents::{AuthorPrincipals as _, ProcessAuthor};
+    let site = publish_site();
+    let source = Arc::new(FakeSource::default());
+    let authors = ConfiguredAuthorPrincipals::new(
+        site.clone(),
+        Arc::clone(&source) as Arc<dyn spot_document::engine::PrincipalSource>,
+    );
+    assert_eq!(
+        authors.principal_of(&site, &ProcessAuthor::Platform),
+        Ok(None)
+    );
+    assert_eq!(
+        authors.principal_of(&site, &ProcessAuthor::Process("p".to_owned())),
+        Ok(None)
+    );
+    assert_eq!(
+        authors.principal_of(&site, &ProcessAuthor::User("not-a-record-id".to_owned())),
+        Ok(None)
+    );
+    // A process author is refused for a version carrying a service principal.
+    let user = RecordId::new_v7();
+    let guard = publish_guard(&site, &source, &[&user]);
+    let violations = check(&guard, &site, &ProcessAuthor::Process("p".to_owned()));
+    // Both checks refuse it: it lacks the publish permission and may not use the principal.
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    assert!(
+        violations
+            .iter()
+            .all(|v| v.code == "bpm_documents.principal_not_permitted"),
+        "{violations:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_storage_failure_resolves_to_no_assignments_and_the_guard_denies() {
+    let site = publish_site();
+    let user = RecordId::new_v7();
+    let source = Arc::new(FakeSource::default());
+    source.assign(&user, &["publisher"], None);
+    let guard = publish_guard(&site, &source, &[&user]);
+    assert!(check(&guard, &site, &user_author(&user)).is_empty());
+    source.break_storage();
+    assert_eq!(check(&guard, &site, &user_author(&user)).len(), 1);
 }
 
 /// The module acts only through the engine's lifecycle methods: its non-test source names no

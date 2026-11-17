@@ -4,7 +4,7 @@
 //! spot-l8 run --backend fake|pg --level rc|rr|ser --workload list-append|rw-register \
 //!            --seed N [--txns N] [--workers W] [--keys K] [--report out.json] [--history out.jsonl]
 //! spot-l8 check history.jsonl --claimed LEVEL [--report out.json]
-//! spot-l8 matrix --seed N [--workload list-append|rw-register] [--report out.json]
+//! spot-l8 matrix --seed N [--workload list-append|rw-register] [--txns N] [--report out.json]
 //! spot-l8 weak --weakness NAME --level rc|rr|ser --workload W --seed N [--report out.json]
 //! ```
 //!
@@ -31,7 +31,7 @@ const USAGE: &str = "usage:
   spot-l8 run --backend fake|pg --level rc|rr|ser --workload list-append|rw-register \
 --seed N [--txns N] [--workers W] [--keys K] [--report out.json] [--history out.jsonl]
   spot-l8 check history.jsonl --claimed LEVEL [--report out.json]
-  spot-l8 matrix --seed N [--workload list-append|rw-register] [--report out.json]
+  spot-l8 matrix --seed N [--workload list-append|rw-register] [--txns N] [--report out.json]
   spot-l8 weak --weakness NAME --level rc|rr|ser --workload list-append|rw-register \
 --seed N [--txns N] [--workers W] [--report out.json]";
 
@@ -262,6 +262,7 @@ async fn matrix(args: &[String]) -> ExitCode {
     let mut seed = 1u64;
     let mut report = None;
     let mut profile = WorkloadConfig::profile_from_env();
+    let mut txn_over: Option<u64> = None;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         match flag.as_str() {
@@ -283,6 +284,13 @@ async fn matrix(args: &[String]) -> ExitCode {
             }
             "--seed" => match value(flag, &mut it).and_then(|v| number(flag, v)) {
                 Ok(s) => seed = s,
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--txns" => match value(flag, &mut it).and_then(|v| number(flag, v)) {
+                Ok(t) => txn_over = Some(t),
                 Err(e) => {
                     eprintln!("{e}");
                     return ExitCode::from(2);
@@ -317,7 +325,10 @@ async fn matrix(args: &[String]) -> ExitCode {
             }
         }
     }
-    let config = WorkloadConfig::for_profile(profile, workload, seed);
+    let mut config = WorkloadConfig::for_profile(profile, workload, seed);
+    if let Some(t) = txn_over {
+        config.transactions = t;
+    }
     let m = run_matrix(Arc::new(Model::default()), &config).await;
     print!("{}", m.to_text());
     if let Some(p) = &report

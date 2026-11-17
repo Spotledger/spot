@@ -18,6 +18,10 @@
 //! - [`search`] — one term, the caller's [`ReadScope`], facet counts and the projection's lag.
 //! - [`rebuild`] — re-projects one DocType from the entity's own data, without writing it.
 //! - [`check`] — the conformance checks that fail loudly.
+//! - [`SearchHook`] — the implementation of `spot-postgres`'s `SearchMaintenance`: installed on a
+//!   `PgBackend` it makes `prepare` create the projection, every document write and delete keep
+//!   it in the same transaction, and `Expr::Search` run through `PgTransaction::query`
+//!   (WP-STO-13.T3). Without it a backend refuses search as `Unsupported`.
 //!
 //! # Why maintenance is in the write's transaction, and not the outbox
 //!
@@ -77,6 +81,7 @@
 
 mod conformance;
 mod error;
+mod hook;
 mod lag;
 mod maintain;
 mod plan;
@@ -90,6 +95,7 @@ mod fixture;
 
 pub use conformance::{ConformanceReport, check, read as read_conformance};
 pub use error::{FIELD_DENIED, SearchError};
+pub use hook::SearchHook;
 pub use lag::{
     DEFAULT_BOUND_MS, METRIC as PROJECTION_LAG_METRIC, ProjectionLag, measure, measure_doctype,
 };

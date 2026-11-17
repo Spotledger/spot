@@ -1,0 +1,154 @@
+# sync codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "sync.bootstrap.status"
+class = "none"
+summary = "The operation was refused: bootstrap status."
+explanation_key = "error.sync.bootstrap.status"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.condition.list"
+class = "none"
+summary = "The operation was refused: condition list."
+explanation_key = "error.sync.condition.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.health"
+class = "none"
+summary = "The operation was refused: health."
+explanation_key = "error.sync.health"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.list"
+class = "none"
+summary = "The operation was refused: node list."
+explanation_key = "error.sync.node.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.notify_contact"
+class = "none"
+summary = "The operation was refused: node notify contact."
+explanation_key = "error.sync.node.notify_contact"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.resend"
+class = "none"
+summary = "The operation was refused: node resend."
+explanation_key = "error.sync.node.resend"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.resume"
+class = "none"
+summary = "The operation was refused: node resume."
+explanation_key = "error.sync.node.resume"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.revoke"
+class = "none"
+summary = "The operation was refused: node revoke."
+explanation_key = "error.sync.node.revoke"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.rotate_certificate"
+class = "none"
+summary = "The operation was refused: node rotate certificate."
+explanation_key = "error.sync.node.rotate_certificate"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.show"
+class = "none"
+summary = "The operation was refused: node show."
+explanation_key = "error.sync.node.show"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.node.suspend"
+class = "none"
+summary = "The operation was refused: node suspend."
+explanation_key = "error.sync.node.suspend"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.policy.lint"
+class = "none"
+summary = "The operation was refused: policy lint."
+explanation_key = "error.sync.policy.lint"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.policy.show"
+class = "none"
+summary = "The operation was refused: policy show."
+explanation_key = "error.sync.policy.show"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.quarantine.discard"
+class = "none"
+summary = "The operation was refused: quarantine discard."
+explanation_key = "error.sync.quarantine.discard"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.quarantine.list"
+class = "none"
+summary = "The operation was refused: quarantine list."
+explanation_key = "error.sync.quarantine.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.quarantine.retry"
+class = "none"
+summary = "The operation was refused: quarantine retry."
+explanation_key = "error.sync.quarantine.retry"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync.role.change"
+class = "none"
+summary = "The operation was refused: role change."
+explanation_key = "error.sync.role.change"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

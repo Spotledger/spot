@@ -166,7 +166,18 @@ async fn serve(env: &Env) -> (Running, SocketAddr, tokio::sync::oneshot::Sender<
 
 impl Stack {
     async fn start(reports: &[(&str, &str)]) -> Option<Stack> {
+        Stack::start_with(reports, "").await
+    }
+
+    /// Like [`Stack::start`], with `common` appended to the site root's `common.toml`.
+    async fn start_with(reports: &[(&str, &str)], common: &str) -> Option<Stack> {
         let env = Env::new().await?;
+        if !common.is_empty() {
+            let path = env.root.join("common.toml");
+            let mut text = std::fs::read_to_string(&path).unwrap();
+            text.push_str(common);
+            std::fs::write(path, text).unwrap();
+        }
         let secret = env
             .ok(&["new-site", &env.site])
             .trim()
@@ -761,7 +772,9 @@ async fn a_definition_that_does_not_compile_stops_the_site_and_names_every_probl
             .unwrap_or_else(|e| panic!("{method} {path}: not JSON ({e}): {}", reply.raw));
         assert_eq!(body["error"]["code"], "server.unavailable", "{}", reply.raw);
         assert!(
-            body["request_id"].as_str().is_some_and(|id| !id.is_empty()),
+            body["error"]["request_id"]
+                .as_str()
+                .is_some_and(|id| !id.is_empty()),
             "{method} {path}: no request id: {}",
             reply.raw
         );
@@ -791,4 +804,74 @@ async fn a_definition_that_does_not_compile_stops_the_site_and_names_every_probl
     }
     let _ = stop.send(());
     running.join().await.ok();
+}
+
+/// The catalogue routes are mounted once, by the route registry, behind the router's bearer
+/// layer (WP-PLT-14.T5): nobody signed in and a credential that does not resolve are the same
+/// `401` before the port is reached. (The host's earlier mount reached the port first; the
+/// answer for these two requests is the same `401 auth.required`.)
+#[tokio::test(flavor = "multi_thread")]
+async fn the_catalogue_routes_refuse_a_missing_or_bad_credential_with_401() {
+    let Some(stack) = Stack::start(&[]).await else {
+        return;
+    };
+    for path in ["/api/v1/report", "/api/v1/report/hours_by_task"] {
+        let none = http(stack.addr, &stack.host, None, "GET", path, &[], None).await;
+        assert_eq!(none.status, 401, "{path}: {}", none.raw);
+        assert_eq!(none.code(), "auth.required", "{path}: {}", none.raw);
+        let bad = http(
+            stack.addr,
+            &stack.host,
+            Some("not-a-token"),
+            "GET",
+            path,
+            &[],
+            None,
+        )
+        .await;
+        assert_eq!(bad.status, 401, "{path}: {}", bad.raw);
+    }
+    stack.finish().await;
+}
+
+/// A site that turns the report service off mounts no catalogue route: both operations answer as
+/// unserved operations do, never a half-served catalogue.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_site_with_reports_disabled_does_not_mount_the_catalogue_routes() {
+    let Some(stack) = Stack::start_with(&[], "\n[services.report]\nenabled = false\n").await else {
+        return;
+    };
+    for path in ["/api/v1/report", "/api/v1/report/hours_by_task"] {
+        let reply = stack.admin("GET", path, None).await;
+        assert!(
+            matches!(reply.status, 404 | 501),
+            "{path}: an unserved operation, not a catalogue: {}",
+            reply.raw
+        );
+        assert!(
+            reply.json()["data"].is_null(),
+            "{path}: data came back: {}",
+            reply.raw
+        );
+    }
+    stack.finish().await;
+}
+
+/// The router never holds the report group twice: with the registry mount alone, the catalogue
+/// lists each report once and the host starts without a duplicate-route panic.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_catalogue_lists_each_report_once_with_the_registry_mount_alone() {
+    let Some(stack) = Stack::start(&[]).await else {
+        return;
+    };
+    let manager = stack.session("manager@example.com").await;
+    let listed = stack.call(&manager, "GET", "/api/v1/report", None).await;
+    assert_eq!(listed.status, 200, "{}", listed.raw);
+    let mut listed_names = names(&listed.data());
+    let total = listed_names.len();
+    listed_names.sort();
+    listed_names.dedup();
+    assert_eq!(listed_names.len(), total, "a report was listed twice");
+    assert!(listed_names.contains(&"hours_by_task".to_owned()));
+    stack.finish().await;
 }

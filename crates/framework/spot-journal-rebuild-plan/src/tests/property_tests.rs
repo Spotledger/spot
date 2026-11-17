@@ -40,6 +40,8 @@ fn journal() -> impl Strategy<Value = (JournalCatalog, Option<Backup>, Target)> 
                         });
                     }
                     generation += 1;
+                    // Positions start again at the beginning of a generation.
+                    position = 1;
                 }
                 segments.push(SegmentRange {
                     generation,
@@ -76,11 +78,7 @@ fn journal() -> impl Strategy<Value = (JournalCatalog, Option<Backup>, Target)> 
                 ],
             )
                 .prop_map(|(catalog, position, target)| {
-                    (
-                        catalog,
-                        position.map(|position| Backup { position }),
-                        target,
-                    )
+                    (catalog, position.map(Backup::new), target)
                 })
         })
 }
@@ -124,7 +122,7 @@ fn messy() -> impl Strategy<Value = (JournalCatalog, Option<Backup>, Target)> {
                     })
                     .collect(),
             };
-            (catalog, backup.map(|position| Backup { position }), target)
+            (catalog, backup.map(Backup::new), target)
         })
 }
 
@@ -140,6 +138,21 @@ fn check(catalog: &JournalCatalog, backup: Option<&Backup>, target: Target) -> R
     let mut position = built.base_position();
     let mut generation = built.base.generation();
     for step in &built.steps {
+        if let Some(previous) = generation
+            && previous != step.generation()
+        {
+            if !catalog.forks.contains(&ForkInfo {
+                generation: step.generation(),
+                from_position: position,
+            }) {
+                return Err(format!(
+                    "step {step:?} enters generation {} at {position} with no fork recorded",
+                    step.generation()
+                ));
+            }
+            // A new generation starts again at the first position.
+            position = 0;
+        }
         if step.first_seq() != position.saturating_add(1) {
             return Err(format!(
                 "step {step:?} does not continue position {position}"
@@ -148,22 +161,17 @@ fn check(catalog: &JournalCatalog, backup: Option<&Backup>, target: Target) -> R
         if step.first_seq() > step.last_seq() {
             return Err(format!("step {step:?} is empty or reversed"));
         }
-        if let Some(previous) = generation
-            && previous != step.generation()
-            && !catalog.forks.contains(&ForkInfo {
-                generation: step.generation(),
-                from_position: position,
-            })
-        {
-            return Err(format!(
-                "step {step:?} enters generation {} at {position} with no fork recorded",
-                step.generation()
-            ));
-        }
         position = step.last_seq();
         generation = Some(step.generation());
     }
-    if position != built.ends_at {
+    // A plan that stops in the parent generation at the point the target generation was forked
+    // from is at position 0 of the target generation.
+    let at_fork_entry = built.ends_at == 0
+        && catalog
+            .forks
+            .iter()
+            .any(|f| f.from_position == position && generation.is_some_and(|g| f.generation > g));
+    if position != built.ends_at && !at_fork_entry {
         return Err(format!(
             "the steps end at {position}, the plan says {}",
             built.ends_at

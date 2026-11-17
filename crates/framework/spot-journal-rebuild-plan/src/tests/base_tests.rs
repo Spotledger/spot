@@ -47,14 +47,14 @@ fn the_catalogue_must_describe_one_live_history() {
                 vec![],
                 {
                     let mut s = ranges(1, &[(1, 10)]);
-                    s.extend(ranges(2, &[(11, 20)]));
+                    s.extend(ranges(2, &[(1, 10)]));
                     s
                 },
                 vec![],
             ),
             PlanError::UnrecordedFork {
                 generation: 2,
-                position: 11,
+                position: 1,
             },
         ),
         (
@@ -80,10 +80,10 @@ fn the_catalogue_must_describe_one_live_history() {
 #[test]
 fn the_live_chain_keeps_history_up_to_the_fork_and_drops_the_tail() {
     let mut segments = ranges(1, &[(1, 10), (11, 20), (21, 30)]);
-    segments.extend(ranges(2, &[(11, 20)]));
+    segments.extend(ranges(2, &[(1, 10)]));
     let chain = LiveChain::build(&cat(vec![], segments, vec![fork(2, 10)])).expect("one history");
-    assert_eq!(chain.start, FIRST_POSITION);
-    assert_eq!(chain.end, 20, "generation 2 ends the live history");
+    assert_eq!(chain.start, (1, FIRST_POSITION));
+    assert_eq!(chain.end, (2, 10), "generation 2 ends the live history");
     assert_eq!(chain.current_generation, 2);
     assert_eq!(
         chain
@@ -91,7 +91,7 @@ fn the_live_chain_keeps_history_up_to_the_fork_and_drops_the_tail() {
             .iter()
             .map(|r| (r.generation, r.first_seq, r.last_seq))
             .collect::<Vec<_>>(),
-        vec![(1, 1, 10), (2, 11, 20)]
+        vec![(1, 1, 10), (2, 1, 10)]
     );
     assert_eq!(
         chain
@@ -107,21 +107,21 @@ fn the_live_chain_keeps_history_up_to_the_fork_and_drops_the_tail() {
 #[test]
 fn fork_generations_chain_and_a_fork_may_run_ahead_of_its_segments() {
     let mut chained = ranges(1, &[(1, 10)]);
-    chained.extend(ranges(2, &[(11, 20)]));
-    chained.extend(ranges(3, &[(21, 30)]));
-    let chain = LiveChain::build(&cat(vec![], chained, vec![fork(2, 10), fork(3, 20)]))
+    chained.extend(ranges(2, &[(1, 10)]));
+    chained.extend(ranges(3, &[(1, 10)]));
+    let chain = LiveChain::build(&cat(vec![], chained, vec![fork(2, 10), fork(3, 10)]))
         .expect("three in a row");
     assert_eq!(chain.current_generation, 3);
-    assert_eq!((chain.start, chain.end), (1, 30));
-    assert!(chain.forked_at(3, 20));
-    assert!(!chain.forked_at(3, 19));
+    assert_eq!((chain.start, chain.end), ((1, 1), (3, 10)));
+    assert!(chain.forked_at(3, 10));
+    assert!(!chain.forked_at(3, 9));
 
     let mut segments = ranges(1, &[(1, 10), (11, 20)]);
     segments.truncate(2);
     let chain = LiveChain::build(&cat(vec![], segments, vec![fork(5, 10)]))
         .expect("a fork whose generation has not written yet");
     assert_eq!(chain.current_generation, 5, "the fork names the generation");
-    assert_eq!(chain.end, 10, "nothing after the fork point is live");
+    assert_eq!(chain.end, (1, 10), "nothing after the fork point is live");
     assert_eq!(chain.abandoned.len(), 1);
 }
 
@@ -135,24 +135,27 @@ fn a_base_knows_where_it_starts() {
     };
     assert_eq!(snapshot_base.position(), 40);
     assert_eq!(snapshot_base.generation(), Some(2));
-    let backup_base = Base::Backup { position: 25 };
+    let backup_base = Base::Backup {
+        position: 25,
+        generation: 1,
+    };
     assert_eq!(backup_base.position(), 25);
     assert_eq!(
         backup_base.generation(),
-        None,
-        "a backup carries no generation"
+        Some(1),
+        "a backup carries the generation it was taken in"
     );
 }
 
 #[test]
-fn the_chain_finds_the_generation_a_position_belongs_to() {
+fn positions_restart_so_a_number_can_belong_to_two_generations() {
     let mut segments = ranges(1, &[(1, 10)]);
-    segments.extend(ranges(2, &[(11, 20)]));
+    segments.extend(ranges(2, &[(1, 10)]));
     let chain = LiveChain::build(&cat(vec![], segments, vec![fork(2, 10)])).expect("one history");
-    assert_eq!(chain.generation_at(5), Some(1));
-    assert_eq!(chain.generation_at(10), Some(1));
-    assert_eq!(chain.generation_at(11), Some(2));
-    assert_eq!(chain.generation_at(0), None);
+    assert_eq!(chain.generations_covering(5), vec![1, 2]);
+    assert_eq!(chain.generations_covering(10), vec![1, 2]);
+    assert_eq!(chain.generations_covering(11), Vec::<u64>::new());
+    assert_eq!(chain.generations_covering(0), Vec::<u64>::new());
 }
 
 #[test]

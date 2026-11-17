@@ -97,7 +97,7 @@ async fn wait_for_a_tick() {
     tokio::time::sleep(Duration::from_millis(1_500)).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_condition_raised_on_one_node_is_never_visible_on_the_other() {
     let Some(a) = node().await else { return };
     let Some(b) = node().await else { return };
@@ -121,7 +121,7 @@ async fn a_condition_raised_on_one_node_is_never_visible_on_the_other() {
     let _ = b.stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_raise_and_a_clear_on_one_node_write_the_matching_outbox_events_and_only_there() {
     let Some(a) = node().await else { return };
     let Some(b) = node().await else { return };
@@ -173,7 +173,7 @@ async fn a_raise_and_a_clear_on_one_node_write_the_matching_outbox_events_and_on
     let _ = b.stop.send(true);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_condition_on_one_node_survives_that_nodes_own_restart() {
     let Some(a) = node().await else { return };
     let Some(b) = node().await else { return };

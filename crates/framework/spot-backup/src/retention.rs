@@ -4,10 +4,16 @@
 //! delete, and its rules are deliberately conservative:
 //!
 //! - the newest **verified** backup is always kept (it is the last good one);
+//! - the [`RetentionPolicy::keep_last`] newest backups are kept, verified or not;
 //! - every backup newer than [`RetentionPolicy::protect_newer_than_days`] is kept;
 //! - every backup referenced by an open restore is kept;
 //! - otherwise one backup per day, ISO week and month is kept for the configured
 //!   grandfather/father/son window.
+//!
+//! The reason reported for a kept backup is the first rule that claims it, in this stable order:
+//! `last_verified`, `last`, `newer_than_window`, `open_restore`, `daily`, `weekly`, `monthly`.
+//! The buckets never count a backup that was kept for another reason twice: `keep_last` does not
+//! use up a daily, weekly or monthly slot.
 //!
 //! An unverified backup is never counted as the last good one. A failed verification
 //! therefore cannot make a bad backup the thing retention protects.
@@ -30,6 +36,9 @@ pub struct RetentionPolicy {
     pub keep_monthly: u32,
     /// Keep everything created within this many days, regardless of buckets.
     pub protect_newer_than_days: u32,
+    /// The newest backups always kept, verified or not, whatever the buckets say. `0` keeps
+    /// none by this rule; the newest verified backup is kept all the same.
+    pub keep_last: u32,
 }
 
 impl Default for RetentionPolicy {
@@ -39,6 +48,8 @@ impl Default for RetentionPolicy {
             keep_weekly: 4,
             keep_monthly: 12,
             protect_newer_than_days: 2,
+            // The default of the typed `[backup.retention]` table of spot-cli.
+            keep_last: 1,
         }
     }
 }
@@ -48,6 +59,8 @@ impl Default for RetentionPolicy {
 pub enum KeepReason {
     /// The newest verified backup; never deleted.
     LastVerified,
+    /// One of the `keep_last` newest backups.
+    Last,
     /// Newer than the protection window.
     NewerThanWindow,
     /// Referenced by an open restore.
@@ -65,6 +78,7 @@ impl KeepReason {
     pub fn as_str(self) -> &'static str {
         match self {
             KeepReason::LastVerified => "last_verified",
+            KeepReason::Last => "last",
             KeepReason::NewerThanWindow => "newer_than_window",
             KeepReason::OpenRestore => "open_restore",
             KeepReason::Daily => "daily",
@@ -130,6 +144,11 @@ pub fn plan(
     let mut reasons: BTreeMap<String, KeepReason> = BTreeMap::new();
     if let Some(id) = &last_verified {
         reasons.insert(id.clone(), KeepReason::LastVerified);
+    }
+
+    // The newest `keep_last` backups, verified or not (the order is newest first).
+    for record in ordered.iter().take(policy.keep_last as usize) {
+        reasons.entry(record.id.clone()).or_insert(KeepReason::Last);
     }
 
     let window = Duration::days(i64::from(policy.protect_newer_than_days));
@@ -246,6 +265,7 @@ mod tests {
             keep_weekly: 4,
             keep_monthly: 3,
             protect_newer_than_days: 2,
+            keep_last: 0,
         };
         let plan = plan(&policy, &backups, now).expect("plan");
         // The three freshest days are protected outright.
@@ -276,6 +296,7 @@ mod tests {
             keep_weekly: 1,
             keep_monthly: 1,
             protect_newer_than_days: 1,
+            keep_last: 0,
         };
         let plan = plan(&policy, &backups, now).expect("plan");
         assert!(plan.keeps("old-good"));
@@ -290,5 +311,101 @@ mod tests {
         let backups = vec![old, record("new", now, true)];
         let plan = plan(&RetentionPolicy::default(), &backups, now).expect("plan");
         assert!(plan.keeps("old"));
+    }
+    fn daily(count: i64, now: OffsetDateTime, verified: impl Fn(i64) -> bool) -> Vec<BackupRecord> {
+        (0..count)
+            .map(|day| {
+                record(
+                    &format!("b{day:03}"),
+                    now - Duration::days(day),
+                    verified(day),
+                )
+            })
+            .collect()
+    }
+
+    fn only_last(keep_last: u32) -> RetentionPolicy {
+        RetentionPolicy {
+            keep_daily: 0,
+            keep_weekly: 0,
+            keep_monthly: 0,
+            protect_newer_than_days: 0,
+            keep_last,
+        }
+    }
+
+    #[test]
+    fn keep_last_keeps_the_newest_n_including_unverified_ones() {
+        let now = datetime!(2026-10-19 12:00:00 UTC);
+        // The three newest are unverified; the fourth is the newest verified.
+        let backups = daily(8, now, |day| day >= 3);
+        let plan = plan(&only_last(3), &backups, now).expect("plan");
+        for id in ["b000", "b001", "b002"] {
+            assert!(plan.keeps(id), "{id}");
+        }
+        let reason = |id: &str| plan.keep.iter().find(|d| d.id == id).map(|d| d.reason);
+        assert_eq!(reason("b000"), Some(KeepReason::Last));
+        assert_eq!(reason("b003"), Some(KeepReason::LastVerified));
+        assert!(!plan.keeps("b004") && plan.delete.contains(&"b004".to_owned()));
+    }
+
+    #[test]
+    fn the_newest_verified_backup_survives_keep_last_zero() {
+        let now = datetime!(2026-10-19 12:00:00 UTC);
+        let backups = daily(5, now, |day| day == 4);
+        let plan = plan(&only_last(0), &backups, now).expect("plan");
+        assert!(
+            plan.keeps("b004"),
+            "the last verified backup is never deleted"
+        );
+        for id in ["b001", "b002", "b003"] {
+            assert!(plan.delete.contains(&id.to_owned()), "{id}");
+        }
+    }
+
+    #[test]
+    fn keep_last_does_not_use_up_a_bucket_slot_or_count_twice() {
+        let now = datetime!(2026-10-19 12:00:00 UTC);
+        let backups = daily(30, now, |_| true);
+        let with = RetentionPolicy {
+            keep_daily: 3,
+            keep_weekly: 0,
+            keep_monthly: 0,
+            protect_newer_than_days: 0,
+            keep_last: 2,
+        };
+        let without = RetentionPolicy {
+            keep_last: 0,
+            ..with
+        };
+        let plan_with = plan(&with, &backups, now).expect("plan");
+        let plan_without = plan(&without, &backups, now).expect("plan");
+        // Overlaps keep one entry per backup, and the buckets still pick three days.
+        let ids: BTreeSet<&str> = plan_with.keep.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids.len(), plan_with.keep.len(), "one decision per backup");
+        assert_eq!(plan_without.keep.len(), 3);
+        assert!(plan_with.keep.len() >= plan_without.keep.len());
+        // The two newest are kept for the `keep_last` rule, the third for its day.
+        assert_eq!(plan_with.keep.len(), 3);
+    }
+
+    #[test]
+    fn a_larger_keep_last_only_ever_keeps_more_and_zero_changes_nothing_else() {
+        let policy = |keep_last| RetentionPolicy {
+            keep_last,
+            ..RetentionPolicy::default()
+        };
+        // The injected clock moves across a year; the kept set only grows with keep_last.
+        for offset in [0_i64, 1, 3, 9, 31, 100, 365] {
+            let now = datetime!(2026-10-19 12:00:00 UTC) + Duration::days(offset);
+            let backups = daily(120, datetime!(2026-10-19 12:00:00 UTC), |day| day % 7 != 3);
+            let mut previous: BTreeSet<String> = BTreeSet::new();
+            for n in 0..6 {
+                let plan = plan(&policy(n), &backups, now).expect("plan");
+                let kept: BTreeSet<String> = plan.keep.iter().map(|d| d.id.clone()).collect();
+                assert!(previous.is_subset(&kept), "keep_last {n} at +{offset} days");
+                previous = kept;
+            }
+        }
     }
 }

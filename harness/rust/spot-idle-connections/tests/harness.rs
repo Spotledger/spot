@@ -125,7 +125,7 @@ async fn a_descriptor_limit_below_the_need_skips_with_a_clear_message() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn invalid_settings_are_refused_before_anything_starts() {
     let budgets = Budgets::shipped().unwrap();
     for bad in [

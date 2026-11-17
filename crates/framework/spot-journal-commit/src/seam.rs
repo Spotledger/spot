@@ -1,5 +1,7 @@
 //! The relay seam: what the driver needs from the relay, so tests can fail it on demand.
 
+use std::future::Future;
+
 use spot_events_contract::envelope::Position;
 use spot_journal_relay::{Appended, Batch, Relay, RelayError};
 use spot_journal_store::{JournalStore, StoreError};
@@ -41,22 +43,24 @@ pub enum ShipError {
 }
 
 /// The relay as the driver uses it.
-#[allow(async_fn_in_trait)]
-pub trait ChunkRelay {
+///
+/// The futures are `Send` so that [`crate::CommitDriver::run`] can be spawned on a multi-threaded
+/// runtime. An implementation may still be written with `async fn`.
+pub trait ChunkRelay: Send {
     /// The generation the relay writes into.
     fn generation(&self) -> u64;
     /// The sequence number the next entry must have.
     fn next_seq(&self) -> u64;
     /// Ships one batch of consecutive entries under `batch_id`.
-    async fn ship(
+    fn ship(
         &mut self,
         batch_id: u64,
         entries: &[ShipEntry],
         now_millis: u64,
-    ) -> Result<Shipped, ShipError>;
+    ) -> impl Future<Output = Result<Shipped, ShipError>> + Send;
     /// Reads the store and repairs what a failed call left; success means the store is
     /// reachable and [`ChunkRelay::next_seq`] is true again.
-    async fn resume(&mut self) -> Result<(), ShipError>;
+    fn resume(&mut self) -> impl Future<Output = Result<(), ShipError>> + Send;
 }
 
 fn classify(error: &RelayError) -> ShipError {

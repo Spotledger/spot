@@ -153,7 +153,17 @@ struct Site {
 
 impl Site {
     async fn start() -> Option<Site> {
+        Self::start_with("").await
+    }
+
+    /// A site whose `common.toml` carries `extra` (a table) after the harness's own settings.
+    async fn start_with(extra: &str) -> Option<Site> {
         let env = Env::new().await?;
+        if !extra.is_empty() {
+            let common = env.root.join("common.toml");
+            let text = std::fs::read_to_string(&common).unwrap();
+            std::fs::write(&common, format!("{text}{extra}")).unwrap();
+        }
         let key_file = env.root.join("admin.key");
         env.ok(&[
             "new-site",
@@ -546,5 +556,74 @@ async fn a_password_change_still_keeps_the_callers_session_and_ends_the_rest() {
     assert_eq!(site.whoami(&caller).await.status, 200);
     assert_eq!(site.whoami(&other).await.status, 401);
     assert_eq!(ids(&site.sessions(&caller).await).len(), 1);
+    site.finish().await;
+}
+
+/// WP-IAM-07.T3: the group is mounted by the route registry behind the router's bearer layer. A
+/// request with no credential, and one with a credential nobody holds, is refused `401` and
+/// reaches nothing (the old hand-called mount reached the port first; the answer is the same
+/// status and carries no data).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_request_without_a_valid_credential_is_refused_before_the_port() {
+    let Some(site) = Site::start().await else {
+        return;
+    };
+    let _ = site.login("administrator").await;
+    for token in [None, Some("not-a-token")] {
+        for (method, path) in [
+            ("GET", "/api/v1/auth/sessions"),
+            ("DELETE", "/api/v1/auth/sessions/some-id"),
+        ] {
+            let reply = http(site.addr, &site.host(), token, method, path, None).await;
+            assert_eq!(
+                reply.status, 401,
+                "{method} {path} {token:?}: {}",
+                reply.raw
+            );
+            assert!(reply.body.get("data").is_none(), "{}", reply.raw);
+        }
+    }
+    site.finish().await;
+}
+
+/// WP-IAM-07.T3: a site with `services.session.enabled = false` provides no port, so the registry
+/// skips the group and both operations answer as unserved ones do: no session data, and the
+/// signed-in user's other routes still work.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_site_with_the_session_service_disabled_does_not_serve_the_group() {
+    let Some(site) = Site::start_with("[services.session]\nenabled = false\n").await else {
+        return;
+    };
+    let token = site.login("administrator").await;
+    let listed = site.sessions(&token).await;
+    assert!(
+        matches!(listed.status, 404 | 501),
+        "the list is unserved: {}",
+        listed.raw
+    );
+    assert!(listed.body.get("data").is_none(), "{}", listed.raw);
+    let ended = site.end(&token, "some-id").await;
+    assert!(
+        matches!(ended.status, 404 | 501),
+        "the end is unserved: {}",
+        ended.raw
+    );
+    assert_eq!(site.whoami(&token).await.status, 200);
+    site.finish().await;
+}
+
+/// WP-IAM-07.T3: the group is mounted exactly once. A second mount of the same route would stop
+/// the router build (the site would not start), so a started site that lists once and answers
+/// with its one current session proves the registry mount alone serves it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_registry_mount_alone_serves_the_list_once() {
+    let Some(site) = Site::start().await else {
+        return;
+    };
+    let token = site.login("administrator").await;
+    let listed = site.sessions(&token).await;
+    assert_eq!(listed.status, 200, "{}", listed.raw);
+    assert_eq!(ids(&listed).len(), 1, "{}", listed.raw);
+    assert_eq!(listed.body["data"][0]["current"], true);
     site.finish().await;
 }

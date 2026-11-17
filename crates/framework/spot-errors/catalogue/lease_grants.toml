@@ -154,3 +154,12 @@ explanation_key = "error.lease_grants.replayed"
 params = []
 remedy = "None: this is a record of a replay, not a failure."
 since = "0.1.0"
+
+[[entry]]
+code = "lease_grants.range_released"
+class = "none"
+summary = "The audit kind written for the unused remainder of a retired node's range."
+explanation_key = "error.lease_grants.range_released"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

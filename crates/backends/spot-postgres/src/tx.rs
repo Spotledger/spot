@@ -74,17 +74,17 @@ use std::time::{Duration, Instant};
 
 use deadpool_postgres::Object;
 use spot_storage_contract::{
-    Access, Catalog, Document, DocumentData, DocumentStore, ErrorKind, GraphTraversal, Isolation,
-    LockKey, LockMode, Locks, Name, Outbox, OutboxEvent, Query, QueryExecutor, RecordId, RowLock,
-    Rows, Savepoint, Sequences, SeriesKey, StorageError, StorageResult, Transaction, Traversal,
-    TraversalResult, TxOptions, Version, Wait,
+    Access, Catalog, CommandRecord, Document, DocumentData, DocumentStore, ErrorKind,
+    GraphTraversal, Isolation, LockKey, LockMode, Locks, Name, Outbox, OutboxEvent, Query,
+    QueryExecutor, RecordId, RowLock, Rows, Savepoint, Sequences, SeriesKey, StorageError,
+    StorageResult, Transaction, Traversal, TraversalResult, TxOptions, Version, Wait,
 };
-use tokio_postgres::Client;
+use tokio_postgres::{Client, Statement};
 use tracing::Instrument;
 
 use crate::backend::PgBackend;
 use crate::error::{commit_outcome_unknown, is_recoverable, map_commit_error, map_pg_error};
-use crate::{documents, feed, graph, locks, query, sequences};
+use crate::{documents, feed, graph, ledger, locks, query, sequences};
 
 /// Added to the statement timeout for the idle-in-transaction timeout and the client-side commit
 /// deadline.
@@ -155,6 +155,9 @@ pub struct PgTransaction {
     span: tracing::Span,
     /// Set once the server confirmed the transaction ended; only then may the connection be reused.
     ended: bool,
+    /// The search maintenance hook of the backend that began this transaction, if any
+    /// (WP-STO-13.T3); set by `PgBackend::begin`, read by `search_hook.rs`.
+    pub(crate) search: Option<crate::search_hook::SharedHook>,
 }
 
 /// Opens a transaction (see the module documentation).
@@ -229,6 +232,7 @@ impl PgTransaction {
             statements: 0,
             span,
             ended: false,
+            search: None,
         }
     }
 
@@ -266,15 +270,17 @@ impl PgTransaction {
         let lock_ms = millis(self.options.lock_timeout);
         let statement_ms = millis(statement);
         let idle_ms = millis(idle);
-        let client = self.client()?;
-        let result = client
-            .execute(
+        let config = self
+            .cached(
                 "SELECT set_config('lock_timeout', $1, true), \
                         set_config('statement_timeout', $2, true), \
                         set_config('idle_in_transaction_session_timeout', $3, true), \
                         set_config('application_name', $4, true)",
-                &[&lock_ms, &statement_ms, &idle_ms, &app_name],
             )
+            .await?;
+        let client = self.client()?;
+        let result = client
+            .execute(&config, &[&lock_ms, &statement_ms, &idle_ms, &app_name])
             .await;
         result.map_err(|e| self.fail(&e, None))?;
         Ok(())
@@ -310,6 +316,14 @@ impl PgTransaction {
         self.record(err, false)
     }
 
+    /// Records the failure of a step that follows a row write inside one document operation (the
+    /// search hook): the transaction is aborted (a recoverable kind) or poisoned (any other), as
+    /// if a statement of the write had failed, so nothing more is sent until the caller rolls
+    /// back, and the row write that preceded the failure is undone with the rollback.
+    pub(crate) fn fail_write(&mut self, err: StorageError) -> StorageError {
+        self.record(err, true)
+    }
+
     /// The catalog snapshot, shared.
     // Used by the area modules that later tasks fill in; allowed (not expected) so they need not edit this file.
     #[allow(dead_code)]
@@ -337,6 +351,29 @@ impl PgTransaction {
         }
         self.writes = total;
         Ok(())
+    }
+
+    /// The prepared form of `sql` on this transaction's connection, prepared once per connection
+    /// and kept (at most [`STATEMENT_CACHE_MAX`](crate::query::STATEMENT_CACHE_MAX) per
+    /// connection): a repeated statement is one round trip instead of two and is parsed once.
+    /// For fixed statements; a caller that builds unbounded SQL text only churns the cache.
+    pub(crate) async fn cached(&mut self, sql: &str) -> StorageResult<Statement> {
+        self.ensure_usable()?;
+        let result = match self.conn.as_ref() {
+            Some(conn) => {
+                if conn.statement_cache.size() >= crate::query::STATEMENT_CACHE_MAX {
+                    conn.statement_cache.clear();
+                }
+                conn.prepare_cached(sql).await
+            }
+            None => {
+                return Err(StorageError::new(
+                    ErrorKind::Internal,
+                    "the transaction has no connection",
+                ));
+            }
+        };
+        result.map_err(|e| self.fail(&e, None))
     }
 
     fn ensure_usable(&self) -> StorageResult<()> {
@@ -544,8 +581,10 @@ impl PgTransaction {
                 WriteKind::Write(_) => (0, *affected),
             },
             async {
+                // Prepared once per connection (a caller's fixed SQL): one round trip, not two.
+                let statement = self.cached(sql).await?;
                 let client = self.client()?;
-                let result = client.execute(sql, params).await;
+                let result = client.execute(&statement, params).await;
                 result.map_err(|e| self.fail(&e, None))
             }
         )
@@ -573,6 +612,40 @@ impl Transaction for PgTransaction {
 
     fn options(&self) -> &TxOptions {
         &self.options
+    }
+
+    fn command_get(
+        &self,
+        principal: &str,
+        command_id: &str,
+    ) -> impl std::future::Future<Output = StorageResult<Option<CommandRecord>>> + Send {
+        // The connection is resolved before the future is built, so the future holds only the
+        // `&Client` and the two keys, never the transaction. An aborted or poisoned transaction
+        // answers with its original error and sends no SQL.
+        let client = self.ensure_usable().and_then(|()| {
+            self.conn.as_ref().ok_or_else(|| {
+                StorageError::new(ErrorKind::Internal, "the transaction has no connection")
+            })
+        });
+        async move { ledger::get(client?, principal, command_id).await }
+    }
+
+    async fn command_put(&mut self, record: CommandRecord) -> StorageResult<()> {
+        traced!(
+            self,
+            "command_put",
+            |_: &()| (0, 1),
+            ledger::put(self, &record)
+        )
+    }
+
+    async fn command_prune(&mut self, before: time::OffsetDateTime) -> StorageResult<u64> {
+        traced!(
+            self,
+            "command_prune",
+            |n: &u64| (0, *n),
+            ledger::prune(self, before)
+        )
     }
 
     async fn savepoint(&mut self) -> StorageResult<Savepoint> {

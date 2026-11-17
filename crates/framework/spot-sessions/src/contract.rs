@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use spot_auth::OpaqueToken;
+use spot_core::Audience;
 
 use crate::error::{InternalReason, SessionError};
 use crate::manager::SessionManager;
@@ -97,7 +98,10 @@ async fn start_on<S: SessionStore>(
     now: i64,
 ) -> (spot_auth::OpaqueToken, SessionRecord) {
     let manager = SessionManager::new(store, policy(), salt());
-    match manager.start(user.clone(), source, client(), now).await {
+    match manager
+        .start(user.clone(), Audience::Staff, source, client(), now)
+        .await
+    {
         Ok(started) => (started.token, started.session),
         Err(error) => panic!("suite start failed: {error:?}"),
     }
@@ -134,6 +138,7 @@ where
     purge_removes_only_expired(&make()).await;
     oldest_active_is_the_oldest_alive(&make()).await;
     store_holds_only_digests(&make()).await;
+    audience_is_stored_and_never_changes(&make()).await;
 
     // Manager-level behaviour over the same store trait.
     validate_is_half_open_at_both_bounds(&make()).await;
@@ -614,6 +619,70 @@ async fn end_and_end_others_count_live_sessions<S: SessionStore>(store: &S) {
     ));
     let _ = one;
 }
+/// The audience a session is started with is stored, returned by every read and kept by touch,
+/// rotation, `end_others` and revocation (ADR-083 Barrier 1: `start` is the only writer).
+async fn audience_is_stored_and_never_changes<S: SessionStore>(store: &S) {
+    let manager = SessionManager::new(store, policy(), salt());
+    let user = user_key("aud-user");
+    let mut tokens = Vec::new();
+    for (audience, source) in [
+        (Audience::Partner, "10.0.0.1"),
+        (Audience::Staff, "10.0.0.2"),
+    ] {
+        let started = match manager
+            .start(user.clone(), audience, source, client(), 1_000)
+            .await
+        {
+            Ok(started) => started,
+            Err(error) => panic!("suite start failed: {error:?}"),
+        };
+        assert_eq!(started.session.audience, audience);
+        tokens.push((audience, started));
+    }
+    let (partner_audience, partner) = &tokens[0];
+    // A read returns it.
+    let found = match store.find_by_digest(&partner.token.digest()).await {
+        Ok(found) => must_some(found, "the session resolves"),
+        Err(error) => panic!("find failed: {error:?}"),
+    };
+    assert_eq!(found.audience, *partner_audience);
+    // A touch keeps it (the idle window moves: well past the touch granularity).
+    let touched = manager
+        .validate(partner.token.as_str(), 1_000 + 70)
+        .await
+        .unwrap_or_else(|error| panic!("validate failed: {error:?}"));
+    assert_eq!(touched.session.audience, Audience::Partner);
+    // A forced rotation keeps it.
+    let due = manager
+        .validate(partner.token.as_str(), 1_000 + ROTATE as i64)
+        .await
+        .unwrap_or_else(|error| panic!("validate failed: {error:?}"));
+    assert!(due.renewed_token.is_some(), "rotation is due at the age");
+    assert_eq!(due.session.audience, Audience::Partner);
+    // end_others and a bulk revoke leave the audience of what they touch unchanged.
+    let _ = manager
+        .end_others(&user, &due.session.id, 1_000 + ROTATE as i64 + 1)
+        .await
+        .unwrap_or_else(|error| panic!("end_others failed: {error:?}"));
+    let _ = manager
+        .revoke_all_for_user(&user, None, crate::model::SessionEndReason::Deactivated)
+        .await
+        .unwrap_or_else(|error| panic!("revoke_all failed: {error:?}"));
+    let listed = manager
+        .list(&user, 1_000 + ROTATE as i64 + 2)
+        .await
+        .unwrap_or_else(|error| panic!("list failed: {error:?}"));
+    assert_eq!(listed.len(), 2);
+    for row in listed {
+        let expected = if row.record.id == partner.session.id {
+            Audience::Partner
+        } else {
+            Audience::Staff
+        };
+        assert_eq!(row.record.audience, expected);
+    }
+}
+
 #[cfg(test)]
 mod suite_tests {
     /// The whole suite against the in-memory store, on the current-thread runtime: this

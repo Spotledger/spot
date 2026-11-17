@@ -29,6 +29,18 @@
 //! - No event or record carries a credential, a token, a recovery code, a TOTP secret or a raw
 //!   address: sources are salted digests and accounts are sign-in names.
 //!
+//! # Audience (ADR-083 Barrier 1)
+//!
+//! Every session records who it is for, chosen once at sign-in from the user's type by
+//! [`audience_for`] (`internal`, `service` and `agent` give `staff`; `portal` gives `partner`;
+//! no staff login path can produce `consumer`). The authenticated principal carries the user's
+//! type, read live from the user directory at every lookup, and the session's audience; an API
+//! key is `staff` (a key whose owner is a portal user is refused). A session whose audience is
+//! not the one its user's type implies is refused as invalid, and a stored session with a
+//! missing or unknown audience is invalid too: there is no default. [`LoginService`] answers
+//! `AuthService::audience_of` for the HTTP layer, which refuses a credential on a route whose
+//! mark does not list its audience before any handler runs.
+//!
 //! # The credential-storage boundary
 //!
 //! A credential reaches storage in exactly one way: the engine's [`SecretAccess`] capability
@@ -39,15 +51,10 @@
 //! capability **once** at construction (`SecretCaller::LoginService`) and no public item of this
 //! crate can hand it out.
 //!
-//! Three properties of the platform app's DocTypes are not expressible yet, and the stores fail
-//! closed rather than work around them:
-//!
-//! - a recovery-code digest has no secret-capable record (`user_recovery_digest` is a child
-//!   DocType, and the secret path refuses child rows), so recovery codes cannot sign anyone in
-//!   over storage and [`stores::StorageUserDirectory`] refuses to write one;
-//! - `session` has no end-reason column, so a durable end records "ended on purpose" or
-//!   "evicted by the cap" and nothing finer;
-//! - `session` has no source-digest column, so a listed session shows the zero digest.
+//! Recovery codes are `recovery_code` records (one top-level row per code, the digest a sealed
+//! lookup secret, spent once by a compare-and-set on `used_at`), and `session` carries a
+//! `source_digest` and an `end_reason` (WP-PLT-02.T10). A session created before those columns
+//! existed has neither: it reads as an unknown source with no recorded end reason.
 //!
 //! # The one-time initial secret
 //!
@@ -69,22 +76,38 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod admin;
+pub mod admission;
 pub mod authenticator;
 pub mod error;
 pub mod events;
 pub mod model;
+pub mod policy;
 pub mod ports;
 pub mod service;
 pub mod stores;
+pub mod totp;
 
+#[cfg(any(test, feature = "testing"))]
+pub use admission::AllowAll;
+pub use admission::{
+    Admission, AdmissionError, CoordinatorAdmission, SignInAdmission, SignInAttempt,
+};
 pub use authenticator::{Authenticated, Authenticator, Via};
 pub use error::{LoginError, LoginErrorKind, invalid_credentials};
 pub use events::{IdentityEvent, IdentityEvents, LoginAttempt};
-pub use model::{KeyRecord, KeyState, SessionSummary, UserRecord, UserState};
+pub use model::{
+    KeyRecord, KeyState, SessionSummary, UserRecord, UserState, audience_for, parse_user_type,
+};
+pub use policy::{
+    AllowLocal, PasswordDecision, PolicyUnavailable, SigninMode, SigninPolicy, SigninPolicyPort,
+    decide_password, ensure_not_weaker,
+};
 pub use ports::{Argon2Hasher, BoxFuture, KeyStore, PasswordHasher, UserDirectory};
 pub use service::{
-    LoginConfig, LoginService, LoginSource, RESULT_OK, format_time, normalise_identifier,
+    LoginConfig, LoginService, LoginSource, RESULT_BREAK_GLASS, RESULT_OK, format_time,
+    normalise_identifier,
 };
 pub use stores::{
     LoginStores, StorageKeyStore, StorageSessionStore, StorageThrottleStore, StorageUserDirectory,
 };
+pub use totp::{Enrolment, TOTP_ISSUER};

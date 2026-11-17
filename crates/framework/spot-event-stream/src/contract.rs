@@ -117,6 +117,8 @@ fn spec(name: &str, partitions: u32) -> ConsumerSpec {
         topics: vec![crate::spec::TopicSelector::Prefix("doc".to_owned())],
         filter: None,
         partitions,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::Fields,
         start: Start::FromBeginning,
     }

@@ -162,6 +162,154 @@ pub enum Code {
     TaskTargetInvalid,
     /// 409: The task is finished or cancelled, so the action is not allowed.
     TaskNotActive,
+    /// 409: The expected previous version is not the latest.
+    ProcessVersionConflict,
+    /// 409: The version, or the migration target, is not published.
+    ProcessVersionNotPublished,
+    /// 403: The caller may not publish a definition that acts as a service principal.
+    ProcessPublishDenied,
+    /// 422: The process definition is not valid.
+    ProcessDefinitionInvalid,
+    /// 422: The migration request is not valid.
+    ProcessMigrationInvalid,
+    /// 404: No migration with this id that the caller may see.
+    ProcessMigrationNotFound,
+    /// 404: No such start record that the caller may read.
+    GraphNotFound,
+    /// 422: The graph query is not valid.
+    GraphQueryInvalid,
+    /// 422: The request exceeds a hard limit.
+    GraphTooLarge,
+    /// 503: The graph index is rebuilding.
+    GraphUnavailable,
+    /// 422: The lineage kind is not known.
+    LineageKindUnknown,
+    /// 404: The generation or range is not a sealed journal segment.
+    JournalRangeUnavailable,
+    /// 503: The change is committed but the journal did not confirm it in time.
+    JournalCommitOutcomeUnknown,
+    /// 503: The durability policy refuses new writes while the journal store is unreachable.
+    JournalHalted,
+    /// 403: The operation needs a recent step-up (re-authentication).
+    AuthStepUpRequired,
+    /// 403: The tenant's sign-in policy requires single sign-on for this user.
+    SsoRequired,
+    /// 401: The single sign-on did not complete. One answer for every cause (unknown identity, bad signature, expired or replayed assertion, disabled user): the reason is audited, never returned.
+    SsoSignInFailed,
+    /// 403: The sign-in policy does not allow single sign-on for this person, role or audience.
+    SsoNotAllowed,
+    /// 400: The sign-in binding cookie or state is missing, does not match, has expired or was already used.
+    SsoStateInvalid,
+    /// 400: A required parameter is missing or malformed (including a return_to that is not a relative path of this site).
+    SsoRequestInvalid,
+    /// 404: No such provider (the same answer for an unknown provider, one that is disabled and one of another tenant).
+    SsoProviderNotFound,
+    /// 503: The identity provider could not be reached or answered an error.
+    SsoProviderUnavailable,
+    /// 400: The logout token or request is not valid.
+    SsoLogoutRejected,
+    /// 422: The provider definition is not valid.
+    SsoProviderInvalid,
+    /// 409: The change would leave no administrator able to sign in (too few break-glass users, a break-glass user that is not an administrator, has no password or no second factor, or no provider while single sign-on is required).
+    SsoWouldLockOut,
+    /// 404: No such user, invitation, role, assignment, key, credential or session that the caller may see (the same answer for one that does not exist and one of another tenant).
+    IdentityNotFound,
+    /// 422: The request is not valid.
+    IdentityInvalid,
+    /// 409: A user with this sign-in name or e-mail address already exists in the tenant.
+    IdentityUserExists,
+    /// 409: The change would leave the tenant without an active Tenant Administrator.
+    IdentityLastAdministrator,
+    /// 409: The grant conflicts with a segregation-of-duties rule.
+    IdentitySodConflict,
+    /// 422: The key's scope is not a subset of its owner's rights.
+    IdentityScopeExceedsOwner,
+    /// 400: The invitation token is unknown, expired, revoked or already used (one answer for every cause).
+    IdentityInvitationInvalid,
+    /// 403: Impersonation is not allowed for this caller, this target or this tenant setting.
+    IdentityImpersonationRefused,
+    /// 409: The second factor is not in the state this call needs (already enrolled, not enrolled or no enrolment pending).
+    IdentityTotpState,
+    /// 422: The assignment rules are not valid (an unknown role or attribute, a cycle or a conflicting rule).
+    IdentityRulesInvalid,
+    /// 404: No such request, rule, review, item, override or emergency grant that the caller may see (the same answer for one that does not exist and one of another tenant).
+    GovernanceNotFound,
+    /// 422: The request is not valid.
+    GovernanceInvalid,
+    /// 403: The caller made this request (or is the beneficiary) and may not decide it.
+    GovernanceSelfApproval,
+    /// 409: The request has already been decided, withdrawn or has expired.
+    GovernanceRequestNotPending,
+    /// 422: The override needs a reason and a mitigating control, covers exactly one rule, user and scope, and must expire.
+    GovernanceOverrideInvalid,
+    /// 409: The access review is closed, so items can no longer be decided.
+    GovernanceReviewClosed,
+    /// 403: The caller is not the reviewer of this item.
+    GovernanceNotReviewer,
+    /// 403: The controller of an emergency access cannot be its beneficiary.
+    GovernanceControllerIsBeneficiary,
+    /// 404: No such run, hold, group, node, request, session or recording that the caller may see (the same answer for one that does not exist and one of another tenant).
+    SecurityNotFound,
+    /// 422: The request is not valid.
+    SecurityInvalid,
+    /// 422: A real retention run needs dry_run false and the plan digest returned by a dry run.
+    SecurityPlanRequired,
+    /// 409: The plan digest is not the current plan (the data changed since the dry run).
+    SecurityPlanChanged,
+    /// 422: The consent record is not customer-signed, does not verify, or does not match the request.
+    SecurityConsentInvalid,
+    /// 409: The support access request has already been consented to, refused, revoked or has expired.
+    SecurityRequestNotPending,
+    /// 422: The uploaded file cannot be read as a table (format, encoding or structure).
+    ImportFileUnreadable,
+    /// 422: The mapping is not valid.
+    ImportMappingInvalid,
+    /// 413: The file exceeds a limit of the site (rows, bytes or columns).
+    ImportLimitExceeded,
+    /// 409: The job is not in the state this call needs (a run needs state `ready`).
+    ImportNotReady,
+    /// 409: The digest sent is not the dry run's digest.
+    ImportDigestChanged,
+    /// 409: The job was cancelled.
+    ImportCancelled,
+    /// 403: The caller lacks the import right on this DocType (or the submit right when `submit` is true).
+    ImportRightMissing,
+    /// 501: This site's database has no search projection for this DocType.
+    SearchUnsupported,
+    /// 422: The search text is longer than 512 characters.
+    SearchTermTooLong,
+    /// 422: A named field is not declared searchable (a protected field is the standard `permission.field_denied`, never this code).
+    SearchFieldNotSearchable,
+    /// 503: An external search engine lags past its bound.
+    SearchProjectionBehind,
+    /// 409: The unit is already occupied or held in that interval.
+    OccupancyConflict,
+    /// 409: The hold expired and another row took its place, so it can no longer be confirmed (the late-confirm rule).
+    OccupancyHoldExpired,
+    /// 422: The end is not after the start, or the interval is longer than the maximum span.
+    OccupancyInvalidRange,
+    /// 422: ttl_seconds is longer than the server's maximum.
+    OccupancyTtlTooLong,
+    /// 403: The caller is not the holder of this hold and lacks the cancel right.
+    OccupancyNotHolder,
+    /// 404: No such connector that the caller may see.
+    ConnectorNotFound,
+    /// 409: The connector is disabled.
+    ConnectorDisabled,
+    /// 404: The connector has no operation with this name.
+    ConnectorOperationUnknown,
+    /// 422: The input does not fit the operation's input schema.
+    ConnectorInputInvalid,
+    /// 502: The external system failed or could not be reached.
+    ConnectorUpstreamFailed,
+    /// 504: The operation did not finish within its deadline.
+    ConnectorDeadlineExceeded,
+    /// 401: The inbound request's signature or token is missing or wrong, or the connector is unknown (one answer, no detail, no oracle).
+    ConnectorSignatureInvalid,
+    /// 409: The sender's delivery id was already accepted.
+    ConnectorReplayed,
+    /// 401: The inbound request is refused; one answer for every refusal (no oracle).
+    LinkInboundUnauthorized,
 }
 
 /// The registry table: `code → (status, retryable, meaning)`. Order is the contract's.
@@ -611,6 +759,445 @@ const TABLE: &[(Code, u16, bool, &str)] = &[
         false,
         "The task is finished or cancelled, so the action is not allowed.",
     ),
+    (
+        Code::ProcessVersionConflict,
+        409,
+        false,
+        "expected_previous is not the latest version of the process; nothing was published.",
+    ),
+    (
+        Code::ProcessVersionNotPublished,
+        409,
+        false,
+        "The version is not published (retire) or the migration target is not published.",
+    ),
+    (
+        Code::ProcessPublishDenied,
+        403,
+        false,
+        "The definition acts as a service principal and the caller lacks process.publish_service_principal; the answer names no principal.",
+    ),
+    (
+        Code::ProcessDefinitionInvalid,
+        422,
+        false,
+        "The definition is not valid; details.problems carries node ids and fault kinds only, never document text.",
+    ),
+    (
+        Code::ProcessMigrationInvalid,
+        422,
+        false,
+        "The migration request is not valid (same version, or a mapping naming a node the target lacks); paths only, never values.",
+    ),
+    (
+        Code::ProcessMigrationNotFound,
+        404,
+        false,
+        "No migration with this id that the caller may see.",
+    ),
+    (
+        Code::GraphNotFound,
+        404,
+        false,
+        "No such start record that the caller may read (the same answer for an unknown record).",
+    ),
+    (
+        Code::GraphQueryInvalid,
+        422,
+        false,
+        "The graph query is not valid; details carries the field path only, never the submitted value.",
+    ),
+    (
+        Code::GraphTooLarge,
+        422,
+        false,
+        "The request itself exceeds a hard limit (depth, node limit, edge types or filter size).",
+    ),
+    (
+        Code::GraphUnavailable,
+        503,
+        true,
+        "The graph index is rebuilding; retry shortly.",
+    ),
+    (
+        Code::LineageKindUnknown,
+        422,
+        false,
+        "The lineage kind is not one of chain, trace_forward, trace_back, bom or where_used.",
+    ),
+    (
+        Code::JournalRangeUnavailable,
+        404,
+        false,
+        "The generation or range is not a sealed journal segment (tail chunks are not served; use the pull API for unsealed positions).",
+    ),
+    (
+        Code::JournalCommitOutcomeUnknown,
+        503,
+        true,
+        "The change is committed here but the journal did not confirm it in time; retry with the same Idempotency-Key.",
+    ),
+    (
+        Code::JournalHalted,
+        503,
+        true,
+        "The tenant's durability policy refuses new writes while the journal store is unreachable; wait for Retry-After.",
+    ),
+    (
+        Code::AuthStepUpRequired,
+        403,
+        false,
+        "The operation needs a recent step-up (re-authentication); call auth_step_up and repeat; details.max_age_seconds says how recent.",
+    ),
+    (
+        Code::SsoRequired,
+        403,
+        false,
+        "The tenant's sign-in policy requires single sign-on for this user; offer the providers of sso_provider_list instead of a password.",
+    ),
+    (
+        Code::SsoSignInFailed,
+        401,
+        false,
+        "The single sign-on did not complete. One answer for every cause (unknown identity, bad signature, expired or replayed assertion, disabled user): the reason is audited, never returned.",
+    ),
+    (
+        Code::SsoNotAllowed,
+        403,
+        false,
+        "The sign-in policy does not allow single sign-on for this person, role or audience.",
+    ),
+    (
+        Code::SsoStateInvalid,
+        400,
+        false,
+        "The sign-in binding cookie or state is missing, does not match, has expired or was already used; start again with sso_begin.",
+    ),
+    (
+        Code::SsoRequestInvalid,
+        400,
+        false,
+        "A required parameter is missing or malformed (including a return_to that is not a relative path of this site); never echoes the value.",
+    ),
+    (
+        Code::SsoProviderNotFound,
+        404,
+        false,
+        "No such provider (the same answer for an unknown provider, one that is disabled and one of another tenant).",
+    ),
+    (
+        Code::SsoProviderUnavailable,
+        503,
+        true,
+        "The identity provider could not be reached or answered an error; try again shortly.",
+    ),
+    (
+        Code::SsoLogoutRejected,
+        400,
+        false,
+        "The logout token or request is not valid; nothing was ended. The reason is audited, never returned.",
+    ),
+    (
+        Code::SsoProviderInvalid,
+        422,
+        false,
+        "The provider definition is not valid; details.fields names field paths only, never values.",
+    ),
+    (
+        Code::SsoWouldLockOut,
+        409,
+        false,
+        "The change would leave no administrator able to sign in (too few break-glass users, a break-glass user that is not an administrator, has no password or no second factor, or no provider while single sign-on is required); details.reason names the rule.",
+    ),
+    (
+        Code::IdentityNotFound,
+        404,
+        false,
+        "No such user, invitation, role, assignment, key, credential or session that the caller may see (the same answer for one that does not exist and one of another tenant).",
+    ),
+    (
+        Code::IdentityInvalid,
+        422,
+        false,
+        "The request is not valid; details.fields names field paths only, never values.",
+    ),
+    (
+        Code::IdentityUserExists,
+        409,
+        false,
+        "A user with this sign-in name or e-mail address already exists in the tenant.",
+    ),
+    (
+        Code::IdentityLastAdministrator,
+        409,
+        false,
+        "The change would leave the tenant without an active Tenant Administrator.",
+    ),
+    (
+        Code::IdentitySodConflict,
+        409,
+        false,
+        "The grant conflicts with a segregation-of-duties rule; details.rule_ids lists the rule ids only, never other users.",
+    ),
+    (
+        Code::IdentityScopeExceedsOwner,
+        422,
+        false,
+        "The key's scope is not a subset of its owner's rights; details.excess lists the excess scopes.",
+    ),
+    (
+        Code::IdentityInvitationInvalid,
+        400,
+        false,
+        "The invitation token is unknown, expired, revoked or already used (one answer for every cause).",
+    ),
+    (
+        Code::IdentityImpersonationRefused,
+        403,
+        false,
+        "Impersonation is not allowed for this caller, this target or this tenant setting.",
+    ),
+    (
+        Code::IdentityTotpState,
+        409,
+        false,
+        "The second factor is not in the state this call needs (already enrolled, not enrolled or no enrolment pending).",
+    ),
+    (
+        Code::IdentityRulesInvalid,
+        422,
+        false,
+        "The assignment rules are not valid (an unknown role or attribute, a cycle or a conflicting rule); details.fields names paths only.",
+    ),
+    (
+        Code::GovernanceNotFound,
+        404,
+        false,
+        "No such request, rule, review, item, override or emergency grant that the caller may see (the same answer for one that does not exist and one of another tenant).",
+    ),
+    (
+        Code::GovernanceInvalid,
+        422,
+        false,
+        "The request is not valid; details.fields names field paths only, never values.",
+    ),
+    (
+        Code::GovernanceSelfApproval,
+        403,
+        false,
+        "The caller made this request (or is the beneficiary) and may not decide it.",
+    ),
+    (
+        Code::GovernanceRequestNotPending,
+        409,
+        false,
+        "The request has already been decided, withdrawn or has expired.",
+    ),
+    (
+        Code::GovernanceOverrideInvalid,
+        422,
+        false,
+        "The override needs a reason and a mitigating control, covers exactly one rule, user and scope, and must expire.",
+    ),
+    (
+        Code::GovernanceReviewClosed,
+        409,
+        false,
+        "The access review is closed, so items can no longer be decided.",
+    ),
+    (
+        Code::GovernanceNotReviewer,
+        403,
+        false,
+        "The caller is not the reviewer of this item.",
+    ),
+    (
+        Code::GovernanceControllerIsBeneficiary,
+        403,
+        false,
+        "The controller of an emergency access cannot be its beneficiary.",
+    ),
+    (
+        Code::SecurityNotFound,
+        404,
+        false,
+        "No such run, hold, group, node, request, session or recording that the caller may see (the same answer for one that does not exist and one of another tenant).",
+    ),
+    (
+        Code::SecurityInvalid,
+        422,
+        false,
+        "The request is not valid; details.fields names field paths only, never values.",
+    ),
+    (
+        Code::SecurityPlanRequired,
+        422,
+        false,
+        "A real retention run needs dry_run false and the plan digest returned by a dry run.",
+    ),
+    (
+        Code::SecurityPlanChanged,
+        409,
+        false,
+        "The plan digest is not the current plan (the data changed since the dry run); run the dry run again.",
+    ),
+    (
+        Code::SecurityConsentInvalid,
+        422,
+        false,
+        "The consent record is not customer-signed, does not verify, or does not match the request.",
+    ),
+    (
+        Code::SecurityRequestNotPending,
+        409,
+        false,
+        "The support access request has already been consented to, refused, revoked or has expired.",
+    ),
+    (
+        Code::ImportFileUnreadable,
+        422,
+        false,
+        "The uploaded file cannot be read as a table (format, encoding or structure); the explanation says what to fix.",
+    ),
+    (
+        Code::ImportMappingInvalid,
+        422,
+        false,
+        "The mapping is not valid; it names a column or field that cannot be used. The same answer whether or not a named field exists, so it hints at nothing the caller may not write.",
+    ),
+    (
+        Code::ImportLimitExceeded,
+        413,
+        false,
+        "The file exceeds a limit of the site (rows, bytes or columns); import_limits says which and how large.",
+    ),
+    (
+        Code::ImportNotReady,
+        409,
+        false,
+        "The job is not in the state this call needs (a run needs state `ready`).",
+    ),
+    (
+        Code::ImportDigestChanged,
+        409,
+        false,
+        "The digest sent is not the dry run's digest; the file or mapping changed since the preview. Run the dry run again.",
+    ),
+    (Code::ImportCancelled, 409, false, "The job was cancelled."),
+    (
+        Code::ImportRightMissing,
+        403,
+        false,
+        "The caller lacks the import right on this DocType (or the submit right when `submit` is true).",
+    ),
+    (
+        Code::SearchUnsupported,
+        501,
+        false,
+        "This site's database has no search projection for this DocType.",
+    ),
+    (
+        Code::SearchTermTooLong,
+        422,
+        false,
+        "The search text is longer than 512 characters.",
+    ),
+    (
+        Code::SearchFieldNotSearchable,
+        422,
+        false,
+        "A named field is not declared searchable (a protected field is the standard `permission.field_denied`, never this code).",
+    ),
+    (
+        Code::SearchProjectionBehind,
+        503,
+        true,
+        "An external search engine lags past its bound; wait for Retry-After.",
+    ),
+    (
+        Code::OccupancyConflict,
+        409,
+        false,
+        "The unit is already occupied or held in that interval; the answer never says who holds it or until when to a caller who cannot read the occupancy rows.",
+    ),
+    (
+        Code::OccupancyHoldExpired,
+        409,
+        false,
+        "The hold expired and another row took its place, so it can no longer be confirmed (the late-confirm rule).",
+    ),
+    (
+        Code::OccupancyInvalidRange,
+        422,
+        false,
+        "The end is not after the start, or the interval is longer than the maximum span.",
+    ),
+    (
+        Code::OccupancyTtlTooLong,
+        422,
+        false,
+        "ttl_seconds is longer than the server's maximum.",
+    ),
+    (
+        Code::OccupancyNotHolder,
+        403,
+        false,
+        "The caller is not the holder of this hold and lacks the cancel right.",
+    ),
+    (
+        Code::ConnectorNotFound,
+        404,
+        false,
+        "No such connector that the caller may see.",
+    ),
+    (
+        Code::ConnectorDisabled,
+        409,
+        false,
+        "The connector is disabled.",
+    ),
+    (
+        Code::ConnectorOperationUnknown,
+        404,
+        false,
+        "The connector has no operation with this name.",
+    ),
+    (
+        Code::ConnectorInputInvalid,
+        422,
+        false,
+        "The input does not fit the operation's input schema; details.fields names paths only, never values.",
+    ),
+    (
+        Code::ConnectorUpstreamFailed,
+        502,
+        true,
+        "The external system failed or could not be reached; the same call may succeed on a retry.",
+    ),
+    (
+        Code::ConnectorDeadlineExceeded,
+        504,
+        false,
+        "The operation did not finish within its deadline.",
+    ),
+    (
+        Code::ConnectorSignatureInvalid,
+        401,
+        false,
+        "The inbound request's signature or token is missing or wrong, or the connector is unknown (one answer, no detail, no oracle).",
+    ),
+    (
+        Code::ConnectorReplayed,
+        409,
+        false,
+        "The sender's delivery id was already accepted.",
+    ),
+    (
+        Code::LinkInboundUnauthorized,
+        401,
+        false,
+        "The inbound request is refused; one answer for every refusal, no detail, no oracle.",
+    ),
 ];
 
 impl Code {
@@ -698,6 +1285,80 @@ impl Code {
             Code::TaskDelegationInvalid => "task.delegation_invalid",
             Code::TaskTargetInvalid => "task.target_invalid",
             Code::TaskNotActive => "task.not_active",
+            Code::ProcessVersionConflict => "process.version_conflict",
+            Code::ProcessVersionNotPublished => "process.version_not_published",
+            Code::ProcessPublishDenied => "process.publish_denied",
+            Code::ProcessDefinitionInvalid => "process.definition_invalid",
+            Code::ProcessMigrationInvalid => "process.migration_invalid",
+            Code::ProcessMigrationNotFound => "process.migration_not_found",
+            Code::GraphNotFound => "graph.not_found",
+            Code::GraphQueryInvalid => "graph.query_invalid",
+            Code::GraphTooLarge => "graph.too_large",
+            Code::GraphUnavailable => "graph.unavailable",
+            Code::LineageKindUnknown => "lineage.kind_unknown",
+            Code::JournalRangeUnavailable => "journal.range_unavailable",
+            Code::JournalCommitOutcomeUnknown => "journal.commit_outcome_unknown",
+            Code::JournalHalted => "journal.halted",
+            Code::AuthStepUpRequired => "auth.step_up_required",
+            Code::SsoRequired => "sso.required",
+            Code::SsoSignInFailed => "sso.sign_in_failed",
+            Code::SsoNotAllowed => "sso.not_allowed",
+            Code::SsoStateInvalid => "sso.state_invalid",
+            Code::SsoRequestInvalid => "sso.request_invalid",
+            Code::SsoProviderNotFound => "sso.provider_not_found",
+            Code::SsoProviderUnavailable => "sso.provider_unavailable",
+            Code::SsoLogoutRejected => "sso.logout_rejected",
+            Code::SsoProviderInvalid => "sso.provider_invalid",
+            Code::SsoWouldLockOut => "sso.would_lock_out",
+            Code::IdentityNotFound => "identity.not_found",
+            Code::IdentityInvalid => "identity.invalid",
+            Code::IdentityUserExists => "identity.user_exists",
+            Code::IdentityLastAdministrator => "identity.last_administrator",
+            Code::IdentitySodConflict => "identity.sod_conflict",
+            Code::IdentityScopeExceedsOwner => "identity.scope_exceeds_owner",
+            Code::IdentityInvitationInvalid => "identity.invitation_invalid",
+            Code::IdentityImpersonationRefused => "identity.impersonation_refused",
+            Code::IdentityTotpState => "identity.totp_state",
+            Code::IdentityRulesInvalid => "identity.rules_invalid",
+            Code::GovernanceNotFound => "governance.not_found",
+            Code::GovernanceInvalid => "governance.invalid",
+            Code::GovernanceSelfApproval => "governance.self_approval",
+            Code::GovernanceRequestNotPending => "governance.request_not_pending",
+            Code::GovernanceOverrideInvalid => "governance.override_invalid",
+            Code::GovernanceReviewClosed => "governance.review_closed",
+            Code::GovernanceNotReviewer => "governance.not_reviewer",
+            Code::GovernanceControllerIsBeneficiary => "governance.controller_is_beneficiary",
+            Code::SecurityNotFound => "security.not_found",
+            Code::SecurityInvalid => "security.invalid",
+            Code::SecurityPlanRequired => "security.plan_required",
+            Code::SecurityPlanChanged => "security.plan_changed",
+            Code::SecurityConsentInvalid => "security.consent_invalid",
+            Code::SecurityRequestNotPending => "security.request_not_pending",
+            Code::ImportFileUnreadable => "import.file_unreadable",
+            Code::ImportMappingInvalid => "import.mapping_invalid",
+            Code::ImportLimitExceeded => "import.limit_exceeded",
+            Code::ImportNotReady => "import.not_ready",
+            Code::ImportDigestChanged => "import.digest_changed",
+            Code::ImportCancelled => "import.cancelled",
+            Code::ImportRightMissing => "import.right_missing",
+            Code::SearchUnsupported => "search.unsupported",
+            Code::SearchTermTooLong => "search.term_too_long",
+            Code::SearchFieldNotSearchable => "search.field_not_searchable",
+            Code::SearchProjectionBehind => "search.projection_behind",
+            Code::OccupancyConflict => "occupancy.conflict",
+            Code::OccupancyHoldExpired => "occupancy.hold_expired",
+            Code::OccupancyInvalidRange => "occupancy.invalid_range",
+            Code::OccupancyTtlTooLong => "occupancy.ttl_too_long",
+            Code::OccupancyNotHolder => "occupancy.not_holder",
+            Code::ConnectorNotFound => "connector.not_found",
+            Code::ConnectorDisabled => "connector.disabled",
+            Code::ConnectorOperationUnknown => "connector.operation_unknown",
+            Code::ConnectorInputInvalid => "connector.input_invalid",
+            Code::ConnectorUpstreamFailed => "connector.upstream_failed",
+            Code::ConnectorDeadlineExceeded => "connector.deadline_exceeded",
+            Code::ConnectorSignatureInvalid => "connector.signature_invalid",
+            Code::ConnectorReplayed => "connector.replayed",
+            Code::LinkInboundUnauthorized => "link_inbound.unauthorized",
         }
     }
 
@@ -792,6 +1453,6 @@ mod tests {
 
     #[test]
     fn every_variant_is_in_the_table() {
-        assert_eq!(Code::all().len(), 75, "registry entry count");
+        assert_eq!(Code::all().len(), 149, "registry entry count");
     }
 }

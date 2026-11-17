@@ -191,4 +191,9 @@
   <x:Double x:Key="Space.7">28</x:Double>
   <x:Double x:Key="Space.8">32</x:Double>
   <x:Double x:Key="Space.9">36</x:Double>
+  <x:Double x:Key="Toast.CornerRadius">6</x:Double>
+  <x:TimeSpan x:Key="Toast.Duration">00:00:06</x:TimeSpan>
+  <x:Double x:Key="Toast.Elevation">8</x:Double>
+  <x:Double x:Key="Toast.MaxWidth">380</x:Double>
+  <x:Double x:Key="Toast.Offset">16</x:Double>
 </ResourceDictionary>

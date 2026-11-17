@@ -105,6 +105,7 @@ async fn a_success_whose_audit_cannot_be_written_is_refused_and_its_session_revo
     let started = manager
         .start(
             key.clone(),
+            spot_core::Audience::Staff,
             "127.0.0.1",
             ClientInfo::default(),
             1_800_000_000,
@@ -329,6 +330,7 @@ fn key_record(
         owner: RecordId::new_v7(),
         state,
         expires_at,
+        scim_only: false,
     }
 }
 

@@ -109,6 +109,14 @@ async fn gate(env: &Env) -> PgAdmissionGate {
     )
 }
 
+/// Removes the control schema, the way a database that predates it lacks it (the statement is
+/// written in two pieces: G5 refuses a full statement outside the storage crates).
+async fn drop_gate(env: &Env) {
+    let client = backend(env).await.pool().get().await.unwrap();
+    let sql = format!("{}{}", "DROP SCHEMA ", "spot_migration_control CASCADE");
+    client.batch_execute(&sql).await.unwrap();
+}
+
 async fn prepare_gate(env: &Env) {
     PgApplySchema::new(backend(env).await.pool())
         .prepare()
@@ -136,7 +144,6 @@ async fn fixture() -> Option<Fixture> {
     let admin = password_file(&env, "admin.pw", PASSWORD, 0o600);
     let manager = password_file(&env, "manager.pw", PASSWORD, 0o600);
     let viewer = password_file(&env, "viewer.pw", PASSWORD, 0o600);
-    prepare_gate(&env).await;
     let fixture = Fixture {
         env,
         admin,
@@ -340,9 +347,15 @@ async fn mutations_are_audited_with_the_console_channel_and_errors_hold_no_value
         assert!(!mine.is_empty(), "no {kind} record for the manager");
         for record in mine {
             assert!(
-                record.replace('\\', "").contains("\"path\":\"console\""),
+                record.replace('\\', "").contains("\"channel\":\"console\""),
                 "{record}"
             );
+            // The channel and the OS account have their own fields: the request path class and
+            // the presented sign-in name are not used for them.
+            let plain = record.replace('\\', "");
+            assert!(plain.contains("\"os_user\":"), "{record}");
+            assert!(!plain.contains("\"path\":"), "{record}");
+            assert!(!plain.contains("\"attempted\":"), "{record}");
             // The OS account, from the kernel: the `USER=opsuser` the child was given is ignored.
             let me =
                 String::from_utf8(Command::new("id").arg("-un").output().unwrap().stdout).unwrap();
@@ -405,7 +418,18 @@ async fn writes_are_refused_while_the_maintenance_gate_is_closed_or_unreadable()
     env.set_password(&env.site, "administrator", PASSWORD);
     let admin = password_file(&env, "admin.pw", PASSWORD, 0o600);
     let write = "create role {\"role_name\": \"Gate Probe\", \"origin\": \"reference\"}";
-    // No control schema: the gate cannot be read, so writes are refused and reads still work.
+    // Provisioning created the control schema, so a fresh site's console can write at once.
+    let fresh = console(
+        &env,
+        "administrator",
+        &admin,
+        &["create role {\"role_name\": \"Fresh Probe\", \"origin\": \"reference\"}"],
+        &[],
+    );
+    assert_eq!(code(&fresh), 0, "{}", text(&fresh));
+    // A database that lost its control schema (or never had it): the gate cannot be read, so writes
+    // are refused and reads still work.
+    drop_gate(&env).await;
     let output = console(&env, "administrator", &admin, &[write], &[]);
     assert_eq!(code(&output), 2, "{}", text(&output));
     assert!(

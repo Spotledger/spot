@@ -200,3 +200,20 @@ impl ScimError {
         }
     }
 }
+
+/// A sentence for a body that did not decode: what was expected and where, never the value the
+/// decoder saw (a serde message quotes it, and a caller's input must not be reflected).
+#[must_use]
+pub(crate) fn shape(what: &str, error: &serde_json::Error) -> String {
+    let kind = match error.classify() {
+        serde_json::error::Category::Syntax => "not valid JSON",
+        serde_json::error::Category::Eof => "cut short",
+        serde_json::error::Category::Data => "of the wrong shape or type",
+        serde_json::error::Category::Io => "unreadable",
+    };
+    format!(
+        "{what}: the document is {kind} (line {}, column {})",
+        error.line(),
+        error.column()
+    )
+}

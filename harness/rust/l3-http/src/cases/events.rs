@@ -21,7 +21,7 @@ const SECTION: &str = "The event stream";
 
 fn run_replay(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the events case could not start its own fixture"));
         };
         let result = a_consumer_reads_in_order_acknowledges_and_replays(&own).await;

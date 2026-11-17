@@ -72,3 +72,41 @@ async fn two_writers_never_fork_the_chain() {
 async fn db_guard() -> Option<spot_postgres::testing::TestDb> {
     common::db().await
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn batched_appends_from_two_writers_never_fork_the_chain() {
+    let Some(db) = db_guard().await else { return };
+    let signer: Arc<dyn spot_audit_chain::CheckpointSigner> =
+        Arc::new(LocalSigner::from_seed([3; 32]));
+    let mut tasks = Vec::new();
+    for writer in 0..3 {
+        let chain = AuditChain::new(
+            common::store(&db).await,
+            "wpaidb-batch-race",
+            Arc::clone(&signer),
+            CheckpointPolicy { every: 10 },
+        );
+        tasks.push(tokio::spawn(async move {
+            for group in 0..10 {
+                let base = i64::from(writer) * 1000 + group * 5;
+                chain
+                    .append_many((0..5).map(|n| record(base + n)).collect())
+                    .await?;
+            }
+            Ok::<_, spot_audit_chain::AuditError>(())
+        }));
+    }
+    for task in tasks {
+        task.await.expect("a writer task").expect("appends");
+    }
+    let store = common::store(&db).await;
+    let mut keys = KeyRing::new();
+    keys.add(&LocalSigner::from_seed([3; 32]).public_key())
+        .expect("key");
+    let report = Verifier::new(&keys)
+        .verify_range(&store, "wpaidb-batch-race", 1, u64::MAX)
+        .await
+        .expect("verify");
+    assert!(report.is_ok(), "{:?}", report.failures);
+    assert_eq!(report.checked, 150, "three writers, ten groups of five");
+}

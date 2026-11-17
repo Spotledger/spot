@@ -1,0 +1,140 @@
+{
+  "holds": [
+    [
+      "Invoice",
+      "c",
+      {
+        "record": {
+          "entity": "Invoice",
+          "id": "c",
+          "version": 1
+        },
+        "reason": {
+          "MetadataTooLow": {
+            "required": 11
+          }
+        },
+        "rerequest_after_upgrade": true,
+        "blocks_applied_prefix": false,
+        "obligation_satisfied": false
+      }
+    ],
+    [
+      "Invoice",
+      "d",
+      {
+        "record": {
+          "entity": "Invoice",
+          "id": "d",
+          "version": 4
+        },
+        "reason": {
+          "MetadataTooLow": {
+            "required": 12
+          }
+        },
+        "rerequest_after_upgrade": true,
+        "blocks_applied_prefix": false,
+        "obligation_satisfied": false
+      }
+    ]
+  ],
+  "pending": [
+    [
+      "Invoice",
+      "a",
+      [
+        {
+          "entry": {
+            "position": 1,
+            "record": {
+              "entity": "Invoice",
+              "id": "a",
+              "version": 1
+            },
+            "topic": "invoice",
+            "major": 2
+          },
+          "hold": {
+            "record": {
+              "entity": "Invoice",
+              "id": "a",
+              "version": 1
+            },
+            "reason": {
+              "UnsupportedMajor": {
+                "topic": "invoice",
+                "major": 2
+              }
+            },
+            "rerequest_after_upgrade": true,
+            "blocks_applied_prefix": false,
+            "obligation_satisfied": false
+          }
+        },
+        {
+          "entry": {
+            "position": 3,
+            "record": {
+              "entity": "Invoice",
+              "id": "a",
+              "version": 2
+            },
+            "topic": "invoice",
+            "major": 1
+          },
+          "hold": {
+            "record": {
+              "entity": "Invoice",
+              "id": "a",
+              "version": 2
+            },
+            "reason": {
+              "BehindHeldVersion": {
+                "blocker": 1
+              }
+            },
+            "rerequest_after_upgrade": true,
+            "blocks_applied_prefix": false,
+            "obligation_satisfied": false
+          }
+        }
+      ]
+    ],
+    [
+      "Invoice",
+      "b",
+      [
+        {
+          "entry": {
+            "position": 2,
+            "record": {
+              "entity": "Invoice",
+              "id": "b",
+              "version": 1
+            },
+            "topic": "invoice",
+            "major": 2
+          },
+          "hold": {
+            "record": {
+              "entity": "Invoice",
+              "id": "b",
+              "version": 1
+            },
+            "reason": {
+              "UnsupportedMajor": {
+                "topic": "invoice",
+                "major": 2
+              }
+            },
+            "rerequest_after_upgrade": true,
+            "blocks_applied_prefix": false,
+            "obligation_satisfied": false
+          }
+        }
+      ]
+    ]
+  ],
+  "limit": 1000
+}

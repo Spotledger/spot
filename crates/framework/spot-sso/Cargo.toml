@@ -13,6 +13,9 @@ rust-version.workspace = true
 testing = []
 
 [dependencies]
+# `Audience`: which kind of caller a provider signs in (staff, partner, consumer; ADR-083
+# section 2.3). `spot-core` depends on nothing in this crate's tree.
+spot-core = { path = "../spot-core" }
 # `LinkedIdentity`, `IdentityKey`, `check_identity_unique`, `SignInMethod`,
 # `validate_sign_in_method` and `UserType`: the directory vocabulary the sign-in decision uses.
 spot-iam-directory = { path = "../spot-iam-directory" }

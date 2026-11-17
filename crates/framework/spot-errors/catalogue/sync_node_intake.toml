@@ -1,0 +1,30 @@
+# sync_node_intake codes: the edge's durable, restored intake (WP-RTB-02.T12). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md. No message carries a record, a key or a value:
+# names, counts and positions only.
+
+[[entry]]
+code = "sync_node_intake.not_restored"
+class = "none"
+summary = "The intake stopped, or was not restored from the node's saved state, so nothing is acknowledged to the hub."
+explanation_key = "error.sync_node_intake.not_restored"
+params = []
+remedy = "Restart the node: the intake restores its prefix, holds and repair list from the database before it acknowledges anything."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_intake.restore_refused"
+class = "none"
+summary = "The node's saved state could not be restored into the intake."
+explanation_key = "error.sync_node_intake.restore_refused"
+params = []
+remedy = "Check that the node serves one tenant and that its repair list belongs to it; restart the node once the state is consistent."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_intake.restore_incomplete"
+class = "none"
+summary = "The repair list holds more items than one restore reads, so the node would restore from part of it."
+explanation_key = "error.sync_node_intake.restore_incomplete"
+params = []
+remedy = "Let the closure repair loop clear the repair list (or resolve its items) before the node starts."
+since = "0.1.0"

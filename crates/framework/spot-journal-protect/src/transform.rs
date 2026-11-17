@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 use spot_events_contract::envelope::EventEnvelope;
-use spot_journal_rebuild::{EventClass, classify};
+use spot_journal_rebuild::{EventClass, EventClassifier, RegistryClassifier};
 use spot_journal_relay::{Appended, Batch, Relay, RelayError};
 use spot_journal_store::JournalStore;
 
@@ -47,7 +47,7 @@ impl ProtectTransform {
             .map_err(|_| ProtectError::EntryInvalid("a line is not valid UTF-8"))?;
         let mut envelope = EventEnvelope::from_json(text)
             .map_err(|_| ProtectError::EntryInvalid("a line is not an event envelope"))?;
-        if classify(envelope.topic.as_str()) != EventClass::State {
+        if RegistryClassifier.class_of(envelope.topic.as_str()) != Some(EventClass::State) {
             return Ok(line.to_vec());
         }
         let entity = envelope.subject.entity.clone();

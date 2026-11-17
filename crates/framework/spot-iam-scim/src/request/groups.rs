@@ -4,11 +4,6 @@ use spot_iam_roles::OutsideGuard;
 
 use super::*;
 
-// `request.rs` still imports the unguarded `plan_idp` (it is outside this task's owned paths);
-// naming it here keeps that import used until a follow-up removes it.
-#[allow(unused_imports)]
-use super::plan_idp as _;
-
 // ----- Groups --------------------------------------------------------------------------------
 
 pub(super) fn list_groups(
@@ -267,15 +262,20 @@ pub(super) fn reconcile_idp(ctx: &mut ScimContext<'_>) -> ScimResult<()> {
         })
         .collect();
     let current = ctx.store.assignments(&ctx.tenant);
-    // ADR-083 Barrier 3: a group mapping must never give a portal user a staff role. The store
-    // exposes role records but not duties, so the guard is built blind: a portal user is given
-    // only a portal role that has no duties and no direct rights (fail closed).
+    // ADR-083 Barrier 3: a group mapping must never give a portal user a staff role. When the
+    // store gives the registry (roles with their duties) the guard is precise: a portal role
+    // whose duties are all outside-exposed is granted. A store that gives role records only
+    // gets the blind guard, which fails closed (a portal role with no duties and no direct
+    // rights). Never `OutsideGuard::none()`.
     let portal: Vec<String> = users
         .iter()
         .filter(|u| u.user.user_type == UserType::Portal)
         .map(|u| u.user.id.to_string())
         .collect();
-    let guard = OutsideGuard::from_roles(&ctx.store.role_records(), portal);
+    let guard = match ctx.store.registry() {
+        Some(registry) => OutsideGuard::new(registry, portal),
+        None => OutsideGuard::from_roles(&ctx.store.role_records(), portal),
+    };
     let mut ids = StoreIds(&mut *ctx.store);
     let plan = spot_iam_assign::plan_idp_guarded(
         &map,

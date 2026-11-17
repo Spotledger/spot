@@ -1,0 +1,5 @@
+# Environment for spot-control-plane.service (systemd EnvironmentFile format).
+# Installed as /etc/spot-control-plane/environment, mode 0600, owner spot-control-plane.
+# One KEY=VALUE per line, no `export`, no quoting. Put the database password here:
+#   SPOT_CP_DB_PASSWORD=...
+# Never commit a populated copy.

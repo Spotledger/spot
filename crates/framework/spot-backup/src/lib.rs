@@ -35,11 +35,25 @@
 //! Time is always an argument; no function reads the wall clock. Money and quantities
 //! are never floats (sizes are integers). No `unsafe`. A secret is never logged or
 //! returned: an encryption reference carries only a key id and version.
+//!
+//! # Encryption and the ledger
+//!
+//! A job with `encrypt: Some(key)` is encrypted by [`encrypting`], a producer wrapper
+//! that seals the payload ([`encrypt`]): a fresh data key per package, wrapped through
+//! a `spot_secrets::KeyProvider`, and the payload in 64 KiB XChaCha20-Poly1305 chunks
+//! (STREAM nonces, final-chunk flag). The runner stays provider-agnostic: it refuses a
+//! job that asks for encryption but received a plain package, before anything is
+//! written. [`quick`] checks the stored bytes' digest and the header without a key;
+//! [`full_with_provider`] decrypts before the scratch restore. [`FileLedger`] is the
+//! durable [`BackupLedger`]: one `ledger.toml`, atomic whole-file rewrites, and a
+//! corrupt file is an error, never an empty ledger.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod encrypt;
 pub mod error;
+pub mod ledger_file;
 pub mod manifest;
 pub mod model;
 pub mod package;
@@ -52,7 +66,12 @@ pub mod target;
 pub mod testing;
 pub mod verify;
 
+#[cfg(test)]
+mod encrypt_tests;
+
+pub use encrypt::{EncryptingProducer, EncryptionInfo, decrypt_stream, encrypt_stream, encrypting};
 pub use error::{BackupError, Result};
+pub use ledger_file::{FileLedger, LedgerHealth, LedgerLock};
 pub use manifest::{BackupManifest, MANIFEST_FILE, MANIFEST_FORMAT};
 pub use model::{
     BackupJob, BackupRecord, BackupRequest, BackupRunOutcome, BackupRunReport, KeyRef, SiteInfo,
@@ -76,7 +95,7 @@ pub use target::{
     FolderTarget, RecordingCloud, RemovableTarget, SpaceProbe, SystemSpaceProbe, SystemVolumeProbe,
     Volume, VolumeProbe,
 };
-pub use verify::{VerifyReport, full, quick};
+pub use verify::{VerifyReport, full, full_with_provider, quick};
 
 /// The crate's own name, for messages and tests.
 pub const CRATE_NAME: &str = "spot-backup";

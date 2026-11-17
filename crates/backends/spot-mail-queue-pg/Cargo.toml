@@ -25,6 +25,8 @@ time = "0.3"
 async-trait = "0.1"
 
 [dev-dependencies]
+# `JobId`, the job a bounce record belongs to.
+spot-jobs = { path = "../../framework/spot-jobs" }
 # The migrator the sent-log table must pass (its live-schema reader and planner).
 spot-pg-migrate = { path = "../spot-pg-migrate" }
 # The empty catalogue the migrator plans against.

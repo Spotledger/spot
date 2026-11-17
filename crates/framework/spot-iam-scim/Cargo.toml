@@ -11,7 +11,7 @@ rust-version.workspace = true
 # `User`, `UserType`, `Transition`, `LeaverAction`, `LifecycleChange`: the directory user the
 # SCIM resource maps to and the deactivation path it calls.
 spot-iam-directory = { path = "../spot-iam-directory" }
-# `GroupRole`, `GroupRoleMap`, `StaticRestriction`, `plan_idp`, `Plan`: the group edit produces
+# `GroupRole`, `GroupRoleMap`, `StaticRestriction`, `plan_idp_guarded`, `Plan`: the group edit produces
 # idp-sourced assignments through the reconciler, never a role edit.
 spot-iam-assign = { path = "../spot-iam-assign" }
 # `RoleName`, `Assignment`, `Scope`, `Source`, `Role`, `RoleDirectory`: the role records SCIM
@@ -21,6 +21,10 @@ spot-iam-roles = { path = "../spot-iam-roles" }
 spot-iam-access = { path = "../spot-iam-access" }
 # `UserPermission`: the scope a mapping row carries.
 spot-permissions = { path = "../spot-permissions" }
+# `Channel::ApiScim`: a SCIM client is a data channel (WP-SEC-04.T10).
+spot-field-guard = { path = "../spot-field-guard" }
+# The document the guard redacts and its value type.
+spot-app-api = { path = "../../../contracts/app-api" }
 # `Actor` and the `identity_*` schemas every mutation emits and validates against (WP-IAM-01).
 spot-events-contract = { path = "../../../contracts/events" }
 # `RecordId`, the stable id of every user, group and credential.
@@ -50,6 +54,9 @@ http = ["dep:axum", "dep:spot-http"]
 # The scripted client transcripts and the conformance fixtures are JSON.
 serde_json = "1"
 proptest = "1"
+# The guard tests build a real field guard over real metadata (WP-SEC-04.T10).
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
 
 [lints]
 workspace = true

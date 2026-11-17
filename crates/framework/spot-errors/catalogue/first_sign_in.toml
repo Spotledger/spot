@@ -1,0 +1,10 @@
+# first_sign_in codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "first_sign_in.portal_role_refused"
+class = "none"
+summary = "The prefix of the error activate_user returns when the outside-role check refuses, so the caller can answer a refusal and not a failure."
+explanation_key = "error.first_sign_in.portal_role_refused"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

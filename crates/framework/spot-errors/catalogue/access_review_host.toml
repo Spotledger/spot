@@ -1,0 +1,56 @@
+# access_review_host codes: the host of SoD analysis and access reviews on a running site (spot-cli
+# services/access_review.rs, WP-SEC-02.T4). Readiness reasons and logs only, never an API answer.
+
+[[entry]]
+code = "access_review_host.no_env"
+class = "none"
+summary = "No module of this site provides the review env and the campaign and SoD stores, so access reviews are not hosted."
+explanation_key = "error.access_review_host.no_env"
+params = []
+remedy = "Enable the module that provides the ReviewEnv, CampaignStore and SodStore ports, or set services.access_review.enabled to false."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_host.run_failed"
+class = "none"
+summary = "The SoD analysis or a campaign tick could not run; the previous read model stays."
+explanation_key = "error.access_review_host.run_failed"
+params = []
+remedy = "Check the site's database and the SoD rule set; the next period retries."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_host.removal_pending"
+class = "none"
+summary = "A review removal was decided but could not be applied or confirmed gone yet."
+explanation_key = "error.access_review_host.removal_pending"
+params = []
+remedy = "Check the pending removals; the next tick retries the governed revoke."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_host.permission_unavailable"
+class = "Unavailable"
+summary = "The permission engine failed or did not answer in time, so the review operation is refused."
+explanation_key = "error.access_review_host.permission_unavailable"
+params = []
+remedy = "Retry; if it persists check the permission engine of the site."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_host.no_role_snapshot"
+class = "PermissionDenied"
+summary = "The caller has no role snapshot, so the review operation is refused."
+explanation_key = "error.access_review_host.no_role_snapshot"
+params = []
+remedy = "Sign in again; check the caller's role assignments."
+since = "0.1.0"
+
+[[entry]]
+code = "access_review_host.not_permitted"
+class = "PermissionDenied"
+summary = "The caller does not hold the permission this review operation needs."
+explanation_key = "error.access_review_host.not_permitted"
+params = []
+remedy = "Ask an administrator for the access review permission."
+since = "0.1.0"

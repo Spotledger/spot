@@ -45,7 +45,7 @@ use spot_mail_queue::{
 use tokio::sync::watch;
 
 use crate::config;
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 
 /// The only account id this host serves.
 pub const ACCOUNT: &str = "default";
@@ -151,6 +151,9 @@ pub struct Settings {
     pub files: Arc<dyn FileStore>,
     /// The durable sent log, when the durable job store is on.
     pub sent_log: Option<Arc<dyn SentLog>>,
+    /// The durable bounce sink (`services.mail.bounce_log = "postgres"`); `None` keeps the
+    /// in-memory sink, whose records [`Mail::bounces`] returns.
+    pub bounces: Option<Arc<dyn spot_mail_queue::BounceSink>>,
     /// The source of `now`.
     pub clock: Arc<dyn Clock>,
 }
@@ -162,7 +165,8 @@ pub struct Mail {
     account: SmtpAccount,
     site: SiteId,
     capture: Option<Arc<CaptureTransport>>,
-    bounces: Arc<InMemoryBounceSink>,
+    /// The in-memory sink, when no durable one was given.
+    bounces: Option<Arc<InMemoryBounceSink>>,
     enabled: bool,
 }
 
@@ -174,6 +178,7 @@ impl Mail {
             mail,
             files,
             sent_log,
+            bounces: durable_bounces,
             clock,
         } = settings;
         let memory = mail.sink == "memory";
@@ -210,7 +215,15 @@ impl Mail {
             Arc::new(InMemorySink::new()),
             Arc::clone(&clock),
         ));
-        let bounces = Arc::new(InMemoryBounceSink::new());
+        let memory_bounces = durable_bounces
+            .is_none()
+            .then(|| Arc::new(InMemoryBounceSink::new()));
+        let bounce_sink: Arc<dyn spot_mail_queue::BounceSink> =
+            match (&durable_bounces, &memory_bounces) {
+                (Some(durable), _) => Arc::clone(durable),
+                (None, Some(memory)) => Arc::clone(memory) as Arc<dyn spot_mail_queue::BounceSink>,
+                (None, None) => Arc::new(InMemoryBounceSink::new()),
+            };
         let ports = MailPorts {
             accounts: Arc::new(Accounts {
                 account: account.clone(),
@@ -227,7 +240,7 @@ impl Mail {
             guard: Arc::clone(&guard),
             files,
             sent_log: sent_log.unwrap_or_else(|| Arc::new(InMemorySentLog::new())),
-            bounces: Arc::clone(&bounces) as Arc<dyn spot_mail_queue::BounceSink>,
+            bounces: bounce_sink,
         };
         // The memory sink dials nothing, so there are no pinned addresses to require. The clock
         // stamps the bounces the final-attempt hook writes.
@@ -242,15 +255,37 @@ impl Mail {
             account,
             site,
             capture,
-            bounces,
+            bounces: memory_bounces,
             enabled: mail.enabled,
         })
     }
 
     /// Adds the `platform:send_mail` handler to `registry` (nothing when mail is disabled).
     pub fn register(&self, registry: &mut JobHandlerRegistry) {
-        if self.enabled {
-            self.sender.register(registry);
+        self.register_gated(registry, None);
+    }
+
+    /// [`Mail::register`], and when the side-effect hold's `gate` is given (the
+    /// `HoldService`'s gate, the port `effect_hold` provides) the handler is guarded: a held
+    /// site never sends a message, and the job tries again after its backoff (WP-MIG-08.T5).
+    /// The gate is asked before the handler, so before the SMTP connection is opened. With no
+    /// gate (the hold service disabled) mail behaves as before.
+    pub fn register_gated(
+        &self,
+        registry: &mut JobHandlerRegistry,
+        gate: Option<Arc<spot_effect_hold::Gate>>,
+    ) {
+        if !self.enabled {
+            return;
+        }
+        self.sender.register(registry);
+        if let Some(gate) = gate {
+            super::jobs::guard_job_handler(
+                registry,
+                spot_mail_queue::MAIL_JOB_NAME,
+                spot_effect_hold::EffectClass::Mail,
+                gate,
+            );
         }
     }
 
@@ -270,9 +305,13 @@ impl Mail {
             .unwrap_or_default()
     }
 
-    /// The bounces recorded in this process.
+    /// The bounces recorded in this process by the in-memory sink; empty when the durable sink
+    /// is in use (read them with `PgBounceSink::records_for`).
     pub fn bounces(&self) -> Vec<spot_mail_queue::BounceRecord> {
-        self.bounces.records()
+        self.bounces
+            .as_ref()
+            .map(|sink| sink.records())
+            .unwrap_or_default()
     }
 
     /// The hosted service.
@@ -359,4 +398,81 @@ impl Service for MailService {
             Ok(())
         })
     }
+}
+
+/// This module's start order: the one it had in the host's table before it moved here (after
+/// jobs at 600, whose finaliser reads the handlers mail contributes).
+pub const ORDER: u32 = 700;
+
+/// Mail: the sender over the site's settings, the site's file store and (with the durable
+/// job store) the site's PostgreSQL sent log. Optional, so a server that cannot be reached
+/// degrades the site, not stops it.
+///
+/// The sent log is PostgreSQL's by default whenever the job store is: a restart between the
+/// server's acceptance and the job's completion must not send a message twice. The table is
+/// `spot_mail_sent_log`, a platform table `spot migrate` knows; `prepare()` creates it when
+/// missing and is safe to repeat. The bounce log is PostgreSQL's (`spot_mail_bounce_log`, the same
+/// rules) when `services.mail.bounce_log = "postgres"`, so a restart neither loses a bounce nor
+/// writes it twice; the default is the in-memory sink.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    if !ctx.assembling() {
+        return Ok(());
+    }
+    let env = *ctx.env()?;
+    let (site, backend, live) = (env.site, env.backend, env.live);
+    let services_config = &env.loaded.common.services;
+    tracing::info!(
+        site = %site.site,
+        "{}",
+        services_config
+            .mail
+            .sent_log_description(&services_config.jobs.store)
+    );
+    let sent_log: Option<Arc<dyn spot_mail_queue::SentLog>> = if services_config
+        .mail
+        .sent_log_in_postgres(&services_config.jobs.store)
+    {
+        let log = spot_mail_queue_pg::PgSentLog::new(backend.pool());
+        log.prepare().await.map_err(crate::error)?;
+        Some(Arc::new(log))
+    } else {
+        None
+    };
+    // The bounce log follows the same rule: durable only when the operator asked for it.
+    let bounces: Option<Arc<dyn spot_mail_queue::BounceSink>> = if services_config
+        .mail
+        .bounce_log_in_postgres(&services_config.jobs.store)
+    {
+        let sink = spot_mail_queue_pg::PgBounceSink::new(backend.pool());
+        sink.prepare().await.map_err(crate::error)?;
+        tracing::info!(site = %site.site, "mail bounce log: postgres");
+        Some(Arc::new(sink))
+    } else {
+        None
+    };
+    let files = ctx.require_port::<crate::services::files::Files>()?;
+    let mail_site = SiteId::new(&site.site).map_err(crate::error)?;
+    let clock = Arc::clone(ctx.clock());
+    let mail = live.mail_with(|| {
+        if sent_log.is_none() {
+            // Once per process (this closure runs for the first build only).
+            tracing::warn!(
+                site = %site.site,
+                "the mail sent log is in memory: a restart can send an accepted message again \
+                 (use the PostgreSQL job store, or services.mail.sent_log = \"postgres\")"
+            );
+        }
+        Mail::new(Settings {
+            site: mail_site,
+            mail: services_config.mail.clone(),
+            files: files.store(),
+            sent_log,
+            bounces,
+            clock,
+        })
+    });
+    mail.register(ctx.job_handlers());
+    ctx.add(mail.service());
+    ctx.provide::<Mail>(mail)?;
+    Ok(())
 }

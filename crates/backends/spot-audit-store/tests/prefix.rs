@@ -223,8 +223,12 @@ async fn every_object_the_crate_creates_starts_with_spot() {
     assert_eq!(
         tables(&client).await,
         vec![
+            "spot_audit_bookmark".to_owned(),
             "spot_audit_chain".to_owned(),
-            "spot_audit_checkpoint".to_owned()
+            "spot_audit_checkpoint".to_owned(),
+            "spot_audit_doc_index".to_owned(),
+            "spot_audit_event_index".to_owned(),
+            "spot_audit_site_checkpoint".to_owned()
         ]
     );
     for name in catalogue(&client).await {
@@ -251,8 +255,12 @@ async fn an_old_database_keeps_every_row_and_its_chain_still_verifies() {
     assert_eq!(
         all,
         vec![
+            "spot_audit_bookmark".to_owned(),
             "spot_audit_chain".to_owned(),
-            "spot_audit_checkpoint".to_owned()
+            "spot_audit_checkpoint".to_owned(),
+            "spot_audit_doc_index".to_owned(),
+            "spot_audit_event_index".to_owned(),
+            "spot_audit_site_checkpoint".to_owned()
         ],
         "the old names are gone"
     );

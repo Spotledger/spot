@@ -269,3 +269,12 @@ explanation_key = "error.document.denial_sink_failed"
 params = []
 remedy = "Fix the denial sink (the audit's sink) so it returns within the engine's denial timeout; the operation's own error was unaffected."
 since = "0.1.0"
+
+[[entry]]
+code = "document.command_conflict"
+class = "Duplicate"
+summary = "This command id was already used for a different request."
+explanation_key = "error.document.command_conflict"
+params = []
+remedy = "Use a new command id for a new request, or repeat the original request unchanged to get its original answer."
+since = "0.1.0"

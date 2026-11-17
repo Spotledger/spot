@@ -2,6 +2,17 @@
 
 Every change is an ADR plus a semantic version bump (blueprint §4, contracts-first rule).
 
+## 0.7.8 (draft, awaiting architecture-owner approval)
+
+Additive (WP-BPM-13, ADR-080 request grants; decided with the architecture owner, 14 Nov 2026).
+A patch version for the same reason as the rest of the 0.7 line.
+- `CommandId` now accepts 1 to 320 visible ASCII characters (was 128). The process engine's
+  request-step grant (`rg1.<payload>.<tag>`) travels as the command id of a governed write and
+  is about 180 characters for a UUID actor, so 128 refused every real grant and the governed
+  create was dropped. No command id accepted before is refused; the native API's own
+  `Idempotency-Key` bound (1 to 128, `contracts/native-api`) is unchanged and enforced at the edge,
+  which also refuses grant-shaped keys. `registry.snapshot.json` changes only `contract_version`.
+
 ## 0.7.7 (draft, awaiting architecture-owner approval)
 
 Additive (WP-CON-04.T7, lead decisions of 2 and 12 Nov 2026). A patch version: gate G6 needs a

@@ -64,14 +64,15 @@ use spot_app_api::context::{Actor, DocumentService, Invocation};
 use spot_app_api::prelude::{CommandId, Name, RecordId, Version};
 use spot_app_api::{AppError, Document, DocumentPatch};
 use spot_bpm_documents::{
-    AuthorPrincipals, CaseAuthors, CaseFile, CaseFileError, CaseFileEdgeStore, CaseFileStore,
+    AuthorPrincipals, CaseAuthors, CaseFile, CaseFileEdgeStore, CaseFileError, CaseFileStore,
     DocumentFailure, DocumentNodeHandler, DocumentOps, DocumentReceipt, DocumentRequest, Entry,
-    GuardedNode, IamPublishPermission, Operation, PgCaseFileEdgeStore, ProcessAuthor,
-    PublishGuard, PublishPermissions, PublishViolation, ServicePrincipalAudit,
-    ServicePrincipalPolicy, ServicePrincipalUse, ServicePrincipals, Unavailable,
+    GuardedNode, IamPublishPermission, Operation, PgCaseFileEdgeStore, ProcessAuthor, PublishGuard,
+    PublishPermissions, PublishViolation, ServicePrincipalAudit, ServicePrincipalPolicy,
+    ServicePrincipalUse, ServicePrincipals, Unavailable,
 };
 use spot_bpm_engine::CaseId;
 use spot_core::SiteId;
+use spot_document::engine::PrincipalSource;
 use spot_edge_pg::PgEdgeWriter;
 use spot_edge_sync::{Edge, EdgeWriter, PropValue};
 use spot_graph_model::EdgeTypeId;
@@ -189,7 +190,11 @@ impl ConfiguredPrincipals {
 }
 
 impl ServicePrincipals for ConfiguredPrincipals {
-    fn is_registered(&self, _tenant: &SiteId, name: &str) -> std::result::Result<bool, Unavailable> {
+    fn is_registered(
+        &self,
+        _tenant: &SiteId,
+        name: &str,
+    ) -> std::result::Result<bool, Unavailable> {
         Ok(self.entries.contains_key(name))
     }
 
@@ -207,22 +212,46 @@ impl ServicePrincipals for ConfiguredPrincipals {
 }
 
 /// Resolves a [`ProcessAuthor::User`] to the permission engine's [`Principal`] for the publish
-/// check; every other author (a process, the platform handled separately) is unknown here.
-struct ConfiguredAuthorPrincipals;
+/// check, carrying the user's active, unexpired role assignments (with their scope) exactly as
+/// every other host path resolves them, through the site's [`PrincipalSource`]
+/// (`SitePermission.principals`, [`crate::permissions::StoragePrincipals`]).
+///
+/// Every other author (a process; the platform is decided by [`IamPublishPermission`] itself) is
+/// unknown here. An id that is not a record id is unknown, and so is a question about another
+/// site. Fail closed: `StoragePrincipals::resolve` turns a storage error into a principal with
+/// no assignments, which no role grants anything to, so the guard denies.
+///
+/// The trait method is synchronous, so the lookup goes through this module's `block_on`, which
+/// needs a multi-thread Tokio runtime (every `spot serve` process has one).
+pub struct ConfiguredAuthorPrincipals {
+    site: SiteId,
+    source: Arc<dyn PrincipalSource>,
+}
+
+impl ConfiguredAuthorPrincipals {
+    /// A resolver for `site`, reading assignments through `source`.
+    #[must_use]
+    pub fn new(site: SiteId, source: Arc<dyn PrincipalSource>) -> Self {
+        Self { site, source }
+    }
+}
 
 impl AuthorPrincipals for ConfiguredAuthorPrincipals {
     fn principal_of(
         &self,
-        _tenant: &SiteId,
+        tenant: &SiteId,
         author: &ProcessAuthor,
     ) -> std::result::Result<Option<Principal>, Unavailable> {
-        Ok(match author {
-            ProcessAuthor::User(id) => Some(Principal {
-                user: id.clone(),
-                ..Principal::default()
-            }),
-            ProcessAuthor::Platform | ProcessAuthor::Process(_) => None,
-        })
+        if *tenant != self.site {
+            return Ok(None);
+        }
+        let ProcessAuthor::User(id) = author else {
+            return Ok(None);
+        };
+        let Some(user) = spot_bpm_documents::ids::parse_record_id(id) else {
+            return Ok(None);
+        };
+        Ok(Some(block_on(self.source.resolve(&user))))
     }
 }
 
@@ -271,8 +300,11 @@ impl CaseAuthors for EngineCaseAuthors {
             Ok(record) => record,
             Err(_) => return Ok(None),
         };
-        let stored = block_on(self.definitions.get(&record.run.dag_key, record.run.dag_version))
-            .map_err(|_| Unavailable)?;
+        let stored = block_on(
+            self.definitions
+                .get(&record.run.dag_key, record.run.dag_version),
+        )
+        .map_err(|_| Unavailable)?;
         Ok(stored.map(|version| author_of_text(&version.published_by)))
     }
 }
@@ -335,7 +367,9 @@ async fn read_case_entries(
     let mut tx = open_tx(backend, catalog, name).await?;
     let result = {
         let mut writer = PgEdgeWriter::new(&mut tx);
-        CaseFile::entries(&mut writer, case).await.map_err(|e| e.to_string())
+        CaseFile::entries(&mut writer, case)
+            .await
+            .map_err(|e| e.to_string())
     };
     let _ = tx.rollback().await;
     result
@@ -360,9 +394,13 @@ impl PgAfterCaseFile {
 impl CaseFileStore for PgAfterCaseFile {
     fn record(&self, entry: &Entry) -> std::result::Result<(), CaseFileError> {
         block_on(async {
-            let mut tx = open_tx(&self.backend, &self.catalog, "bpm_documents_case_file_write")
-                .await
-                .map_err(CaseFileError::new)?;
+            let mut tx = open_tx(
+                &self.backend,
+                &self.catalog,
+                "bpm_documents_case_file_write",
+            )
+            .await
+            .map_err(CaseFileError::new)?;
             let result = {
                 let mut writer = PgEdgeWriter::new(&mut tx);
                 CaseFile::record(&mut writer, entry)
@@ -370,7 +408,10 @@ impl CaseFileStore for PgAfterCaseFile {
                     .map_err(|e| CaseFileError::new(e.to_string()))
             };
             match result {
-                Ok(()) => tx.commit().await.map_err(|e| CaseFileError::new(e.to_string())),
+                Ok(()) => tx
+                    .commit()
+                    .await
+                    .map_err(|e| CaseFileError::new(e.to_string())),
                 Err(e) => {
                     let _ = tx.rollback().await;
                     Err(e)
@@ -441,11 +482,14 @@ impl PgPrincipalAudit {
             id: spot_bpm_documents::ids::record_id_for(&format!("case:{}", case.as_str())),
         };
         block_on(async {
-            let mut tx = open_tx(&self.backend, &self.catalog, "bpm_documents_principal_read")
-                .await?;
+            let mut tx =
+                open_tx(&self.backend, &self.catalog, "bpm_documents_principal_read").await?;
             let result = {
                 let mut writer = PgEdgeWriter::new(&mut tx);
-                writer.scan_by_source(&source).await.map_err(|e| e.to_string())
+                writer
+                    .scan_by_source(&source)
+                    .await
+                    .map_err(|e| e.to_string())
             };
             let _ = tx.rollback().await;
             let edges = result?;
@@ -541,18 +585,29 @@ impl HostDocumentOps {
     /// acting user), or whose text is neither a registered principal nor a user id, is refused
     /// with `PRINCIPAL_INVALID`. This port never builds `Actor::System`, which the document
     /// engine lets do anything, and a caller never obtains it by any input.
-    fn actor_of(principal: Option<&str>, principals: &ConfiguredPrincipals) -> std::result::Result<Actor, DocumentFailure> {
-        let refuse = |reason: &str| DocumentFailure::new(spot_bpm_documents::codes::PRINCIPAL_INVALID, reason);
+    fn actor_of(
+        principal: Option<&str>,
+        principals: &ConfiguredPrincipals,
+    ) -> std::result::Result<Actor, DocumentFailure> {
+        let refuse = |reason: &str| {
+            DocumentFailure::new(spot_bpm_documents::codes::PRINCIPAL_INVALID, reason)
+        };
         let Some(text) = principal else {
             return Err(refuse(
                 "the node has no acting principal (neither a service principal nor a user), so it will not act as the system",
             ));
         };
         if let Some(user) = principals.user_of(text) {
-            return Ok(Actor::User { id: user, via: None });
+            return Ok(Actor::User {
+                id: user,
+                via: None,
+            });
         }
         if let Some(user) = spot_bpm_documents::ids::parse_record_id(text) {
-            return Ok(Actor::User { id: user, via: None });
+            return Ok(Actor::User {
+                id: user,
+                via: None,
+            });
         }
         Err(refuse(
             "the node's acting principal is neither a registered service principal nor a user id",
@@ -608,10 +663,8 @@ impl HostDocumentOps {
     ) -> std::result::Result<Document, DocumentFailure> {
         let outcome = match request.operation {
             Operation::CreateFrom => {
-                let id = spot_bpm_documents::ids::record_id_for(&format!(
-                    "{}:document",
-                    request.key
-                ));
+                let id =
+                    spot_bpm_documents::ids::record_id_for(&format!("{}:document", request.key));
                 let mut document = Document::new(request.doctype.clone(), id);
                 for (name, value) in &request.fields {
                     document.set(name.clone(), value.clone());
@@ -626,8 +679,7 @@ impl HostDocumentOps {
                     // When no document with the derived id exists, the duplicate was a
                     // unique-field collision with another document: that refusal stands.
                     Err(e) if e.code == "document.duplicate" => {
-                        block_on(self.engine.load(inv, request.doctype.as_str(), id))
-                            .map_err(|_| e)
+                        block_on(self.engine.load(inv, request.doctype.as_str(), id)).map_err(|_| e)
                     }
                     other => other,
                 }
@@ -661,7 +713,9 @@ impl HostDocumentOps {
                 ));
             }
         };
-        outcome.map(|loaded| loaded.value).map_err(|e| failure_of(&e))
+        outcome
+            .map(|loaded| loaded.value)
+            .map_err(|e| failure_of(&e))
     }
 
     /// The document id a `create_from` will produce, or the one an `update`, `submit` or
@@ -703,12 +757,17 @@ impl DocumentOps for HostDocumentOps {
                 request.operation,
             ) {
                 Ok(true) => {
-                    let loaded = block_on(self.engine.load(&inv, request.doctype.as_str(), document))
-                        .map_err(|e| failure_of(&e))?
-                        .value;
+                    let loaded =
+                        block_on(self.engine.load(&inv, request.doctype.as_str(), document))
+                            .map_err(|e| failure_of(&e))?
+                            .value;
                     let version = loaded.version().unwrap_or(Version::FIRST);
-                    let receipt =
-                        DocumentReceipt::new(request.operation, request.doctype.clone(), document, version);
+                    let receipt = DocumentReceipt::new(
+                        request.operation,
+                        request.doctype.clone(),
+                        document,
+                        version,
+                    );
                     self.replies().insert(request.key.clone(), receipt.clone());
                     return Ok(receipt);
                 }
@@ -724,8 +783,12 @@ impl DocumentOps for HostDocumentOps {
         }
         let document = self.run(&inv, request)?;
         let version = document.version().unwrap_or(Version::FIRST);
-        let receipt =
-            DocumentReceipt::new(request.operation, request.doctype.clone(), document.id(), version);
+        let receipt = DocumentReceipt::new(
+            request.operation,
+            request.doctype.clone(),
+            document.id(),
+            version,
+        );
         let entry = Entry {
             case: request.case.clone(),
             node: request.node.clone(),
@@ -736,9 +799,9 @@ impl DocumentOps for HostDocumentOps {
             compensation: request.compensation,
             receipt: receipt.receipt_json(),
         };
-        self.case_file
-            .record(&entry)
-            .map_err(|e| DocumentFailure::new(spot_bpm_documents::codes::CASE_FILE, e.to_string()))?;
+        self.case_file.record(&entry).map_err(|e| {
+            DocumentFailure::new(spot_bpm_documents::codes::CASE_FILE, e.to_string())
+        })?;
         self.replies().insert(request.key.clone(), receipt.clone());
         Ok(receipt)
     }
@@ -816,7 +879,10 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let definitions = Arc::new(
         spot_bpm_defs_pg::PgDefinitionStore::new(backend.pool()).with_tenant(site.as_str()),
     );
-    let authors = Arc::new(EngineCaseAuthors::new(Arc::clone(&process_host), definitions));
+    let authors = Arc::new(EngineCaseAuthors::new(
+        Arc::clone(&process_host),
+        definitions,
+    ));
     let policy = ServicePrincipalPolicy::new(
         site.clone(),
         Arc::clone(&principals) as Arc<dyn ServicePrincipals>,
@@ -834,7 +900,10 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let publish_permissions = Arc::new(IamPublishPermission::new(
         site.clone(),
         Arc::clone(&env.permission.decision),
-        Arc::new(ConfiguredAuthorPrincipals) as Arc<dyn AuthorPrincipals>,
+        Arc::new(ConfiguredAuthorPrincipals::new(
+            site.clone(),
+            Arc::clone(&env.permission.principals) as Arc<dyn PrincipalSource>,
+        )) as Arc<dyn AuthorPrincipals>,
     ));
     let guard = Arc::new(PublishGuard::new(
         Arc::clone(&principals) as Arc<dyn ServicePrincipals>,
@@ -896,7 +965,11 @@ mod tests {
     #[test]
     fn configured_principals_register_and_check_grants() {
         let user = spot_bpm_documents::ids::record_id_for("billing-user");
-        let configs = vec![principal_config("billing_bot", &user.to_string(), &["platform"])];
+        let configs = vec![principal_config(
+            "billing_bot",
+            &user.to_string(),
+            &["platform"],
+        )];
         let principals = ConfiguredPrincipals::parse(&configs).unwrap();
         let tenant = SiteId::new("acme").unwrap();
         assert!(principals.is_registered(&tenant, "billing_bot").unwrap());

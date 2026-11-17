@@ -17,6 +17,7 @@ use crate::conversion::{
     api_error, messages_of, to_api_document, to_document, to_method_outcome, to_patch,
     to_write_result,
 };
+use crate::list_guard::ListFieldGuard;
 use crate::query::{QueryService, list};
 use crate::resources::Delegates;
 use crate::util::build_invocation;
@@ -33,6 +34,7 @@ pub struct EngineResources<S: DocumentService> {
     clock: Arc<dyn Clock>,
     actor: Arc<ActorResolver>,
     delegates: Delegates,
+    list_guard: Option<ListFieldGuard>,
 }
 
 /// Caller-provided credential resolution; this adapter never authenticates or invents users.
@@ -52,6 +54,7 @@ impl<S: DocumentService> EngineResources<S> {
             clock,
             actor,
             delegates: Delegates::none(),
+            list_guard: None,
         }
     }
 
@@ -60,6 +63,22 @@ impl<S: DocumentService> EngineResources<S> {
     #[must_use]
     pub fn with_delegates(mut self, delegates: Delegates) -> Self {
         self.delegates = delegates;
+        self
+    }
+
+    /// Puts the list path behind the field guard (WP-SEC-04.T5): list columns are classified
+    /// with `Channel::ListColumn` (hidden removed, masked masked, guard error removes the
+    /// columns) and a filter or sort on a field the caller may not report is answered as an
+    /// unknown field. The host calls this where it assembles the services; without it the list
+    /// path keeps only the engine's read-level filtering (a documented gap, not a default to
+    /// ship with).
+    #[must_use]
+    pub fn with_field_guard(
+        mut self,
+        guard: Arc<spot_field_guard::FieldGuard>,
+        principals: Arc<dyn crate::access::PrincipalSource>,
+    ) -> Self {
+        self.list_guard = Some(ListFieldGuard::new(guard, principals));
         self
     }
 
@@ -105,7 +124,15 @@ impl<S: DocumentService + QueryService + 'static> ResourceService for EngineReso
     ) -> BoxFuture<'a, Result<Page, ApiError>> {
         Box::pin(async move {
             let inv = self.build_invocation(ctx)?;
-            list(self.engine.as_ref(), &self.meta, &inv, doctype, spec).await
+            list(
+                self.engine.as_ref(),
+                &self.meta,
+                &inv,
+                doctype,
+                spec,
+                self.list_guard.as_ref(),
+            )
+            .await
         })
     }
 
@@ -278,8 +305,15 @@ impl<S: DocumentService + QueryService + 'static> ResourceService for EngineReso
         via_get: bool,
     ) -> BoxFuture<'a, Result<(Json, Vec<ApiMessage>), ApiError>> {
         if let Some(delegate) = &self.delegates.function {
-            // Fail closed: a delegate is reached only by a request whose credential resolves.
-            if let Err(error) = (self.actor)(ctx) {
+            // Fail closed, with one exception. A request that carries a credential reaches the
+            // delegate only if that credential resolved (a bad one is refused here and never
+            // downgraded to a guest). A request that carries **no credential at all** reaches
+            // it unauthenticated: the delegate decides, and it answers a guest only for
+            // functions declared `guest` (WP-PLT-17.T3). Reports, documents and the admin
+            // methods keep failing closed.
+            if ctx.credential.is_some()
+                && let Err(error) = (self.actor)(ctx)
+            {
                 return Box::pin(async move { Err(error) });
             }
             return delegate.call(ctx, app, module, function, args, via_get);

@@ -224,3 +224,12 @@ explanation_key = "error.auth.session_changed"
 params = []
 remedy = "Repeat the request as the signed-in user if it is still wanted."
 since = "0.1.0"
+
+[[entry]]
+code = "auth.step_up_required"
+class = "none"
+summary = "The operation was refused: step up required."
+explanation_key = "error.auth.step_up_required"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

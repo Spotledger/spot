@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod fixture;
+mod fork_tests;
 mod property_tests;
 mod run_tests;
 

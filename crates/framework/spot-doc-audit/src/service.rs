@@ -298,7 +298,9 @@ impl<S: AuditStore> DocAudit<S> {
     /// is marked verified when it is within the last successfully verified range of its lane.
     ///
     /// # Errors
-    /// [`DocAuditError::Chain`] or [`DocAuditError::Encoding`] on a store or decode failure.
+    /// [`DocAuditError::Chain`] or [`DocAuditError::Encoding`] on a store or decode failure;
+    /// [`DocAuditError::AppenderState`] when the document index cannot be read (never an empty
+    /// history).
     pub async fn history(
         &self,
         principal: &Principal,
@@ -319,7 +321,7 @@ impl<S: AuditStore> DocAudit<S> {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         let mut out = Vec::new();
-        for (lane, seq) in self.state.document_entries(doctype, id) {
+        for (lane, seq) in self.state.document_entries(doctype, id).await? {
             let site = lane_site(&self.site, lane);
             for entry in self.store.range(&site, seq, seq).await? {
                 let event = crate::appender::event_of(&entry)?;
@@ -353,7 +355,8 @@ impl<S: AuditStore> DocAudit<S> {
     /// How far the appenders are behind: unchained events per lane and the age of the oldest.
     ///
     /// # Errors
-    /// [`DocAuditError::Chain`] on a feed failure.
+    /// [`DocAuditError::Chain`] on a feed failure; [`DocAuditError::AppenderState`] when a bookmark
+    /// cannot be read (an unreadable bookmark never makes the lag look like zero).
     pub async fn audit_lag(
         &self,
         feed: &dyn OutboxFeed,
@@ -364,7 +367,8 @@ impl<S: AuditStore> DocAudit<S> {
         let mut oldest: Option<i64> = None;
         let mut pending = 0u64;
         for lane in self.config.lanes() {
-            let records = feed.read(self.state.bookmark(lane), limit).await?;
+            let bookmark = self.state.bookmark(lane).await?;
+            let records = feed.read(bookmark, limit).await?;
             let mut count = 0u64;
             for record in &records {
                 let (doctype, id, at) = match record.event.topic.as_str() {

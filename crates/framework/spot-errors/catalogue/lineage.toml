@@ -73,3 +73,12 @@ explanation_key = "error.lineage.quantity_overflow"
 params = []
 remedy = "Reduce the quantity scale or magnitude, or split the bill of materials into smaller parts."
 since = "0.1.0"
+
+[[entry]]
+code = "lineage.kind_unknown"
+class = "none"
+summary = "The operation was refused: kind unknown."
+explanation_key = "error.lineage.kind_unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use spot_auth::{OpaqueToken, TokenDigest};
+use spot_core::Audience;
 use spot_sessions::manager::SessionManager;
 use spot_sessions::memory::InMemorySessionStore;
 use spot_sessions::model::{ClientInfo, SaltKey, SessionPolicy, SessionState, UserKey};
@@ -49,7 +50,13 @@ async fn end_to_end_login_validate_logout() {
     let (_store, manager) = fresh();
     let user = user_key("ayesha@acme.test");
     let started = manager
-        .start(user.clone(), "203.0.113.7", client(), 1_000)
+        .start(
+            user.clone(),
+            Audience::Staff,
+            "203.0.113.7",
+            client(),
+            1_000,
+        )
         .await
         .unwrap_or_else(|error| panic!("start: {error:?}"));
     let token_text = started.token.as_str().to_owned();
@@ -122,11 +129,23 @@ async fn the_password_change_rule_ends_other_sessions() {
     let (_store, manager) = fresh();
     let user = user_key("ayesha@acme.test");
     let first = manager
-        .start(user.clone(), "203.0.113.1", client(), 1_000)
+        .start(
+            user.clone(),
+            Audience::Staff,
+            "203.0.113.1",
+            client(),
+            1_000,
+        )
         .await
         .unwrap_or_else(|error| panic!("start: {error:?}"));
     let second = manager
-        .start(user.clone(), "203.0.113.2", client(), 1_100)
+        .start(
+            user.clone(),
+            Audience::Staff,
+            "203.0.113.2",
+            client(),
+            1_100,
+        )
         .await
         .unwrap_or_else(|error| panic!("start: {error:?}"));
 
@@ -148,7 +167,7 @@ async fn the_absolute_bound_outlives_any_activity() {
     let (_store, manager) = fresh();
     let user = user_key("busy@acme.test");
     let started = manager
-        .start(user, "203.0.113.1", client(), 1_000)
+        .start(user, Audience::Staff, "203.0.113.1", client(), 1_000)
         .await
         .unwrap_or_else(|error| panic!("start: {error:?}"));
     // Every 61 s the client validates — each touch moves the window by more than the
@@ -196,14 +215,22 @@ async fn client_info_bounds_the_labels() {
             return;
         }
     };
-    let _ = manager.start(user, "203.0.113.1", big, 1_000).await;
+    let _ = manager
+        .start(user, Audience::Staff, "203.0.113.1", big, 1_000)
+        .await;
 }
 
 #[tokio::test]
 async fn the_source_digest_never_echoes_the_address() {
     let (_store, manager) = fresh();
     let started = manager
-        .start(user_key("a@acme.test"), "203.0.113.42", client(), 1_000)
+        .start(
+            user_key("a@acme.test"),
+            Audience::Staff,
+            "203.0.113.42",
+            client(),
+            1_000,
+        )
         .await
         .unwrap_or_else(|error| panic!("start: {error:?}"));
     let rendered = format!("{:?}", started.session);
@@ -224,7 +251,13 @@ async fn session_policy_defaults_match_the_documented_values() {
     let started = {
         let (_store, manager) = fresh();
         manager
-            .start(user_key("p@acme.test"), "203.0.113.1", client(), 0)
+            .start(
+                user_key("p@acme.test"),
+                Audience::Staff,
+                "203.0.113.1",
+                client(),
+                0,
+            )
             .await
             .unwrap_or_else(|error| panic!("start: {error:?}"))
     };

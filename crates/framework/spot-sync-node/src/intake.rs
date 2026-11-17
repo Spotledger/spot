@@ -2,16 +2,18 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use spot_sync_closure::{Bundle, Position, RecordKey};
+use spot_sync_closure::{Bundle, BundleRecord, Position, RecordKey};
 use spot_sync_freshness::FreshnessTracker;
 use spot_sync_skew::{HoldSet, NodeReport, RecordRef, triage};
 
 use crate::error::NodeError;
 use crate::model::{
-    Applied, AppliedSet, ApplyRefusal, Counters, Delivery, NodeConfig, ParkedBundle, Receipt,
-    RepairCause, RepairItem,
+    Applied, AppliedSet, ApplyRefusal, Counters, Delivery, GoneOutcome, MAX_GONE_PER_TENANT,
+    NodeConfig, ParkedBundle, Receipt, RepairCause, RepairItem,
 };
 use crate::prefix::PrefixTracker;
+use crate::restore::{RestoreError, RestoreState};
+use crate::serve::{ServeStamp, ServeTracker};
 use crate::traits::{BundleApply, NodeCatalog, ParkingStore};
 
 /// What evaluating one bundle against the node's state produced.
@@ -29,18 +31,35 @@ enum Eval {
 /// the node would let one tenant's settled positions advance another's acknowledged prefix.
 struct TenantState {
     prefix: PrefixTracker,
+    /// The serve-sequence prefix: what the hub is acknowledged by.
+    serve: ServeTracker,
     freshness: FreshnessTracker,
     holds: HoldSet,
+    /// Keys the hub answered `Gone` for: they exist no more, so a reference to one is not a
+    /// miss. Bounded by `MAX_GONE_PER_TENANT`.
+    gone: BTreeSet<RecordKey>,
 }
 
 impl TenantState {
     fn new() -> Self {
         Self {
             prefix: PrefixTracker::new(),
+            serve: ServeTracker::new(),
             freshness: FreshnessTracker::new(),
             holds: HoldSet::new(),
+            gone: BTreeSet::new(),
         }
     }
+}
+
+/// A bundle that left parking or was refused: its records, and the serve stamps of the bundles
+/// that stand for it, which count into the serve prefix once every record is applied.
+struct Unsettled {
+    records: Vec<(RecordKey, Position)>,
+    serves: Vec<ServeStamp>,
+    /// Restored from durable state: the records are not known until the hub redelivers a bundle
+    /// with this first position.
+    restored: bool,
 }
 
 /// The receiving side of sync for one node and one hub.
@@ -57,7 +76,7 @@ pub struct NodeIntake<A: BundleApply, P: ParkingStore, C: NodeCatalog> {
     /// Bundles that left parking or were refused, by tenant and first position, with their
     /// records. They keep holding the prefix until every one of their records is applied (by a
     /// redelivery of the bundle or by any other bundle carrying them).
-    unsettled: BTreeMap<(String, Position), Vec<(RecordKey, Position)>>,
+    unsettled: BTreeMap<(String, Position), Unsettled>,
     counters: Counters,
     next_seq: u64,
 }
@@ -103,6 +122,31 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
     /// `TooManyTenants` when the delivery names a new tenant beyond the configured cap (nothing
     /// is stored), or `ReferenceUnreadable` when a record's references cannot be read.
     pub fn receive(&mut self, delivery: Delivery, now_ms: u64) -> Result<Receipt, NodeError> {
+        self.receive_stamped(delivery, None, now_ms)
+    }
+
+    /// As [`receive`](Self::receive) for a bundle that carries the serve stamp the hub's queue
+    /// gave it. The stamp counts into [`served_prefix`](Self::served_prefix) when the bundle is
+    /// settled (applied, replayed or held for skew), immediately or later when a parked bundle is
+    /// released; a parked, refused or repaired bundle holds the prefix back until then.
+    ///
+    /// # Errors
+    /// As [`receive`](Self::receive).
+    pub fn receive_served(
+        &mut self,
+        delivery: Delivery,
+        stamp: ServeStamp,
+        now_ms: u64,
+    ) -> Result<Receipt, NodeError> {
+        self.receive_stamped(delivery, Some(stamp), now_ms)
+    }
+
+    fn receive_stamped(
+        &mut self,
+        delivery: Delivery,
+        serve: Option<ServeStamp>,
+        now_ms: u64,
+    ) -> Result<Receipt, NodeError> {
         if delivery.source != self.config.hub_source {
             return Err(NodeError::ForeignSource {
                 source_id: delivery.source.as_str().to_owned(),
@@ -118,26 +162,39 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
             self.tenants.insert(tenant.clone(), TenantState::new());
         }
         let Some((first, last)) = span(&bundle) else {
+            self.settle_serve(&tenant, serve);
             return Ok(Receipt::Applied(Applied::default()));
         };
 
         // Version skew: a record the node cannot decode is held and the bundle goes no further.
+        // A tombstone has no image to decode, so it is never held for skew.
         let batch: Vec<_> = bundle
             .records
             .iter()
+            .filter(|r| !r.deleted)
             .map(|r| self.catalog.classify(r))
             .collect();
         let verdict = triage(&batch, &self.report);
         if let Some(first_hold) = verdict.held.first() {
             let reason = first_hold.reason.clone();
+            // A restored repair hold at this position is settled by a bundle held for skew too:
+            // a held bundle never blocks the prefix.
+            let restored = self.release_restored(&tenant, first);
             let state = self.state_mut(&tenant);
             for hold in verdict.held {
                 state.holds.insert(hold);
             }
+            if restored {
+                state.prefix.release(first);
+            }
             state.prefix.settle(last);
+            if let Some(stamp) = serve {
+                state.serve.settle(stamp);
+            }
             return Ok(Receipt::Held(reason));
         }
 
+        self.adopt_restored(&tenant, first, &bundle);
         match self.evaluate(&tenant, &bundle)? {
             Eval::Applied {
                 set,
@@ -145,7 +202,8 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
                 older_ignored,
             } => {
                 self.state_mut(&tenant).prefix.settle(last);
-                let released = self.wake(&tenant, &set.keys())?;
+                self.settle_serve(&tenant, serve);
+                let released = self.wake(&tenant, &live_keys(&set, &bundle))?;
                 Ok(Receipt::Applied(Applied {
                     applied: set,
                     duplicates,
@@ -153,12 +211,87 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
                     released,
                 }))
             }
-            Eval::Missing(missing) => Ok(self.park(tenant, bundle, missing, first, now_ms)),
+            Eval::Missing(missing) => Ok(self.park(tenant, bundle, missing, first, serve, now_ms)),
             Eval::Refused(refusal) => {
-                self.track_unsettled(&tenant, first, &bundle, false);
+                self.track_unsettled(&tenant, first, &bundle, serve, false);
                 Ok(Receipt::Refused(refusal))
             }
         }
+    }
+
+    /// Seed `tenant` from durable state after a restart; see [`RestoreState`]. Call it before the
+    /// first delivery of the tenant, once.
+    ///
+    /// Restoring then receiving the hub's redelivery gives the same state as never having
+    /// restarted: parked bundles hold the prefix at their first positions again, repair items hold
+    /// it until a bundle with that first position applies, the saved holds are back and the
+    /// serve prefix starts at the stored value.
+    ///
+    /// # Errors
+    /// [`RestoreError::AlreadyStarted`] when the tenant has state in this intake,
+    /// [`RestoreError::TooManyTenants`] past the cap, [`RestoreError::Invalid`] when a repair
+    /// item names another tenant. The intake is unchanged then.
+    pub fn restore(&mut self, tenant: &str, state: RestoreState) -> Result<(), RestoreError> {
+        if self.tenants.contains_key(tenant) {
+            return Err(RestoreError::AlreadyStarted);
+        }
+        if self.tenants.len() >= self.config.max_tenants {
+            return Err(RestoreError::TooManyTenants);
+        }
+        if state.repair.iter().any(|item| item.tenant != tenant) {
+            return Err(RestoreError::Invalid);
+        }
+        let mut tenant_state = TenantState::new();
+        tenant_state.prefix = PrefixTracker::restored(state.applied_prefix);
+        tenant_state.serve = ServeTracker::restored(state.served_prefix.unwrap_or(0));
+        if let Some(holds) = state.holds {
+            tenant_state.holds = holds;
+        }
+        for first in state.parked_first_positions {
+            tenant_state.prefix.hold(first);
+        }
+        for item in state.repair {
+            let id = (tenant.to_owned(), item.first_position);
+            if self.unsettled.contains_key(&id) {
+                continue;
+            }
+            tenant_state.prefix.hold(item.first_position);
+            self.unsettled.insert(
+                id,
+                Unsettled {
+                    records: Vec::new(),
+                    serves: Vec::new(),
+                    restored: true,
+                },
+            );
+        }
+        self.tenants.insert(tenant.to_owned(), tenant_state);
+        Ok(())
+    }
+
+    /// A bundle received for a position a restored repair item holds: its records are what must
+    /// be applied for the hold to go.
+    fn adopt_restored(&mut self, tenant: &str, first: Position, bundle: &Bundle) {
+        if let Some(entry) = self.unsettled.get_mut(&(tenant.to_owned(), first))
+            && entry.restored
+        {
+            entry.records = bundle
+                .records
+                .iter()
+                .map(|r| (r.key.clone(), r.position))
+                .collect();
+            entry.restored = false;
+        }
+    }
+
+    /// Drops a restored hold entry at `first`; whether there was one (the caller releases it).
+    fn release_restored(&mut self, tenant: &str, first: Position) -> bool {
+        let id = (tenant.to_owned(), first);
+        if self.unsettled.get(&id).is_some_and(|entry| entry.restored) {
+            self.unsettled.remove(&id);
+            return true;
+        }
+        false
     }
 
     /// Move every bundle parked longer than `max_age_ms` to the repair list.
@@ -175,6 +308,19 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
     #[must_use]
     pub fn applied_prefix(&self, tenant: &str) -> Option<Position> {
         self.tenants.get(tenant)?.prefix.prefix()
+    }
+
+    /// The serve sequence the node acknowledges to the hub for `tenant`: the highest one such that
+    /// every bundle the hub's queue held up to it is settled here (WP-SYN-11.T2). Only bundles
+    /// received with [`receive_served`](Self::receive_served) count. `None` when nothing counts
+    /// yet or the tenant is unknown.
+    ///
+    /// Unlike [`applied_prefix`](Self::applied_prefix) it cannot leap over a bundle the node was
+    /// never sent: the stamps name what lies below each bundle. It is volatile (a restart starts
+    /// again from 0 and the hub re-serves what it still queues).
+    #[must_use]
+    pub fn served_prefix(&self, tenant: &str) -> Option<u64> {
+        self.tenants.get(tenant)?.serve.prefix()
     }
 
     /// How many tenants the node has taken a delivery for.
@@ -214,6 +360,15 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
     /// applies.
     pub fn take_repair(&mut self) -> Vec<RepairItem> {
         self.repair.drain(..).collect()
+    }
+
+    /// Put items back at the front of the repair list: a host that took them with
+    /// [`take_repair`](Self::take_repair) and could not store them gives them back, so none is
+    /// lost. The bundles they stand for are still unsettled; nothing else changes.
+    pub fn requeue_repair(&mut self, items: Vec<RepairItem>) {
+        for item in items.into_iter().rev() {
+            self.repair.push_front(item);
+        }
     }
 
     /// Entries waiting on the repair list.
@@ -269,17 +424,10 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
         let mut older_ignored = 0;
         let mut remaining = Vec::with_capacity(bundle.records.len());
         for record in &bundle.records {
-            if self.apply.has(tenant, &record.key, record.position) {
-                if self
-                    .apply
-                    .has(tenant, &record.key, record.position.saturating_add(1))
-                {
-                    older_ignored += 1;
-                } else {
-                    duplicates += 1;
-                }
-            } else {
-                remaining.push(record.clone());
+            match self.replay_of(tenant, record) {
+                Some(Replay::Duplicate) => duplicates += 1,
+                Some(Replay::Older) => older_ignored += 1,
+                None => remaining.push(record.clone()),
             }
         }
         self.counters.duplicates += duplicates as u64;
@@ -292,9 +440,15 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
             });
         }
 
-        let inside: BTreeSet<&RecordKey> = bundle.records.iter().map(|r| &r.key).collect();
+        // A tombstone in the bundle does not satisfy a reference to its key: the record is gone.
+        let inside: BTreeSet<&RecordKey> = bundle
+            .records
+            .iter()
+            .filter(|r| !r.deleted)
+            .map(|r| &r.key)
+            .collect();
         let mut missing = BTreeSet::new();
-        for record in &remaining {
+        for record in remaining.iter().filter(|r| !r.deleted) {
             let refs = self.catalog.references(record).map_err(|e| match e {
                 spot_sync_closure::ClosureError::ReferenceUnreadable { entity, field } => {
                     NodeError::ReferenceUnreadable { entity, field }
@@ -305,7 +459,12 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
                 },
             })?;
             for target in refs {
-                if !inside.contains(&target) && !self.apply.has(tenant, &target, 0) {
+                // A key that was deleted is not present, so a reference to it is a miss until
+                // the hub answers `Gone` (`resolve_gone`): park, then release.
+                if !inside.contains(&target)
+                    && !self.apply.has(tenant, &target, 0)
+                    && !self.is_gone(tenant, &target)
+                {
                     missing.insert(target);
                 }
             }
@@ -334,20 +493,127 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
         }
     }
 
+    /// Whether the hub answered `Gone` for the key of this tenant.
+    fn is_gone(&self, tenant: &str, key: &RecordKey) -> bool {
+        self.tenants
+            .get(tenant)
+            .is_some_and(|state| state.gone.contains(key))
+    }
+
+    /// Whether the sink has this record (or a later word on it) already: a replay of the same
+    /// version, or an old one a newer version or a later delete has superseded.
+    fn replay_of(&self, tenant: &str, record: &BundleRecord) -> Option<Replay> {
+        let key = &record.key;
+        let at = record.position;
+        let next = at.saturating_add(1);
+        if record.deleted {
+            // A delete is a replay when the same or a later delete was applied, and outdated when
+            // the record was re-created at or after it.
+            if self.apply.has_tombstone(tenant, key, at) {
+                return Some(if self.apply.has_tombstone(tenant, key, next) {
+                    Replay::Older
+                } else {
+                    Replay::Duplicate
+                });
+            }
+            return self.apply.has(tenant, key, at).then_some(Replay::Older);
+        }
+        if self.apply.has(tenant, key, at) {
+            return Some(if self.apply.has(tenant, key, next) {
+                Replay::Older
+            } else {
+                Replay::Duplicate
+            });
+        }
+        // A later delete supersedes this image: applying it would bring the record back.
+        self.apply
+            .has_tombstone(tenant, key, at)
+            .then_some(Replay::Older)
+    }
+
+    /// The hub answered `Gone` for these keys of `tenant`: they exist no more. A bundle that was
+    /// parked for one of them is no longer missing it and is applied now (the reference dangles by
+    /// the record's own business); bundles that already left parking are released when the hub
+    /// re-sends them. A tenant the node has no state for is not created. The keys are remembered
+    /// per tenant up to `MAX_GONE_PER_TENANT`; the ones that did not fit come back in
+    /// `GoneOutcome::not_recorded` and stay missing.
+    ///
+    /// # Errors
+    /// `ReferenceUnreadable` when a released bundle's references cannot be read.
+    pub fn resolve_gone(
+        &mut self,
+        tenant: &str,
+        keys: &[RecordKey],
+    ) -> Result<GoneOutcome, NodeError> {
+        let mut recorded = Vec::new();
+        let mut not_recorded = Vec::new();
+        let Some(state) = self.tenants.get_mut(tenant) else {
+            return Ok(GoneOutcome::default());
+        };
+        for key in keys {
+            if state.gone.contains(key) || state.gone.len() < MAX_GONE_PER_TENANT {
+                state.gone.insert(key.clone());
+                recorded.push(key.clone());
+            } else {
+                not_recorded.push(key.clone());
+            }
+        }
+        let released = self.wake(tenant, &recorded)?;
+        Ok(GoneOutcome {
+            released,
+            not_recorded,
+        })
+    }
+
     /// A bundle that is neither applied nor parked keeps (`held`: the prefix already counts it) holding the prefix at its first
-    /// position until all its records are applied.
-    fn track_unsettled(&mut self, tenant: &str, first: Position, bundle: &Bundle, held: bool) {
-        let records = bundle
+    /// position until all its records are applied. Its serve stamp, if it has one, is settled
+    /// then too.
+    fn track_unsettled(
+        &mut self,
+        tenant: &str,
+        first: Position,
+        bundle: &Bundle,
+        serve: Option<ServeStamp>,
+        held: bool,
+    ) {
+        let records: Vec<(RecordKey, Position)> = bundle
             .records
             .iter()
             .map(|r| (r.key.clone(), r.position))
             .collect();
-        let fresh = self
-            .unsettled
-            .insert((tenant.to_owned(), first), records)
-            .is_none();
+        let id = (tenant.to_owned(), first);
+        let fresh = match self.unsettled.get_mut(&id) {
+            Some(entry) => {
+                entry.records = records;
+                entry.restored = false;
+                if let Some(stamp) = serve
+                    && !entry.serves.contains(&stamp)
+                {
+                    entry.serves.push(stamp);
+                }
+                false
+            }
+            None => {
+                self.unsettled.insert(
+                    id,
+                    Unsettled {
+                        records,
+                        serves: serve.into_iter().collect(),
+                        restored: false,
+                    },
+                );
+                true
+            }
+        };
         if fresh && !held {
             self.state_mut(tenant).prefix.hold(first);
+        }
+    }
+
+    /// Count a serve stamp into the tenant's serve prefix, if the bundle came with one.
+    fn settle_serve(&mut self, tenant: &str, serve: Option<ServeStamp>) {
+        if let Some(stamp) = serve {
+            self.state_mut(tenant).serve.settle(stamp);
         }
     }
 
@@ -357,16 +623,25 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
         let done: Vec<(String, Position)> = self
             .unsettled
             .iter()
-            .filter(|((t, _), records)| {
-                t == tenant && records.iter().all(|(k, v)| self.apply.has(tenant, k, *v))
+            .filter(|((t, _), entry)| {
+                t == tenant
+                    && !entry.restored
+                    && entry
+                        .records
+                        .iter()
+                        .all(|(k, v)| self.apply.has(tenant, k, *v))
             })
             .map(|(id, _)| id.clone())
             .collect();
         for id in done {
-            self.unsettled.remove(&id);
+            let entry = self.unsettled.remove(&id);
             self.repair
                 .retain(|r| !(r.tenant == id.0 && r.first_position == id.1));
-            self.state_mut(tenant).prefix.release(id.1);
+            let state = self.state_mut(tenant);
+            state.prefix.release(id.1);
+            for stamp in entry.into_iter().flat_map(|e| e.serves) {
+                state.serve.settle(stamp);
+            }
         }
     }
 
@@ -385,6 +660,7 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
         bundle: Bundle,
         missing: BTreeSet<RecordKey>,
         first: Position,
+        serve: Option<ServeStamp>,
         now_ms: u64,
     ) -> Receipt {
         let limits = self.config.limits;
@@ -397,6 +673,7 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
             parked_at_ms: now_ms,
             first_position: first,
             bytes,
+            serve,
         };
         self.next_seq += 1;
         self.state_mut(&tenant).prefix.hold(first);
@@ -423,7 +700,13 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
     /// A parked bundle leaves parking unapplied: it stays unsettled and goes to the repair list.
     fn send_to_repair(&mut self, parked: ParkedBundle, cause: RepairCause) {
         self.counters.to_repair += 1;
-        self.track_unsettled(&parked.tenant, parked.first_position, &parked.bundle, true);
+        self.track_unsettled(
+            &parked.tenant,
+            parked.first_position,
+            &parked.bundle,
+            parked.serve,
+            true,
+        );
         self.repair.push_back(RepairItem {
             tenant: parked.tenant,
             first_position: parked.first_position,
@@ -449,7 +732,10 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
                         if let Some((_, last)) = span(&parked.bundle) {
                             state.prefix.settle(last);
                         }
-                        work.extend(set.keys());
+                        if let Some(stamp) = parked.serve {
+                            state.serve.settle(stamp);
+                        }
+                        work.extend(live_keys(&set, &parked.bundle));
                         released.push(set);
                         self.resolve_unsettled(tenant);
                     }
@@ -481,6 +767,30 @@ impl<A: BundleApply, P: ParkingStore, C: NodeCatalog> NodeIntake<A, P, C> {
     }
 }
 
+/// How a record the sink already knows about relates to what it holds.
+enum Replay {
+    /// The same version (or the same delete) again.
+    Duplicate,
+    /// A newer version or a later delete is applied already.
+    Older,
+}
+
+/// The keys of an applied set that are present now: a tombstone satisfies no reference, so it
+/// wakes nothing.
+fn live_keys(set: &AppliedSet, bundle: &Bundle) -> Vec<RecordKey> {
+    let deleted: BTreeSet<&RecordKey> = bundle
+        .records
+        .iter()
+        .filter(|r| r.deleted)
+        .map(|r| &r.key)
+        .collect();
+    set.records
+        .iter()
+        .filter(|r| !deleted.contains(&r.key))
+        .map(|r| r.key.clone())
+        .collect()
+}
+
 /// The lowest and highest record position in a bundle, or `None` when it is empty.
 fn span(bundle: &Bundle) -> Option<(Position, Position)> {
     let first = bundle.records.iter().map(|r| r.position).min()?;
@@ -488,6 +798,9 @@ fn span(bundle: &Bundle) -> Option<(Position, Position)> {
     Some((first, last))
 }
 
-fn image_len(record: &spot_sync_closure::BundleRecord) -> usize {
+fn image_len(record: &BundleRecord) -> usize {
+    if record.deleted {
+        return 0;
+    }
     serde_json::to_string(&record.image).map_or(0, |s| s.len())
 }

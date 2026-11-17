@@ -33,6 +33,9 @@ pub const DOUBLE_REGISTRATION: &str = "docaudit.double_registration";
 /// A refused operation could not be recorded in the audit (logged once, counted).
 pub const DENIAL_NOT_RECORDED: &str = "docaudit.denial_not_recorded";
 
+/// The appender's durable state could not be read or written; the drain stopped (fail closed).
+pub const APPENDER_STATE: &str = "docaudit.appender_state";
+
 /// Every error this crate returns.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DocAuditError {
@@ -83,6 +86,11 @@ pub enum DocAuditError {
     /// A refused operation could not be recorded.
     #[error("a refused operation could not be recorded in the document audit: {0}")]
     DenialNotRecorded(String),
+    /// The appender's durable state (bookmark, event index, document index, site checkpoint)
+    /// could not be read or written. The message names the operation and the store's error code
+    /// only, never an event id, a document id, a checkpoint or a value.
+    #[error("the document audit appender state failed: {0}")]
+    AppenderState(String),
 }
 
 impl DocAuditError {
@@ -99,6 +107,7 @@ impl DocAuditError {
             Self::Guard(_) => GUARD,
             Self::DoubleRegistration { .. } => DOUBLE_REGISTRATION,
             Self::DenialNotRecorded(_) => DENIAL_NOT_RECORDED,
+            Self::AppenderState(_) => APPENDER_STATE,
         }
     }
 
@@ -106,13 +115,22 @@ impl DocAuditError {
     #[must_use]
     pub fn class(&self) -> ErrorClass {
         match self {
-            Self::OutboxWrite(_) | Self::DenialNotRecorded(_) => ErrorClass::Unavailable,
+            Self::OutboxWrite(_) | Self::DenialNotRecorded(_) | Self::AppenderState(_) => {
+                ErrorClass::Unavailable
+            }
             Self::AuditOff(_) | Self::LaneEpoch { .. } | Self::DoubleRegistration { .. } => {
                 ErrorClass::Validation
             }
             Self::UnknownDoctype(_) => ErrorClass::UnknownDocType,
             Self::Encoding(_) | Self::Chain(_) | Self::Guard(_) => ErrorClass::Internal,
         }
+    }
+
+    /// An appender-state failure of `operation` whose underlying store error has `store_code`.
+    /// Only those two fixed words go into the message.
+    #[must_use]
+    pub fn appender_state(operation: &str, store_code: &str) -> Self {
+        Self::AppenderState(format!("{operation}: {store_code}"))
     }
 
     /// The app API error, for a controller step that must fail the operation.

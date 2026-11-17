@@ -100,3 +100,12 @@ explanation_key = "error.retrieval.query_too_long"
 params = ["chars"]
 remedy = "Shorten the query, or raise the retriever's query limit."
 since = "0.1.0"
+
+[[entry]]
+code = "retrieval.protection_unknown"
+class = "none"
+summary = "The document's DocType is not known to the protection source, so nothing is indexed."
+explanation_key = "error.retrieval.protection_unknown"
+params = []
+remedy = "Register the DocType's protection, then index again."
+since = "0.1.0"

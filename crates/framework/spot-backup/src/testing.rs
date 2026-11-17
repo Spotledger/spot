@@ -427,7 +427,7 @@ impl BackupProducer for FakeProducer {
                 parent_digest: request.job.parent_digest.clone(),
                 verify: request.job.verify,
                 target: request.job.target.to_string(),
-                encryption: request.job.encrypt.clone(),
+                encryption: None,
             };
             crate::package::build_from_files(manifest, self.files.clone(), &self.work_dir)
         })

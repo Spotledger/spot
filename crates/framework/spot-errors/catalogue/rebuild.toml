@@ -1,0 +1,10 @@
+# rebuild codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "rebuild.unregistered_topics_applied_as_state"
+class = "none"
+summary = "The outcome warning when allow_unregistered applied unregistered topics as state."
+explanation_key = "error.rebuild.unregistered_topics_applied_as_state"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

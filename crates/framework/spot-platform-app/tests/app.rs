@@ -125,6 +125,7 @@ fn every_credential_field_is_a_secret_in_the_closed_credential_group() {
         credentials,
         [
             "api_key.digest",
+            "recovery_code.digest",
             "session.token_digest",
             "user.password_hash",
             "user.totp_secret",
@@ -142,7 +143,7 @@ fn credential_fields_are_in_the_effective_protection_data() {
         .into_iter()
         .filter(|p| p.groups.iter().any(|g| g == group::CREDENTIAL))
         .collect();
-    assert_eq!(protected.len(), 5);
+    assert_eq!(protected.len(), 6);
     for p in &protected {
         assert!(
             p.trace_groups.iter().any(|g| g == group::CREDENTIAL),
@@ -218,7 +219,14 @@ fn only_the_system_principal_reads_a_credential() {
         let d = engine.field_access(&Principal::system(), dt, &facts, &doc);
         assert_eq!(d.level, FieldLevel::ReadReveal, "system on {}", p.path);
     }
-    assert_eq!(checked, 5 * roles.len());
+    // Every credential field (the count grows with the apps that seal values) for every role.
+    let credential_fields = m
+        .field_protection()
+        .into_iter()
+        .filter(|p| p.groups.iter().any(|g| g == group::CREDENTIAL))
+        .count();
+    assert!(credential_fields >= 5, "{credential_fields}");
+    assert_eq!(checked, credential_fields * roles.len());
 }
 
 #[test]
@@ -303,4 +311,36 @@ fn system_manager_reads_and_creates_a_custom_field_and_a_plain_user_cannot() {
     };
     assert!(holds_create(role::SYSTEM_MANAGER));
     assert!(!holds_create(role::USER_MANAGER));
+}
+
+#[test]
+fn the_group_mapping_doctype_holds_one_row_per_idp_group_and_scim_user_fields_exist() {
+    // WP-IAM-06.T2: SCIM stores its groups and the group-to-role table in one document per group.
+    let defs = definitions().unwrap();
+    let mapping = defs
+        .iter()
+        .find(|d| d.name == doctype::GROUP_MAPPING)
+        .unwrap();
+    let group_field = mapping
+        .fields
+        .iter()
+        .find(|f| f.name == "idp_group")
+        .unwrap();
+    assert!(group_field.unique && group_field.required);
+    for name in ["role", "scope", "members", "is_group", "scim_version"] {
+        assert!(mapping.fields.iter().any(|f| f.name == name), "{name}");
+    }
+    // The role link is optional: a group with no row grants nothing, it is not invalid.
+    let role_field = mapping.fields.iter().find(|f| f.name == "role").unwrap();
+    assert!(!role_field.required);
+    let user = defs.iter().find(|d| d.name == doctype::USER).unwrap();
+    for name in [
+        "scim_profile",
+        "scim_external_id",
+        "scim_version",
+        "scim_created_at",
+        "scim_updated_at",
+    ] {
+        assert!(user.fields.iter().any(|f| f.name == name), "{name}");
+    }
 }

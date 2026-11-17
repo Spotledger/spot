@@ -11,11 +11,7 @@ async fn a_missed_deadline_is_unknown_and_a_retry_never_ships_again() {
         ack_deadline_millis: 500,
         ..GateConfig::default()
     };
-    let settings = CommitSettings {
-        ack_deadline_millis: 500,
-        ..CommitSettings::default()
-    };
-    let rig = rig_with(REMOTE_HALT, settings, gate);
+    let rig = rig_with(REMOTE_HALT, CommitSettings::default(), gate);
     rig.relay.state().down = true;
     let ticket = rig.commit(1);
     rig.flush().await;

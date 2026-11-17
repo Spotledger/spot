@@ -143,3 +143,48 @@ explanation_key = "error.settings.catalogue_invalid"
 params = []
 remedy = "Fix the setting's TOML so it matches the SettingSpec shape."
 since = "0.1.0"
+
+[[entry]]
+code = "settings.get"
+class = "none"
+summary = "The operation was refused: get."
+explanation_key = "error.settings.get"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.history"
+class = "none"
+summary = "The operation was refused: history."
+explanation_key = "error.settings.history"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.list"
+class = "none"
+summary = "The operation was refused: list."
+explanation_key = "error.settings.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.set"
+class = "none"
+summary = "The operation was refused: set."
+explanation_key = "error.settings.set"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings.set_high_risk"
+class = "none"
+summary = "The operation was refused: set high risk."
+explanation_key = "error.settings.set_high_risk"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

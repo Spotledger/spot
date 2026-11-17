@@ -35,6 +35,9 @@ public sealed class DocumentFormView : UserControl, IDisposable
     private readonly ContentControl _body = new();
     private readonly TextBlock _audit = new() { Opacity = 0.7 };
     private readonly ContentControl _recovery = new();
+    private readonly ContentControl _banner = new();
+    private readonly Border _merge = new() { IsVisible = false, Padding = new Thickness(Metric("Space.3", 12)) };
+    private MergeProposal? _shownMerge;
     private readonly TextBlock _note = new() { Opacity = 0.7, IsVisible = false, TextWrapping = TextWrapping.Wrap };
     private readonly IDisposable _canvas;
     private readonly IDisposable _ink;
@@ -58,12 +61,16 @@ public sealed class DocumentFormView : UserControl, IDisposable
         header.Children.Add(heading);
         var root = new DockPanel { Margin = new Thickness(Metric("Space.4", 16)) };
         DockPanel.SetDock(header, Dock.Top);
+        DockPanel.SetDock(_banner, Dock.Top);
+        DockPanel.SetDock(_merge, Dock.Top);
         DockPanel.SetDock(_recovery, Dock.Top);
         DockPanel.SetDock(_note, Dock.Top);
         DockPanel.SetDock(_conflict, Dock.Top);
         DockPanel.SetDock(_messages, Dock.Top);
         DockPanel.SetDock(_audit, Dock.Bottom);
         root.Children.Add(header);
+        root.Children.Add(_banner);
+        root.Children.Add(_merge);
         root.Children.Add(_recovery);
         root.Children.Add(_note);
         root.Children.Add(_conflict);
@@ -144,6 +151,8 @@ public sealed class DocumentFormView : UserControl, IDisposable
         RefreshMessages();
         RefreshAudit();
         _recovery.Content = _model.Recovery;
+        _banner.Content = _model.Banner;
+        RefreshMerge();
         _note.Text = _model.HistoryNote;
         _note.IsVisible = !string.IsNullOrEmpty(_model.HistoryNote);
         if (_model.Phase == FormPhase.Failed)
@@ -208,6 +217,79 @@ public sealed class DocumentFormView : UserControl, IDisposable
         panel.Children.Add(buttons);
         AutomationProperties.SetName(panel, "Version conflict");
         _conflict.Child = panel;
+    }
+
+    /// <summary>
+    /// The merge panel (WP-UI-02.T6): one row per field changed on the server and in the person's edits,
+    /// both values shown as plain text, "Keep mine" chosen until the person picks "Take theirs". It is
+    /// rebuilt only when the proposal changes, so a keystroke elsewhere never resets a choice or the focus.
+    /// </summary>
+    private void RefreshMerge()
+    {
+        var proposal = _model.PendingMerge;
+        if (ReferenceEquals(proposal, _shownMerge))
+        {
+            return;
+        }
+
+        _shownMerge = proposal;
+        _merge.IsVisible = proposal is not null;
+        if (proposal is null)
+        {
+            _merge.Child = null;
+            return;
+        }
+
+        var panel = new StackPanel { Spacing = Metric("Space.2", 8) };
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = FontWeight.SemiBold,
+            Text = "These were changed by someone else and by you. Choose which value to keep for each, then save.",
+        });
+        foreach (var choice in proposal.Conflicts)
+        {
+            var group = "merge-" + choice.Field;
+            var mine = new RadioButton
+            {
+                GroupName = group,
+                IsChecked = choice.Side == MergeSide.Mine,
+                Content = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = "Keep mine: " + choice.Mine },
+            };
+            var theirs = new RadioButton
+            {
+                GroupName = group,
+                IsChecked = choice.Side == MergeSide.Theirs,
+                Content = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = "Take theirs: " + choice.Theirs },
+            };
+            mine.IsCheckedChanged += (_, _) =>
+            {
+                if (mine.IsChecked == true)
+                {
+                    choice.Side = MergeSide.Mine;
+                }
+            };
+            theirs.IsCheckedChanged += (_, _) =>
+            {
+                if (theirs.IsChecked == true)
+                {
+                    choice.Side = MergeSide.Theirs;
+                }
+            };
+            AutomationProperties.SetName(mine, $"{choice.Label}: keep mine, {choice.Mine}");
+            AutomationProperties.SetName(theirs, $"{choice.Label}: take theirs, {choice.Theirs}");
+            var row = new StackPanel { Spacing = 2, Name = "MergeRow_" + choice.Field };
+            row.Children.Add(new TextBlock { Text = choice.Label, FontWeight = FontWeight.SemiBold });
+            row.Children.Add(mine);
+            row.Children.Add(theirs);
+            panel.Children.Add(row);
+        }
+
+        var apply = new SpotButton { Content = "Apply my choices", Name = "MergeApply" };
+        apply.Click += (_, _) => _model.ApplyMergeChoices();
+        panel.Children.Add(apply);
+        AutomationProperties.SetName(panel, "Merge changes");
+        _merge.Child = panel;
     }
 
     private void RefreshMessages()

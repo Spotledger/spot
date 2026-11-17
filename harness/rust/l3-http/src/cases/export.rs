@@ -29,7 +29,7 @@ const SECTION: &str = "Bulk export";
 
 fn run_export(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the export case could not start its own fixture"));
         };
         let result = a_filtered_export_pages_and_matches_the_list(&own).await;

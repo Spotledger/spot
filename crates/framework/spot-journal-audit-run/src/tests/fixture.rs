@@ -20,7 +20,7 @@ use crate::memory::MemoryLive;
 
 pub(crate) const TENANT: &str = "acme";
 pub(crate) const SOURCE: &str = "acme.example";
-const KEY_ID: &str = "journal-key-1";
+pub(crate) const KEY_ID: &str = "journal-key-1";
 
 /// A record id in canonical UUID form.
 pub(crate) fn uuid(n: u64) -> String {
@@ -60,7 +60,7 @@ pub(crate) fn delete(n: u64, version: u64) -> Ev {
     }
 }
 
-fn line(event: &Ev, position: Position, source: &str) -> String {
+pub(crate) fn line(event: &Ev, position: Position, source: &str) -> String {
     let (entity, id, version, data) = match event {
         Ev::Put {
             entity,
@@ -122,7 +122,7 @@ fn model(events: &[Ev], upto: usize) -> Model {
     out
 }
 
-fn signing_key() -> SigningKey {
+pub(crate) fn signing_key() -> SigningKey {
     SigningKey::from_bytes(&[1; 32])
 }
 
@@ -145,17 +145,22 @@ impl SnapshotKeys for Toy {
 }
 
 fn seal(events: &[Ev], per: usize) -> Vec<SealedSegment> {
+    seal_in(events, per, 1)
+}
+
+/// Seals `events` as positions `1..` of `generation`, `per` entries to a segment.
+pub(crate) fn seal_in(events: &[Ev], per: usize, generation: u64) -> Vec<SealedSegment> {
     let mut sealed: Vec<SealedSegment> = Vec::new();
     for (chunk_index, chunk) in events.chunks(per).enumerate() {
         let mut config = match sealed.last() {
-            Some(previous) => SegmentConfig::after(SOURCE, 1, previous.hash),
-            None => SegmentConfig::first(SOURCE, 1),
+            Some(previous) => SegmentConfig::after(SOURCE, generation, previous.hash),
+            None => SegmentConfig::first(SOURCE, generation),
         };
         config.block_target = 400;
         let mut writer = SegmentWriter::new(config).unwrap();
         for (offset, event) in chunk.iter().enumerate() {
             let seq = 1 + (chunk_index * per + offset) as u64;
-            let position = Position { generation: 1, seq };
+            let position = Position { generation, seq };
             writer
                 .push(position, line(event, position, SOURCE).as_bytes())
                 .unwrap();
@@ -165,7 +170,7 @@ fn seal(events: &[Ev], per: usize) -> Vec<SealedSegment> {
     sealed
 }
 
-fn summary(segment: &SealedSegment) -> SegmentSummary {
+pub(crate) fn summary(segment: &SealedSegment) -> SegmentSummary {
     let header = &segment.header;
     SegmentSummary::new(
         header.generation,

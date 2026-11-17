@@ -197,3 +197,66 @@ explanation_key = "error.import.config_command_id"
 params = []
 remedy = "Shorten the batch label and run the import again."
 since = "0.1.0"
+
+[[entry]]
+code = "import.file_unreadable"
+class = "none"
+summary = "The uploaded file cannot be read as a table."
+explanation_key = "error.import.file_unreadable"
+params = []
+remedy = "Save the file as UTF-8 CSV or a valid XLSX workbook and upload it again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.mapping_invalid"
+class = "none"
+summary = "The import mapping names a column or field that cannot be used."
+explanation_key = "error.import.mapping_invalid"
+params = []
+remedy = "Map only columns of the file to fields you may write, then start the import again."
+since = "0.1.0"
+
+[[entry]]
+code = "import.limit_exceeded"
+class = "none"
+summary = "The import file exceeds a row, size or column limit of this site."
+explanation_key = "error.import.limit_exceeded"
+params = []
+remedy = "Read the limits from the import limits operation and split the file."
+since = "0.1.0"
+
+[[entry]]
+code = "import.not_ready"
+class = "none"
+summary = "The import job is not in the state this call needs."
+explanation_key = "error.import.not_ready"
+params = []
+remedy = "Wait for the dry run to finish, or start a new import."
+since = "0.1.0"
+
+[[entry]]
+code = "import.digest_changed"
+class = "none"
+summary = "The digest sent is not the dry run's digest: the file or mapping changed since the preview."
+explanation_key = "error.import.digest_changed"
+params = []
+remedy = "Run the dry run again and run the import with the new digest."
+since = "0.1.0"
+
+[[entry]]
+code = "import.cancelled"
+class = "none"
+summary = "The import job was cancelled."
+explanation_key = "error.import.cancelled"
+params = []
+remedy = "Start a new import if the data is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "import.right_missing"
+class = "none"
+summary = "You lack the import right on this DocType, or the submit right when submit is requested."
+explanation_key = "error.import.right_missing"
+params = []
+remedy = "Ask an administrator for the right, or import without submitting."
+since = "0.1.0"

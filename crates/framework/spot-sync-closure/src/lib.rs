@@ -12,6 +12,10 @@
 //! The up direction runs the same code: hub-owned and mirrored targets are `owns`, so nothing is
 //! added in the normal case.
 //!
+//! Deletions travel: a deleted record is a tombstone ([`SourceImage::deleted`],
+//! [`BundleRecord::deleted`]) with no image, 0 bytes and no references. It is a root or satellite
+//! like any record of its role, is not redacted, and is never added as an extra.
+//!
 //! A record the destination holds — it cannot decode the record's schema major yet (ADR-066
 //! section 5) — is never an extra, whatever its role, and a record whose closure needs one is
 //! withheld with it ([`BundlePlan::withheld_by_hold`]). Sending the dependency anyway would hand

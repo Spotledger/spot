@@ -7,6 +7,7 @@ use spot_sync_closure::{Bundle, Position, RecordKey};
 use spot_sync_skew::HoldReason;
 
 use crate::error::NodeError;
+use crate::serve::ServeStamp;
 
 /// One bundle as it reaches the node: who sent it, for which tenant, and the bundle itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +49,20 @@ impl AppliedSet {
 pub struct ApplyRefusal {
     /// Why, without any secret.
     pub reason: String,
+}
+
+/// Most keys per tenant the node remembers as `Gone` (settings never hidden: a constant of the
+/// bound, reported back by `resolve_gone`).
+pub const MAX_GONE_PER_TENANT: usize = 4_096;
+
+/// What `resolve_gone` did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GoneOutcome {
+    /// Parked bundles the answer unblocked and applied, in arrival order.
+    pub released: Vec<AppliedSet>,
+    /// Keys that were not recorded because the tenant already remembers `MAX_GONE_PER_TENANT`:
+    /// they stay missing.
+    pub not_recorded: Vec<RecordKey>,
 }
 
 /// A bundle was applied (or was a no-op replay).
@@ -101,6 +116,9 @@ pub struct ParkedBundle {
     pub first_position: Position,
     /// Size of the bundle's images.
     pub bytes: usize,
+    /// The serve stamp it arrived with, if it came with one: it counts into the acknowledged
+    /// serve-sequence prefix only when the bundle is applied.
+    pub serve: Option<ServeStamp>,
 }
 
 /// A bundle that left the parking store without being applied: the closure repair loop

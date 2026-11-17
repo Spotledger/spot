@@ -39,10 +39,22 @@ pub use self::permissions::*;
 /// is last because it stops the host.
 pub async fn run_all(fixture: &Fixture, filter: Filter) -> Report {
     let mut report = Report::new();
+    // `L3_ONLY=a,b` runs only the registered cases whose name contains one of the words (the
+    // hand-written block is skipped), to rerun a few cases without the whole suite.
+    let only: Vec<String> = std::env::var("L3_ONLY")
+        .map(|v| {
+            v.split(',')
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let filter_only = !only.is_empty();
     macro_rules! case {
         ($case:ident, $core:expr) => {{
-            if filter.admits($core) {
+            if !filter_only && filter.admits($core) {
                 let started = Instant::now();
+                eprintln!("l3: case {}", stringify!($case));
                 let status = match $case(fixture).await {
                     Ok(()) => Status::Passed,
                     Err(failure) => Status::Failed(failure),
@@ -60,7 +72,7 @@ pub async fn run_all(fixture: &Fixture, filter: Filter) -> Report {
     // the same table `CASES.md` is generated from, so there is one source.
     macro_rules! blocked {
         ($name:literal) => {{
-            if filter.admits(false) {
+            if !filter_only && filter.admits(false) {
                 let status = match LEGACY_BLOCKED.iter().find(|(name, ..)| *name == $name) {
                     Some((_, owner, reason)) => Status::Blocked { owner, reason },
                     None => Status::Failed(failure!(
@@ -157,11 +169,18 @@ pub async fn run_all(fixture: &Fixture, filter: Filter) -> Report {
 
     // The registered cases (`src/cases/<name>.rs`, found by `build.rs`), after the hand-written
     // block, ordered by `(ORDER, name)`.
+    // The hand-written cases ended with the shutdown case: the stopped host's pools are not
+    // needed by the registered cases that start hosts of their own.
+    fixture.release_connections().await;
     for def in registered() {
+        if filter_only && !only.iter().any(|w| def.name.contains(w.as_str())) {
+            continue;
+        }
         match def.kind {
             CaseKind::Run(run) => {
                 if filter.admits(def.core) {
                     let started = Instant::now();
+                    eprintln!("l3: case {}", def.name);
                     let status = match run(fixture).await {
                         Ok(()) => Status::Passed,
                         Err(failure) => Status::Failed(failure),

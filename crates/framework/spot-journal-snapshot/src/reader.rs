@@ -78,6 +78,44 @@ impl<'a> SnapshotReader<'a> {
         }
     }
 
+    /// How many parts the index lists.
+    #[must_use]
+    pub fn part_count(&self) -> usize {
+        self.index.body.parts.len()
+    }
+
+    /// The images of part `ordinal` (0-based), verified exactly as streaming verifies them: the
+    /// stored bytes hash to the index's, decompress to its size, parse, number what the index
+    /// says, and are strictly ascending by `(entity, id)` inside the part. A caller that needs
+    /// one part (a keyed fetch) loads only that one.
+    ///
+    /// # Errors
+    /// [`SnapshotError::ParamsInvalid`] when `ordinal` is not a part of this snapshot (never a
+    /// panic), [`SnapshotError::PartInvalid`] naming the part when it is missing, altered, out of
+    /// order or disagrees with the index, or a store failure.
+    pub async fn part(&self, ordinal: usize) -> Result<Vec<ImageRecord>, SnapshotError> {
+        let entry = self
+            .index
+            .body
+            .parts
+            .get(ordinal)
+            .ok_or(SnapshotError::ParamsInvalid(
+                "the part ordinal is not a part of this snapshot",
+            ))?;
+        let images = self.load_part(entry).await?;
+        for pair in images.windows(2) {
+            if let [before, after] = pair
+                && (&before.entity, &before.id) >= (&after.entity, &after.id)
+            {
+                return Err(SnapshotError::part(
+                    &entry.name,
+                    "the images are not in order",
+                ));
+            }
+        }
+        Ok(images)
+    }
+
     async fn load_part(&self, entry: &PartEntry) -> Result<Vec<ImageRecord>, SnapshotError> {
         let body = &self.index.body;
         let key =
@@ -150,10 +188,10 @@ impl ImageStream<'_, '_> {
                 self.last = Some(key);
                 return Ok(Some(record));
             }
-            let Some(entry) = self.reader.index.body.parts.get(self.next_part) else {
+            if self.next_part >= self.reader.part_count() {
                 return Ok(None);
-            };
-            self.current = self.reader.load_part(entry).await?.into();
+            }
+            self.current = self.reader.part(self.next_part).await?.into();
             self.next_part += 1;
         }
     }

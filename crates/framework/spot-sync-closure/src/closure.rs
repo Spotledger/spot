@@ -100,6 +100,10 @@ pub(crate) fn collect(
     let mut held: BTreeSet<RecordKey> = BTreeSet::new();
     let mut work: Vec<RecordKey> = Vec::new();
     for seed in seeds {
+        if seed.deleted {
+            // A tombstone references nothing.
+            continue;
+        }
         let targets = refs.references(&seed.key.entity, &seed.image)?;
         add_edges(&mut dependents, &seed.key, &targets);
         work.extend(targets);
@@ -131,6 +135,12 @@ pub(crate) fn collect(
                 entity: target.entity.clone(),
                 id: target.id.clone(),
             })?;
+        if image.deleted {
+            // A deleted target is never an extra: there is no image to send. The record that
+            // refers to it is not satisfied by it; the node decides (park, then `Gone`).
+            known.insert(target);
+            continue;
+        }
         let in_scope = dest.in_scope(&target);
         if in_scope
             && dest

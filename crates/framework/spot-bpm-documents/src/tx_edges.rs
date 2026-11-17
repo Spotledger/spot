@@ -373,13 +373,37 @@ where
 pub type PgCaseFileParticipant =
     CaseFileParticipant<spot_postgres::PgTransaction, spot_edge_pg::PgEdgeWriters>;
 
+/// Runs a future that waits on real I/O to completion on a private current-thread runtime, on a
+/// thread of its own. A no-op-waker poll ([`run_ready`]) never finishes such a future, and the
+/// caller may sit on a runtime worker, where blocking on the runtime itself is refused; the
+/// connections the future uses are driven by their own tasks on the host's runtime, so a private
+/// runtime for its timers is enough.
+#[cfg(feature = "pg")]
+fn block_on_private_runtime<F>(future: F) -> Result<bool, CaseFileError>
+where
+    F: std::future::Future<Output = Result<bool, CaseFileError>> + Send,
+{
+    let unreadable = || CaseFileError::new("the Case-file edge could not be read");
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .map_err(|_| unreadable())?
+                    .block_on(future)
+            })
+            .join()
+            .unwrap_or_else(|_| Err(unreadable()))
+    })
+}
+
 /// The PostgreSQL [`CaseFileEdgeStore`]: reads the edge on its own connection, in a read-only
 /// transaction apart from the document's. One database is one site (ADR-34), so it serves the
 /// site it was built for and answers `false` for any other.
 ///
-/// Like [`EngineDocumentOps`](crate::EngineDocumentOps) it polls the backend's futures to
-/// completion, so call it from a thread that is not a runtime worker (the port runs on a
-/// blocking thread).
+/// It reads on a private runtime of its own thread (see `block_on_private_runtime`), so it may be
+/// called from any thread.
 #[cfg(feature = "pg")]
 pub struct PgCaseFileEdgeStore {
     backend: spot_postgres::PgBackend,
@@ -421,7 +445,7 @@ impl CaseFileEdgeStore for PgCaseFileEdgeStore {
             return Ok(false);
         }
         let name = Name::new("case_file_read").map_err(|_| unreadable())?;
-        run_ready(async {
+        block_on_private_runtime(async {
             let options = TxOptions::new(name, Isolation::ReadCommitted);
             let mut tx = self
                 .backend

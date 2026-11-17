@@ -1,0 +1,29 @@
+# offline_identity_host codes: the hub side of offline identity (spot-cli services/offline_identity.rs,
+# WP-IAM-09.T4). They appear in readiness reasons and logs only, never in an API answer.
+
+[[entry]]
+code = "offline_identity_host.no_roles"
+class = "none"
+summary = "The published role snapshot is not available, so no offline permission snapshot is issued."
+explanation_key = "error.offline_identity_host.no_roles"
+params = []
+remedy = "Enable the roles module (services.roles) and wait for its first snapshot, or set services.offline_identity.enabled to false."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_host.no_directory"
+class = "none"
+summary = "No module of this site provides the node registry and the directory of the users a node serves."
+explanation_key = "error.offline_identity_host.no_directory"
+params = []
+remedy = "Enable the module that provides the HubFacts port for this site, or set services.offline_identity.enabled to false."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity_host.stale_nodes"
+class = "none"
+summary = "One or more nodes hold an older permission snapshot than the latest issued to them."
+explanation_key = "error.offline_identity_host.stale_nodes"
+params = []
+remedy = "Bring the listed nodes online so they fetch the new snapshot; until then they act on a smaller or older set of permissions (never a larger one)."
+since = "0.1.0"

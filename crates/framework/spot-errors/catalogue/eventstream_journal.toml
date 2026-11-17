@@ -1,0 +1,37 @@
+# eventstream_journal codes: the refusals of the journal history reader behind the event stream (WP-JRN-09.T2, ADR-061 s5 and s6). A history refusal is a library-internal vocabulary: the stream adapter (WP-JRN-09.T3) maps it to the stream's own `eventstream.*` answer, so every class is `none`. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "eventstream_journal.resync_required"
+class = "none"
+summary = "Generation {generation}, position {seq} cannot be continued from the journal: it lies in history a fork abandoned, or the outbox horizon moved past the seam."
+explanation_key = "error.eventstream_journal.resync_required"
+params = ["generation", "seq"]
+remedy = "Resync the consumer from a snapshot, then resume from the live stream."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream_journal.history_unavailable"
+class = "none"
+summary = "Journal history cannot be served: {reason}."
+explanation_key = "error.eventstream_journal.history_unavailable"
+params = ["reason"]
+remedy = "Run the journal verification and restore the missing or damaged object from the object store or another copy; nothing is served from the affected range until it verifies."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream_journal.foreign_key"
+class = "none"
+summary = "A journal object names another tenant, another source or an unsafe path, and was refused."
+explanation_key = "error.eventstream_journal.foreign_key"
+params = []
+remedy = "Check the manifest and the tenant the reader was built for; a journal must only list its own tenant's objects."
+since = "0.1.0"
+
+[[entry]]
+code = "eventstream_journal.request_invalid"
+class = "none"
+summary = "The history request is not acceptable: {reason}."
+explanation_key = "error.eventstream_journal.request_invalid"
+params = ["reason"]
+remedy = "Send a position the stream issued, or the start position (generation 0, seq 0)."
+since = "0.1.0"

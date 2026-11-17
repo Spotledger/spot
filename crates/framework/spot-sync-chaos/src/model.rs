@@ -110,14 +110,18 @@ pub enum Frame {
         position: u64,
         /// The bundle's index within its position.
         index: u32,
+        /// The serve sequence the hub's queue gave the bundle.
+        serve_seq: u64,
+        /// The serve sequence of the bundle the queue held below it when it was served (0: none).
+        serve_after: u64,
         /// The bundle itself.
         bundle: Box<Bundle>,
     },
-    /// The node's applied prefix.
+    /// The node's acknowledgement: the highest serve sequence it applied everything up to.
     Ack {
         /// The acknowledging node.
         node: usize,
-        /// The prefix it applied.
+        /// The serve sequence it applied through (not a journal position).
         prefix: u64,
     },
     /// The node's refusal of a bundle.
@@ -155,9 +159,11 @@ impl Frame {
                 of,
                 position,
                 index,
+                serve_seq,
                 bundle,
+                ..
             } => format!(
-                "node-{node} batch offer={offer} {ordinal}/{of} pos={position} index={index} records={}",
+                "node-{node} batch offer={offer} {ordinal}/{of} pos={position} index={index} serve={serve_seq} records={}",
                 bundle.records.len()
             ),
             Self::Ack { node, prefix } => format!("node-{node} ack prefix={prefix}"),
@@ -300,10 +306,12 @@ pub struct WorldConfig {
     /// The generation a restored node comes back with: older than the hub's.
     pub restored_generation: u64,
     /// Whether the `Customer` entity travels in the mandatory lane (served before the bulk, out
-    /// of position order). Off by default: see `tests/findings.rs` for why.
+    /// of position order). Off by default; `tests/findings.rs` runs it on and proves the
+    /// acknowledgement still means applied.
     pub mandatory_customers: bool,
     /// Write every wave before the hub reads any (the hub's images then run ahead of the
-    /// entries it bundles). Off by default: see `tests/findings.rs` for why.
+    /// entries it bundles). Off by default; `tests/findings.rs` runs it on and proves the
+    /// acknowledgement still means applied.
     pub images_run_ahead: bool,
     /// A node whose scope holds only these entities (`None`: every node is fully scoped).
     pub narrow_node: Option<usize>,

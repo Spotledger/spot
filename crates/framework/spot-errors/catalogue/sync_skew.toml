@@ -72,3 +72,30 @@ explanation_key = "error.sync_skew.hold_retired"
 params = []
 remedy = "Upgrade the node to a version that can decode the current major; it then resynchronises by catch-up."
 since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.state_duplicate_key"
+class = "none"
+summary = "A persisted hold set names the same record (entity and id) twice, so it is refused instead of one entry silently overwriting the other."
+explanation_key = "error.sync_skew.state_duplicate_key"
+params = []
+remedy = "The saved sync state is damaged or hand-edited: remove the duplicate entry or restore the state from a backup; the hub then catches the node up from its acknowledged position."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.state_disorder"
+class = "none"
+summary = "A persisted hub-side hold queue is not strictly ascending by position, so it is refused: loading it would deliver a later version before an earlier one."
+explanation_key = "error.sync_skew.state_disorder"
+params = []
+remedy = "The saved sync state is damaged or hand-edited: put the queue back in ascending position order or restore the state from a backup."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_skew.state_over_limit"
+class = "none"
+summary = "A persisted hold set queues more entries than its limit, so it is refused."
+explanation_key = "error.sync_skew.state_over_limit"
+params = []
+remedy = "The saved sync state is damaged or was written with a larger limit: restore it from a backup or raise the limit; the node otherwise catches up after it upgrades."
+since = "0.1.0"

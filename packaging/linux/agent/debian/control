@@ -1,0 +1,19 @@
+Source: spot-agent
+Section: admin
+Priority: optional
+Maintainer: Spotledger Packaging <packaging@spotledger.invalid>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://spotledger.example/
+
+Package: spot-agent
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd, sudo
+Description: Spotledger host agent
+ The Spotledger host agent runs as an unprivileged account and executes signed
+ management commands. The few privileged operations go through a small helper
+ named by an exact entry in /etc/sudoers.d/spot-agent.
+ .
+ The package never starts, enables or enrols the agent: enrolment is an
+ explicit operator action with a one-time token.

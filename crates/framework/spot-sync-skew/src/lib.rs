@@ -12,11 +12,13 @@ mod filter;
 mod holds;
 mod majors;
 mod model;
+mod persist;
 mod session;
 
 pub use error::{
     HOLD_RETIRED, HOLDS_FULL, NODE_TOO_OLD, SCHEMA_RETIRE_BLOCKED, SESSION_EPOCH_UNVERIFIED_HUB,
-    SESSION_EPOCH_UNVERIFIED_NODE, SESSION_MIGRATING_HUB, SESSION_MIGRATING_NODE,
+    SESSION_EPOCH_UNVERIFIED_NODE, SESSION_MIGRATING_HUB, SESSION_MIGRATING_NODE, STATE_DISORDER,
+    STATE_DUPLICATE_KEY, STATE_OVER_LIMIT,
 };
 pub use filter::{
     FilterResult, Outgoing, filter_outgoing, filter_outgoing_with_fleet, release_for_upgrade,

@@ -19,6 +19,8 @@ path = "src/main.rs"
 # The scratch-database helper: the PostgreSQL admin connection the launcher samples
 # `pg_stat_activity` and drops the run's database with, and the `SPOT_TEST_PG_URL` convention.
 spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+# The one helper that makes a site's key file (the sign-in stores seal through the vault).
+spot-cli = { path = "../../../crates/framework/spot-cli" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "process", "fs"] }
 # The profile, the budgets file and the report.
 serde = { version = "1", features = ["derive"] }

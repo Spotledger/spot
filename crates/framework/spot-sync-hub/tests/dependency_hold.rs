@@ -229,7 +229,22 @@ fn a_dependent_waits_for_every_held_record_it_needs() {
 }
 
 /// A destination whose entitlement can be revoked while entries are withheld from it.
-struct Revocable(std::rc::Rc<std::cell::Cell<bool>>);
+/// A flag a test flips while the relay owns the scope (`Cell<bool>` made `Send`).
+struct Flag(std::sync::atomic::AtomicBool);
+
+impl Flag {
+    fn new(value: bool) -> Self {
+        Self(std::sync::atomic::AtomicBool::new(value))
+    }
+    fn get(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn set(&self, value: bool) {
+        self.0.store(value, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+struct Revocable(std::sync::Arc<Flag>);
 
 impl DestinationScope for Revocable {
     fn covers(&self, entry: &StreamEntry) -> bool {
@@ -254,7 +269,7 @@ fn a_withheld_dependent_is_not_released_after_the_scope_was_revoked() {
     ]);
     let q = SharedQueue::default();
     let mut r = relay_with(stream, src, q.clone());
-    let live = std::rc::Rc::new(std::cell::Cell::new(true));
+    let live = std::sync::Arc::new(Flag::new(true));
     r.add_destination(Destination::new(
         "d",
         Box::new(Revocable(live.clone())),

@@ -28,6 +28,8 @@ public sealed class StartupWiringTests : IDisposable
 
         public bool Accept { get; set; } = true;
 
+        public List<(string Url, string User, string Password)> SignIns { get; } = [];
+
         public Task<bool> OpenFormAsync(string doctype, string id)
         {
             Opened.Add($"form:{doctype}:{id}");
@@ -37,6 +39,12 @@ public sealed class StartupWiringTests : IDisposable
         public Task<bool> OpenListAsync(string doctype)
         {
             Opened.Add($"list:{doctype}");
+            return Task.FromResult(Accept);
+        }
+
+        public Task<bool> SignInAsync(string url, string user, string password)
+        {
+            SignIns.Add((url, user, password));
             return Task.FromResult(Accept);
         }
     }
@@ -173,5 +181,121 @@ public sealed class StartupWiringTests : IDisposable
         }
 
         Assert.Equal(Run(), Run());
+    }
+
+    // ---- WP-UI-09.T8: the test sign-in hook. The refusals come first: this is a way into authentication. ----
+
+    private const string TestUser = "test-user";
+    private const string TestSecret = "not-a-real-secret-0xC0FFEE";
+
+    private BrowserHostState ComposeWithOpener(out RecordingOpener opener, bool flag)
+    {
+        var state = BrowserHostState.Compose(new MemoryBrowserStorage(), Tick, RecentFile);
+        opener = new RecordingOpener();
+        state.AttachOpener(opener);
+        if (flag)
+        {
+            state.EnableTestSignIn();
+        }
+
+        return state;
+    }
+
+    [Fact]
+    public async Task SignInDoesNothingWithoutTheFlag()
+    {
+        var state = ComposeWithOpener(out var opener, flag: false);
+        Assert.False(state.TestSignInEnabled);
+        Assert.False(await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret));
+        Assert.Empty(opener.SignIns);
+        Assert.Equal(0, state.Metrics.CountOf("signIn"));
+    }
+
+    [Theory]
+    [InlineData("https://erp.example.test")]
+    [InlineData("http://127.0.0.1.example.test:8080")]
+    [InlineData("http://localhost.example.test")]
+    [InlineData("http://localhost@evil.example.test")]
+    [InlineData("http://user:pw@localhost:8080")]
+    [InlineData("http://10.0.0.5:8080")]
+    [InlineData("http://0.0.0.0:8080")]
+    [InlineData("ftp://localhost")]
+    [InlineData("localhost:8080")]
+    [InlineData("")]
+    public async Task SignInRefusesAnythingButTheLoopbackHost(string url)
+    {
+        var state = ComposeWithOpener(out var opener, flag: true);
+        Assert.False(await state.SignInAsync(url, TestUser, TestSecret));
+        Assert.Empty(opener.SignIns);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8080")]
+    [InlineData("http://localhost:8080")]
+    [InlineData("http://[::1]:8080")]
+    [InlineData("https://localhost")]
+    public void LoopbackHostsAreRecognised(string url) => Assert.True(BrowserHostState.IsLoopbackUrl(url));
+
+    [Fact]
+    public async Task SignInWithNoOpenerIsFalse()
+    {
+        var state = BrowserHostState.Compose(new MemoryBrowserStorage(), Tick, RecentFile);
+        state.EnableTestSignIn();
+        Assert.False(await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret));
+    }
+
+    [Theory]
+    [InlineData("", TestSecret)]
+    [InlineData(TestUser, "")]
+    public async Task SignInRefusesMissingCredentials(string user, string password)
+    {
+        var state = ComposeWithOpener(out var opener, flag: true);
+        Assert.False(await state.SignInAsync("http://127.0.0.1:8080", user, password));
+        Assert.Empty(opener.SignIns);
+    }
+
+    [Fact]
+    public async Task SignInForwardsTheThreeArgumentsAndReportsTheResult()
+    {
+        var state = ComposeWithOpener(out var opener, flag: true);
+        Assert.True(await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret));
+        Assert.Equal([("http://127.0.0.1:8080", TestUser, TestSecret)], opener.SignIns);
+        Assert.Equal(1, state.Metrics.CountOf("signIn"));
+        Assert.NotNull(state.Metrics.MarkOf("lastSignedIn"));
+
+        opener.Accept = false;
+        Assert.False(await state.SignInAsync("http://localhost:8080", TestUser, TestSecret));
+        Assert.NotNull(state.Metrics.MarkOf("lastSignInRefused"));
+    }
+
+    [Fact]
+    public async Task TheOpenersExceptionIsSwallowedAndTheCredentialsDoNotEscape()
+    {
+        var state = BrowserHostState.Compose(new MemoryBrowserStorage(), Tick, RecentFile);
+        state.EnableTestSignIn();
+        state.AttachOpener(new ThrowingOpener());
+        Assert.False(await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret));
+    }
+
+    [Fact]
+    public async Task NeitherThePasswordNorTheUserIsInTheMetricsJson()
+    {
+        var state = ComposeWithOpener(out _, flag: true);
+        await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret);
+        await state.SignInAsync("http://127.0.0.1:8080", TestUser, TestSecret);
+        var json = state.Metrics.ToJson();
+        Assert.DoesNotContain(TestSecret, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(TestUser, json, StringComparison.Ordinal);
+        Assert.Contains("\"signIn\"", json, StringComparison.Ordinal);
+    }
+
+    private sealed class ThrowingOpener : IWorkspaceOpener
+    {
+        public Task<bool> OpenFormAsync(string doctype, string id) => Task.FromResult(false);
+
+        public Task<bool> OpenListAsync(string doctype) => Task.FromResult(false);
+
+        public Task<bool> SignInAsync(string url, string user, string password) =>
+            throw new InvalidOperationException("boom " + password);
     }
 }

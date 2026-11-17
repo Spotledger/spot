@@ -1,0 +1,48 @@
+[package]
+name = "spot-journal-ship"
+description = "The journal shipper (WP-RTB-01.T3, ADR-061 sections 1, 4, 5 and 10): per site, one task that reads the outbox from a persisted watermark and makes it durable through the relay (signed manifest, sealed segments, tail chunks), seals personal fields on the way out, advances the watermark only to a position the relay reports durable, keeps one writer under a fenced lease, opens a new relay generation when the outbox generation changes, and verifies its own chain continuously"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The feed position (generation, seq) and the envelope the shipper reads from the outbox.
+spot-events-contract = { path = "../../../contracts/events" }
+# The storage contract's outbox reader and `ResyncRequired` (the PostgreSQL adapter only).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The relay and its seams: the shipper ships through `ChunkRelay`, the same seam the commit driver uses.
+spot-journal-relay = { path = "../spot-journal-relay" }
+spot-journal-commit = { path = "../spot-journal-commit" }
+# The manifest signer seam, fork records and the verifying keys.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The object-store seam, the per-tenant layout and the folder provider.
+spot-journal-store = { path = "../spot-journal-store" }
+# Continuous light verification of the chain.
+spot-journal-verify = { path = "../spot-journal-verify" }
+# The relay-side transform that seals personal fields.
+spot-journal-protect = { path = "../spot-journal-protect" }
+# The key provider seam: the manifest signing key and the tail keys are derived from it.
+spot-secrets = { path = "../spot-secrets" }
+# The one-writer lease with a fencing token.
+spot-coordinator = { path = "../spot-coordinator" }
+# The site's own pool and outbox reader (the PostgreSQL adapter).
+spot-postgres = { path = "../../backends/spot-postgres" }
+deadpool-postgres = "0.14"
+# The manifest signing key (derived from the key provider, never stored).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Watch channel for the progress handle, time for the wait and the backoff.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# Typed errors with stable `journal_ship.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "time", "rt", "macros"] }
+# Personal-field protection in tests: the memory key store, counter nonces and a field description.
+serde_json = "1"
+spot-journal-pii = { path = "../spot-journal-pii" }
+spot-journal-segment = { path = "../spot-journal-segment" }
+
+[lints]
+workspace = true

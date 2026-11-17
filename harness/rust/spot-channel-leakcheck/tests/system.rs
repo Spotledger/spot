@@ -31,7 +31,7 @@ fn records_text(core: &Core) -> Vec<Output> {
     ]
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_job_reads_a_declared_group_and_its_records_carry_no_value() {
     let core = core();
     let corpus = corpus();
@@ -78,7 +78,7 @@ async fn a_job_reads_a_declared_group_and_its_records_carry_no_value() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_undeclared_group_is_refused_and_the_audit_record_names_no_value() {
     let core = core();
     let corpus = corpus();
@@ -102,7 +102,7 @@ async fn an_undeclared_group_is_refused_and_the_audit_record_names_no_value() {
     assert_no_leak(&corpus, &[Output::Text(format!("{audit:?}"))]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_job_that_exports_as_the_user_gets_the_users_masked_form() {
     let core = core();
     let corpus = corpus();

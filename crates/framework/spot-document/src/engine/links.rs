@@ -76,7 +76,11 @@ impl<B: StorageBackend> LinkChecks for TxChecks<'_, B> {
             // The caller's read rights compile into the query before it reaches storage. A
             // caller that may read nothing of the DocType, or whose rights cannot answer this
             // query, sees an empty result: the same as a document that is not there.
-            let plan = match self.engine.query_plan(self.inv, query).await {
+            let principal = self
+                .engine
+                .principal_or(self.work.pinned_for(self.inv), self.inv)
+                .await;
+            let plan = match self.engine.query_plan_as(&principal, query).await {
                 Ok(Some(plan)) => plan,
                 Ok(None) | Err(_) => return Ok(empty_page(query)),
             };

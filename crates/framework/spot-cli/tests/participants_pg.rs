@@ -14,8 +14,8 @@
 //! - the edge set equals the link set after a mixed write sequence (`check_invariant` clean), and
 //!   an edge written before a later refusal rolls back with the document;
 //! - an `AuditStep` registered beside the audit participant stops the install check
-//!   (`docaudit.double_registration`) — the host installs no audit participant yet
-//!   (WP-PRD-01.T22), and the check is armed for the day it does;
+//!   (`docaudit.double_registration`) — the host installs the audit participant since
+//!   WP-PRD-01.T22 (`tests/doc_audit_pg.rs` covers the hosted audit);
 //! - `spot migrate` creates the ownership tables on a fresh site and on a populated one, and a
 //!   second run plans nothing.
 //!
@@ -392,8 +392,13 @@ async fn a_write_outside_the_node_s_scope_is_refused_before_storage_and_an_owned
         .await
         .map(|_| ())
         .expect("the owned scope writes through the engine too");
+    // A second command: the ledger refuses one id for two different requests.
+    let other = Invocation {
+        command_id: CommandId::new("cmd-t21-other").ok(),
+        ..invocation.clone()
+    };
     let error = engine
-        .create(&invocation, label("W13"))
+        .create(&other, label("W13"))
         .await
         .expect_err("the unowned scope is refused");
     assert_eq!(error.code, "partition.not_owner", "{}", error.message);

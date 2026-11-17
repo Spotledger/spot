@@ -1,0 +1,32 @@
+[package]
+name = "spot-occupancy"
+description = "Booking holds on range exclusion (WP-STO-14.T1, ADR-087 section 6): the occupancy entity with a tentative state, claim by insert, the takeover of an expired hold, the expiry sweeper with SKIP LOCKED, occupancy outbox events, the late-confirm rule and one owning node per resource"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The storage contract: `StorageBackend`, `Transaction`, `Query`, `RangeValue`, the typed errors.
+# Every read and write goes through it; SQL stays in the storage crates (ADR-45).
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The occupancy DocType is declared through metadata (`Definition`, `ExclusionSpec`).
+spot-meta = { path = "../spot-meta" }
+# `Clock`: expiry and the takeover predicate read the one injected clock, never the wall clock.
+spot-core = { path = "../spot-core" }
+# Instants and durations; `formatting` renders the event payload instants as RFC 3339.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting"] }
+# The event payload is JSON text (`OutboxEvent::payload`).
+serde_json = "1"
+# Only `time`: the back-off between retries of a transaction that failed to serialise.
+tokio = { version = "1", default-features = false, features = ["time"] }
+
+[dev-dependencies]
+# The real database: every race case runs on PostgreSQL (the fake answers `Unsupported`,
+# ADR-087 section 5.5). Tests skip (print `SKIPPED:`) without `SPOT_TEST_PG_URL`.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

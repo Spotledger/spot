@@ -63,6 +63,8 @@ pub(crate) struct RelayState {
     /// A failure no retry cures.
     pub(crate) fatal: bool,
     pub(crate) buffered_only: bool,
+    /// The generation the relay writes into (a fork opens the next one; `seq` restarts at 1).
+    pub(crate) generation: u64,
 }
 
 impl RelayState {
@@ -76,8 +78,13 @@ pub(crate) struct FakeRelay(pub(crate) Arc<Mutex<RelayState>>);
 
 impl FakeRelay {
     pub(crate) fn new(first_seq: u64) -> Self {
+        Self::in_generation(1, first_seq)
+    }
+
+    pub(crate) fn in_generation(generation: u64, first_seq: u64) -> Self {
         Self(Arc::new(Mutex::new(RelayState {
             next_seq: first_seq,
+            generation,
             ..RelayState::default()
         })))
     }
@@ -89,7 +96,7 @@ impl FakeRelay {
 
 impl ChunkRelay for FakeRelay {
     fn generation(&self) -> u64 {
-        1
+        self.state().generation
     }
 
     fn next_seq(&self) -> u64 {
@@ -185,7 +192,17 @@ pub(crate) const REMOTE_HALT: Policy = Policy::RemoteSync {
 };
 
 pub(crate) fn rig_with(policy: Policy, settings: CommitSettings, gate: GateConfig) -> Rig {
-    let relay = FakeRelay::new(1);
+    rig_in_generation(policy, settings, gate, 1)
+}
+
+/// A rig whose relay writes generation `generation`, starting at `seq` 1.
+pub(crate) fn rig_in_generation(
+    policy: Policy,
+    settings: CommitSettings,
+    gate: GateConfig,
+    generation: u64,
+) -> Rig {
+    let relay = FakeRelay::in_generation(generation, 1);
     let clock = VirtualClock::default();
     let recorder = Arc::new(Recorder::default());
     let tenant = TenantDurability {
@@ -198,6 +215,7 @@ pub(crate) fn rig_with(policy: Policy, settings: CommitSettings, gate: GateConfi
         clock.clone(),
         settings,
     )
+    .unwrap()
     .with_observer(recorder.clone());
     Rig {
         driver: Arc::new(driver),

@@ -190,7 +190,12 @@ impl ExclusionSource for EngineExclusions {
             .0
             .engine()
             .ok_or_else(|| "the document engine is not running".to_owned())?;
-        let mut out = Exclusions::new();
+        // The login stores write a session's touch, rotation and end straight to storage (the
+        // create goes through the engine): a session is ephemeral sign-in state, not part of
+        // the recoverable record, so its later versions have no state event by design.
+        let mut out = Exclusions::new()
+            .local("session", "platform", "login_session_updates_write_storage")
+            .map_err(|e| e.to_string())?;
         for exclusion in engine.capture_exclusions() {
             out = match exclusion.kind {
                 ExclusionKind::Derived => out.derived(

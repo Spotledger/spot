@@ -4,7 +4,8 @@
 //! Contents:
 //! - [`config::ServerConfig`]: bounds and addresses, serde-loadable,
 //! - [`server::ServerBuilder`]: assembles the router with limits, timeouts, request ids and the
-//!   health endpoints, binds the listeners and accepts with graceful shutdown,
+//!   health endpoints, binds the listeners (one router per audience) and accepts with graceful
+//!   shutdown,
 //! - [`server::ServerHandle`]: live connection counter and join,
 //! - [`site::StaticSites`]/[`site::SiteResolver`]: host-to-site resolution (ADR-34),
 //! - [`request::RequestId`]: end-to-end request identification,
@@ -22,7 +23,7 @@ pub mod request;
 pub mod server;
 pub mod site;
 
-pub use config::ServerConfig;
+pub use config::{ListenerAudience, ListenerConfig, ServerConfig};
 pub use error::{ErrorEnvelope, HttpErrorCode, ServerError};
 pub use health::{CheckResult, ReadinessCheck};
 pub use request::RequestId;

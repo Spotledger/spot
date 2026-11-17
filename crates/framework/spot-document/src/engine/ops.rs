@@ -13,7 +13,7 @@ use spot_app_api::{
     AppError, AppResult, BoxFuture, ChildRow, DocState, DocTypeDef, Document, DocumentPatch,
     ErrorClass, FieldPath, HookPoint, Message, Operation, Target,
 };
-use spot_permissions::Action;
+use spot_permissions::{Action, Principal};
 use spot_storage_contract::{DocumentStore, Outbox, OutboxEvent, QueryExecutor};
 use spot_storage_contract::{
     ErrorKind, Isolation, Query, RowLock, Rows, StorageBackend, StorageError, Transaction,
@@ -21,9 +21,12 @@ use spot_storage_contract::{
 };
 use tracing::{Instrument, Span};
 
+mod batch;
+
 use super::authz::{WriteChange, create_changes, patch_changes};
 use super::committed::{CommittedBatch, CommittedStep, CommittedSteps, OutboxSink, StepOutcome};
 use super::ctx::Ctx;
+use super::ledger::{Attempted, LedgerCall, command_conflict};
 use super::links;
 use super::naming;
 use super::participant::{
@@ -107,7 +110,7 @@ pub(crate) enum Req {
 }
 
 impl Req {
-    fn doctype(&self) -> &str {
+    pub(crate) fn doctype(&self) -> &str {
         match self {
             Req::Create(doc) | Req::CreateWithSecrets { doc, .. } => doc.doctype().as_str(),
             Req::Update { doctype, .. }
@@ -122,7 +125,7 @@ impl Req {
     }
 
     /// The id of the document the request is about.
-    fn target_id(&self) -> Option<RecordId> {
+    pub(crate) fn target_id(&self) -> Option<RecordId> {
         match self {
             Req::Create(doc) | Req::CreateWithSecrets { doc, .. } => Some(doc.id()),
             Req::Update { id, .. }
@@ -143,7 +146,7 @@ impl Req {
         matches!(self, Req::SetSecrets { .. } | Req::CreateWithSecrets { .. })
     }
 
-    fn op(&self) -> &'static str {
+    pub(crate) fn op(&self) -> &'static str {
         match self {
             Req::Create(_) | Req::CreateWithSecrets { .. } => "create",
             Req::SetSecrets { .. } => "update",
@@ -441,6 +444,17 @@ impl<B: StorageBackend> Engine<B> {
         inv: &'a Invocation,
         req: Req,
     ) -> BoxFuture<'a, AppResult<Done>> {
+        self.top_class(inv, req, None)
+    }
+
+    /// As [`top`](Self::top), for a caller of the retention class `class` (the command ledger
+    /// keeps the row for that class's retention; `None` is the default class).
+    pub(crate) fn top_class<'a>(
+        &'a self,
+        inv: &'a Invocation,
+        req: Req,
+        class: Option<&'a str>,
+    ) -> BoxFuture<'a, AppResult<Done>> {
         let span = tracing::info_span!(
             "doc.op",
             doctype = req.doctype(),
@@ -452,7 +466,7 @@ impl<B: StorageBackend> Engine<B> {
         Box::pin(
             async move {
                 let attempts = AtomicU32::new(0);
-                let result = self.top_inner(inv, req, &attempts).await;
+                let result = self.top_inner(inv, req, &attempts, class).await;
                 let span = Span::current();
                 span.record(
                     "retries",
@@ -465,21 +479,45 @@ impl<B: StorageBackend> Engine<B> {
         )
     }
 
-    async fn top_inner(&self, inv: &Invocation, req: Req, attempts: &AtomicU32) -> AppResult<Done> {
+    async fn top_inner(
+        &self,
+        inv: &Invocation,
+        req: Req,
+        attempts: &AtomicU32,
+        class: Option<&str>,
+    ) -> AppResult<Done> {
         {
             let snap = self.snapshot();
             let label = label(req.doctype(), req.op());
             let unmasked = req.unmasked();
             let trail = Mutex::new(Trail::default());
+            let ledger = self.ledger_call(inv, &req, class);
             let attempted = self
                 .retrying(&label, || {
                     let number = attempts.fetch_add(1, Ordering::Relaxed) + 1;
                     Span::current().record("attempt", number);
-                    self.attempt(&snap, inv, &req, &label, &trail)
+                    self.attempt(&snap, inv, &req, &label, &trail, ledger.as_ref())
                 })
                 .await;
+            // A failure may be the loser of a race between two first uses of one command id: when
+            // the key is recorded by now, the winner's outcome is the answer (a replay), and a
+            // record of another request is a conflict.
+            let attempted = match (attempted, ledger.as_ref()) {
+                (Err(error), Some(call)) if error.code != "document.command_conflict" => {
+                    match self.recorded_since(&snap.catalog, &label, call).await {
+                        Ok(Some(record)) => Ok(Attempted::Replayed(record)),
+                        Ok(None) => Err(error),
+                        Err(conflict) => Err(conflict),
+                    }
+                }
+                (other, _) => other,
+            };
             let (value, mut messages, committed, mut receipts) = match attempted {
-                Ok(done) => done,
+                Ok(Attempted::Replayed(record)) => {
+                    // Nothing runs: no step, no write, no event, no committed delivery.
+                    return self.replayed(inv, &req, &record).await;
+                }
+                Ok(Attempted::Ran(done)) => done,
                 Err(error) => {
                     // The transaction has rolled back by now: tell the sink, never inside it.
                     let trail = trail.into_inner().unwrap_or_else(|p| p.into_inner());
@@ -588,7 +626,8 @@ impl<B: StorageBackend> Engine<B> {
         req: &Req,
         label: &Name,
         trail: &Mutex<Trail>,
-    ) -> Result<(Ret, Vec<Message>, Vec<CommittedItem>, Vec<Finished>), Failed> {
+        ledger: Option<&LedgerCall>,
+    ) -> Result<Attempted<(Ret, Vec<Message>, Vec<CommittedItem>, Vec<Finished>)>, Failed> {
         let options = TxOptions::new(label.clone(), Isolation::ReadCommitted);
         let tx = self
             .backend
@@ -596,6 +635,24 @@ impl<B: StorageBackend> Engine<B> {
             .await
             .map_err(|e| Failed::Storage(e, StorageOp::Other))?;
         let mut work = Work::new(tx);
+        // The command ledger is read first, inside the operation's own transaction.
+        if let Some(call) = ledger {
+            match work.tx.command_get(&call.principal, &call.command_id).await {
+                Ok(None) => {}
+                Ok(Some(record)) => {
+                    let _ = work.tx.rollback().await;
+                    return if record.fingerprint == call.fingerprint {
+                        Ok(Attempted::Replayed(record))
+                    } else {
+                        Err(Failed::App(command_conflict()))
+                    };
+                }
+                Err(e) => {
+                    let _ = work.tx.rollback().await;
+                    return Err(Failed::Storage(e, StorageOp::Other));
+                }
+            }
+        }
         let result = self.exec(snap, &mut work, inv, req.clone()).await;
         let outcome = match (result, work.poisoned.take()) {
             (Ok(_), Some((e, during))) => Err(Failed::Storage(e, during)),
@@ -655,6 +712,22 @@ impl<B: StorageBackend> Engine<B> {
                     let _ = work.tx.rollback().await;
                     return Err(failed);
                 }
+                // The ledger row is the last write, in this transaction: it exists if and only if
+                // the document change does.
+                if let Some(call) = ledger {
+                    let written = match self.command_record(call, req, &value, &work.messages) {
+                        Ok(record) => work
+                            .tx
+                            .command_put(record)
+                            .await
+                            .map_err(|e| Failed::Storage(e, StorageOp::Write)),
+                        Err(error) => Err(Failed::App(error)),
+                    };
+                    if let Err(failed) = written {
+                        let _ = work.tx.rollback().await;
+                        return Err(failed);
+                    }
+                }
                 let Work {
                     tx,
                     messages,
@@ -675,7 +748,7 @@ impl<B: StorageBackend> Engine<B> {
                         None => Failed::Storage(e, during),
                     }
                 })?;
-                Ok((value, messages, committed, finished))
+                Ok(Attempted::Ran((value, messages, committed, finished)))
             }
         }
     }
@@ -850,6 +923,38 @@ impl<B: StorageBackend> Engine<B> {
             .await?;
         let changes = create_changes(&doc, def.as_ref());
         self.authorize_write(&principal, Action::Op(Operation::Create), &doc, &changes)
+            .await?;
+        self.run_op(snap, work, inv, Operation::Create, doc).await
+    }
+
+    /// [`do_create`](Self::do_create) for a caller whose principal is already resolved: the
+    /// same gates, with the principal given instead of looked up again (a batch of creates
+    /// resolves its one actor once).
+    async fn do_create_as(
+        &self,
+        snap: &Snapshot,
+        work: &mut Work<B::Tx>,
+        inv: &Invocation,
+        doc: Document,
+        principal: &spot_permissions::Principal,
+    ) -> AppResult<Document> {
+        let def = snap.doctype(doc.doctype().as_str())?;
+        if def.is_child {
+            return Err(AppError::new(
+                ErrorClass::InvalidState,
+                "document.invalid_state",
+                format!("`{}` rows live in their parent's tables.", def.name),
+            ));
+        }
+        if !doc.is_new() {
+            return Err(state_error("Creating a document that was already saved"));
+        }
+        self.authorizer
+            .authorize(principal, Action::Op(Operation::Create), &doc)
+            .await
+            .map_err(|e| self.denied(e))?;
+        let changes = create_changes(&doc, def.as_ref());
+        self.authorize_write(principal, Action::Op(Operation::Create), &doc, &changes)
             .await?;
         self.run_op(snap, work, inv, Operation::Create, doc).await
     }
@@ -1586,6 +1691,9 @@ impl<B: StorageBackend> Engine<B> {
             self.check_unreferenced(snap, work, inv, def, op, &doc)
                 .await?;
         }
+        // The write transform (WP-SEC-10.T7): after the checks, which saw the value the caller
+        // wrote, and before the participants and the storage write, which see the stored form.
+        self.transform_for_write(inv, op, &mut doc)?;
         let intent = WriteIntent {
             doctype: doc.doctype().as_str(),
             operation: op,
@@ -1704,6 +1812,50 @@ impl<B: StorageBackend> Engine<B> {
         .await
     }
 
+    /// Several documents of one DocType through one short read-only transaction. A document
+    /// that does not exist is `None` in its place.
+    pub(crate) async fn read_documents(
+        &self,
+        snap: &Snapshot,
+        doctype: &str,
+        ids: &[RecordId],
+    ) -> AppResult<Vec<Option<Document>>> {
+        snap.doctype(doctype)?;
+        let entity = name(doctype)?;
+        let label = label(doctype, "load");
+        self.retrying(&label, || async {
+            let mut tx = self
+                .backend
+                .begin(
+                    snap.catalog.clone(),
+                    TxOptions::new(label.clone(), Isolation::ReadCommitted).read_only(),
+                )
+                .await
+                .map_err(|e| Failed::Storage(e, StorageOp::Other))?;
+            let mut documents = Vec::with_capacity(ids.len());
+            let mut failed = None;
+            for id in ids {
+                match tx.load(&entity, *id, RowLock::None).await {
+                    Ok(stored) => documents.push(stored),
+                    Err(e) => {
+                        failed = Some(e);
+                        break;
+                    }
+                }
+            }
+            let _ = tx.rollback().await;
+            if let Some(e) = failed {
+                return Err(Failed::Storage(e, StorageOp::Other));
+            }
+            documents
+                .into_iter()
+                .map(|stored| stored.map(|s| from_storage(&snap.meta, s)).transpose())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Failed::App)
+        })
+        .await
+    }
+
     /// A query through a short read-only transaction.
     pub(crate) async fn query_detached(&self, snap: &Snapshot, query: &Query) -> AppResult<Rows> {
         let label = label(query.from.entity.as_str(), "query");
@@ -1774,6 +1926,54 @@ impl<B: StorageBackend> Engine<B> {
         let mut ctx = Ctx::detached(self, &snap, inv, HookPoint::Load, doc);
         ctx.run_point().await?;
         let doc = self.readable(&principal, ctx.doc).await?;
+        Ok(Outcome {
+            value: doc,
+            messages: ctx.messages,
+        })
+    }
+
+    /// [`load_document`](Self::load_document) for a page of documents of one DocType: the
+    /// principal is resolved once and the rows are read in one transaction instead of one each.
+    /// Every document still goes through the same read check, `load` steps and field filter, and
+    /// a document that is gone or refused is an `Err` or `NotFound` in its place, as a single
+    /// load would answer.
+    pub(crate) async fn load_documents(
+        &self,
+        inv: &Invocation,
+        doctype: &str,
+        ids: &[RecordId],
+    ) -> Vec<AppResult<Outcome<Document>>> {
+        let snap = self.snapshot();
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let stored = match self.read_documents(&snap, doctype, ids).await {
+            Ok(stored) => stored,
+            Err(e) => return ids.iter().map(|_| Err(e.clone())).collect(),
+        };
+        let principal = self.authorizer.principal_for(inv).await;
+        let mut out = Vec::with_capacity(ids.len());
+        for doc in stored {
+            out.push(self.finish_load(&snap, inv, &principal, doc).await);
+        }
+        out
+    }
+
+    async fn finish_load(
+        &self,
+        snap: &Snapshot,
+        inv: &Invocation,
+        principal: &Principal,
+        doc: Option<Document>,
+    ) -> AppResult<Outcome<Document>> {
+        let doc = doc.ok_or_else(not_found)?;
+        self.authorizer
+            .authorize(principal, Action::Read, &doc)
+            .await
+            .map_err(|e| self.denied(e))?;
+        let mut ctx = Ctx::detached(self, snap, inv, HookPoint::Load, doc);
+        ctx.run_point().await?;
+        let doc = self.readable(principal, ctx.doc).await?;
         Ok(Outcome {
             value: doc,
             messages: ctx.messages,

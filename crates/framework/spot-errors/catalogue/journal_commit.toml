@@ -1,4 +1,4 @@
-# journal_commit codes: the commit-acknowledgement driver of spot-journal-commit (WP-JRN-04.T2, ADR-061 s4 and s10): the ordering and stopped-relay refusals of the commit path. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# journal_commit codes: the commit-acknowledgement driver of spot-journal-commit (WP-JRN-04.T2, ADR-061 s4 and s10): the ordering, stopped-relay and setting refusals of the commit path. One [[entry]] per code; see crates/framework/spot-errors/README.md.
 
 [[entry]]
 code = "journal_commit.seq_out_of_order"
@@ -25,4 +25,13 @@ summary = "The journal relay stopped for a reason a retry cannot cure (another w
 explanation_key = "error.journal_commit.relay_stopped"
 params = []
 remedy = "Do not retry blindly: read the relay's own error code from the driver status, resolve it (for example a second writer or a broken chain) and restart the driver."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_commit.invalid_setting"
+class = "none"
+summary = "A commit driver setting is outside its allowed range, for example a local commit deadline shorter than the acknowledgement deadline, so the driver was not built."
+explanation_key = "error.journal_commit.invalid_setting"
+params = []
+remedy = "Set local_commit_deadline_millis to at least the acknowledgement deadline of the durability gate (ack_deadline_millis), or lower the acknowledgement deadline."
 since = "0.1.0"

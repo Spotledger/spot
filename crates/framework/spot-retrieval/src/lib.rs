@@ -29,6 +29,15 @@
 //!   view — before returning at most `k` hits.
 //! - [`testing`]: in-memory fakes for every port.
 //!
+//! # The field guard (WP-SEC-04.T7)
+//!
+//! [`Indexer::with_protection`] keeps every field of a protection group (or with a tag or a
+//! mask) out of the index unless the policy opts it in and the tenant default allows it, and
+//! fails closed on an unknown DocType. [`Retriever::with_search_guard`] asks the field guard with
+//! `Channel::Search` (the `report` right) for every hit. Both are opt-in builders so existing
+//! hosts keep working; a host that serves search to users must call both. To re-index after a
+//! protection change, replay the feed from `FeedPosition::START` into an empty store.
+//!
 //! # No side channels
 //!
 //! The result carries no total count and no "hidden" figure, and there is no distinct error for
@@ -63,7 +72,10 @@ pub use error::{
     CODE_POLICY_INVALID, CODE_POLICY_PARSE, CODE_POLICY_UNKNOWN_DOCTYPE, CODE_POLICY_UNKNOWN_FIELD,
     CODE_POSITION_FAILED, CODE_QUERY_TOO_LONG, CODE_STORE_FAILED, CODES, RetrievalError,
 };
-pub use indexer::{DEFAULT_MAX_DOCUMENT_CHARS, Indexer, IndexerConfig, PumpReport, Skipped};
+pub use indexer::{
+    CODE_PROTECTION_UNKNOWN, DEFAULT_MAX_DOCUMENT_CHARS, Indexer, IndexerConfig, PumpReport,
+    Skipped,
+};
 pub use policy::{
     Chunking, DEFAULT_MAX_CHUNK_CHARS, DEFAULT_OVERLAP_CHARS, DocTypePolicy, FieldPlan, IndexPolicy,
 };

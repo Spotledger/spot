@@ -226,6 +226,25 @@ pub fn encode_secret_event(event: &SecretAuditEvent) -> Result<String, DocAuditE
 /// [`DocAuditError::Chain`] when the record does not validate (for instance a kind that is not
 /// a dotted lower-case code); [`DocAuditError::Encoding`] when the event cannot be encoded.
 pub fn secret_record_of(event: &SecretAuditEvent) -> Result<AuditRecord, DocAuditError> {
+    secret_record(event, None)
+}
+
+/// [`secret_record_of`] for an outbox event: the record also carries the outbox event id as
+/// `payload["event_id"]` (the appender's recovery key).
+///
+/// # Errors
+/// As [`secret_record_of`].
+pub fn secret_record_of_with_id(
+    event: &SecretAuditEvent,
+    event_id: &str,
+) -> Result<AuditRecord, DocAuditError> {
+    secret_record(event, Some(event_id))
+}
+
+fn secret_record(
+    event: &SecretAuditEvent,
+    event_id: Option<&str>,
+) -> Result<AuditRecord, DocAuditError> {
     let json = encode_secret_event(event)?;
     let digest = sha256_hex(json.as_bytes());
     let mut payload: BTreeMap<String, PayloadValue> = BTreeMap::new();
@@ -235,6 +254,12 @@ pub fn secret_record_of(event: &SecretAuditEvent) -> Result<AuditRecord, DocAudi
     );
     payload.insert("secret_event".to_owned(), PayloadValue::Text(json));
     payload.insert("digest".to_owned(), PayloadValue::Text(digest));
+    if let Some(id) = event_id {
+        payload.insert(
+            crate::appender::EVENT_ID_KEY.to_owned(),
+            PayloadValue::Text(id.to_owned()),
+        );
+    }
     let record = AuditRecord {
         kind: format!("{SECRET_KIND_PREFIX}{}", event.op),
         actor: event.actor.actor.clone(),

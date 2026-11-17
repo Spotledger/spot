@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 ///
 /// While a record is in the set, its later versions are routed to that destination like an
 /// in-scope record, and the destination holds it as a mirror flagged `by_reference`. Records leave
-/// the set only when the destination is decommissioned or a scope change brings them in scope
-/// (so there is deliberately no `remove` here). The routing decision itself belongs to
+/// the set only when the destination is decommissioned, a scope change brings them in scope, or
+/// the record is deleted and its tombstone is delivered ([`ExtrasSet::forget_deleted_extra`]). The routing decision itself belongs to
 /// `WP-SYN-02`; this type is the data it asks.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtrasSet {
@@ -35,6 +35,14 @@ impl ExtrasSet {
     /// Note that `key` was delivered as an extra. Returns true when it was not already there.
     pub fn record_delivered_extra(&mut self, key: RecordKey) -> bool {
         self.keys.insert(key)
+    }
+
+    /// The record was deleted and its tombstone was delivered to the destination: the destination
+    /// holds nothing to keep up to date any more, so the key leaves the set. A re-created record
+    /// is routed again only if it is in scope or delivered as an extra anew. Returns whether the
+    /// key was in the set.
+    pub fn forget_deleted_extra(&mut self, key: &RecordKey) -> bool {
+        self.keys.remove(key)
     }
 
     /// Whether `key` is in the set.

@@ -247,7 +247,11 @@ async fn run_pinned(
         Err(error) => return failed(FailureStage::Snapshots, error.code()),
     };
     // A snapshot after the pinned position cannot be a base for it.
-    let mut usable = listed.into_iter().filter(|s| s.position <= as_of.seq);
+    // Positions are `(generation, seq)` pairs, ordered lexicographically (ADR-061 A.0): a bare
+    // `seq` identifies nothing, because every generation restarts at 1.
+    let mut usable = listed
+        .into_iter()
+        .filter(|s| (s.generation, s.position) <= (as_of.generation, as_of.seq));
     let (snapshots, chosen_untrusted) = if options.allow_untrusted_snapshot {
         match usable.next_back() {
             Some(mut latest) => {
@@ -266,7 +270,14 @@ async fn run_pinned(
         segments: options.segments.clone(),
         forks: options.forks.clone(),
     };
-    let rebuild_plan = match plan(&catalog, None, Target::At(as_of.seq)) {
+    let rebuild_plan = match plan(
+        &catalog,
+        None,
+        Target::In {
+            generation: as_of.generation,
+            position: as_of.seq,
+        },
+    ) {
         Ok(rebuild_plan) => rebuild_plan,
         Err(error) => return failed(FailureStage::Plan, error.code()),
     };

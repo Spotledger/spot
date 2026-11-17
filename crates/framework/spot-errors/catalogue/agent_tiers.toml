@@ -1,0 +1,10 @@
+# agent_tiers agent tier codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "agent_tiers.refusal_not_audited"
+class = "none"
+summary = "A refusal could not be appended to the audit chain."
+explanation_key = "error.agent_tiers.refusal_not_audited"
+params = []
+remedy = "Check the audit store of the site; the refusal itself still stands."
+since = "0.1.0"

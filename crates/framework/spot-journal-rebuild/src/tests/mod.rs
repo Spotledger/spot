@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod catalogue_tests;
+mod classifier_tests;
 mod fixture;
 mod ordering_tests;
 mod rebuild_tests;

@@ -19,6 +19,9 @@ use crate::convert::{
 };
 use crate::error::{EdgePgError, Result};
 
+/// How many entries one multi-row insert of [`write_report`] carries.
+const ENTRY_CHUNK: usize = 500;
+
 /// What kind of drift one entry names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DriftKind {
@@ -233,37 +236,79 @@ pub async fn write_report(tx: &mut PgTransaction, report: &DriftReport) -> Resul
     )
     .await
     .map_err(failed)?;
-    for (ordinal, entry) in report.entries.iter().enumerate() {
-        let ordinal = i32::try_from(ordinal)
-            .map_err(|_| EdgePgError::write("too many drift entries to store"))?;
-        let kind = entry.kind.as_str();
-        let owner_id = uuid_of(entry.owner.id);
-        let from_id = uuid_of(entry.from.id);
-        let to_id = uuid_of(entry.to.id);
+    // The entries go in chunks of one multi-row statement each, not one statement per entry: a
+    // tenant whose edge table was never filled reports one entry per link, and a statement per
+    // entry kept the writing connection busy for minutes.
+    let mut ordinal = 0usize;
+    for chunk in report.entries.chunks(ENTRY_CHUNK) {
+        let len = chunk.len();
+        let mut ordinals: Vec<i32> = Vec::with_capacity(len);
+        let mut kinds: Vec<&str> = Vec::with_capacity(len);
+        let mut edge_types: Vec<&str> = Vec::with_capacity(len);
+        let mut owner_entities: Vec<&str> = Vec::with_capacity(len);
+        let mut owner_ids: Vec<uuid::Uuid> = Vec::with_capacity(len);
+        let mut from_entities: Vec<&str> = Vec::with_capacity(len);
+        let mut from_ids: Vec<uuid::Uuid> = Vec::with_capacity(len);
+        let mut to_entities: Vec<&str> = Vec::with_capacity(len);
+        let mut to_ids: Vec<uuid::Uuid> = Vec::with_capacity(len);
+        let mut expected: Vec<Option<&Json>> = Vec::with_capacity(len);
+        let mut found: Vec<Option<&Json>> = Vec::with_capacity(len);
+        for entry in chunk {
+            ordinals.push(
+                i32::try_from(ordinal)
+                    .map_err(|_| EdgePgError::write("too many drift entries to store"))?,
+            );
+            ordinal += 1;
+            kinds.push(entry.kind.as_str());
+            edge_types.push(entry.edge_type.as_str());
+            owner_entities.push(entry.owner.entity.as_str());
+            owner_ids.push(uuid_of(entry.owner.id));
+            from_entities.push(entry.from.entity.as_str());
+            from_ids.push(uuid_of(entry.from.id));
+            to_entities.push(entry.to.entity.as_str());
+            to_ids.push(uuid_of(entry.to.id));
+            expected.push(entry.expected.as_ref());
+            found.push(entry.found.as_ref());
+        }
         let params: [&(dyn ToSql + Sync); 12] = [
             &report.report_key,
-            &ordinal,
-            &kind,
-            &entry.edge_type,
-            &entry.owner.entity.as_str().to_owned(),
-            &owner_id,
-            &entry.from.entity.as_str().to_owned(),
-            &from_id,
-            &entry.to.entity.as_str().to_owned(),
-            &to_id,
-            &entry.expected,
-            &entry.found,
+            &ordinals,
+            &kinds,
+            &edge_types,
+            &owner_entities,
+            &owner_ids,
+            &from_entities,
+            &from_ids,
+            &to_entities,
+            &to_ids,
+            &expected,
+            &found,
         ];
         tx.raw_execute(
             "INSERT INTO spot_edge_drift_entry \
              (report_key, ordinal, kind, edge_type, owner_entity, owner_id, from_entity, from_id, \
               to_entity, to_id, expected, found) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+             SELECT $1, o, k, t, oe, oi, fe, fi, te, ti, e, f \
+             FROM unnest($2::int4[], $3::text[], $4::text[], $5::text[], $6::uuid[], $7::text[], \
+                         $8::uuid[], $9::text[], $10::uuid[], $11::jsonb[], $12::jsonb[]) \
+                  AS u(o, k, t, oe, oi, fe, fi, te, ti, e, f)",
             &params,
         )
         .await
         .map_err(failed)?;
     }
+    Ok(())
+}
+
+/// Deletes a report and its entries (a no-op when there is none). A report that only drove one
+/// repair has no use afterwards.
+pub async fn delete_report(tx: &mut PgTransaction, report_key: &str) -> Result<()> {
+    tx.raw_execute(
+        "DELETE FROM spot_edge_drift_report WHERE report_key = $1",
+        &[&report_key],
+    )
+    .await
+    .map_err(|e| EdgePgError::write(e.explanation))?;
     Ok(())
 }
 

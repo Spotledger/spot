@@ -64,6 +64,8 @@ pub mod policy;
 pub mod ports;
 /// The promotion pipeline itself.
 pub mod service;
+/// A serialisable snapshot of a promotion and the restore constructor.
+pub mod snapshot;
 /// The promotion record and its state machine.
 pub mod state;
 /// Where promotions live between steps.
@@ -81,6 +83,7 @@ pub use ports::{
     TargetSite, VerifyEvidence,
 };
 pub use service::PromotionService;
+pub use snapshot::{SNAPSHOT_VERSION, Snapshot};
 pub use state::{Promotion, PromotionState, Transition};
 pub use store::{MemoryPromotionStore, PromotionStore};
 

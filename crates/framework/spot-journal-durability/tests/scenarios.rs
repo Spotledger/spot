@@ -3,6 +3,10 @@
 
 use spot_journal_durability::*;
 
+fn p(seq: Seq) -> Position {
+    Position::new(1, seq)
+}
+
 fn cfg() -> GateConfig {
     GateConfig {
         rpo_grace_millis: 60_000,
@@ -29,7 +33,7 @@ fn commit(g: &mut AckGate, now: u64, seq: Seq) -> Vec<Output> {
     g.handle(
         now,
         Event::LocalCommitDurable {
-            seq,
+            position: p(seq),
             command_id: format!("c{seq}"),
         },
     )
@@ -40,7 +44,7 @@ fn chunk(g: &mut AckGate, now: u64, batch: u64, up_to: Seq) -> Vec<Output> {
         now,
         Event::ChunkDurable {
             batch: BatchId(batch),
-            up_to_seq: up_to,
+            up_to: p(up_to),
         },
     )
 }
@@ -48,7 +52,7 @@ fn chunk(g: &mut AckGate, now: u64, batch: u64, up_to: Seq) -> Vec<Output> {
 fn acks(out: &[Output]) -> Vec<Seq> {
     out.iter()
         .filter_map(|o| match o {
-            Output::Ack { seq, .. } => Some(*seq),
+            Output::Ack { position, .. } => Some(position.seq),
             _ => None,
         })
         .collect()
@@ -61,7 +65,7 @@ fn local_acks_on_the_local_commit_and_never_waits_for_the_store() {
     assert_eq!(
         out,
         vec![Output::Ack {
-            seq: 1,
+            position: p(1),
             basis: AckBasis::Local
         }]
     );
@@ -89,26 +93,26 @@ fn local_without_a_target_shows_the_standing_warning() {
 #[test]
 fn replica_sync_waits_for_the_standby_not_the_store() {
     let mut g = AckGate::new(tenant(Policy::ReplicaSync, false), cfg());
-    assert_eq!(commit(&mut g, 0, 1), vec![Output::Wait { seq: 1 }]);
-    assert_eq!(commit(&mut g, 1, 2), vec![Output::Wait { seq: 2 }]);
+    assert_eq!(commit(&mut g, 0, 1), vec![Output::Wait { position: p(1) }]);
+    assert_eq!(commit(&mut g, 1, 2), vec![Output::Wait { position: p(2) }]);
     // A chunk or store event does not release a replica-sync commit.
     assert!(chunk(&mut g, 2, 1, 2).is_empty());
-    let out = g.handle(3, Event::StandbyConfirmed { seq: 2 });
+    let out = g.handle(3, Event::StandbyConfirmed { position: p(2) });
     assert_eq!(
         out,
         vec![
             Output::Ack {
-                seq: 1,
+                position: p(1),
                 basis: AckBasis::Standby
             },
             Output::Ack {
-                seq: 2,
+                position: p(2),
                 basis: AckBasis::Standby
             },
         ]
     );
     // A confirmation that arrives before the commit event acks at once.
-    g.handle(4, Event::StandbyConfirmed { seq: 5 });
+    g.handle(4, Event::StandbyConfirmed { position: p(5) });
     assert_eq!(acks(&commit(&mut g, 5, 3)), vec![3]);
 }
 
@@ -117,15 +121,21 @@ fn replica_sync_standby_silence_reports_outcome_unknown() {
     let mut g = AckGate::new(tenant(Policy::ReplicaSync, true), cfg());
     commit(&mut g, 0, 1);
     let out = g.handle(30_000, Event::Tick);
-    assert_eq!(out, vec![Output::CommitOutcomeUnknown { seq: 1 }]);
-    assert_eq!(g.outcome("c1"), Some(CommandOutcome::Unknown { seq: 1 }));
+    assert_eq!(out, vec![Output::CommitOutcomeUnknown { position: p(1) }]);
+    assert_eq!(
+        g.outcome("c1"),
+        Some(CommandOutcome::Unknown { position: p(1) })
+    );
 }
 
 #[test]
 fn remote_sync_group_commit_one_round_trip_releases_the_batch_in_order() {
     let mut g = remote(OnUnreachable::Halt);
     for seq in 1..=5 {
-        assert_eq!(commit(&mut g, seq, seq), vec![Output::Wait { seq }]);
+        assert_eq!(
+            commit(&mut g, seq, seq),
+            vec![Output::Wait { position: p(seq) }]
+        );
     }
     assert_eq!(g.pending_count(), 5);
     // One ChunkDurable (one object-store round trip) covers the whole range.
@@ -204,7 +214,7 @@ fn degrade_store_down_at_commit_acks_locally_and_raises_the_breach_after_the_gra
     assert_eq!(
         out,
         vec![Output::Ack {
-            seq: 1,
+            position: p(1),
             basis: AckBasis::Degraded
         }]
     );
@@ -215,7 +225,7 @@ fn degrade_store_down_at_commit_acks_locally_and_raises_the_breach_after_the_gra
     let out = g.handle(62_000, Event::Tick);
     let breach = RpoBreach {
         since: 2_000,
-        unshipped_from_seq: 1,
+        unshipped_from: p(1),
     };
     assert_eq!(out, vec![Output::RpoBreachRaised(breach)]);
     assert!(g.handle(70_000, Event::Tick).is_empty());
@@ -233,11 +243,11 @@ fn degrade_releases_commits_waiting_when_the_store_goes_down() {
         vec![
             Output::Degraded { since: 5 },
             Output::Ack {
-                seq: 1,
+                position: p(1),
                 basis: AckBasis::Degraded
             },
             Output::Ack {
-                seq: 2,
+                position: p(2),
                 basis: AckBasis::Degraded
             },
         ]
@@ -261,7 +271,7 @@ fn degrade_breach_persists_until_the_backlog_ships_then_clears_exactly_once() {
     // A partial ship moves the unshipped marker but does not clear.
     let out = chunk(&mut g, 63_000, 1, 1);
     assert!(!out.contains(&Output::RpoBreachCleared));
-    assert_eq!(g.rpo_breach().map(|b| b.unshipped_from_seq), Some(2));
+    assert_eq!(g.rpo_breach().map(|b| b.unshipped_from), Some(p(2)));
     // The rest ships: cleared exactly once.
     let out = chunk(&mut g, 64_000, 2, 2);
     assert_eq!(
@@ -295,35 +305,44 @@ fn ack_lost_after_local_commit_reports_unknown_and_the_retry_is_a_query() {
     commit(&mut g, 0, 7);
     assert_eq!(
         g.admit("c7"),
-        Admission::Existing(CommandOutcome::Pending { seq: 7 })
+        Admission::Existing(CommandOutcome::Pending { position: p(7) })
     );
     let out = g.handle(30_000, Event::Tick);
-    assert_eq!(out, vec![Output::CommitOutcomeUnknown { seq: 7 }]);
+    assert_eq!(out, vec![Output::CommitOutcomeUnknown { position: p(7) }]);
     // The retry of the same command id is a query, never a second commit.
     assert_eq!(
         g.admit("c7"),
-        Admission::Existing(CommandOutcome::Unknown { seq: 7 })
+        Admission::Existing(CommandOutcome::Unknown { position: p(7) })
     );
-    assert_eq!(g.outcome("c7"), Some(CommandOutcome::Unknown { seq: 7 }));
+    assert_eq!(
+        g.outcome("c7"),
+        Some(CommandOutcome::Unknown { position: p(7) })
+    );
     // The same command id cannot be registered again.
     assert!(commit(&mut g, 30_001, 8).len() == 1);
-    assert!(
+    assert_eq!(
         g.handle(
             30_002,
             Event::LocalCommitDurable {
-                seq: 9,
+                position: p(9),
                 command_id: "c7".into()
             }
-        )
-        .is_empty()
+        ),
+        vec![Output::Rejected {
+            position: p(9),
+            error: DurabilityError::DuplicateCommand { position: p(9) }
+        }]
     );
     // The late chunk resolves it: the outcome becomes committed, with no second ack.
     let out = chunk(&mut g, 40_000, 1, 8);
     assert!(!acks(&out).contains(&7));
-    assert_eq!(g.outcome("c7"), Some(CommandOutcome::Committed { seq: 7 }));
+    assert_eq!(
+        g.outcome("c7"),
+        Some(CommandOutcome::Committed { position: p(7) })
+    );
     assert_eq!(
         g.admit("c7"),
-        Admission::Existing(CommandOutcome::Committed { seq: 7 })
+        Admission::Existing(CommandOutcome::Committed { position: p(7) })
     );
 }
 
@@ -334,7 +353,7 @@ fn a_retry_of_a_known_command_is_answered_even_while_halted() {
     g.handle(1, Event::StoreReachable(false));
     assert_eq!(
         g.admit("c1"),
-        Admission::Existing(CommandOutcome::Pending { seq: 1 })
+        Admission::Existing(CommandOutcome::Pending { position: p(1) })
     );
     assert_eq!(g.admit("fresh"), Admission::Refuse(Refusal::Halted));
 }
@@ -404,13 +423,13 @@ fn defaults_validation_and_error_codes() {
     assert!(tenant(Policy::Local, false).validate().is_ok());
     assert_eq!(DurabilityError::Halted.code(), "journal_durability.halted");
     assert_eq!(
-        DurabilityError::OutcomeUnknown { seq: 1 }.code(),
+        DurabilityError::OutcomeUnknown { position: p(1) }.code(),
         "journal_durability.outcome_unknown"
     );
     assert_eq!(
         DurabilityError::RpoBreach {
             since: 0,
-            unshipped_from_seq: 1
+            unshipped_from: p(1)
         }
         .code(),
         "journal_durability.rpo_breach"

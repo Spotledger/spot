@@ -18,6 +18,9 @@ spot-pg-bridge = { path = "../spot-pg-bridge" }
 deadpool-postgres = "0.14"
 # The driver: transactions, SQLSTATE codes, timestamptz and jsonb bindings.
 tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1"] }
+# The async store's per-call deadline (`timeout_at` over the pool wait and the statement); the
+# time feature only, no runtime of its own.
+tokio = { version = "1", default-features = false, features = ["time"] }
 # The task and event bodies are stored as jsonb.
 serde_json = "1"
 

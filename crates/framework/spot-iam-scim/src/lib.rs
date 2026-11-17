@@ -15,6 +15,7 @@
 //! | Group-to-role mapping table | [`GroupMapping`], [`MappingStore`] |
 //! | Deactivation as `active=false` | [`LeaverOutcome`], [`apply_leaver_actions`] |
 //! | The request entry point | [`handle`], [`ScimRequest`], [`ScimResponse`], [`ScimContext`] |
+//! | The field guard (`Channel::ApiScim`) | [`ScimGuard`], [`handle_guarded`] |
 //! | The HTTP adapter (`feature = "http"`) | [`http`] |
 //!
 //! # The rules this crate keeps
@@ -32,6 +33,7 @@
 
 pub mod error;
 pub mod filter;
+pub mod guard;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod mapping;
@@ -46,6 +48,7 @@ pub type TenantId = String;
 
 pub use error::{ScimError, ScimErrorBody, ScimResult, codes};
 pub use filter::{AttrPath, CompareOp, Filter, ScimValue, Target};
+pub use guard::{ScimGuard, USER_DOCTYPE, field_of, handle_guarded};
 pub use mapping::{
     GroupAdminRow, GroupMapping, MappingStore, build_group_role_map, group_admin_view,
     validate_mapping,

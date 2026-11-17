@@ -71,7 +71,9 @@ pub use migration::{
 };
 #[allow(deprecated)]
 pub use version::publish;
-pub use version::{PinnedCase, PublishCheck, PublishReport, VersionRef, pinned, publish_guarded};
+pub use version::{
+    PinnedCase, PublishCheck, PublishReport, VersionRef, pinned, publish_guarded, validate_guarded,
+};
 
 /// The name of this crate.
 pub const CRATE_NAME: &str = "spot-bpm-versioning";

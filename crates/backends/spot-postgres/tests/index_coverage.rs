@@ -247,6 +247,12 @@ async fn a_range_overlap_on_a_table_with_no_such_index_is_a_failure() {
 /// The projection of ADR-087 section 7.3 and the entity table, without the GIN index.
 async fn search_env() -> Option<(common::Env, Arc<Catalog>)> {
     let env = common::env().await?;
+    // The search compiler's accent folding needs the `unaccent` extension (ADR-087).
+    let missing = env.db.create_extensions(&["unaccent"]).await;
+    if !missing.is_empty() {
+        println!("SKIPPED: the server does not offer {missing:?}");
+        return None;
+    }
     let client = env.db.raw_client().await;
     client
         .batch_execute(

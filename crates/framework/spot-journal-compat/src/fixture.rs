@@ -18,7 +18,9 @@
 use std::path::{Path, PathBuf};
 
 use spot_journal_manifest::{SignedManifest, VerifyingKeys};
-use spot_journal_rebuild::{RebuildKeys, RebuildOptions};
+use spot_journal_rebuild::{
+    EventClass, EventClassifier, RebuildKeys, RebuildOptions, RegistryClassifier,
+};
 use spot_journal_rebuild_plan::{
     JournalCatalog, RebuildPlan, SegmentRange, SnapshotInfo, Target, plan,
 };
@@ -171,11 +173,25 @@ impl Fixture {
     /// # Errors
     /// [`CompatError`] when the tenant id is not usable.
     pub fn options(&self) -> Result<RebuildOptions<'static>, CompatError> {
-        Ok(RebuildOptions::new(
-            TenantId::new(TENANT)?,
-            SOURCE,
-            TARGET_SCHEMA,
-        ))
+        let mut options = RebuildOptions::new(TenantId::new(TENANT)?, SOURCE, TARGET_SCHEMA);
+        options.classifier = Some(&FIXTURE_CLASSES);
+        Ok(options)
+    }
+}
+
+/// The classes of the topics the frozen journal holds: the events contract registry's, and the
+/// fixture's own audit entry (`sys_role_changed`, which the registry does not list).
+struct FixtureClasses;
+
+/// The one classifier every fixture rebuild uses.
+static FIXTURE_CLASSES: FixtureClasses = FixtureClasses;
+
+impl EventClassifier for FixtureClasses {
+    fn class_of(&self, topic: &str) -> Option<EventClass> {
+        if topic == "sys_role_changed" {
+            return Some(EventClass::Audit);
+        }
+        RegistryClassifier.class_of(topic)
     }
 }
 

@@ -205,6 +205,7 @@ mod tests {
             topic: entity.to_owned(),
             major: 1,
             lane,
+            deleted: false,
         }
     }
 

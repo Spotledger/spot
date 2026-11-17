@@ -10,7 +10,7 @@ use spot_storage_contract::StorageError;
 
 /// The stable `eventstream.*` vocabulary this crate defines, so the error-code scan sees
 /// every code exactly where it is used.
-pub const CODES: [&str; 7] = [
+pub const CODES: [&str; 9] = [
     CODE_CONSUMER_NOT_FOUND,
     CODE_CONSUMER_BUSY,
     CODE_RESYNC_REQUIRED,
@@ -18,6 +18,8 @@ pub const CODES: [&str; 7] = [
     CODE_POSITION_INVALID,
     CODE_ACK_REFUSED,
     CODE_SPEC_INVALID,
+    CODE_CLASS_UNKNOWN,
+    CODE_ENTITIES_NEED_STATE,
 ];
 
 /// No consumer with this name belongs to the caller.
@@ -36,6 +38,12 @@ pub const CODE_ACK_REFUSED: &str = "eventstream.ack_refused";
 /// The consumer definition is invalid, or changes something fixed for the life of the
 /// consumer such as the partition count.
 pub const CODE_SPEC_INVALID: &str = "eventstream.spec_invalid";
+
+/// The consumer names an event class that is not `state`, `domain` or `audit` (telemetry is not
+/// an event class).
+pub const CODE_CLASS_UNKNOWN: &str = "eventstream.class_unknown";
+/// The consumer selects entities but not the `state` class, which is the only class they apply to.
+pub const CODE_ENTITIES_NEED_STATE: &str = "eventstream.entities_need_state";
 
 /// One event-stream failure.
 #[derive(Debug, thiserror::Error)]
@@ -103,6 +111,14 @@ pub enum StreamError {
         reason: String,
     },
 
+    /// The consumer names an event class that does not exist.
+    #[error("unknown event class: expected `state`, `domain` or `audit`")]
+    ClassUnknown,
+
+    /// The consumer selects entities without selecting the `state` class.
+    #[error("entities apply to the state class only: select `state` too, or drop the entities")]
+    EntitiesNeedState,
+
     /// The feed read failed with an error other than a lost position.
     #[error("feed read failed: {0}")]
     Feed(#[source] StorageError),
@@ -138,6 +154,8 @@ impl StreamError {
             Self::PositionInvalid { .. } => CODE_POSITION_INVALID,
             Self::AckRefused { .. } => CODE_ACK_REFUSED,
             Self::SpecInvalid { .. } => CODE_SPEC_INVALID,
+            Self::ClassUnknown => CODE_CLASS_UNKNOWN,
+            Self::EntitiesNeedState => CODE_ENTITIES_NEED_STATE,
             // Wrapped failures report their own code: storage.*, coordinator.*, fieldguard.*.
             Self::Feed(error) => error.kind.code(),
             Self::Coordinator { code, .. } | Self::Permission { code, .. } => code,

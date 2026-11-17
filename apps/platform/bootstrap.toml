@@ -32,3 +32,8 @@ description = "Creates and edits users and their role assignments and linked ide
 id = "01990000-0000-7000-8000-000000000014"
 name = "Webhook Manager"
 description = "Reads webhooks and their delivery log. Reads no signing secret and no endpoint address, and writes nothing."
+
+[[roles]]
+id = "01990000-0000-7000-8000-000000000015"
+name = "Integration Manager"
+description = "Reads connectors and their run log. Reads no credential and no endpoint secret, and writes nothing."

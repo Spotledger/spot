@@ -286,7 +286,7 @@ async fn read_token(started: &Started, site: &str, id: RecordId) -> Option<Strin
 
 // --- tests -----------------------------------------------------------------------------------
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_sealed_value_written_over_the_engine_survives_a_restart() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -332,7 +332,7 @@ async fn a_sealed_value_written_over_the_engine_survives_a_restart() {
     again.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bad_key_file_refuses_to_start_and_names_the_file_not_the_key() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -450,19 +450,16 @@ async fn a_bad_key_file_refuses_to_start_and_names_the_file_not_the_key() {
     }
 }
 
-#[tokio::test]
-async fn a_host_without_the_table_starts_with_no_vault_and_a_secret_is_refused() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_host_without_the_table_keeps_the_site_unavailable_and_serves_no_secret() {
+    // The sign-in stores seal their credentials through the vault, so a site without
+    // `[services.secrets]` does not serve at all (the host itself stays up).
     let Some(rig) = Rig::new().await else { return };
-    rig.env.write_common(&["'sample'"], "");
-    let started = rig.start().await;
-    let err = write_note(&started, &rig.env.site, "tok_nothing")
-        .await
-        .unwrap_err();
-    assert_eq!(err, "secretfield.not_configured");
-    started.finish().await;
+    rig.env.write_common(&["'sample'"], "# no-secrets\n");
+    assert_site_unavailable(&rig).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_older_copy_of_the_key_file_is_refused_after_a_rotation() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -500,7 +497,7 @@ async fn an_older_copy_of_the_key_file_is_refused_after_a_rotation() {
     let _ = id;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rotation_with_a_writer_running_loses_no_write_and_ends_with_no_old_rows() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -642,7 +639,55 @@ async fn rotation_with_a_writer_running_loses_no_write_and_ends_with_no_old_rows
     started.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_rotation_is_journalled_as_the_operator_and_not_as_the_bootstrap() {
+    use spot_document::secrets::SecretOp;
+
+    let Some(rig) = Rig::new().await else { return };
+    rig.init_key_file().await;
+    let site = rig.env.site.clone();
+    let started = rig.start().await;
+    for i in 0..5 {
+        write_note(&started, &site, &format!("tok_operator_{i}_a1b2c3"))
+            .await
+            .unwrap();
+    }
+    let (exit, applied) = secrets_cmd(
+        rig.secrets_cmd_root(),
+        &["rotate-kek", "--site", &site, "--apply", "--batch", "2"],
+    )
+    .await;
+    assert_eq!(exit, Exit::Ok, "{applied}");
+
+    let live = started.running.live(&site).unwrap();
+    let engine = live.engine().unwrap();
+    let access = engine.secret_access(SecretCaller::Operator, &invocation(&site));
+    let journal = engine.secret_audit_journal(&access).await.unwrap();
+    let rewraps: Vec<_> = journal
+        .iter()
+        .filter(|e| e.op == SecretOp::Rewrap)
+        .collect();
+    assert!(
+        !rewraps.is_empty(),
+        "the rotation journalled no rewrap batch"
+    );
+    for entry in &rewraps {
+        assert_eq!(entry.caller, SecretCaller::Operator, "{entry:?}");
+    }
+    assert!(
+        !rewraps.iter().any(|e| e.caller == SecretCaller::Seed),
+        "a rewrap batch was journalled as seed"
+    );
+    // The seeding writes of the test are still `seed`: the trail tells them apart.
+    assert!(
+        journal
+            .iter()
+            .any(|e| e.op == SecretOp::Set && e.caller == SecretCaller::Seed)
+    );
+    started.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn retire_apply_without_the_confirmation_flag_is_refused_and_changes_nothing() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -697,7 +742,7 @@ async fn retire_apply_without_the_confirmation_flag_is_refused_and_changes_nothi
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_rotation_that_cannot_take_the_lock_is_refused_and_audited() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -745,7 +790,7 @@ async fn a_rotation_that_cannot_take_the_lock_is_refused_and_audited() {
     assert_eq!(rig.key_texts().len(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rotate_refuses_while_values_are_under_an_older_version_and_resume_finishes_it() {
     let Some(rig) = Rig::new().await else { return };
     rig.init_key_file().await;
@@ -821,7 +866,7 @@ async fn rotate_refuses_while_values_are_under_an_older_version_and_resume_finis
     started.finish().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn init_creates_a_private_key_file_once() {
     let Some(rig) = Rig::new().await else { return };
     let site = rig.env.site.clone();
@@ -852,7 +897,7 @@ async fn init_creates_a_private_key_file_once() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_command_refuses_a_site_with_no_secrets_table_and_an_unknown_site() {
     let Some(rig) = Rig::new().await else { return };
     let site = rig.env.site.clone();
@@ -862,7 +907,7 @@ async fn the_command_refuses_a_site_with_no_secrets_table_and_an_unknown_site() 
     )
     .await;
     assert_eq!(exit, Exit::Usage, "{text}");
-    rig.env.write_common(&["'sample'"], "");
+    rig.env.write_common(&["'sample'"], "# no-secrets\n");
     let (exit, text) = secrets_cmd(rig.secrets_cmd_root(), &["status", "--site", &site]).await;
     assert_eq!(exit, Exit::Refused, "{text}");
     assert!(text.contains("[services.secrets]"), "{text}");

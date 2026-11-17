@@ -81,6 +81,15 @@ pub enum FileServiceError {
         /// Plain-language cause from the scanner, for logs only.
         message: String,
     },
+    /// Storage could not answer now (the pool wait ran out, the database was unreachable, a lock
+    /// or statement timed out, or the commit outcome is unknown): nothing is stored by this
+    /// attempt that a retry could not repeat. Code `server.unavailable`; the caller waits for
+    /// `Retry-After`. Carries no path, key or connection detail.
+    #[error("the file store is temporarily unavailable")]
+    Unavailable {
+        /// The wait to advertise, in seconds; `None` means the default of one second.
+        retry_after_secs: Option<u64>,
+    },
     /// An internal failure with no more specific code. Code `http.internal`.
     #[error("internal file service error: {message}")]
     Internal {
@@ -104,6 +113,7 @@ impl FileServiceError {
             FileServiceError::StoreFailed { .. } => "file.store_failed",
             FileServiceError::ScanFailed { .. } => "file.scan_failed",
             FileServiceError::VirusDetected { .. } => "file.virus_detected",
+            FileServiceError::Unavailable { .. } => "server.unavailable",
             FileServiceError::Internal { .. } => "http.internal",
         }
     }
@@ -120,6 +130,7 @@ impl FileServiceError {
             FileServiceError::StoreFailed { .. } => 500,
             FileServiceError::ScanFailed { .. } => 502,
             FileServiceError::VirusDetected { .. } => 422,
+            FileServiceError::Unavailable { .. } => 503,
             FileServiceError::Internal { .. } => 500,
         }
     }
@@ -130,8 +141,24 @@ impl FileServiceError {
             self,
             FileServiceError::StoreFailed { .. }
                 | FileServiceError::ScanFailed { .. }
+                | FileServiceError::Unavailable { .. }
                 | FileServiceError::Internal { .. }
         )
+    }
+
+    /// Storage is unavailable now; `retry_after_secs` is the wait to advertise (`None`: one second).
+    pub fn unavailable(retry_after_secs: Option<u64>) -> Self {
+        FileServiceError::Unavailable { retry_after_secs }
+    }
+
+    /// The wait to advertise in seconds, for an error that carries one (at least one).
+    pub fn retry_after(&self) -> Option<u64> {
+        match self {
+            FileServiceError::Unavailable { retry_after_secs } => {
+                Some(retry_after_secs.unwrap_or(1).max(1))
+            }
+            _ => None,
+        }
     }
 
     /// Wraps a store failure as [`FileServiceError::StoreFailed`].
@@ -148,7 +175,7 @@ mod tests {
 
     #[test]
     fn codes_statuses_and_retryability_are_total() {
-        let cases: [(FileServiceError, &str, u16, bool); 11] = [
+        let cases: [(FileServiceError, &str, u16, bool); 12] = [
             (FileServiceError::NotFound, "document.not_found", 404, false),
             (
                 FileServiceError::PermissionDenied,
@@ -219,6 +246,14 @@ mod tests {
                 "file.virus_detected",
                 422,
                 false,
+            ),
+            (
+                FileServiceError::Unavailable {
+                    retry_after_secs: None,
+                },
+                "server.unavailable",
+                503,
+                true,
             ),
             (
                 FileServiceError::Internal {

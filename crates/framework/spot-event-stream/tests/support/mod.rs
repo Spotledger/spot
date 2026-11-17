@@ -164,12 +164,12 @@ pub fn record(
     }
 }
 
-/// A `doc_created` record for `id` at `(generation, seq)`.
+/// A `task_created` record (an app topic with no registry entry: class `domain`) for `id` at `(generation, seq)`.
 pub fn doc_record(generation: u64, seq: u64, id: RecordId) -> OutboxRecord {
     record(
         generation,
         seq,
-        "doc_created",
+        "task_created",
         "task",
         id,
         seq.max(1),

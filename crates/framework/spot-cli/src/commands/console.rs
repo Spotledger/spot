@@ -28,22 +28,19 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde_json::{Value as Json, json};
 use spot_api_services::engine_resources::EngineResources;
 use spot_api_services::{Delegates, FunctionDelegate, MetaResources, ReportDelegate};
+use spot_api_services::{EngineLookup, ListFieldGuard};
 use spot_app_api::context::Actor;
 use spot_cli::audit::chain::ChainAudit;
-use spot_cli::audit::{IdentityAudit, Recorder, redact_name};
+use spot_cli::audit::{IdentityAudit, Recorder};
 use spot_cli::live::SiteLive;
-use spot_cli::login::{Credentials, LoginStores, SiteAuth, SiteDirectory};
+use spot_cli::login::{Credentials, LoginStores, SiteAuth, SiteStorage};
 use spot_cli::permissions::GuardedEngine;
 use spot_cli::services::{self, Services};
 use spot_core::SiteId;
 use spot_document::engine::{Engine, InProcessDelivery, V7Ids};
 use spot_http::api::idempotency::MemoryIdempotencyStore;
-use spot_http::api::lookup::{LookupPage, LookupRequest};
-use spot_http::api::registry::Code;
 use spot_http::api::router::{ApiServices, router};
-use spot_http::api::service::{
-    ApiError, BoxFuture, Credential, LoginBody, LookupService, RequestCtx,
-};
+use spot_http::api::service::{ApiError, Credential, LoginBody, RequestCtx};
 use spot_http::request::RequestId;
 use spot_http::site::SiteContext;
 use spot_migration_apply::gate::GateStatus;
@@ -78,7 +75,9 @@ pub fn command() -> Command {
         opt(id, long, help).action(ArgAction::SetTrue)
     };
     Command::new(NAME)
-        .about("Inspect and repair one site's documents as a named user (permissions and audit apply)")
+        .about(
+            "Inspect and repair one site's documents as a named user (permissions and audit apply)",
+        )
         .long_about(
             "Signs in as the named user; every statement runs through the same permission, \
              field-guard and audit path as the native API. It is as powerful as that account: \
@@ -96,23 +95,44 @@ pub fn command() -> Command {
                 .action(ArgAction::Append),
         )
         .arg(
-            opt("file", "file", "Run the statements of a file, one per line, and exit")
-                .conflicts_with("exec"),
+            opt(
+                "file",
+                "file",
+                "Run the statements of a file, one per line, and exit",
+            )
+            .conflicts_with("exec"),
         )
-        .arg(flag("keep_going", "keep-going", "In a script, continue after a failed statement"))
+        .arg(flag(
+            "keep_going",
+            "keep-going",
+            "In a script, continue after a failed statement",
+        ))
         .arg(
             opt("format", "format", "Output: JSON lines or a table")
                 .value_parser(["json", "table"])
                 .default_value("json"),
         )
-        .arg(flag("history", "history", "Keep a 0600 history file (statements can hold personal data)"))
-        .arg(opt("timeout", "timeout", "Overall time limit of a script in seconds (default 600)"))
+        .arg(flag(
+            "history",
+            "history",
+            "Keep a 0600 history file (statements can hold personal data)",
+        ))
+        .arg(opt(
+            "timeout",
+            "timeout",
+            "Overall time limit of a script in seconds (default 600)",
+        ))
 }
 
 #[derive(Debug, PartialEq)]
 enum Statement {
     Get(String, String),
-    List { doctype: String, filter: Option<Json>, limit: u32, fields: Vec<String> },
+    List {
+        doctype: String,
+        filter: Option<Json>,
+        limit: u32,
+        fields: Vec<String>,
+    },
     Create(String, Json),
     Update(String, String, Json),
     Delete(String, String),
@@ -132,7 +152,9 @@ const BAD_ID: Usage = Usage("a record id is letters, digits, `-` and `_`");
 
 fn name_of(text: Option<&&str>) -> Result<String, Usage> {
     let ok = |t: &str| (1..=64).contains(&t.len()) && t.bytes().all(is_name_byte);
-    text.filter(|t| ok(t)).map(|t| (*t).to_owned()).ok_or(BAD_NAME)
+    text.filter(|t| ok(t))
+        .map(|t| (*t).to_owned())
+        .ok_or(BAD_NAME)
 }
 
 fn is_name_byte(b: u8) -> bool {
@@ -140,13 +162,23 @@ fn is_name_byte(b: u8) -> bool {
 }
 
 fn id_of(text: Option<&&str>) -> Result<String, Usage> {
-    let ok = |t: &str| (1..=64).contains(&t.len()) && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-    text.filter(|t| ok(t)).map(|t| (*t).to_owned()).ok_or(BAD_ID)
+    let ok = |t: &str| {
+        (1..=64).contains(&t.len())
+            && t.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    };
+    text.filter(|t| ok(t))
+        .map(|t| (*t).to_owned())
+        .ok_or(BAD_ID)
 }
 
 fn parse(line: &str) -> Result<Statement, Usage> {
     let line = line.trim();
-    let first = line.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
+    let first = line
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let (head, tail) = match line.find('{') {
         Some(at) if first != "list" => (&line[..at], Some(&line[at..])),
         _ => (line, None),
@@ -184,20 +216,35 @@ fn parse(line: &str) -> Result<Statement, Usage> {
         "create" => arity(2).and_then(|()| Ok(Statement::Create(name_of(word(1))?, need()?))),
         "update" => {
             arity(3)?;
-            Ok(Statement::Update(name_of(word(1))?, id_of(word(2))?, need()?))
+            Ok(Statement::Update(
+                name_of(word(1))?,
+                id_of(word(2))?,
+                need()?,
+            ))
         }
         "call" | "report" => {
             arity(2)?;
             let target = word(1).map(|t| (*t).to_owned()).unwrap_or_default();
-            let parts: Vec<&str> = target.split(if first == "call" { '.' } else { '\u{0}' }).collect();
-            let valid = |p: &str| !p.is_empty() && p.len() <= 64 && p.bytes().all(|b| is_name_byte(b) || (first == "report" && b == b'-'));
+            let parts: Vec<&str> = target
+                .split(if first == "call" { '.' } else { '\u{0}' })
+                .collect();
+            let valid = |p: &str| {
+                !p.is_empty()
+                    && p.len() <= 64
+                    && p.bytes()
+                        .all(|b| is_name_byte(b) || (first == "report" && b == b'-'))
+            };
             match (first.as_str(), parts.len()) {
-                ("call", 3) | ("report", 1) if parts.iter().all(|p| valid(p)) => Ok(match first.as_str() {
-                    "call" => Statement::Call(target, or_empty()),
-                    _ => Statement::Report(target, or_empty()),
-                }),
+                ("call", 3) | ("report", 1) if parts.iter().all(|p| valid(p)) => {
+                    Ok(match first.as_str() {
+                        "call" => Statement::Call(target, or_empty()),
+                        _ => Statement::Report(target, or_empty()),
+                    })
+                }
                 ("call", _) => Err(Usage("a function is APP.MODULE.FUNCTION")),
-                _ => Err(Usage("a report name is lowercase letters, digits, `_` and `-`")),
+                _ => Err(Usage(
+                    "a report name is lowercase letters, digits, `_` and `-`",
+                )),
             }
         }
         _ => Err(Usage("unknown statement; see `help`")),
@@ -210,20 +257,26 @@ fn words_of(line: &str) -> Result<Vec<(String, bool)>, Usage> {
     while !rest.is_empty() {
         if rest.starts_with('"') {
             let mut escaped = false;
-            let end = rest.char_indices().skip(1).find(|&(_, c)| match (escaped, c) {
-                (true, _) => {
-                    escaped = false;
-                    false
-                }
-                (false, '\\') => {
-                    escaped = true;
-                    false
-                }
-                (false, c) => c == '"',
-            });
+            let end = rest
+                .char_indices()
+                .skip(1)
+                .find(|&(_, c)| match (escaped, c) {
+                    (true, _) => {
+                        escaped = false;
+                        false
+                    }
+                    (false, '\\') => {
+                        escaped = true;
+                        false
+                    }
+                    (false, c) => c == '"',
+                });
             let end = end.ok_or(Usage("a quoted value is not closed"))?.0 + 1;
             let word = serde_json::from_str::<String>(&rest[..end]);
-            out.push((word.map_err(|_| Usage("a quoted value could not be read"))?, true));
+            out.push((
+                word.map_err(|_| Usage("a quoted value could not be read"))?,
+                true,
+            ));
             rest = &rest[end..];
         } else {
             let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
@@ -256,7 +309,11 @@ fn parse_list(line: &str) -> Result<Statement, Usage> {
                     Some("prefix") => "prefix",
                     Some("contains") => "contains",
                     Some("suffix") => "suffix",
-                    _ => return Err(Usage("an operator is = != < <= > >= prefix contains suffix")),
+                    _ => {
+                        return Err(Usage(
+                            "an operator is = != < <= > >= prefix contains suffix",
+                        ));
+                    }
                 };
                 let (raw, quoted) = it.next().ok_or(Usage("where FIELD OP VALUE"))?;
                 let as_json = serde_json::from_str::<Json>(raw).ok();
@@ -268,7 +325,9 @@ fn parse_list(line: &str) -> Result<Statement, Usage> {
             }
             "limit" => {
                 let n = it.next().and_then(|(w, _)| w.parse::<u32>().ok());
-                limit = n.filter(|n| (1..=LIMIT_MAX).contains(n)).ok_or(Usage("limit is 1 to 1000"))?;
+                limit = n
+                    .filter(|n| (1..=LIMIT_MAX).contains(n))
+                    .ok_or(Usage("limit is 1 to 1000"))?;
             }
             "fields" => {
                 let list = it.next().map(|(w, _)| w).ok_or(Usage("fields a,b"))?;
@@ -277,7 +336,11 @@ fn parse_list(line: &str) -> Result<Statement, Usage> {
                     return Err(Usage("fields are names separated by commas"));
                 }
             }
-            _ => return Err(Usage("list DOCTYPE [where FIELD OP VALUE ...] [limit N] [fields a,b]")),
+            _ => {
+                return Err(Usage(
+                    "list DOCTYPE [where FIELD OP VALUE ...] [limit N] [fields a,b]",
+                ));
+            }
         }
     }
     let filter = match filters.len() {
@@ -285,7 +348,12 @@ fn parse_list(line: &str) -> Result<Statement, Usage> {
         1 => filters.pop(),
         _ => Some(json!({ "and": filters })),
     };
-    Ok(Statement::List { doctype, filter, limit, fields })
+    Ok(Statement::List {
+        doctype,
+        filter,
+        limit,
+        fields,
+    })
 }
 
 const HELP: &str = "statements:\n  get DOCTYPE ID\n  list DOCTYPE [where FIELD OP VALUE ...] [limit N] [fields a,b]\n  create DOCTYPE {json}\n  update DOCTYPE ID {json}\n  delete DOCTYPE ID\n  call APP.MODULE.FUNCTION [{json}]\n  report NAME [{json}]\n  whoami | help | exit\noperators: = != < <= > >= prefix contains suffix; quote values with spaces; limit is at most 1000.";
@@ -296,7 +364,10 @@ fn cell(value: &Json) -> String {
         Json::Null => String::new(),
         other => other.to_string(),
     };
-    let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let text: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
     match text.chars().count() > 60 {
         true => format!("{}...", text.chars().take(57).collect::<String>()),
         false => text,
@@ -306,7 +377,13 @@ fn cell(value: &Json) -> String {
 fn table(header: &[String], rows: &[Vec<String>]) -> String {
     let width = |i: usize| {
         let cells = rows.iter().filter_map(|r| r.get(i));
-        header.get(i).into_iter().chain(cells).map(|c| c.chars().count()).max().unwrap_or(0)
+        header
+            .get(i)
+            .into_iter()
+            .chain(cells)
+            .map(|c| c.chars().count())
+            .max()
+            .unwrap_or(0)
     };
     let widths: Vec<usize> = (0..header.len()).map(width).collect();
     let line = |cells: &[String]| {
@@ -317,23 +394,36 @@ fn table(header: &[String], rows: &[Vec<String>]) -> String {
             .collect();
         format!("{}\n", padded.join("  ").trim_end())
     };
-    std::iter::once(header).chain(rows.iter().map(Vec::as_slice)).map(line).collect()
+    std::iter::once(header)
+        .chain(rows.iter().map(Vec::as_slice))
+        .map(line)
+        .collect()
 }
 
 fn render(docs: &[Json], tabular: bool, out: &mut Vec<u8>) {
     if !tabular {
-        docs.iter().for_each(|d| out.extend(format!("{d}\n").bytes()));
+        docs.iter()
+            .for_each(|d| out.extend(format!("{d}\n").bytes()));
         return;
     }
     let mut columns: Vec<String> = Vec::new();
-    for key in docs.iter().filter_map(Json::as_object).flat_map(|m| m.keys()) {
+    for key in docs
+        .iter()
+        .filter_map(Json::as_object)
+        .flat_map(|m| m.keys())
+    {
         if !columns.contains(key) {
             columns.push(key.clone());
         }
     }
     let rows: Vec<Vec<String>> = docs
         .iter()
-        .map(|d| columns.iter().map(|c| cell(d.get(c).unwrap_or(&Json::Null))).collect())
+        .map(|d| {
+            columns
+                .iter()
+                .map(|c| cell(d.get(c).unwrap_or(&Json::Null)))
+                .collect()
+        })
         .collect();
     out.extend(table(&columns, &rows).bytes());
 }
@@ -354,30 +444,24 @@ impl Reply {
         (200..300).contains(&self.status)
     }
     fn code(&self) -> &str {
-        self.body["error"]["code"].as_str().unwrap_or("console.unexpected_reply")
+        self.body["error"]["code"]
+            .as_str()
+            .unwrap_or("console.unexpected_reply")
     }
     /// The failure for a refused reply: the stable code and status, never a value.
     fn fail(&self) -> Fail {
         let code = self.code();
-        let exit = match code.starts_with("permission.") || code.starts_with("auth.") || code == "server.maintenance" {
+        let exit = match code.starts_with("permission.")
+            || code.starts_with("auth.")
+            || code == "server.maintenance"
+        {
             true => Exit::Refused,
             false => Exit::Failed,
         };
-        Fail(exit, format!("{code}: the statement failed (http {})", self.status))
-    }
-}
-
-struct NoLookup;
-
-impl LookupService for NoLookup {
-    fn search<'a>(
-        &'a self,
-        _: &'a RequestCtx,
-        _: &'a str,
-        _: &'a str,
-        _: &'a LookupRequest,
-    ) -> BoxFuture<'a, Result<LookupPage, ApiError>> {
-        Box::pin(async { Err(ApiError::new(Code::ApiInvalidRequest, "No lookup provider is configured.")) })
+        Fail(
+            exit,
+            format!("{code}: the statement failed (http {})", self.status),
+        )
     }
 }
 
@@ -400,7 +484,13 @@ struct Session {
 }
 
 impl Session {
-    async fn send(&self, method: Method, path: &str, version: Option<&str>, body: Option<&Json>) -> Reply {
+    async fn send(
+        &self,
+        method: Method,
+        path: &str,
+        version: Option<&str>,
+        body: Option<&Json>,
+    ) -> Reply {
         let mut request = Request::builder()
             .method(method)
             .uri(path)
@@ -411,11 +501,19 @@ impl Session {
         }
         let bytes = body.map(Json::to_string).unwrap_or_default();
         let Ok(mut request) = request.body(axum::body::Body::from(bytes)) else {
-            return Reply { status: 500, body: Json::Null };
+            return Reply {
+                status: 500,
+                body: Json::Null,
+            };
         };
         let request_id = RequestId::generate();
         request.extensions_mut().insert(request_id.clone());
-        let site = SiteContext { site: self.site.clone(), request_id, peer: None, host: None };
+        let site = SiteContext {
+            site: self.site.clone(),
+            request_id,
+            peer: None,
+            host: None,
+        };
         request.extensions_mut().insert(site);
         let response = match self.router.clone().oneshot(request).await {
             Ok(response) => response,
@@ -424,7 +522,10 @@ impl Session {
         let status = response.status().as_u16();
         let bytes = axum::body::to_bytes(response.into_body(), RESPONSE_MAX).await;
         let body = bytes.ok().and_then(|b| serde_json::from_slice(&b).ok());
-        Reply { status, body: body.unwrap_or(Json::Null) }
+        Reply {
+            status,
+            body: body.unwrap_or(Json::Null),
+        }
     }
 
     /// One identity-trail record of channel `console`; `required` refuses the statement when it
@@ -432,8 +533,9 @@ impl Session {
     fn audit(&self, kind: &str, target: &str, required: bool) -> Result<(), ()> {
         let mut record = self.recorder.record(kind);
         record.user = Some(self.user.to_string());
-        record.attempted = Some(redact_name(&self.os_user));
-        record.path = Some(CHANNEL.to_owned());
+        // The channel and the OS account have their own fields: `path` is the request path class
+        // and `attempted` the presented sign-in name, which a console record does not have.
+        record.set_channel(CHANNEL, Some(&self.os_user));
         record.reason = Some(target.to_owned());
         match required {
             true => self.recorder.required(&record).map_err(|_| ()),
@@ -461,7 +563,9 @@ impl Session {
     /// Runs one statement: the gate and the audit record first when it writes.
     async fn run(&self, statement: &Statement, out: &mut Vec<u8>) -> Result<(), Fail> {
         let (verb, target, writes, reads) = match statement {
-            Statement::Get(d, _) | Statement::List { doctype: d, .. } => ("read", d.clone(), false, Some(d)),
+            Statement::Get(d, _) | Statement::List { doctype: d, .. } => {
+                ("read", d.clone(), false, Some(d))
+            }
             Statement::Create(d, _) => ("create", d.clone(), true, None),
             Statement::Update(d, ..) => ("update", d.clone(), true, None),
             Statement::Delete(d, _) => ("delete", d.clone(), true, None),
@@ -482,13 +586,26 @@ impl Session {
         if writes {
             self.gate_open().await?;
         }
-        if audited && self.audit(&format!("console_{verb}"), &target, true).is_err() {
-            return Err(refused("console.audit_unavailable: the audit trail cannot be written; nothing was changed"));
+        if audited
+            && self
+                .audit(&format!("console_{verb}"), &target, true)
+                .is_err()
+        {
+            return Err(refused(
+                "console.audit_unavailable: the audit trail cannot be written; nothing was changed",
+            ));
         }
         let result = self.execute(statement, out).await;
         if audited {
-            let outcome = result.as_ref().err().map_or("ok", |f| f.1.split(':').next().unwrap_or("failed"));
-            let _ = self.audit(&format!("console_{verb}_outcome"), &format!("{target} {outcome}"), false);
+            let outcome = result
+                .as_ref()
+                .err()
+                .map_or("ok", |f| f.1.split(':').next().unwrap_or("failed"));
+            let _ = self.audit(
+                &format!("console_{verb}_outcome"),
+                &format!("{target} {outcome}"),
+                false,
+            );
         }
         result
     }
@@ -496,12 +613,20 @@ impl Session {
     /// The version a write must name. A document the user cannot see answers exactly as one that
     /// is not there.
     async fn version_of(&self, doctype: &str, id: &str) -> Result<String, Fail> {
-        let reply = self.send(Method::GET, &format!("/api/v1/resource/{doctype}/{id}"), None, None).await;
+        let reply = self
+            .send(
+                Method::GET,
+                &format!("/api/v1/resource/{doctype}/{id}"),
+                None,
+                None,
+            )
+            .await;
         match reply.body["data"]["version"].as_u64() {
             Some(version) if reply.ok() => Ok(version.to_string()),
-            _ if reply.status == 403 || reply.status == 404 => {
-                Err(Fail(Exit::Failed, "document.not_found: no such document (http 404)".into()))
-            }
+            _ if reply.status == 403 || reply.status == 404 => Err(Fail(
+                Exit::Failed,
+                "document.not_found: no such document (http 404)".into(),
+            )),
             _ => Err(reply.fail()),
         }
     }
@@ -509,18 +634,44 @@ impl Session {
     async fn execute(&self, statement: &Statement, out: &mut Vec<u8>) -> Result<(), Fail> {
         let resource = |doctype: &str| format!("/api/v1/resource/{doctype}");
         let reply = match statement {
-            Statement::Get(d, id) => self.send(Method::GET, &format!("{}/{id}", resource(d)), None, None).await,
-            Statement::List { doctype, filter, limit, fields } => {
-                return self.list(doctype, filter.as_ref(), *limit, fields, out).await;
+            Statement::Get(d, id) => {
+                self.send(Method::GET, &format!("{}/{id}", resource(d)), None, None)
+                    .await
             }
-            Statement::Create(d, body) => self.send(Method::POST, &resource(d), None, Some(body)).await,
+            Statement::List {
+                doctype,
+                filter,
+                limit,
+                fields,
+            } => {
+                return self
+                    .list(doctype, filter.as_ref(), *limit, fields, out)
+                    .await;
+            }
+            Statement::Create(d, body) => {
+                self.send(Method::POST, &resource(d), None, Some(body))
+                    .await
+            }
             Statement::Update(d, id, body) => {
                 let version = self.version_of(d, id).await?;
-                self.send(Method::PATCH, &format!("{}/{id}", resource(d)), Some(&version), Some(body)).await
+                self.send(
+                    Method::PATCH,
+                    &format!("{}/{id}", resource(d)),
+                    Some(&version),
+                    Some(body),
+                )
+                .await
             }
             Statement::Delete(d, id) => {
                 let version = self.version_of(d, id).await?;
-                let reply = self.send(Method::DELETE, &format!("{}/{id}", resource(d)), Some(&version), None).await;
+                let reply = self
+                    .send(
+                        Method::DELETE,
+                        &format!("{}/{id}", resource(d)),
+                        Some(&version),
+                        None,
+                    )
+                    .await;
                 if reply.ok() {
                     out.extend(format!("{}\n", json!({"deleted": id})).bytes());
                     return Ok(());
@@ -529,11 +680,23 @@ impl Session {
             }
             Statement::Call(path, args) => {
                 self.need("function")?;
-                self.send(Method::POST, &format!("/api/v1/method/{}", path.replace('.', "/")), None, Some(args)).await
+                self.send(
+                    Method::POST,
+                    &format!("/api/v1/method/{}", path.replace('.', "/")),
+                    None,
+                    Some(args),
+                )
+                .await
             }
             Statement::Report(name, args) => {
                 self.need("report")?;
-                self.send(Method::POST, &format!("/api/v1/report/{name}/run"), None, Some(args)).await
+                self.send(
+                    Method::POST,
+                    &format!("/api/v1/report/{name}/run"),
+                    None,
+                    Some(args),
+                )
+                .await
             }
             Statement::Whoami | Statement::Help | Statement::Exit => return Ok(()),
         };
@@ -544,11 +707,20 @@ impl Session {
         match (data["columns"].as_array(), data["rows"].as_array()) {
             (Some(columns), Some(rows)) if self.tabular => {
                 let header: Vec<String> = columns.iter().map(|c| cell(&c["name"])).collect();
-                let rows: Vec<Vec<String>> = rows.iter().filter_map(Json::as_array).map(|r| r.iter().map(cell).collect()).collect();
+                let rows: Vec<Vec<String>> = rows
+                    .iter()
+                    .filter_map(Json::as_array)
+                    .map(|r| r.iter().map(cell).collect())
+                    .collect();
                 out.extend(table(&header, &rows).bytes());
             }
             _ if self.tabular && data.is_object() => {
-                let rows: Vec<Vec<String>> = data.as_object().into_iter().flatten().map(|(k, v)| vec![k.clone(), cell(v)]).collect();
+                let rows: Vec<Vec<String>> = data
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(k, v)| vec![k.clone(), cell(v)])
+                    .collect();
                 out.extend(table(&["field".to_owned(), "value".to_owned()], &rows).bytes());
             }
             _ => out.extend(format!("{data}\n").bytes()),
@@ -558,12 +730,22 @@ impl Session {
 
     fn need(&self, service: &'static str) -> Result<(), Fail> {
         match self.missing.contains(&service) {
-            true => Err(Fail(Exit::Failed, format!("console.{service}_unavailable: that service did not start here"))),
+            true => Err(Fail(
+                Exit::Failed,
+                format!("console.{service}_unavailable: that service did not start here"),
+            )),
             false => Ok(()),
         }
     }
 
-    async fn list(&self, doctype: &str, filter: Option<&Json>, limit: u32, fields: &[String], out: &mut Vec<u8>) -> Result<(), Fail> {
+    async fn list(
+        &self,
+        doctype: &str,
+        filter: Option<&Json>,
+        limit: u32,
+        fields: &[String],
+        out: &mut Vec<u8>,
+    ) -> Result<(), Fail> {
         let (mut docs, mut cursor): (Vec<Json>, Option<String>) = (Vec::new(), None);
         while docs.len() < limit as usize {
             let remaining = limit.saturating_sub(u32::try_from(docs.len()).unwrap_or(limit));
@@ -595,15 +777,26 @@ fn prompt(label: &str) -> Result<String, String> {
     #[cfg(unix)]
     {
         let none = || "no terminal; use --password-file".to_owned();
-        let tty = std::fs::OpenOptions::new().read(true).write(true).open("/dev/tty").map_err(|_| none())?;
+        let tty = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .map_err(|_| none())?;
         let reader = tty.try_clone().map_err(|_| none())?;
         let mut terminal = tty.try_clone().map_err(|_| none())?;
         let stty = |args: &[&str]| -> bool {
-            let stdin = tty.try_clone().map_or(std::process::Stdio::null(), Into::into);
-            let status = std::process::Command::new("stty").args(args).stdin(stdin).status();
+            let stdin = tty
+                .try_clone()
+                .map_or(std::process::Stdio::null(), Into::into);
+            let status = std::process::Command::new("stty")
+                .args(args)
+                .stdin(stdin)
+                .status();
             status.is_ok_and(|s| s.success())
         };
-        write!(terminal, "{label}").and_then(|()| terminal.flush()).map_err(|_| none())?;
+        write!(terminal, "{label}")
+            .and_then(|()| terminal.flush())
+            .map_err(|_| none())?;
         if !stty(&["-echo"]) {
             return Err("cannot turn terminal echo off; use --password-file".to_owned());
         }
@@ -632,9 +825,14 @@ fn read_password_file(path: &Path) -> Result<String, String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(path).map_err(|_| unreadable())?.permissions().mode();
+        let mode = std::fs::metadata(path)
+            .map_err(|_| unreadable())?
+            .permissions()
+            .mode();
         if mode & 0o077 != 0 {
-            return Err("the password file must not be readable by group or others (chmod 600)".to_owned());
+            return Err(
+                "the password file must not be readable by group or others (chmod 600)".to_owned(),
+            );
         }
     }
     let mut text = String::new();
@@ -650,7 +848,38 @@ fn read_password_file(path: &Path) -> Result<String, String> {
 
 /// Signs in through the site's own sign-in service. Every failure feeds that service's throttle
 /// and its audit records, and a wrong password and an unknown user are answered the same.
-async fn sign_in(auth: &SiteAuth, site: &SiteId, user: &str, file: Option<&Path>) -> Result<(String, RecordId), String> {
+/// The admission of the console's own sign-in: at most [`ADMISSIONS`] attempts in this process,
+/// then it refuses. A console never serves anyone else, so no shared counter is needed.
+#[derive(Default)]
+struct ConsoleAdmission(std::sync::atomic::AtomicUsize);
+
+/// The attempts one console process admits (the terminal loop makes at most `ATTEMPTS`).
+const ADMISSIONS: usize = 20;
+
+impl spot_login::SignInAdmission for ConsoleAdmission {
+    fn admit<'a>(
+        &'a self,
+        _attempt: spot_login::SignInAttempt<'a>,
+    ) -> spot_login::BoxFuture<'a, Result<spot_login::Admission, spot_login::AdmissionError>> {
+        let used = self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Box::pin(async move {
+            if used < ADMISSIONS {
+                Ok(spot_login::Admission::Allowed)
+            } else {
+                Ok(spot_login::Admission::Denied {
+                    retry_after: Duration::from_secs(60),
+                })
+            }
+        })
+    }
+}
+
+async fn sign_in(
+    auth: &SiteAuth,
+    site: &SiteId,
+    user: &str,
+    file: Option<&Path>,
+) -> Result<(String, RecordId), String> {
     let ctx = |credential: Option<Credential>| RequestCtx {
         site: site.clone(),
         credential,
@@ -664,23 +893,40 @@ async fn sign_in(auth: &SiteAuth, site: &SiteId, user: &str, file: Option<&Path>
             Some(path) => read_password_file(path)?,
             None => prompt("Password: ")?,
         };
-        let mut body = LoginBody { user: user.to_owned(), password, totp: None, recovery_code: None };
+        let mut body = LoginBody {
+            user: user.to_owned(),
+            password,
+            totp: None,
+            recovery_code: None,
+        };
         let mut result = auth.login_with_source(&ctx(None), &body, "console").await;
-        if result.as_ref().err().is_some_and(|e| e.code.as_str() == "auth.totp_required") {
+        if result
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.code.as_str() == "auth.totp_required")
+        {
             if file.is_some() {
                 wipe(std::mem::take(&mut body.password));
-                return Err("this user needs a second factor: run `spot console` at a terminal".to_owned());
+                return Err(
+                    "this user needs a second factor: run `spot console` at a terminal".to_owned(),
+                );
             }
             body.totp = Some(prompt("One-time code: ")?);
             result = auth.login_with_source(&ctx(None), &body, "console").await;
         }
         wipe(std::mem::take(&mut body.password));
         match result {
-            Ok((_, true)) => return Err("this user has not chosen a password yet; choose one on the web first".to_owned()),
+            Ok((_, true)) => {
+                return Err(
+                    "this user has not chosen a password yet; choose one on the web first"
+                        .to_owned(),
+                );
+            }
             Ok((session, false)) => {
                 let credential = Credential::new(session.token.clone());
                 let principal = auth.authenticate(&ctx(Some(credential))).await;
-                let principal = principal.map_err(|_| "the session could not be read".to_owned())?;
+                let principal =
+                    principal.map_err(|_| "the session could not be read".to_owned())?;
                 return Ok((session.token, principal.user_id));
             }
             Err(error) if error.code.as_str().starts_with("auth.") => {}
@@ -690,57 +936,88 @@ async fn sign_in(auth: &SiteAuth, site: &SiteId, user: &str, file: Option<&Path>
     Err("sign-in failed".to_owned())
 }
 
-fn why(what: &'static str) -> impl Fn(spot_cli::Error) -> String {
+fn why<E: std::fmt::Display>(what: &'static str) -> impl Fn(E) -> String {
     move |error| format!("{what}: {error}")
 }
 
 /// Builds the site's engine the way the host does (the same permission snapshot, controllers,
 /// participants and secrets), without serving, listening or starting a job, then signs in.
-async fn open(ctx: &mut CommandCtx, site_name: &str, user: &str, file: Option<&Path>, tabular: bool) -> Result<Session, String> {
+async fn open(
+    ctx: &mut CommandCtx,
+    site_name: &str,
+    user: &str,
+    file: Option<&Path>,
+    tabular: bool,
+) -> Result<Session, String> {
     let root = ctx.root().to_path_buf();
     let clock = ctx.clock().clone();
-    let loaded = spot_cli::config::load(&root, false).map_err(why("the host configuration did not load"))?;
+    let loaded =
+        spot_cli::config::load(&root, false).map_err(why("the host configuration did not load"))?;
     let site = loaded.sites.iter().find(|s| s.site == site_name).cloned();
     let site = site.ok_or_else(|| "there is no such site".to_owned())?;
     if site.partition.is_some() {
         return Err("this site is a partitioned node; the console does not open those".to_owned());
     }
-    let permission = spot_cli::permissions::site(&root, &loaded, &site).await.map_err(why("the site cannot be opened"))?;
-    let backend = spot_cli::schema::backend(&loaded, &site).await.map_err(why("the site's database cannot be reached"))?;
+    let permission = spot_cli::permissions::site(&root, &loaded, &site)
+        .await
+        .map_err(why("the site cannot be opened"))?;
+    let backend = spot_cli::schema::backend(&loaded, &site)
+        .await
+        .map_err(why("the site's database cannot be reached"))?;
     let pending = spot_cli::schema::pending_platform_tables(&backend, &permission.catalog).await;
-    if !pending.map_err(why("the database cannot be read"))?.is_empty() {
-        return Err("the database is behind the installed apps; run `spot migrate --apply`".to_owned());
+    if !pending
+        .map_err(why("the database cannot be read"))?
+        .is_empty()
+    {
+        return Err(
+            "the database is behind the installed apps; run `spot migrate --apply`".to_owned(),
+        );
     }
-    if spot_cli::schema::audit_protection_gap(&backend).await.map_err(why("the audit store cannot be read"))?.is_some() {
-        return Err("the audit chain is not fully protected; run `spot migrate --apply`".to_owned());
+    if spot_cli::schema::audit_protection_gap(&backend)
+        .await
+        .map_err(why("the audit store cannot be read"))?
+        .is_some()
+    {
+        return Err(
+            "the audit chain is not fully protected; run `spot migrate --apply`".to_owned(),
+        );
     }
     let site_id = SiteId::new(&site.site).map_err(|_| "the site name is not valid".to_owned())?;
     // The identity trail: sign-ins and every console statement. Without it nothing runs.
     let mut pg = loaded.admin.clone().with_dbname(&site.database);
     pg.pool_max_size = loaded.common.postgres.pool_max_size.clamp(1, 4);
-    let Ok((chain, _)) = ChainAudit::open(pg, &site.site, None).await.map_err(why("the audit trail cannot be opened"))? else {
+    let Ok((chain, _)) = ChainAudit::open(pg, &site.site, None)
+        .await
+        .map_err(why("the audit trail cannot be opened"))?
+    else {
         return Err("the audit store is not prepared; run `spot migrate --apply`".to_owned());
     };
     let sink: Arc<dyn IdentityAudit> = Arc::new(chain);
     let recorder = Arc::new(Recorder::new(&site.site, sink, clock.clone()));
     let stores = LoginStores::new(recorder.clone(), clock.clone());
-    let credentials = Credentials::load(&root, &site, clock.clone()).map_err(why("the site's credentials cannot be read"))?;
-    let credentials = Arc::new(credentials);
-    let directory = SiteDirectory::new(backend.clone(), permission.catalog.clone(), credentials.clone());
-    let auth = SiteAuth::new(spot_cli::login::default_login_config(), Arc::new(directory), credentials, Vec::new(), clock.clone(), &stores);
-    let auth = Arc::new(auth.map_err(why("sign-in cannot start"))?);
-    let (token, user_id) = sign_in(&auth, &site_id, user, file).await?;
     // The engine, as the host builds it.
     let apps = &permission.apps;
-    let installed = services::controllers::build(&root, &loaded, &site, &permission.meta, apps).map_err(why("the controllers cannot be installed"))?;
-    let secrets = services::secrets::open(&root, &loaded, &site).await.map_err(why("the secrets service cannot start"))?;
+    let installed = services::controllers::build(&root, &loaded, &site, &permission.meta, apps)
+        .map_err(why("the controllers cannot be installed"))?;
+    let secrets = services::secrets::open(&root, &loaded, &site)
+        .await
+        .map_err(why("the secrets service cannot start"))?;
     if let Some(host) = &secrets {
-        let checked = services::secrets::verify_values(host, &backend, &permission.catalog, &permission.meta).await;
+        let checked =
+            services::secrets::verify_values(host, &backend, &permission.catalog, &permission.meta)
+                .await;
         checked.map_err(why("the sealed values cannot be verified"))?;
     }
-    let engine = Engine::new(backend.clone(), permission.meta.clone(), installed.seams.clone(), clock.clone(), Arc::new(V7Ids));
+    let engine = Engine::new(
+        backend.clone(),
+        permission.meta.clone(),
+        installed.seams.clone(),
+        clock.clone(),
+        Arc::new(V7Ids),
+    );
     let engine = engine.map_err(|e| format!("the engine cannot start: {e}"))?;
-    let permitted = spot_app_permissions::SnapshotAppPermissions::new(permission.authorizer.clone());
+    let permitted =
+        spot_app_permissions::SnapshotAppPermissions::new(permission.authorizer.clone());
     let engine = engine
         .with_delivery(Arc::new(InProcessDelivery))
         .with_authorizer(permission.authorizer.clone())
@@ -757,25 +1034,110 @@ async fn open(ctx: &mut CommandCtx, site_name: &str, user: &str, file: Option<&P
         partitions: None,
         meta: Arc::new(move || generation.clone()),
     };
-    let participants = services::participants::build(&site_id, &site, &deps).map_err(why("the participants cannot be installed"))?;
+    let participants = services::participants::build(&site_id, &site, &deps)
+        .map_err(why("the participants cannot be installed"))?;
     engine.set_participants(participants.participants);
-    engine.prepare().await.map_err(|e| format!("the engine cannot prepare storage: {e}"))?;
+    engine
+        .prepare()
+        .await
+        .map_err(|e| format!("the engine cannot prepare storage: {e}"))?;
     let engine = Arc::new(engine);
+    // Sign-in runs over the engine's stores (WP-IAM-11.T24), so it starts once the engine is
+    // prepared. Its admission is the coordinator throttle over an in-process coordinator: the
+    // console is one process, so a lockout lasts for the session, never a bypass.
+    let storage = SiteStorage::new(
+        engine.clone(),
+        permission.catalog.clone(),
+        &site.site,
+        clock.clone(),
+    )
+    .map_err(why("the sign-in storage cannot start"))?;
+    // The password an operator chose with `spot set-password` is staged in the site file until a
+    // host imports it into the sealed fields; the console is a host for this session, so it imports
+    // what is staged before anyone signs in (idempotent, the same call the server makes).
+    services::login_stores::import_site_file(&root, &site.site, &storage, &engine, &clock)
+        .await
+        .map_err(why("the staged credentials cannot be imported"))?;
+    let credentials = Credentials::load(&root, &site, clock.clone())
+        .map_err(why("the site's credentials cannot be read"))?;
+    let credentials = Arc::new(credentials);
+    let admission = admission(secrets.as_ref(), &site.site, &clock, recorder.clone()).await?;
+    let auth = SiteAuth::new(
+        spot_cli::login::default_login_config(),
+        &storage,
+        credentials,
+        Vec::new(),
+        clock.clone(),
+        &stores,
+        admission,
+    );
+    let auth = Arc::new(auth.map_err(why("sign-in cannot start"))?);
+    let (_token, _user_id) = sign_in(&auth, &site_id, user, file).await?;
     let live = Arc::new(SiteLive::new());
     let (meta, model) = (permission.meta.clone(), permission.model.clone());
     let principals = permission.principals.clone();
-    live.attach(meta, model, apps.clone(), permission.decision.clone(), engine.clone(), permission.authorizer.clone(), principals);
+    live.attach(
+        meta,
+        model,
+        apps.clone(),
+        permission.decision.clone(),
+        engine.clone(),
+        permission.authorizer.clone(),
+        principals,
+    );
+    // The sign-in service runs over the engine's own stores. The console is one operator at one
+    // terminal: it admits the few password tries it makes itself (`ATTEMPTS`), and the user's
+    // lockout is the one stored in the site database.
+    let storage = spot_cli::login::SiteStorage::new(
+        engine.clone(),
+        permission.catalog.clone(),
+        &site.site,
+        clock.clone(),
+    )
+    .map_err(why("the sign-in storage cannot start"))?;
+    // The password an operator chose with `spot set-password` is staged in the site file until a
+    // host imports it into the sealed fields; the console is a host for this session, so it imports
+    // what is staged before anyone signs in (idempotent, the same call the server makes).
+    services::login_stores::import_site_file(&root, &site.site, &storage, &engine, &clock)
+        .await
+        .map_err(why("the staged credentials cannot be imported"))?;
+    let credentials = Credentials::load(&root, &site, clock.clone())
+        .map_err(why("the site's credentials cannot be read"))?;
+    let credentials = Arc::new(credentials);
+    let admission: Arc<dyn spot_login::SignInAdmission> = Arc::new(ConsoleAdmission::default());
+    let auth = SiteAuth::new(
+        spot_cli::login::default_login_config(),
+        &storage,
+        credentials,
+        Vec::new(),
+        clock.clone(),
+        &stores,
+        admission,
+    );
+    let auth = Arc::new(auth.map_err(why("sign-in cannot start"))?);
+    let (token, user_id) = sign_in(&auth, &site_id, user, file).await?;
     live.set_auth(auth.clone());
     // Functions and reports: the same hosting modules, assembled but never serving.
     let grace = Duration::from_millis(loaded.common.services.shutdown_grace_ms);
     let extra = loaded.common.services.services_extra.clone();
-    let env = services::SiteEnv { root: &root, loaded: &loaded, site: &site, permission: &permission, backend: &backend, live: &live };
-    let mut hosting = services::SiteCtx::new(site.site.clone(), grace, clock.clone(), extra, true).with_env(env);
+    let env = services::SiteEnv {
+        root: &root,
+        loaded: &loaded,
+        site: &site,
+        permission: &permission,
+        backend: &backend,
+        live: &live,
+    };
+    let mut hosting =
+        services::SiteCtx::new(site.site.clone(), grace, clock.clone(), extra, true).with_env(env);
     let mut missing = Vec::new();
     hosting.as_module("function", services::function::ORDER);
     if services::function::register(&mut hosting).is_err() {
         missing.push("function");
     }
+    // The console serves no Server Scripts: the hubs the controllers installed would otherwise
+    // refuse every write of a scriptable DocType as "not loaded yet".
+    services::scripts::slot(&site.site).set(services::scripts::SlotState::Off);
     hosting.as_module("report", services::report::ORDER);
     if services::report::register(&mut hosting).is_err() {
         missing.push("report");
@@ -793,20 +1155,57 @@ async fn open(ctx: &mut CommandCtx, site_name: &str, user: &str, file: Option<&P
     {
         missing.extend(["function", "report"]);
     }
-    let guarded = Arc::new(GuardedEngine::new(engine, permission.authorizer.clone(), Arc::default()));
-    let actor = Arc::new(move |_: &RequestCtx| Ok::<_, ApiError>(Actor::User { id: user_id, via: None }));
-    let resources = EngineResources::new(guarded, permission.meta.clone(), clock.clone(), actor).with_delegates(delegates);
+    let guarded = Arc::new(GuardedEngine::new(
+        engine,
+        permission.authorizer.clone(),
+        Arc::default(),
+    ));
+    let actor = Arc::new(move |_: &RequestCtx| {
+        Ok::<_, ApiError>(Actor::User {
+            id: user_id,
+            via: None,
+        })
+    });
+    // The same guard as `serve`: the list path and the link lookup read through it (WP-SEC-04.T14).
+    let served = live
+        .current()
+        .map_err(|_| "the site's metadata cannot be served".to_owned())?;
+    let field_guard = spot_cli::live::field_guard(&served, &clock);
+    let resources = EngineResources::new(
+        guarded.clone(),
+        permission.meta.clone(),
+        clock.clone(),
+        actor.clone(),
+    )
+    .with_delegates(delegates)
+    .with_field_guard(field_guard.clone(), permission.principals.clone());
+    let lookup = EngineLookup::new(
+        guarded,
+        permission.meta.clone(),
+        clock.clone(),
+        actor,
+        ListFieldGuard::new(field_guard, permission.principals.clone()),
+    );
     let api = ApiServices::new(
         Arc::new(MetaResources::live(live.meta_source())),
         Arc::new(resources),
-        Arc::new(NoLookup),
+        Arc::new(lookup),
         auth.clone(),
         Arc::new(MemoryIdempotencyStore::new(clock.clone())),
     );
     let protected = permission.meta.field_protection();
-    let restricted = protected.iter().filter(|p| !p.groups.is_empty() || !p.tags.is_empty());
-    let restricted = restricted.filter_map(|p| p.path.split('.').next().map(str::to_owned)).collect();
-    let gate = PgAdmissionGate::new(backend.pool(), site_id.clone(), clock.clone(), Duration::from_secs(1));
+    let restricted = protected
+        .iter()
+        .filter(|p| !p.groups.is_empty() || !p.tags.is_empty());
+    let restricted = restricted
+        .filter_map(|p| p.path.split('.').next().map(str::to_owned))
+        .collect();
+    let gate = PgAdmissionGate::new(
+        backend.pool(),
+        site_id.clone(),
+        clock.clone(),
+        Duration::from_secs(1),
+    );
     Ok(Session {
         router: router(api),
         site: site_id,
@@ -824,14 +1223,61 @@ async fn open(ctx: &mut CommandCtx, site_name: &str, user: &str, file: Option<&P
     })
 }
 
+/// The sign-in admission of the console: the coordinator throttle over an in-process coordinator,
+/// with the site's derived salt and the default limits, wrapped so every refusal is audited. The
+/// secrets service is required (the salt comes from its key provider), as it is on the host.
+async fn admission(
+    secrets: Option<&Arc<spot_cli::services::secrets::SecretsHost>>,
+    site: &str,
+    clock: &Arc<dyn spot_core::Clock>,
+    recorder: Arc<Recorder>,
+) -> Result<Arc<dyn spot_login::SignInAdmission>, String> {
+    use spot_cli::services::signin_throttle::Settings;
+    use spot_throttle_coordinator::{CoordinatorThrottle, DerivedSalt, load_ring};
+    let host = secrets.ok_or_else(|| {
+        "sign-in needs the secrets service ([services.secrets]) for its throttle salt".to_owned()
+    })?;
+    let settings = Settings::default();
+    let policy = settings
+        .policy()
+        .map_err(why("the sign-in throttle settings are not valid"))?;
+    let source = DerivedSalt::new(Arc::clone(host.keyring()));
+    let ring = load_ring(
+        &source,
+        site,
+        settings.salt_version,
+        settings.previous_salt_version,
+    )
+    .await;
+    let ring = ring.map_err(|_| "the sign-in throttle cannot load its salt".to_owned())?;
+    let id = RecordId::new_v7().to_string();
+    let part = id.rsplit('-').next().unwrap_or(&id).to_owned();
+    let node = spot_coordinator::NodeId::new(format!("console-{site}-{part}"))
+        .map_err(why("the console node name is not valid"))?;
+    let presence = Arc::new(spot_coordinator::InMemoryPresence::new());
+    let coordinator =
+        spot_coordinator::InProcessCoordinator::start(presence, node, clock.clone()).await;
+    let coordinator: Arc<dyn spot_coordinator::Coordinator> =
+        coordinator.map_err(why("the sign-in throttle cannot start"))?;
+    let throttle = Arc::new(CoordinatorThrottle::with_ring(coordinator, ring, policy));
+    let inner = Arc::new(spot_login::CoordinatorAdmission::new(throttle));
+    Ok(Arc::new(spot_cli::audit::AuditedAdmission::new(
+        inner, recorder,
+    )))
+}
+
 /// The OS account this process runs as: on Unix the real uid from the kernel (never `USER` or
-/// `LOGNAME`, which the caller controls) named through `/etc/passwd`, else `uid:N`; elsewhere `USERNAME`.
+/// `LOGNAME`, which the caller controls) named through `/etc/passwd`, else `uid:N`; on Windows the
+/// account `whoami.exe` reports for the process token.
 fn os_user() -> String {
     #[cfg(unix)]
     {
         let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
         let line = status.lines().find_map(|l| l.strip_prefix("Uid:"));
-        let Some(uid) = line.and_then(|l| l.split_whitespace().next()).and_then(|u| u.parse::<u32>().ok()) else {
+        let Some(uid) = line
+            .and_then(|l| l.split_whitespace().next())
+            .and_then(|u| u.parse::<u32>().ok())
+        else {
             return "unknown".to_owned();
         };
         let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
@@ -840,18 +1286,36 @@ fn os_user() -> String {
             let name = f.next().filter(|n| !n.is_empty())?;
             (f.nth(1)?.parse::<u32>().ok()? == uid).then(|| name.to_owned())
         };
-        passwd.lines().find_map(name).unwrap_or_else(|| format!("uid:{uid}"))
+        passwd
+            .lines()
+            .find_map(name)
+            .unwrap_or_else(|| format!("uid:{uid}"))
     }
     #[cfg(not(unix))]
     {
-        std::env::var("USERNAME").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| "unknown".to_owned())
+        // The account of the process token, from the operating system's own tool at its fixed
+        // path, never from `USERNAME`, which the process environment can set.
+        std::process::Command::new(r"C:\Windows\System32\whoami.exe")
+            .env_clear()
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .map(|text| text.trim().to_owned())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "unknown".to_owned())
     }
 }
 
 fn open_history() -> Result<std::fs::File, String> {
     let home = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("state"));
-    let state = std::env::var_os("XDG_STATE_HOME").or_else(|| std::env::var_os("LOCALAPPDATA")).map(PathBuf::from);
-    let dir = state.or(home).ok_or("there is no state directory for the history file")?.join("spot");
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .or_else(|| std::env::var_os("LOCALAPPDATA"))
+        .map(PathBuf::from);
+    let dir = state
+        .or(home)
+        .ok_or("there is no state directory for the history file")?
+        .join("spot");
     std::fs::create_dir_all(&dir).map_err(|_| "the history directory cannot be created")?;
     let mut options = std::fs::OpenOptions::new();
     options.create(true).append(true);
@@ -860,7 +1324,9 @@ fn open_history() -> Result<std::fs::File, String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    options.open(dir.join("console-history")).map_err(|_| "the history file cannot be opened".to_owned())
+    options
+        .open(dir.join("console-history"))
+        .map_err(|_| "the history file cannot be opened".to_owned())
 }
 
 fn statements_of(matches: &ArgMatches) -> Result<Option<Vec<String>>, String> {
@@ -875,28 +1341,41 @@ fn statements_of(matches: &ArgMatches) -> Result<Option<Vec<String>>, String> {
         return Err("the script is too large".to_owned());
     }
     let text = std::fs::read_to_string(path).map_err(|_| unreadable())?;
-    let lines = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#'));
+    let lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'));
     Ok(Some(lines.map(str::to_owned).collect()))
 }
 
 fn next_line() -> std::io::Result<Option<String>> {
     let mut line = String::new();
-    let read = std::io::stdin().lock().take(STATEMENT_MAX as u64 + 1).read_line(&mut line)?;
+    let read = std::io::stdin()
+        .lock()
+        .take(STATEMENT_MAX as u64 + 1)
+        .read_line(&mut line)?;
     Ok((read > 0).then_some(line))
 }
 
 /// Runs the command.
 pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result<Exit> {
-    let (Some(site), Some(user)) = (matches.get_one::<String>("site"), matches.get_one::<String>("user")) else {
+    let (Some(site), Some(user)) = (
+        matches.get_one::<String>("site"),
+        matches.get_one::<String>("user"),
+    ) else {
         writeln!(ctx.err(), "usage: spot console --site SITE --user EMAIL")?;
         return Ok(Exit::Usage);
     };
-    let timeout = matches.get_one::<String>("timeout").map_or(Some(TIMEOUT_DEFAULT), |t| t.parse::<u64>().ok());
+    let timeout = matches
+        .get_one::<String>("timeout")
+        .map_or(Some(TIMEOUT_DEFAULT), |t| t.parse::<u64>().ok());
     let script = statements_of(matches);
     let mut early = None;
     match (&timeout, &script) {
         (Some(1..=TIMEOUT_MAX), Ok(s)) if s.as_ref().is_none_or(|s| s.len() <= SCRIPT_MAX) => {}
-        (Some(1..=TIMEOUT_MAX), Ok(_)) => early = Some("a script runs at most 10000 statements".to_owned()),
+        (Some(1..=TIMEOUT_MAX), Ok(_)) => {
+            early = Some("a script runs at most 10000 statements".to_owned())
+        }
         (_, Err(text)) => early = Some(text.clone()),
         _ => early = Some("--timeout is a number of seconds from 1 to 86400".to_owned()),
     }
@@ -904,7 +1383,10 @@ pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result
     // nothing and changes nothing.
     let script: Option<Vec<(String, Statement)>> = match script {
         Ok(Some(lines)) if early.is_none() => {
-            let parsed: Result<Vec<_>, Usage> = lines.into_iter().map(|l| parse(&l).map(|s| (l, s))).collect();
+            let parsed: Result<Vec<_>, Usage> = lines
+                .into_iter()
+                .map(|l| parse(&l).map(|s| (l, s)))
+                .collect();
             match parsed {
                 Ok(parsed) => Some(parsed),
                 Err(Usage(text)) => {
@@ -926,8 +1408,12 @@ pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result
         writeln!(ctx.err(), "usage: {text}")?;
         return Ok(Exit::Usage);
     }
-    let file = matches.get_one::<String>("password_file").map(PathBuf::from);
-    let tabular = matches.get_one::<String>("format").is_some_and(|f| f == "table");
+    let file = matches
+        .get_one::<String>("password_file")
+        .map(PathBuf::from);
+    let tabular = matches
+        .get_one::<String>("format")
+        .is_some_and(|f| f == "table");
     let mut session = match open(ctx, site, user, file.as_deref(), tabular).await {
         Ok(session) => session,
         Err(text) => {
@@ -937,7 +1423,8 @@ pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result
     };
     let keep_going = matches.get_flag("keep_going");
     let interactive = script.is_none();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout.unwrap_or(TIMEOUT_DEFAULT));
+    let deadline =
+        tokio::time::Instant::now() + Duration::from_secs(timeout.unwrap_or(TIMEOUT_DEFAULT));
     let mut queue = script.unwrap_or_default().into_iter();
     let mut first: Option<Exit> = None;
     loop {
@@ -977,10 +1464,20 @@ pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result
         if let Some(file) = &mut history {
             let _ = writeln!(file, "{}", line.replace(['\r', '\n'], " "));
         }
-        let limit = if interactive { STATEMENT_TIME } else { deadline.saturating_duration_since(tokio::time::Instant::now()) };
+        let limit = if interactive {
+            STATEMENT_TIME
+        } else {
+            deadline.saturating_duration_since(tokio::time::Instant::now())
+        };
         let mut out = Vec::new();
         let result = tokio::time::timeout(limit, session.run(&statement, &mut out)).await;
-        let result = result.unwrap_or_else(|_| Err(Fail(Exit::Failed, "console.timeout: the time limit passed; the statement may not have completed".into())));
+        let result = result.unwrap_or_else(|_| {
+            Err(Fail(
+                Exit::Failed,
+                "console.timeout: the time limit passed; the statement may not have completed"
+                    .into(),
+            ))
+        });
         ctx.out().write_all(&out)?;
         if let Err(Fail(exit, text)) = result {
             writeln!(ctx.err(), "error: {text}")?;
@@ -993,5 +1490,9 @@ pub async fn run(matches: &ArgMatches, ctx: &mut CommandCtx) -> spot_cli::Result
     if let Some(mut running) = session.assembly.take() {
         running.shutdown().await;
     }
-    Ok(if interactive { Exit::Ok } else { first.unwrap_or(Exit::Ok) })
+    Ok(if interactive {
+        Exit::Ok
+    } else {
+        first.unwrap_or(Exit::Ok)
+    })
 }

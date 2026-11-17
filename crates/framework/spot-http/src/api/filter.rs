@@ -443,9 +443,10 @@ fn op_fits_type(op: Op, ty: Option<&FieldType>) -> bool {
     match op {
         Op::IsNull | Op::IsNotNull => true,
         Op::Prefix | Op::Contains | Op::Suffix => matches!(ty, FieldType::Text),
-        Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::In => {
-            !matches!(ty, FieldType::Table | FieldType::Json)
-        }
+        Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::In => !matches!(
+            ty,
+            FieldType::Table | FieldType::TableMultiselect | FieldType::Secret | FieldType::Json
+        ),
     }
 }
 

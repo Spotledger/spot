@@ -13,7 +13,9 @@ The folder is the web root of `dotnet publish clients/avalonia/src/Spotledger.Cl
 * the Brotli siblings exist (every compressible file has one, and there is at least one);
 * the total compressed size is printed and, when `tools/browser-budgets/budgets.toml` carries
   `browser.download.compressed`, compared with it;
-* the linker-roots file named by the T1 brief is present.
+* the linker-roots file named by the T1 brief is present;
+* with `--expect-aot` (WP-UI-09.T10): `dotnet.native.wasm` is at least AOT_FLOOR_BYTES. An interpreted
+  publish links a native wasm of about 7.5 MB, an AOT one about 34.9 MB (the project process notes).
 
 Pure standard library, no network. Exit 0 when every check passes, 1 otherwise, 2 on bad usage.
 """
@@ -22,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -33,6 +36,11 @@ BUDGET_ID = "browser.download.compressed"
 MANIFEST = "assets.json"
 COMPRESSED_SUFFIXES = (".br", ".gz")
 # Files the publish pre-compresses; each must have a Brotli sibling.
+# Floor for the uncompressed dotnet.native.wasm of an AOT publish: half of SPK-07's measured AOT build
+# (34.9 MB, docs/spikes/SPK-07), 34.9 / 2 = 17.45, rounded down to 17,000,000 bytes. The interpreted
+# build measured 7.5 MB in CI, so the floor sits between the two with room on both sides.
+AOT_FLOOR_BYTES = 17_000_000
+NATIVE_WASM = re.compile(r"(^|/)dotnet\.native(\.[A-Za-z0-9_-]+)?\.wasm$")
 COMPRESSIBLE = (".wasm", ".js", ".mjs", ".dll", ".dat", ".css")
 
 
@@ -67,7 +75,24 @@ def load_budget(path: Path | None):
     return None
 
 
-def check(root: Path, budgets: Path | None, linker_roots: Path | None):
+def check_aot(root: Path, on_disk, floor: int = AOT_FLOOR_BYTES):
+    """Errors when an AOT publish is expected but dotnet.native.wasm is missing or interpreted-sized.
+
+    Messages name only paths relative to the published folder."""
+    natives = [p for p in on_disk if NATIVE_WASM.search(p)]
+    if not natives:
+        return ["AOT expected but no dotnet.native.wasm in the publish folder"], None
+    path = natives[0]
+    size = (root / path).stat().st_size
+    if size < floor:
+        return [f"AOT expected but {path} is {size} bytes, below the AOT floor of {floor} bytes: the build looks "
+                "interpreted (the AOT compile step did not run). Likely causes: RunAOTCompilation evaluated to "
+                "false, the wasm-tools workload is missing or does not match the SDK, or SpotBrowserAot=false "
+                "was passed"], size
+    return [], size
+
+
+def check(root: Path, budgets: Path | None, linker_roots: Path | None, expect_aot: bool = False):
     """Return (errors, report). Errors is a list of strings; empty means pass."""
     errors: list[str] = []
     report: dict = {"root": str(root)}
@@ -173,6 +198,18 @@ def check(root: Path, budgets: Path | None, linker_roots: Path | None):
             if total > limit:
                 errors.append(f"compressed size {total} exceeds budget {BUDGET_ID} max {limit}")
 
+    if expect_aot:
+        aot_errors, native = check_aot(root, on_disk)
+        errors.extend(aot_errors)
+        report["expect_aot"] = True
+        report["native_wasm_bytes"] = native
+        report["aot_floor_bytes"] = AOT_FLOOR_BYTES
+        print(f"dotnet.native.wasm: {native if native is not None else 'not found'} bytes "
+              f"(AOT floor {AOT_FLOOR_BYTES}): {'ok' if not aot_errors else 'FAILED'}")
+    else:
+        native = next((( root / p).stat().st_size for p in on_disk if NATIVE_WASM.search(p)), None)
+        report["native_wasm_bytes"] = native
+
     if linker_roots is not None:
         report["linker_roots"] = str(linker_roots)
         if not linker_roots.is_file():
@@ -186,10 +223,12 @@ def main(argv=None) -> int:
     parser.add_argument("folder", type=Path, help="the published web root (holds assets.json)")
     parser.add_argument("--budgets", type=Path, default=DEFAULT_BUDGETS)
     parser.add_argument("--linker-roots", type=Path, default=DEFAULT_LINKER_ROOTS)
+    parser.add_argument("--expect-aot", action="store_true",
+                        help="fail when dotnet.native.wasm is below the AOT floor (the publish looks interpreted)")
     parser.add_argument("--report", type=Path, help="write the size report JSON here")
     args = parser.parse_args(argv)
 
-    errors, report = check(args.folder, args.budgets, args.linker_roots)
+    errors, report = check(args.folder, args.budgets, args.linker_roots, args.expect_aot)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -254,6 +254,12 @@
       </StackPanel>
     </Border>
 
+    <!-- Toast host (WP-UI-02.T6): the notification centre's toast sits in the bottom corner on the
+         reading-direction side (the shell's FlowDirection mirrors Right to the left in Urdu). It never
+         takes keyboard focus, and it is empty (and hit-test transparent) until a notice arrives. -->
+    <ContentControl Name="ToastHost" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Focusable="False" IsTabStop="False" />
+
     <!-- Mid-session re-sign-in modal (WP-UI-02.T3): over the current screen; cancelling
          keeps the open tabs read-only until the user signs back in or closes them. -->
     <Border Name="ReSignInPanel" Classes="chrome" CornerRadius="{controls:CornerRadiusToken Radius.Large}"

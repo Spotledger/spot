@@ -454,10 +454,18 @@ fn search_spec(
             ..DocFacts::default()
         },
     );
+    // A child table is rows of another table, not a column of this one: a query cannot select it.
     let requested: Vec<&FieldDef> = def
         .fields
         .iter()
         .filter(|f| readable.contains(f.name.as_str()))
+        .filter(|f| {
+            !matches!(
+                f.kind,
+                spot_app_api::meta::FieldKind::Table { .. }
+                    | spot_app_api::meta::FieldKind::TableMultiselect { .. }
+            )
+        })
         .collect();
     let mut select = vec![json!({ "expr": { "field": "id" }, "as": "id" })];
     for field in &requested {

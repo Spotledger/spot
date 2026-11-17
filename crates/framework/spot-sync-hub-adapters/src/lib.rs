@@ -18,6 +18,14 @@
 //! answers "not covered", never a panic. Master data is hub-authored and flows down only, so
 //! `DestinationScope::owns` is always `false`.
 
+//! # Tested together
+//!
+//! `tests/hub_end_to_end.rs` drives [`MasterScope`], [`PolicyRedactor`], the real closure builder
+//! and the tenant-keyed ack ledger through a real `HubRelay`, and searches the serialised bytes
+//! of every queued bundle for the excluded names and values. Hosts: before starting a
+//! destination, refuse it when [`PolicyBook::missing_for`] lists an entity of its scope (the test
+//! `an_entity_without_a_policy_queues_null_is_named_and_fails_the_start_check` shows the check).
+
 #![warn(missing_docs)]
 
 mod keys;

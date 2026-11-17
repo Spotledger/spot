@@ -1,0 +1,10 @@
+# access_questions_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "access_questions_host.unavailable"
+class = "none"
+summary = "The access questions cannot build their model (no duty definitions, a file that does not parse, or the database is unreadable), so they answer nothing."
+explanation_key = "error.access_questions_host.unavailable"
+params = []
+remedy = "Ship duties.toml with an installed app, fix the file that does not parse, or restore the database."
+since = "0.1.0"

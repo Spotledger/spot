@@ -26,11 +26,16 @@ pub trait PromotionStore: Send + Sync {
     /// the backend fails.
     fn insert(&self, promotion: Promotion) -> Result<(), PromotionError>;
 
-    /// Replaces an existing promotion.
+    /// Replaces an existing promotion, only against the revision the store holds.
+    ///
+    /// The promotion carries the revision it was read at ([`Promotion::revision`]); the store
+    /// accepts the save when that is still the stored revision and then holds the next one. A
+    /// save against any other revision writes nothing.
     ///
     /// # Errors
-    /// [`PromotionError::NotFound`] when it does not exist, [`PromotionError::StoreFailed`] when
-    /// the backend fails.
+    /// [`PromotionError::NotFound`] when it does not exist, [`PromotionError::StaleSave`] when
+    /// another writer saved since it was read, [`PromotionError::StoreFailed`] when the backend
+    /// fails.
     fn save(&self, promotion: Promotion) -> Result<(), PromotionError>;
 
     /// Loads one promotion.
@@ -85,10 +90,15 @@ impl PromotionStore for MemoryPromotionStore {
     fn save(&self, promotion: Promotion) -> Result<(), PromotionError> {
         let id = promotion.id().to_string();
         let mut promotions = self.lock()?;
-        if !promotions.contains_key(&id) {
+        let Some(held) = promotions.get(&id) else {
             return Err(PromotionError::NotFound { id });
+        };
+        if held.revision() != promotion.revision() {
+            return Err(PromotionError::StaleSave { id });
         }
-        promotions.insert(id, promotion);
+        let mut next = promotion;
+        next.mark_saved();
+        promotions.insert(id, next);
         Ok(())
     }
 

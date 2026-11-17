@@ -23,6 +23,10 @@ pub struct MemApply {
     pub refuse_tenants: BTreeSet<String>,
     pub refuse: bool,
     pub calls: usize,
+    /// The version of the latest delete applied, per tenant and key.
+    pub tombstones: BTreeMap<(String, RecordKey), u64>,
+    /// How many deletes changed something (a replayed delete changes nothing).
+    pub delete_effects: usize,
 }
 
 impl BundleApply for MemApply {
@@ -30,6 +34,34 @@ impl BundleApply for MemApply {
         self.stored
             .get(&(tenant.to_owned(), key.clone()))
             .is_some_and(|v| *v >= min_version)
+    }
+
+    fn has_tombstone(&self, tenant: &str, key: &RecordKey, min_version: u64) -> bool {
+        self.tombstones
+            .get(&(tenant.to_owned(), key.clone()))
+            .is_some_and(|v| *v >= min_version)
+    }
+
+    fn delete(
+        &mut self,
+        tenant: &str,
+        key: &RecordKey,
+        version: u64,
+        _position: u64,
+    ) -> Result<(), ApplyRefusal> {
+        let id = (tenant.to_owned(), key.clone());
+        if self.tombstones.get(&id).is_some_and(|v| *v >= version) {
+            return Ok(());
+        }
+        // An older delete does not remove a record re-created later.
+        if self.stored.get(&id).is_none_or(|v| *v <= version) {
+            if self.stored.remove(&id).is_some() {
+                self.delete_effects += 1;
+            }
+            self.order.push(id.clone());
+        }
+        self.tombstones.insert(id, version);
+        Ok(())
     }
 
     fn apply_bundle(&mut self, tenant: &str, bundle: &Bundle) -> Result<AppliedSet, ApplyRefusal> {
@@ -41,9 +73,13 @@ impl BundleApply for MemApply {
         }
         let mut records = Vec::new();
         for r in &bundle.records {
-            self.stored
-                .insert((tenant.to_owned(), r.key.clone()), r.position);
-            self.order.push((tenant.to_owned(), r.key.clone()));
+            if r.deleted {
+                self.delete(tenant, &r.key, r.position, r.position)?;
+            } else {
+                self.stored
+                    .insert((tenant.to_owned(), r.key.clone()), r.position);
+                self.order.push((tenant.to_owned(), r.key.clone()));
+            }
             records.push(AppliedRecord {
                 key: r.key.clone(),
                 version: r.position,
@@ -141,6 +177,18 @@ pub fn rec(id: &str, position: u64, refs: &[&str]) -> BundleRecord {
         key: RecordKey::new("Doc", id),
         position,
         image: json!({ "refs": refs }),
+        deleted: false,
+    }
+}
+
+/// The tombstone of record `id`, deleted by the event at `position`.
+pub fn tomb(id: &str, position: u64) -> BundleRecord {
+    BundleRecord {
+        role: Role::Root,
+        key: RecordKey::new("Doc", id),
+        position,
+        image: serde_json::Value::Null,
+        deleted: true,
     }
 }
 

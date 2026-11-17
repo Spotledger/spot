@@ -1,0 +1,37 @@
+# Help for the connector error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "connector.bad_job"
+what_happened = "A connector run job does not name a connector and an operation."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Queue the run with the connector and operation names.", "If it keeps happening, tell your administrator and quote the code connector.bad_job."]
+audience = "operator"
+
+[[help]]
+code = "connector.busy"
+what_happened = "The connector's concurrency cap is reached, so this run is retried later."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait for the running call to finish, or raise services.connectors.max_concurrent_runs.", "If it keeps happening, tell your administrator and quote the code connector.busy."]
+audience = "admin"
+
+[[help]]
+code = "connector.dead_letter"
+what_happened = "The connector failed on its last attempt and waits for an operator."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the cause, then re-enable the connector.", "If it keeps happening, tell your administrator and quote the code connector.dead_letter."]
+audience = "operator"
+
+[[help]]
+code = "connector.disabled"
+what_happened = "The connector is disabled, failed to load, or is in the dead-letter state, so the run was refused."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Re-enable the connector or fix its definition, then run it again.", "If it keeps happening, tell your administrator and quote the code connector.disabled."]
+audience = "operator"
+
+[[help]]
+code = "connector.timeout"
+what_happened = "A connector run outlived its deadline."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Make the connector faster or raise its wall-clock limit within the site maximum.", "If it keeps happening, tell your administrator and quote the code connector.timeout."]
+audience = "admin"

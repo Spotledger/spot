@@ -32,6 +32,9 @@ spot-document = { path = "../spot-document" }
 # (feature `pg`) names the PostgreSQL edge writer and its transaction type.
 spot-edge-pg = { path = "../../backends/spot-edge-pg", optional = true }
 spot-postgres = { path = "../../backends/spot-postgres", optional = true }
+# A private current-thread runtime for the PostgreSQL edge reader (feature `pg`): its futures wait on
+# real I/O and timers, which a no-op-waker poll cannot drive.
+tokio = { version = "1", default-features = false, features = ["rt", "time"], optional = true }
 # `PermissionEngine` and `Principal`: the publish permission is asked of the engine (WP-BPM-04.T4).
 spot-permissions = { path = "../spot-permissions" }
 # Canonical JSON for the node output, the receipt and the Case-file edge property.
@@ -40,7 +43,7 @@ serde_json = "1"
 [features]
 # `PgCaseFileParticipant`: the Case-file participant over the PostgreSQL edge writer. Off by
 # default so the crate's normal dependency tree holds no storage backend.
-pg = ["dep:spot-edge-pg", "dep:spot-postgres"]
+pg = ["dep:spot-edge-pg", "dep:spot-postgres", "dep:tokio"]
 
 [dev-dependencies]
 # The real database: the Case-file edge commits and rolls back with the document on PostgreSQL.

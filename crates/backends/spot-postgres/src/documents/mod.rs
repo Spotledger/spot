@@ -19,6 +19,12 @@
 //!   violation is named (entity and field) from its constraint through the catalog, whether a
 //!   write or `COMMIT` raised it.
 //!
+//! **Search.** When the backend has a search maintenance hook (WP-STO-13.T3) and the entity has a
+//! `search` declaration, `insert` and `update` call `after_write` and `delete` calls
+//! `after_delete` on the same transaction, after the row (and child row) writes and before
+//! commit; a failure of the hook fails the operation (see `search_hook.rs`). An entity without
+//! a declaration pays nothing.
+//!
 //! Row locks: a `RowLock` locks the parent row. With `Wait::SkipLocked` a locked row loads as
 //! `None`, which the contract's return type cannot tell from a missing one.
 
@@ -38,6 +44,7 @@ use tokio_postgres::types::ToSql;
 use self::values::{Param, check_value, placeholder, read_value, select_expr, to_param, uuid_of};
 use crate::PgTransaction;
 use crate::schema::names::{entity_for_pk, exclusion_for_constraint, link_for_constraint, quote};
+use crate::search_hook;
 
 /// A shared bound parameter, so one list of field values can serve several statements.
 type Shared = Arc<dyn ToSql + Sync + Send>;
@@ -91,6 +98,8 @@ pub(crate) async fn insert(tx: &mut PgTransaction, doc: &DocumentData) -> Storag
     for (child, rows) in checked.children.values() {
         insert_children(tx, &catalog, child, doc.id, rows).await?;
     }
+    // A searchable entity's projection row, in this transaction, after the row write.
+    search_hook::after_write(tx, checked.entity, doc.id).await?;
     Ok(Version::FIRST)
 }
 
@@ -236,6 +245,7 @@ pub(crate) async fn update(
         let rows = checked.children.get(name).map_or(&empty, |(_, rows)| rows);
         replace_children(tx, &catalog, child, doc.id, rows).await?;
     }
+    search_hook::after_write(tx, checked.entity, doc.id).await?;
     Ok(version)
 }
 
@@ -270,6 +280,7 @@ pub(crate) async fn delete(
         let removed = execute(tx, &catalog, &sql, &params[..1]).await?;
         tx.count_writes(u32::try_from(removed).unwrap_or(u32::MAX))?;
     }
+    search_hook::after_delete(tx, def, id).await?;
     Ok(())
 }
 
@@ -547,8 +558,9 @@ async fn execute(
     sql: &str,
     params: &[Shared],
 ) -> StorageResult<u64> {
+    let statement = tx.cached(sql).await?;
     let client = tx.client()?;
-    let result = client.execute(sql, &refs(params)).await;
+    let result = client.execute(&statement, &refs(params)).await;
     result.map_err(|e| write_error(tx, catalog, &e, None))
 }
 
@@ -559,15 +571,15 @@ async fn query(
     params: &[Shared],
     lock_wait: Option<Wait>,
 ) -> StorageResult<Vec<tokio_postgres::Row>> {
+    let statement = tx.cached(sql).await?;
     let client = tx.client()?;
-    let result = client.query(sql, &refs(params)).await;
+    let result = client.query(&statement, &refs(params)).await;
     result.map_err(|e| write_error(tx, catalog, &e, lock_wait))
 }
 
 async fn prepare(tx: &mut PgTransaction, catalog: &Catalog, sql: &str) -> StorageResult<Statement> {
-    let client = tx.client()?;
-    let result = client.prepare(sql).await;
-    result.map_err(|e| write_error(tx, catalog, &e, None))
+    let _ = catalog;
+    tx.cached(sql).await
 }
 
 async fn execute_prepared(

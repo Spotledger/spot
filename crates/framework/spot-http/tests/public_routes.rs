@@ -308,6 +308,17 @@ async fn every_real_group_that_is_not_public_answers_401_without_a_bearer() {
                 "seed",
                 time::Duration::minutes(15),
             )))
+            .with_port::<dyn spot_http::api::ports::webhook::WebhookPort>(Arc::new(
+                spot_http::api::ports::webhook::MemoryWebhookPort::new(),
+            ))
+            .with_port::<dyn spot_http::api::idempotency::IdempotencyStore>(Arc::new(
+                MemoryIdempotencyStore::new(Arc::new(ManualClock::new(
+                    datetime!(2026-11-05 08:00:00 UTC),
+                ))),
+            ))
+            .with_port::<dyn spot_http::api::ports::process::ProcessPort>(Arc::new(
+                spot_http::api::ports::process::MemoryProcessPort::new(),
+            ))
     });
     let mut checked = 0;
     for group in REGISTRY.iter().filter(|g| g.public.is_none()) {
@@ -334,6 +345,10 @@ async fn every_real_group_that_is_not_public_answers_401_without_a_bearer() {
     // The public groups are exactly the ones the contract marks `security: []`: here, the
     // renewal, which does not answer `auth.required`.
     for group in REGISTRY.iter().filter(|g| g.public.is_some()) {
+        // A group whose ports this fixture does not provide is not mounted at all.
+        if !f.report.mounted.contains(&group.name) {
+            continue;
+        }
         assert!(
             f.report.public.contains(&group.name),
             "{} mounts",
@@ -381,6 +396,32 @@ async fn the_auth_rate_class_answers_429_with_retry_after_per_client_address() {
     assert_eq!(get_open(&f, "2001:db8:1:2::1").await.status, 200);
     // The window passes by the injected clock, not the wall clock.
     f.clock.advance(Duration::from_secs(61));
+    assert_eq!(get_open(&f, "203.0.113.1").await.status, 200);
+}
+
+#[tokio::test]
+async fn a_configured_auth_limit_limits_the_fourth_request_in_a_window() {
+    let limits = spot_http::api::router::RateLimits {
+        auth_limit: 3,
+        auth_window: Duration::from_secs(120),
+    };
+    let f = fixture(&[OPEN], |s| s.with_rate_limits(limits));
+    for n in 1..=3 {
+        assert_eq!(get_open(&f, "203.0.113.1").await.status, 200, "request {n}");
+    }
+    let r = get_open(&f, "203.0.113.1").await;
+    assert_eq!(r.status, 429, "{}", r.raw);
+    assert_eq!(r.body["error"]["code"], "api.rate_limited");
+    let wait: u64 = r.headers[header::RETRY_AFTER]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((1..=121).contains(&wait), "Retry-After {wait}");
+    // The window is the configured one: 61 seconds is not enough, 121 is.
+    f.clock.advance(Duration::from_secs(61));
+    assert_eq!(get_open(&f, "203.0.113.1").await.status, 429);
+    f.clock.advance(Duration::from_secs(60));
     assert_eq!(get_open(&f, "203.0.113.1").await.status, 200);
 }
 

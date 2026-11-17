@@ -100,6 +100,8 @@ impl TestIdp {
             claims_map: ClaimsMap::default(),
             require_email_verified: true,
             acr_values: Vec::new(),
+            audience: spot_sso::Audience::Staff,
+            user_options: spot_sso::UserOptions::default(),
         }
     }
 

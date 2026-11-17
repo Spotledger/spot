@@ -93,6 +93,7 @@ Playwright scripts need no other knowledge of the build.
 | `ready` | `Promise<void>` | Resolves when the shell (server picker, login or home) is interactive. |
 | `openForm(doctype, id)` | `Promise<boolean>` | Waits for `ready`, then opens the form tab of the document. `false` when the shell cannot (not signed in). |
 | `openList(doctype)` | `Promise<boolean>` | Waits for `ready`, then opens the list tab of the doctype. `false` when it cannot. |
+| `signIn(url, user, password)` | `Promise<boolean>` | **Test only.** Waits for `ready`, points the shell at `url` and signs in through the same server picker and login view models (so the same `ApiConnection.LoginAsync`) the screens use; `true` when the shell then holds a session, `false` on a refusal. Guard: it does nothing and returns `false` unless the page URL carried `?testSignIn=1` (read once at start-up; a real deployment never serves the flag), and it accepts only an `http(s)` URL on the loopback host (`127.0.0.1`, `localhost`, `[::1]`). The password is never stored (in-memory session only, "remember me" off), logged, or put in a metric or label; only the flag is read from the URL, never credentials. |
 | `metrics()` | `string` (JSON) | The measurements below. Parse with `JSON.parse`. |
 
 In this task the form and list tabs are real tabs with the real key and title, but their content is a
@@ -150,6 +151,13 @@ Dynamic loading of third-party .NET assemblies in the browser is **not** support
 - `wwwroot/index.html` has a commented registration point for the worker.
 - The first-paint path starts only the shell (server picker, login, home). No module bundle is loaded;
   T2 adds progressive loading behind it.
+
+## AOT or interpreted
+
+A Release publish of the head is AOT-compiled (`SpotBrowserAot`, default `true`; `-p:SpotBrowserAot=false` gives the
+interpreted build). Tell them apart by `_framework/dotnet.native.wasm`: about 34.9 MB uncompressed for AOT (SPK-07), about
+7.5 MB interpreted, and an AOT compile step in the `dotnet publish -v:n` log. `python3 tools/ci/browser/check_publish.py <wwwroot> --expect-aot`
+fails below 17,000,000 bytes; the CI job passes the flag. Details and the diagnosis: the project process notes.
 
 ## Open questions
 

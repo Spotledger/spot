@@ -27,7 +27,7 @@ const SECTION: &str = "Reports";
 
 fn run_reports(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the report case could not start its own fixture"));
         };
         let result = the_catalogue_is_served_and_fails_closed(&own).await;
@@ -38,7 +38,7 @@ fn run_reports(_shared: &Fixture) -> CaseFuture<'_> {
 
 fn run_hours(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
-        let Some(mut own) = Fixture::start().await else {
+        let Some(mut own) = Fixture::start_secondary().await else {
             return Err(failure!("the report case could not start its own fixture"));
         };
         let result = hours_by_task_sums_real_time_entries(&own).await;

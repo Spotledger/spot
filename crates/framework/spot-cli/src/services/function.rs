@@ -68,6 +68,11 @@ pub const ORDER: u32 = 1020;
 /// The audit target of this service.
 const AUDIT_TARGET: &str = "spot::audit::function";
 
+/// Marker port: the site's function service decides calls that carry no credential (guest
+/// functions).
+#[derive(Debug)]
+pub struct GuestFunctions;
+
 /// The job that drops idle rate-limit buckets. A schedule that enqueues it is the operator's (or
 /// the platform app's); the registry also bounds itself, see `bucket_cap`.
 pub const EVICT_JOB: &str = "platform:function_evict_idle";
@@ -477,6 +482,9 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     });
     let delegate: Arc<dyn FunctionDelegate> = service;
     ctx.provide(delegate)?;
+    // Tells the host that this site serves guest functions, so a function call with no credential
+    // is passed to the service instead of being refused at the bearer layer.
+    ctx.provide::<GuestFunctions>(Arc::new(GuestFunctions))?;
     Ok(())
 }
 

@@ -51,6 +51,7 @@ pub mod handler;
 pub mod harness;
 pub mod jobs;
 pub mod logic;
+pub mod node_run_log;
 pub mod store;
 pub mod timer;
 
@@ -70,10 +71,17 @@ pub use handler::{
 };
 pub use harness::{
     EffectLedger, FlakyHandler, Harness, RecordingHandler, ScriptedFaults, VirtualClock,
+    node_run_log_contract,
 };
 pub use jobs::{CASE_JOB_NAME, CaseJob, CaseJobQueue, RecordingQueue, to_new_job};
+pub use node_run_log::{
+    Checkpoint, LoggedCaseStore, LoggedState, LoggedWait, NodeRunDraft, NodeRunLog,
+    NodeRunLogFactory, NodeRunRecord, NodeRunSeq, OpenNode, StoredEffect, derive_node_runs,
+    failure_code_of, validate_consumer,
+};
 pub use store::{
     CaseFuture, CaseStore, CaseStoreFactory, InMemoryCaseStore, InMemoryCaseStoreFactory,
+    InMemoryNodeRunLogFactory,
 };
 pub use timer::{InMemoryTimerPort, NoTimers, TimerPort, TimerRegistration};
 

@@ -40,9 +40,10 @@ pub struct BackupManifest {
     pub schema_version: u64,
     /// Installed apps at take time, sorted.
     pub app_set: Vec<String>,
-    /// SHA-256 of the package's payload section, lower-case hex.
+    /// SHA-256 of the package's payload section as stored (the encrypted bytes when
+    /// `encryption` is set), lower-case hex.
     pub digest: String,
-    /// Sum of the payload files' bytes, integer.
+    /// Sum of the payload files' plaintext bytes, integer.
     pub size: u64,
     /// Number of files in the payload.
     pub file_count: u64,
@@ -56,7 +57,8 @@ pub struct BackupManifest {
     pub verify: VerifyMode,
     /// The target as configured, for a human reading the manifest.
     pub target: String,
-    /// The encryption key reference, when the payload is encrypted by the host.
+    /// The key-encryption key that wrapped the payload's data key, when the payload is
+    /// encrypted (`encrypt` module); the wrapped key itself is in the payload header.
     pub encryption: Option<KeyRef>,
 }
 

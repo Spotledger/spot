@@ -25,10 +25,10 @@ public sealed class ToastView : UserControl, IDisposable
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         Focusable = false;
         IsVisible = false;
-        MaxWidth = 380;
+        MaxWidth = ToastTokens.Number(Tokens.TokenToastMaxWidth, 380);
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Bottom;
-        Margin = new Thickness(16);
+        Margin = new Thickness(ToastTokens.Number(Tokens.TokenToastOffset, 16));
         AutomationProperties.SetLiveSetting(this, AutomationLiveSetting.Polite);
         PointerEntered += (_, _) => _queue.Pause();
         PointerExited += (_, _) => _queue.Resume();
@@ -86,13 +86,24 @@ public sealed class ToastView : UserControl, IDisposable
         close.Click += (_, _) => _queue.Dismiss();
         DockPanel.SetDock(marker, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
-        Content = new Border
+        var card = new Border
         {
             Padding = new Thickness(12),
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = new CornerRadius(ToastTokens.Number(Tokens.TokenToastCornerRadius, 6)),
             BorderThickness = new Thickness(1),
             Child = new DockPanel { Children = { marker, close, text } },
         };
+        var elevation = ToastTokens.Number(Tokens.TokenToastElevation, 8);
+        _subscriptions.Add(NoticeLook.BindBrush(card, Tokens.TokenColorBorderStrong, brush =>
+        {
+            card.BorderBrush = brush;
+            card.BoxShadow = new BoxShadows(new BoxShadow
+            {
+                Blur = elevation,
+                Color = (brush as ISolidColorBrush)?.Color ?? default,
+            });
+        }));
+        Content = card;
         AutomationProperties.SetName(this, $"{NoticeLook.Name(notice.Severity)}: {notice.Title}");
     }
 }

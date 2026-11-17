@@ -1,0 +1,23 @@
+# Help for the access_review_host error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "access_review_host.no_role_snapshot"
+what_happened = "The caller has no role snapshot, so the review operation is refused."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Sign in again; check the caller's role assignments.", "If it keeps happening, tell your administrator and quote the code access_review_host.no_role_snapshot."]
+audience = "user"
+
+[[help]]
+code = "access_review_host.not_permitted"
+what_happened = "The caller does not hold the permission this review operation needs."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask an administrator for the access review permission.", "If it keeps happening, tell your administrator and quote the code access_review_host.not_permitted."]
+audience = "user"
+
+[[help]]
+code = "access_review_host.permission_unavailable"
+what_happened = "The permission engine failed or did not answer in time, so the review operation is refused."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry; if it persists check the permission engine of the site.", "If it keeps happening, tell your administrator and quote the code access_review_host.permission_unavailable."]
+audience = "admin"

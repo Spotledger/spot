@@ -7,6 +7,7 @@
 use deadpool_postgres::Pool;
 use spot_audit_chain::genesis_hash;
 
+use crate::appender_sql::APPENDER_TABLE_DDL;
 use crate::error::{Result, db, pool};
 use crate::schema::rename_old_tables;
 
@@ -36,7 +37,7 @@ pub(crate) async fn prepare(db_pool: &Pool) -> Result<()> {
     // Databases created before the `spot_` prefix hold the old names: rename them, keeping every
     // row, before anything is created.
     rename_old_tables(&tx).await?;
-    for (_, statement) in TABLE_DDL {
+    for (_, statement) in TABLE_DDL.iter().chain(APPENDER_TABLE_DDL.iter()) {
         tx.batch_execute(statement)
             .await
             .map_err(|e| db("prepare tables", &e))?;
@@ -95,8 +96,24 @@ pub const TABLE_DDL: [(&str, &str); 2] = [
     (CHECKPOINT_TABLE, CHECKPOINT_TABLE_DDL),
 ];
 
-/// The application role and its grants: read and append the chain, maintain the checkpoint
-/// pointer, and nothing else. `spot_audit_chain` never receives `UPDATE`, `DELETE` or `TRUNCATE`.
+/// The application role and its grants (WP-AI-11.T7).
+///
+/// | table | privileges | why |
+/// | --- | --- | --- |
+/// | `spot_audit_chain` | `SELECT, INSERT` | read and append the chain; never rewrite |
+/// | `spot_audit_checkpoint` | `SELECT, INSERT, UPDATE` | the signed checkpoint pointer moves forward |
+/// | `spot_audit_bookmark` | `SELECT, INSERT, UPDATE` | the lane bookmark moves forward |
+/// | `spot_audit_site_checkpoint` | `SELECT, INSERT, UPDATE` | the signed site checkpoint moves forward |
+/// | `spot_audit_event_index` | `SELECT, INSERT` | append-only: a rewritten row could chain an event twice or skip one |
+/// | `spot_audit_doc_index` | `SELECT, INSERT` | append-only: the document history is read from it |
+///
+/// `DELETE` and `TRUNCATE` are granted on none of them, `UPDATE` only where a row legitimately
+/// moves forward, and `PUBLIC` holds nothing. The appender tables are reset with `REVOKE ALL`
+/// before the grant, so a widened grant is repaired and not merely added to.
+///
+/// The identity column `ord` of `spot_audit_doc_index` needs no sequence grant: PostgreSQL does
+/// not check the privileges of the sequence behind an identity column on `INSERT` (unlike a
+/// `serial` column), and the grants test runs the whole appender as the role to prove it.
 const ROLE_AND_GRANTS: &str = "\
 DO $$ BEGIN \
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spot_audit_app') THEN \
@@ -107,7 +124,13 @@ END $$; \
 GRANT USAGE ON SCHEMA public TO spot_audit_app; \
 REVOKE UPDATE, DELETE, TRUNCATE ON spot_audit_chain FROM spot_audit_app; \
 GRANT SELECT, INSERT ON spot_audit_chain TO spot_audit_app; \
-GRANT SELECT, INSERT, UPDATE ON spot_audit_checkpoint TO spot_audit_app;";
+GRANT SELECT, INSERT, UPDATE ON spot_audit_checkpoint TO spot_audit_app; \
+REVOKE ALL ON spot_audit_bookmark, spot_audit_site_checkpoint, \
+              spot_audit_event_index, spot_audit_doc_index FROM PUBLIC; \
+REVOKE ALL ON spot_audit_bookmark, spot_audit_site_checkpoint, \
+              spot_audit_event_index, spot_audit_doc_index FROM spot_audit_app; \
+GRANT SELECT, INSERT, UPDATE ON spot_audit_bookmark, spot_audit_site_checkpoint TO spot_audit_app; \
+GRANT SELECT, INSERT ON spot_audit_event_index, spot_audit_doc_index TO spot_audit_app;";
 
 /// The guard triggers: an `UPDATE`, `DELETE` or `TRUNCATE` on `spot_audit_chain` is refused even for the owner,
 /// unless `spot.audit_maintenance` is `on` (the documented restore path). A database upgraded
@@ -152,6 +175,20 @@ WHERE (SELECT COALESCE(max(seq), 0) FROM spot_audit_chain WHERE site = $1) = $7 
   AND $2 = $7 + 1 \
   AND COALESCE((SELECT hash FROM spot_audit_chain WHERE site = $1 ORDER BY seq DESC LIMIT 1), $8) = $3 \
 ON CONFLICT (site, seq) DO NOTHING \
+RETURNING seq";
+
+/// Appends consecutive entries in one statement when the chain's head is still `$7` and the first
+/// entry links to it (`$9` is its `prev_hash`; `$8` the site's genesis hash for an empty chain).
+/// Every column is an array, one element per entry in `seq` order. No row means another writer
+/// won; a concurrent writer that took the same `seq` makes the statement fail with a unique
+/// violation, which the caller reads as the same answer, so the write is all or nothing.
+pub(crate) const APPEND_MANY_SQL: &str = "\
+INSERT INTO spot_audit_chain (site, seq, prev_hash, hash, record, at) \
+SELECT $1, t.seq, t.prev_hash, t.hash, t.record, t.at \
+FROM unnest($2::bigint[], $3::bytea[], $4::bytea[], $5::text[], $6::bigint[]) \
+     AS t(seq, prev_hash, hash, record, at) \
+WHERE (SELECT COALESCE(max(seq), 0) FROM spot_audit_chain WHERE site = $1) = $7 \
+  AND COALESCE((SELECT hash FROM spot_audit_chain WHERE site = $1 ORDER BY seq DESC LIMIT 1), $8) = $9 \
 RETURNING seq";
 
 /// Stores a checkpoint only when it is newer than the stored one.

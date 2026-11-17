@@ -1,0 +1,32 @@
+# sso_audience codes: the audience of a single sign-on provider (WP-IAM-11.T8, ADR-083 section 2.3).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# `spot-sso` raises these. A catalogue file's name is its entries' prefix, so the codes are
+# `sso_audience.*`. No message names a subject, an e-mail or a token.
+
+[[entry]]
+code = "sso_audience.wrong_audience"
+class = "none"
+summary = "That sign-in method is not available here."
+explanation_key = "error.sso_audience.wrong_audience"
+params = []
+remedy = "Use a provider whose audience matches the listener and the kind of user."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_audience.audience_option_conflict"
+class = "none"
+summary = "The identity provider is not configured completely."
+explanation_key = "error.sso_audience.audience_option_conflict"
+params = []
+remedy = "Remove the option that creates or links directory users from the consumer provider, or make it a staff or partner provider."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_audience.consumer_cannot_link_user"
+class = "none"
+summary = "This sign-in account cannot be connected to a user."
+explanation_key = "error.sso_audience.consumer_cannot_link_user"
+params = []
+remedy = "Keep a consumer provider's identities with consumer principals; link a user only through a staff or partner provider."
+since = "0.1.0"

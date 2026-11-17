@@ -218,6 +218,13 @@ impl DeepCredential {
     pub fn receipt_hash(&self) -> Hash {
         self.receipt_hash
     }
+
+    /// SHA-256 of the credential's secret: what a tenant may store to recognise the credential
+    /// later. The secret itself has no accessor.
+    #[must_use]
+    pub fn secret_digest(&self) -> Hash {
+        hash(&self.secret)
+    }
     /// Operator hardware-key identity.
     #[must_use]
     pub fn operator_key_id(&self) -> &KeyId {

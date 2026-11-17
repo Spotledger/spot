@@ -4,10 +4,11 @@
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use spot_sync_closure::{Position, RecordKey};
+use spot_sync_node::{Position, RecordKey};
 use spot_sync_repair_pull::{
-    CLOSURE_UNRESOLVED, ConditionPort, ConditionRaise, Input, OUT_OF_SCOPE, Output, PullRequest,
-    RepairConfig, RepairLoop, ScopeCheck, forward_conditions,
+    CLOSURE_UNRESOLVED, ConditionClear, ConditionPort, ConditionRaise, Input, OUT_OF_SCOPE, Output,
+    PullRequest, RepairConfig, RepairLoop, ScopeCheck, ScopedResend, TOO_MANY_TENANTS,
+    forward_conditions,
 };
 
 struct Scope {
@@ -25,13 +26,13 @@ impl Scope {
 }
 
 impl ScopeCheck for Scope {
-    fn in_scope(&self, key: &RecordKey) -> bool {
+    fn in_scope(&self, _tenant: &str, key: &RecordKey) -> bool {
         key.entity != self.foreign_entity
     }
-    fn scope(&self) -> String {
+    fn scope(&self, _tenant: &str) -> String {
         "branch:khi".to_owned()
     }
-    fn applied_prefix(&self) -> Option<Position> {
+    fn applied_prefix(&self, _tenant: &str) -> Option<Position> {
         self.prefix
     }
 }
@@ -45,15 +46,38 @@ fn keys(r: std::ops::Range<u32>) -> Vec<RecordKey> {
 }
 
 fn missed(keys: Vec<RecordKey>, pos: Position, now_ms: u64) -> Input {
+    missed_for("t1", keys, pos, now_ms)
+}
+
+fn missed_for(tenant: &str, keys: Vec<RecordKey>, pos: Position, now_ms: u64) -> Input {
     Input::Missed {
+        tenant: tenant.to_owned(),
         keys,
         bundle_position: pos,
         now_ms,
     }
 }
 
+fn arrived(keys: Vec<RecordKey>) -> Input {
+    arrived_for("t1", keys)
+}
+
+fn arrived_for(tenant: &str, keys: Vec<RecordKey>) -> Input {
+    Input::Arrived {
+        tenant: tenant.to_owned(),
+        keys,
+    }
+}
+
 fn new_loop(cfg: RepairConfig) -> RepairLoop {
     RepairLoop::new("n1", cfg).expect("config")
+}
+
+fn oos(tenant: &str, keys: Vec<RecordKey>) -> Output {
+    Output::OutOfScope {
+        tenant: tenant.to_owned(),
+        keys,
+    }
 }
 
 fn asks(out: &[Output]) -> Vec<&PullRequest> {
@@ -80,7 +104,13 @@ fn asks_only_on_tick_and_names_keys_only() {
     let s = Scope::all();
     assert_eq!(l.step(missed(keys(0..3), 50, 0), &s), vec![Output::Nothing]);
     let out = l.step(Input::Tick(0), &s);
-    assert_eq!(out, vec![Output::Ask(PullRequest { keys: keys(0..3) })]);
+    assert_eq!(
+        out,
+        vec![Output::Ask(PullRequest {
+            tenant: "t1".to_owned(),
+            keys: keys(0..3)
+        })]
+    );
 }
 
 #[test]
@@ -216,7 +246,8 @@ fn escalates_after_max_asks_per_key_then_suppresses_single_asks() {
                     Output::Escalate(r) => Some(r.clone()),
                     _ => None,
                 }),
-                Some(spot_sync_repair_pull::ScopedResend {
+                Some(ScopedResend {
+                    tenant: "t1".to_owned(),
                     scope: "branch:khi".to_owned(),
                     from_position: Some(41),
                 })
@@ -226,13 +257,13 @@ fn escalates_after_max_asks_per_key_then_suppresses_single_asks() {
     }
     assert_eq!(asked, 5);
     assert!(escalated_at.is_some());
-    assert!(l.resend_pending());
+    assert!(l.resend_pending("t1"));
     // No single ask while the re-send is outstanding.
     let out = l.step(Input::Tick(escalated_at.unwrap_or(0) + 1), &s);
     assert!(asks(&out).is_empty());
     // The keys arrive: the re-send completes.
-    l.step(Input::Arrived(vec![k(1)]), &s);
-    assert!(!l.resend_pending());
+    l.step(arrived(vec![k(1)]), &s);
+    assert!(!l.resend_pending("t1"));
     assert_eq!(l.tracked_len(), 0);
 }
 
@@ -256,14 +287,14 @@ fn escalates_by_volume_once() {
 #[derive(Default)]
 struct Port {
     raised: Vec<ConditionRaise>,
-    cleared: Vec<String>,
+    cleared: Vec<ConditionClear>,
 }
 impl ConditionPort for Port {
     fn raise(&mut self, r: &ConditionRaise) {
         self.raised.push(r.clone());
     }
-    fn clear(&mut self, subject: &str) {
-        self.cleared.push(subject.to_owned());
+    fn clear(&mut self, c: &ConditionClear) {
+        self.cleared.push(c.clone());
     }
 }
 
@@ -283,6 +314,7 @@ fn condition_raises_once_after_ten_minutes_and_clears_with_the_last_key() {
         vec![ConditionRaise {
             code: CLOSURE_UNRESOLVED.to_owned(),
             subject: "node:n1".to_owned(),
+            tenant: "t1".to_owned(),
             missing: 2,
         }]
     );
@@ -291,13 +323,19 @@ fn condition_raises_once_after_ten_minutes_and_clears_with_the_last_key() {
     forward_conditions(&out, &mut port);
     assert_eq!(port.raised.len(), 1);
     // One key arrives: still raised. The last one clears it.
-    let out = l.step(Input::Arrived(vec![k(0)]), &s);
+    let out = l.step(arrived(vec![k(0)]), &s);
     forward_conditions(&out, &mut port);
-    assert!(port.cleared.is_empty() && l.condition_raised());
-    let out = l.step(Input::Arrived(vec![k(1)]), &s);
+    assert!(port.cleared.is_empty() && l.condition_raised("t1"));
+    let out = l.step(arrived(vec![k(1)]), &s);
     forward_conditions(&out, &mut port);
-    assert_eq!(port.cleared, vec!["node:n1".to_owned()]);
-    assert!(!l.condition_raised());
+    assert_eq!(
+        port.cleared,
+        vec![ConditionClear {
+            subject: "node:n1".to_owned(),
+            tenant: "t1".to_owned(),
+        }]
+    );
+    assert!(!l.condition_raised("t1"));
 }
 
 #[test]
@@ -306,7 +344,7 @@ fn out_of_scope_key_goes_to_the_lead_and_is_never_asked() {
     let s = Scope::all();
     let secret = RecordKey::new("Secret", "S-1");
     let out = l.step(missed(vec![secret.clone(), k(1)], 5, 0), &s);
-    assert_eq!(out, vec![Output::OutOfScope(vec![secret.clone()])]);
+    assert_eq!(out, vec![oos("t1", vec![secret.clone()])]);
     assert_eq!(OUT_OF_SCOPE, "sync_repair_pull.out_of_scope");
     let out = l.step(Input::Tick(0), &s);
     assert_eq!(asks(&out)[0].keys, vec![k(1)]);
@@ -324,10 +362,7 @@ fn a_scope_that_narrows_drops_tracked_keys_to_the_lead() {
     l.step(missed(vec![RecordKey::new("Secret", "S-1")], 5, 0), &wide);
     let narrow = Scope::all();
     let out = l.step(Input::Tick(0), &narrow);
-    assert_eq!(
-        out,
-        vec![Output::OutOfScope(vec![RecordKey::new("Secret", "S-1")])]
-    );
+    assert_eq!(out, vec![oos("t1", vec![RecordKey::new("Secret", "S-1")])]);
     assert_eq!(l.tracked_len(), 0);
 }
 
@@ -359,7 +394,7 @@ fn a_dropped_key_escalates_even_when_nothing_else_is_missing() {
     let mut l = new_loop(cfg);
     let s = Scope::all();
     l.step(missed(vec![k(1), k(2)], 5, 0), &s);
-    l.step(Input::Arrived(vec![k(2)]), &s);
+    l.step(arrived(vec![k(2)]), &s);
     let out = l.step(Input::Tick(0), &s);
     assert_eq!(escalations(&out), 1);
 }
@@ -387,6 +422,14 @@ fn unusable_settings_are_refused() {
             max_tracked: 0,
             ..RepairConfig::default()
         },
+        RepairConfig {
+            max_out_of_scope: 0,
+            ..RepairConfig::default()
+        },
+        RepairConfig {
+            max_tenants: 0,
+            ..RepairConfig::default()
+        },
     ] {
         let err = RepairLoop::new("n1", cfg).expect_err("refused");
         assert_eq!(err.code(), "sync_repair_pull.invalid_config");
@@ -396,7 +439,11 @@ fn unusable_settings_are_refused() {
 #[test]
 fn every_code_is_in_the_catalogue() {
     let toml = include_str!("../../spot-errors/catalogue/sync_repair_pull.toml");
-    for code in [OUT_OF_SCOPE, spot_sync_repair_pull::INVALID_CONFIG] {
+    for code in [
+        OUT_OF_SCOPE,
+        TOO_MANY_TENANTS,
+        spot_sync_repair_pull::INVALID_CONFIG,
+    ] {
         assert!(toml.contains(&format!("code = \"{code}\"")), "{code}");
     }
 }
@@ -420,8 +467,8 @@ proptest! {
             now += 1_000;
             prop_assert!(l.tracked_len() <= cap);
         }
-        l.step(Input::Arrived(all.iter().map(|i| k(*i)).collect()), &s);
+        l.step(arrived(all.iter().map(|i| k(*i)).collect()), &s);
         prop_assert_eq!(l.tracked_len(), 0);
-        prop_assert!(!l.resend_pending());
+        prop_assert!(!l.resend_pending("t1"));
     }
 }

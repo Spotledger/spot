@@ -87,9 +87,15 @@ async fn a_new_doctype_gets_one_default_grant_and_lives_in_the_custom_module() {
         vec![DefaultGrant {
             doctype: "ticket".into(),
             role: "System Manager".into(),
-            rights: vec![Right::Read, Right::Write, Right::Create, Right::Delete],
+            rights: vec![
+                Right::Read,
+                Right::Write,
+                Right::Create,
+                Right::Delete,
+                Right::Report
+            ],
         }],
-        "System Manager read/write/create/delete and nobody else: closed by default"
+        "System Manager read/write/create/delete/report and nobody else: closed by default"
     );
     let snapshot = rig.live.current();
     let definition = snapshot.meta().definition("ticket").unwrap();

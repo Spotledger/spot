@@ -15,13 +15,14 @@
 //! type has no field for a token or a digest, so none can be echoed. Every response is
 //! `private, no-store`.
 //!
-//! **Not registered in the route registry yet.** Like the report group before WP-PLT-14.T4, this
-//! file does not declare `SERVES`, `routes` and `required_ports`: registering the group would add
-//! its operations to the served set and the conformance walk (`tests/conformance.rs`, not owned by
-//! this task) would then need a case for each of them. The host mounts the group itself
-//! (`services/session.rs` of `spot-cli`) through [`registration`]. To register it, rename
-//! [`SESSION_SERVES`], [`session_routes`] and [`session_required_ports`] to `SERVES`, `routes` and
-//! `required_ports` and add the walk cases.
+//! **Registered** under the registry's standard names (`SERVES`, `routes`, `required_ports`), so
+//! the served set, the conformance walk and the registry tests know both operations. The registry
+//! mounts the group, behind the router's bearer layer, when the router is built over a
+//! [`Ports`](crate::api::Ports) that holds the session port; the `spot-cli` host provides it
+//! (`services/session.rs` provides the port, `host.rs` hands it to the router with `with_port`).
+//! A site with `services.session.enabled = false` provides none, and the group is then skipped
+//! and answers as an unserved operation does. [`registration`] stays for a test that builds the
+//! group by hand.
 
 use axum::Router;
 use axum::extract::{Path, State};
@@ -40,20 +41,20 @@ use crate::site::SiteContext;
 use super::super::{Failure, build_ctx, fail};
 
 /// The operation ids this group serves once registered.
-pub const SESSION_SERVES: &[&str] = &["auth_session_list", "auth_session_end"];
+pub const SERVES: &[&str] = &["auth_session_list", "auth_session_end"];
 
 /// The longest session id the contract allows.
 const ID_MAX: usize = 64;
 
 /// The ports this group needs: the session port, whose adapter decides identity, ownership and
 /// the audit. A group without it is not mounted at all.
-pub fn session_required_ports() -> &'static [PortKey] {
+pub fn required_ports() -> &'static [PortKey] {
     static KEYS: [PortKey; 1] = [PortKey::of::<dyn SessionPort>()];
     &KEYS
 }
 
 /// The session routes.
-pub fn session_routes() -> Router<RouteState> {
+pub fn routes() -> Router<RouteState> {
     Router::new()
         .route("/api/v1/auth/sessions", get(auth_session_list))
         .route("/api/v1/auth/sessions/{id}", delete(auth_session_end))
@@ -63,9 +64,9 @@ pub fn session_routes() -> Router<RouteState> {
 pub fn registration() -> Registration {
     Registration {
         name: "session",
-        serves: SESSION_SERVES,
-        required_ports: session_required_ports,
-        routes: session_routes,
+        serves: SERVES,
+        required_ports,
+        routes,
         public: None,
     }
 }

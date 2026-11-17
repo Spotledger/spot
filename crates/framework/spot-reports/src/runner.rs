@@ -532,6 +532,12 @@ impl ReportRunner {
                             .and_then(|i| row.get(i))
                             .cloned()
                             .unwrap_or(Value::Null);
+                        // A source that sums an integer field exactly answers an integer: it is the
+                        // same whole number as the decimal the pair carries.
+                        let sum = match sum {
+                            Value::Int(whole) => Value::Decimal(rust_decimal::Decimal::from(whole)),
+                            other => other,
+                        };
                         let count = index_of(&format!("{}__count", column.name))
                             .and_then(|i| row.get(i))
                             .cloned()

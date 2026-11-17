@@ -37,6 +37,7 @@
 mod constraints;
 mod feed;
 mod graph;
+mod ledger;
 mod locks;
 mod query;
 mod store;
@@ -122,6 +123,8 @@ pub(crate) struct State {
     pub feeds: Feeds,
     /// What `prepare` has created.
     pub schema: Schema,
+    /// Committed command records (storage contract 0.3.0).
+    pub commands: crate::ledger::CommandStore,
 }
 
 /// Entities created by `prepare`, and the collation they were created with.

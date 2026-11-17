@@ -9,6 +9,11 @@
 //!   API keys of that user, a session another node started, and a session that outlives an
 //!   operator's `spot set-password` (the first rule keeps that one restricted).
 //!
+//! Sessions themselves are records of the site database since WP-PLT-02.T8, so a restart or a
+//! reload keeps a restricted session restricted by the second rule (the one-time secret is still
+//! in the file until the user chooses a password); the in-memory set below adds the first rule
+//! for the life of the process.
+//!
 //! A restricted principal may do exactly three things: change the password, sign out, and read
 //! its own session (the display name). Everything else is refused with
 //! `cli.password_change_required` (HTTP 403) by [`refusal`], called from one place: the
@@ -38,15 +43,24 @@ pub fn allowed_while_restricted(method: &Method, path: &str) -> bool {
 }
 
 /// The refusal for a restricted principal: 403 with the stable code, never 200.
+///
+/// The body is the ADR-055 envelope, `{"error": {code, message, retryable, request_id}}`, built
+/// here by hand because the code is not in the `spot-http` registry, so
+/// `ApiError::to_envelope_json` cannot render it. It names no role and no permission.
 pub fn refusal(request_id: &str) -> Response {
-    let body = json!({
+    (StatusCode::FORBIDDEN, axum::Json(refusal_body(request_id))).into_response()
+}
+
+/// The envelope of [`refusal`]: `request_id` and `retryable` inside `error`, no top-level field.
+pub(crate) fn refusal_body(request_id: &str) -> serde_json::Value {
+    json!({
         "error": {
             "code": REFUSAL_CODE,
             "message": "Choose a password before doing anything else.",
+            "retryable": false,
+            "request_id": request_id,
         },
-        "request_id": request_id,
-    });
-    (StatusCode::FORBIDDEN, axum::Json(body)).into_response()
+    })
 }
 
 /// The ids of the sessions a one-time secret started, with when each stops mattering.
@@ -92,6 +106,23 @@ impl RestrictedSessions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_refusal_body_is_the_adr_055_envelope() {
+        let body = refusal_body("req-1");
+        assert_eq!(body["error"]["code"], REFUSAL_CODE);
+        assert_eq!(
+            body["error"]["message"],
+            "Choose a password before doing anything else."
+        );
+        assert_eq!(body["error"]["retryable"], false);
+        assert_eq!(body["error"]["request_id"], "req-1");
+        assert!(
+            body.get("request_id").is_none(),
+            "no top-level request_id: {body}"
+        );
+        assert_eq!(body.as_object().map(serde_json::Map::len), Some(1));
+    }
 
     #[test]
     fn only_three_operations_are_allowed_and_only_exactly() {

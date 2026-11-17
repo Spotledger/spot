@@ -244,11 +244,13 @@ fn rank(role: Role) -> u8 {
 /// the site is partitioned.
 ///
 /// Readiness only reports; a site that cannot check ownership refuses to start rather than serving
-/// weaker, so this check is always `ok`. The audit chain's lag is **not** reported here yet: the
-/// site has no audit chain to measure (see the task's open questions).
+/// weaker, so this check is always `ok`. With the hosted document audit attached
+/// ([`ParticipantsReady::with_audit`]) it also renders the audit's lag and denial counters, warn
+/// only.
 pub struct ParticipantsReady {
     name: String,
     detail: String,
+    audit: Option<Arc<dyn crate::audit::doc::AuditReport>>,
 }
 
 impl ParticipantsReady {
@@ -282,7 +284,18 @@ impl ParticipantsReady {
         Self {
             name: format!("participants:{site}"),
             detail: format!("{partition}; {audit}; installed: {participants}"),
+            audit: None,
         }
+    }
+
+    /// Adds the hosted document audit's live status (lag and denial counters) to the check. The
+    /// check stays `ok`: a lagging appender is reported, never a reason to pull the node out of
+    /// rotation (warn only, until the operations guide has an alert). Nothing in the line is an
+    /// event body, an actor or a document value.
+    #[must_use]
+    pub fn with_audit(mut self, audit: Option<Arc<dyn crate::audit::doc::AuditReport>>) -> Self {
+        self.audit = audit;
+        self
     }
 
     /// What the check renders (for tests and for the operator's log).
@@ -300,8 +313,11 @@ impl spot_http::health::ReadinessCheck for ParticipantsReady {
     fn check(
         &self,
     ) -> std::pin::Pin<Box<dyn Future<Output = spot_http::health::CheckResult> + Send + '_>> {
-        let detail = self.detail.clone();
+        let mut detail = self.detail.clone();
         Box::pin(async move {
+            if let Some(audit) = &self.audit {
+                detail = detail.replace("docaudit: on", &audit.report().await);
+            }
             let mut result = spot_http::health::CheckResult::ok();
             result.detail = detail;
             result

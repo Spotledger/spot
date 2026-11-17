@@ -105,6 +105,57 @@ impl<S: ThrottleStore> ThrottleStore for AuditedThrottleStore<S> {
     }
 }
 
+// ---- admission decisions -------------------------------------------------------------------
+
+/// A sign-in admission whose refusals are audited (WP-IAM-11.T23): a denial writes
+/// `sign_in_throttled` and an admission that could not count writes `throttle_unavailable`.
+/// The record carries the redacted name and a stable reason, never an address, a bucket key or
+/// the coordinator's own message. An admitted attempt writes nothing here (the service audits
+/// the sign-in itself), so the audit volume follows the refusals, which the recorder bounds.
+pub struct AuditedAdmission<A: ?Sized> {
+    inner: Arc<A>,
+    recorder: Arc<Recorder>,
+}
+
+impl<A: ?Sized + spot_login::SignInAdmission> AuditedAdmission<A> {
+    /// Audits the refusals of `inner`.
+    #[must_use]
+    pub fn new(inner: Arc<A>, recorder: Arc<Recorder>) -> Self {
+        Self { inner, recorder }
+    }
+}
+
+impl<A: ?Sized + spot_login::SignInAdmission> spot_login::SignInAdmission for AuditedAdmission<A> {
+    fn admit<'a>(
+        &'a self,
+        attempt: spot_login::SignInAttempt<'a>,
+    ) -> spot_login::BoxFuture<
+        'a,
+        std::result::Result<spot_login::Admission, spot_login::AdmissionError>,
+    > {
+        Box::pin(async move {
+            let account = attempt.account;
+            let answer = self.inner.admit(attempt).await;
+            match &answer {
+                Ok(spot_login::Admission::Allowed) => {}
+                Ok(spot_login::Admission::Denied { .. }) => {
+                    let mut record = self.recorder.record("sign_in_throttled");
+                    record.attempted = Some(redact_name(account));
+                    record.reason = Some("rate_limited".to_owned());
+                    self.recorder.failure(&record);
+                }
+                Err(spot_login::AdmissionError::Unavailable { code }) => {
+                    let mut record = self.recorder.record("throttle_unavailable");
+                    record.attempted = Some(redact_name(account));
+                    record.reason = Some((*code).to_owned());
+                    self.recorder.failure(&record);
+                }
+            }
+            answer
+        })
+    }
+}
+
 // ---- the bounded in-process counters ------------------------------------------------------
 
 /// The in-process throttle counters with a hard ceiling on tracked keys.

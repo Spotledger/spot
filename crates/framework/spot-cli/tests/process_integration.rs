@@ -684,7 +684,7 @@ async fn a_mail_node_is_idempotent_per_case_node_and_attempt_not_per_content() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queued_mail_without_an_engine_key_fails_closed() {
     let submit = Arc::new(RecordingSubmit::default());
     let port = QueueMailPort::new(submit.clone() as Arc<dyn JobSubmit>);

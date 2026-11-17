@@ -1,36 +1,20 @@
 //! Creating the generation's manifest and repairing a crash between any two sealing steps.
 
-use spot_events_contract::envelope::Position;
 use spot_journal_manifest::{Manifest, SegmentSummary, SignedManifest, verify};
 use spot_journal_segment::{SegmentReader, genesis_hash, segment_hash};
 use spot_journal_store::{
     JournalStore, Key, Layout, ObjectEntry, SEGMENTS_PREFIX, StoreError, TAIL_PREFIX,
 };
 
-use crate::chunk::{self, Entry};
 use crate::config::Durability;
 use crate::error::RelayError;
 use crate::relay::{Relay, hex};
+use crate::tail::{self, TailChunk};
 
 const PAGE: usize = 1000;
 
 fn broken(reason: &'static str) -> RelayError {
     RelayError::ChainBroken { reason }
-}
-
-/// A tail chunk read back from the store.
-struct Chunk {
-    batch_id: u64,
-    entries: Vec<Entry>,
-}
-
-impl Chunk {
-    fn first_seq(&self) -> u64 {
-        self.entries.first().map_or(0, |(position, _)| position.seq)
-    }
-    fn last_seq(&self) -> u64 {
-        self.entries.last().map_or(0, |(position, _)| position.seq)
-    }
 }
 
 impl<S: JournalStore> Relay<S> {
@@ -280,7 +264,7 @@ impl<S: JournalStore> Relay<S> {
 
         // 4. Tail chunks: delete what the manifest covers, keep the rest in order.
         let covered_to = manifest.last_seq();
-        let mut remaining: Vec<Chunk> = Vec::new();
+        let mut remaining: Vec<TailChunk> = Vec::new();
         for chunk in self.read_chunks().await? {
             if chunk.last_seq() <= covered_to {
                 let key =
@@ -357,7 +341,7 @@ impl<S: JournalStore> Relay<S> {
         Ok(())
     }
 
-    async fn read_chunks(&self) -> Result<Vec<Chunk>, RelayError> {
+    async fn read_chunks(&mut self) -> Result<Vec<TailChunk>, RelayError> {
         let prefix = format!(
             "{}/{}/{}/",
             self.cfg.tenant,
@@ -365,6 +349,7 @@ impl<S: JournalStore> Relay<S> {
             Layout::padded(self.generation)
         );
         let mut chunks = Vec::new();
+        let mut highest = 0_u64;
         for entry in self.list_all(&prefix).await? {
             let Ok(Key::Tail(key)) = Layout::parse(&entry.key) else {
                 return Err(broken(
@@ -376,28 +361,23 @@ impl<S: JournalStore> Relay<S> {
                 .get(&entry.key)
                 .await?
                 .ok_or_else(|| broken("a listed tail chunk vanished"))?;
-            let entries = chunk::decode(&object.bytes)
-                .filter(|entries| self.chunk_is_consecutive(entries))
-                .ok_or_else(|| broken("a tail chunk is damaged"))?;
-            chunks.push(Chunk {
-                batch_id: key.batch_id,
-                entries,
-            });
+            // A.3 (a) to (e), either version; a failure refuses the generation (A.6).
+            let chunk = tail::decode(
+                &self.cfg.tenant,
+                self.generation,
+                self.cfg.tail_keys.as_ref(),
+                &entry.key,
+                &object.bytes,
+            )
+            .await
+            .map_err(|error| broken(error.chain_reason()))?;
+            highest = highest.max(key.batch_id);
+            chunks.push(chunk);
         }
         chunks.sort_by_key(|chunk| chunk.batch_id);
+        // D4: the next batch id is the highest in the listing plus one, never lower than the
+        // relay's own counter.
+        self.next_batch_id = self.next_batch_id.max(highest.saturating_add(1));
         Ok(chunks)
-    }
-
-    fn chunk_is_consecutive(&self, entries: &[Entry]) -> bool {
-        let mut previous: Option<Position> = None;
-        for (position, _) in entries {
-            if position.generation != self.generation
-                || previous.is_some_and(|before| before.seq.checked_add(1) != Some(position.seq))
-            {
-                return false;
-            }
-            previous = Some(*position);
-        }
-        previous.is_some()
     }
 }

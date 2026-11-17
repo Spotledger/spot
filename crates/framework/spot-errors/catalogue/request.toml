@@ -1,0 +1,10 @@
+# request request-shape codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "request.invalid"
+class = "none"
+summary = "The request is too large or contains characters that are not allowed."
+explanation_key = "error.request.invalid"
+params = []
+remedy = "Shorten the request and remove control characters."
+since = "0.1.0"

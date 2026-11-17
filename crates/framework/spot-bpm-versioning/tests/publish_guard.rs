@@ -12,7 +12,9 @@ use spot_bpm_documents::service_principal::PUBLISH_PERMISSION;
 use spot_bpm_documents::{MemoryDirectory, ProcessAuthor, PublishGuard, codes};
 use spot_bpm_engine::{CaseId, Harness};
 use spot_bpm_model::{ProcessVersion, from_text};
-use spot_bpm_versioning::{PublishCheck, RefusedNode, VersioningError, publish, publish_guarded};
+use spot_bpm_versioning::{
+    PublishCheck, RefusedNode, VersioningError, publish, publish_guarded, validate_guarded,
+};
 
 fn block_on<F: Future>(future: F) -> F::Output {
     let mut future = std::pin::pin!(future);
@@ -282,4 +284,78 @@ fn running_pins_in_the_report_are_unchanged() {
     assert_eq!(report.running.len(), 1);
     assert_eq!(report.running[0].pin.version, 1);
     assert_eq!(report.on_other_versions, vec![case]);
+}
+
+fn run_validate(
+    version: &ProcessVersion,
+    author: &ProcessAuthor,
+    directory: &Arc<MemoryDirectory>,
+) -> Result<spot_bpm_engine::ProcessDefinition, VersioningError> {
+    let guard = guard(directory);
+    let tenant = site();
+    let check = PublishCheck {
+        guard: &guard,
+        tenant: &tenant,
+        author,
+    };
+    validate_guarded(version, &check)
+}
+
+#[test]
+fn validate_guarded_returns_the_definition_and_registers_nothing() {
+    let harness = Harness::default();
+    let definition = run_validate(
+        &process(1, &[None, Some("svc_ledger")]),
+        &alice(),
+        &directory(),
+    )
+    .unwrap();
+    assert_eq!(definition.number(), 1);
+    assert!(harness.engine().processes().get("guarded", 1).is_none());
+    assert!(harness.engine().processes().latest("guarded").is_none());
+}
+
+#[test]
+fn validate_guarded_refuses_a_denied_principal_with_node_ids_and_rule_codes_only() {
+    let harness = Harness::default();
+    let violations = refused(
+        run_validate(&process(1, &[Some("svc_other")]), &alice(), &directory()).unwrap_err(),
+    );
+    assert_eq!(
+        violations,
+        vec![RefusedNode {
+            node: "doc0".to_owned(),
+            rule: codes::PRINCIPAL_NOT_REGISTERED.to_owned(),
+        }]
+    );
+    assert!(harness.engine().processes().get("guarded", 1).is_none());
+}
+
+#[test]
+fn validate_guarded_and_publish_guarded_give_the_same_refusal() {
+    let harness = Harness::default();
+    let directory = directory();
+    let version = process(1, &[Some("svc_one"), Some("svc_ledger"), Some("svc_two")]);
+    let validated = run_validate(&version, &alice(), &directory).unwrap_err();
+    let published = run_guarded(&harness, &version, &alice(), &directory).unwrap_err();
+    assert_eq!(validated, published);
+    assert_eq!(validated.code(), "bpm_versioning.publish_refused");
+}
+
+#[test]
+fn validate_guarded_leaves_an_existing_registry_unchanged() {
+    let harness = Harness::default();
+    let directory = directory();
+    run_guarded(&harness, &process(1, &[None]), &alice(), &directory).unwrap();
+    run_validate(&process(2, &[None]), &alice(), &directory).unwrap();
+    assert_eq!(
+        harness
+            .engine()
+            .processes()
+            .latest("guarded")
+            .unwrap()
+            .number(),
+        1
+    );
+    assert!(harness.engine().processes().get("guarded", 2).is_none());
 }

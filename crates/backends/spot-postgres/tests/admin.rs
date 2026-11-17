@@ -54,6 +54,15 @@ async fn creates_icu_database_and_refuses_duplicate_without_altering_it() {
     assert_eq!(before.get::<_, String>(1), "i");
     assert_eq!(before.get::<_, String>(2), "en");
     assert_eq!(before.get::<_, String>(3), "UTF8");
+    // The ctype is a Unicode one, so `pg_trgm` builds trigrams for Urdu (WP-STO-13.T4).
+    let ctype = client
+        .query_one(
+            "SELECT datctype::text FROM pg_database WHERE datname = $1",
+            &[&name],
+        )
+        .await
+        .unwrap();
+    assert_eq!(ctype.get::<_, String>(0), "C.UTF-8");
     assert!(create_database(&admin, &name, "und").await.is_err());
     let after = client
         .query_one(

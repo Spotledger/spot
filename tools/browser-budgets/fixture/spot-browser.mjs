@@ -2,7 +2,7 @@
 // published browser build.
 //
 // It implements exactly the page contract clients/avalonia/docs/browser-publish.md
-// documents (`ready`, `openForm`, `openList`, `metrics()`), nothing else: the
+// documents (`ready`, `openForm`, `openList`, `signIn`, `metrics()`), nothing else: the
 // driver cannot tell it apart from the real shell, which is the point. The
 // numbers it produces are a real measurement of this fixture page and are
 // marked `fixture: true` in every result; they are never evidence for a budget.
@@ -65,8 +65,29 @@ function openTab(title) {
   return true;
 }
 
+// The test sign-in guard of the real head: only with ?testSignIn=1 in the page URL, only a loopback http(s)
+// URL, no user-info. The fixture has no login screen, so a passing call only records that it was accepted;
+// it never keeps or shows the password.
+const testSignIn = new URLSearchParams(globalThis.location?.search ?? '').get('testSignIn') === '1';
+function isLoopbackUrl(value) {
+  if (typeof value !== 'string') return false;
+  let url;
+  try { url = new URL(value.trim()); } catch { return false; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  if (url.username !== '' || url.password !== '') return false;
+  return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]';
+}
+
 window.spotBrowser = {
   ready,
+  async signIn(url, user, password) {
+    if (!testSignIn || !isLoopbackUrl(url) || typeof user !== 'string' || user.trim() === '') return false;
+    if (typeof password !== 'string' || password === '') return false;
+    await ready;
+    counters.signIn = (counters.signIn || 0) + 1;
+    status.textContent = 'fixture: signed in (test hook)';
+    return true;
+  },
   async openForm(doctype, id) {
     await ready;
     counters.openForm += 1;

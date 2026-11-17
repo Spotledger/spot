@@ -686,6 +686,8 @@ fn every_code_has_a_catalogue_entry_and_every_entry_is_raised() {
         "lease_grants.granted",
         "lease_grants.refused",
         "lease_grants.replayed",
+        // The audit kind of a released range (a node returning its unused interval).
+        "lease_grants.range_released",
     ]);
     assert_eq!(listed, expected);
 }

@@ -1,0 +1,145 @@
+# tenants codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "tenants.audit_unavailable"
+class = "none"
+summary = "The operation was refused: audit unavailable."
+explanation_key = "error.tenants.audit_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.cluster_id"
+class = "none"
+summary = "The operation was refused: cluster id."
+explanation_key = "error.tenants.cluster_id"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.cluster_region"
+class = "none"
+summary = "The operation was refused: cluster region."
+explanation_key = "error.tenants.cluster_region"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.cluster_unreachable"
+class = "none"
+summary = "The operation was refused: cluster unreachable."
+explanation_key = "error.tenants.cluster_unreachable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.cluster_url"
+class = "none"
+summary = "The operation was refused: cluster url."
+explanation_key = "error.tenants.cluster_url"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.config_unreadable"
+class = "none"
+summary = "The operation was refused: config unreadable."
+explanation_key = "error.tenants.config_unreadable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.control_schema"
+class = "none"
+summary = "The operation was refused: control schema."
+explanation_key = "error.tenants.control_schema"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.env_missing"
+class = "none"
+summary = "The operation was refused: env missing."
+explanation_key = "error.tenants.env_missing"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.licence_key"
+class = "none"
+summary = "The operation was refused: licence key."
+explanation_key = "error.tenants.licence_key"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.tenants.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.no_runner_factory"
+class = "none"
+summary = "The operation was refused: no runner factory."
+explanation_key = "error.tenants.no_runner_factory"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.nonce_table"
+class = "none"
+summary = "The operation was refused: nonce table."
+explanation_key = "error.tenants.nonce_table"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.not_configured"
+class = "none"
+summary = "The operation was refused: not configured."
+explanation_key = "error.tenants.not_configured"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.provisioner_url"
+class = "none"
+summary = "The operation was refused: provisioner url."
+explanation_key = "error.tenants.provisioner_url"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.store_failed"
+class = "none"
+summary = "The operation was refused: store failed."
+explanation_key = "error.tenants.store_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "tenants.worker"
+class = "none"
+summary = "The operation was refused: worker."
+explanation_key = "error.tenants.worker"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

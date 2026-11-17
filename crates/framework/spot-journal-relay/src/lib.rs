@@ -48,6 +48,15 @@
 //! tenant. Entry lines are opaque and never appear in an error or a log (the crate logs
 //! nothing). The signing key lives behind [`ManifestSigner`] and never enters the crate.
 //!
+//! # What a reader sees
+//!
+//! The relay returns no record content: entry lines go in and are never handed back, and no error
+//! or `Debug` text quotes one. A reader that is not the system learns about an entry only through
+//! [`JournalViewer`] (WP-SEC-04.T9, `Channel::Journal`): a [`JournalView`] holds the entity, the
+//! record id, the kind, the position and the names of the fields the reader may know exist, never
+//! a value. Other journal crates (verify, snapshot, rebuild plan, manifest listings) must build
+//! every description of an entry through it.
+//!
 //! # Not here
 //!
 //! Encryption of segments, the acknowledgement gate, multi-tenant scheduling and the outbox
@@ -56,12 +65,13 @@
 
 #![forbid(unsafe_code)]
 
-mod chunk;
 mod config;
 mod error;
 mod relay;
 mod resume;
 mod signer;
+pub mod tail;
+mod view;
 
 #[cfg(test)]
 mod tests;
@@ -70,3 +80,5 @@ pub use config::{Appended, Batch, Durability, RelayConfig};
 pub use error::RelayError;
 pub use relay::Relay;
 pub use signer::ManifestSigner;
+pub use tail::TailKeys;
+pub use view::{JournalView, JournalViewer, VIEW_CHANNEL};

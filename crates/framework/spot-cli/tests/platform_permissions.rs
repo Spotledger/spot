@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use spot_bpm_documents::engine_permission_name;
 use spot_cli::services::controllers::{
     DeclareError, PLATFORM_APP, declare_app_permission, declare_platform_permissions,
     platform_permissions,
@@ -15,13 +16,20 @@ use spot_permissions::{
     PermissionEngine, Snapshot,
 };
 
-const NAMES: [&str; 5] = [
-    "process_publish",
-    "process_read_versions",
-    "process_migrate",
-    "process_supervise",
-    "process_publish_service_principal",
-];
+/// The permission the publish path of a service-principal version really asks the engine for.
+fn asked() -> String {
+    engine_permission_name("process.publish_service_principal")
+}
+
+fn names() -> Vec<String> {
+    vec![
+        "process_publish".to_owned(),
+        "process_read_versions".to_owned(),
+        "process_migrate".to_owned(),
+        "process_supervise".to_owned(),
+        asked(),
+    ]
+}
 
 fn name(text: &str) -> AppPermissionName {
     AppPermissionName::parse(text).unwrap()
@@ -50,8 +58,8 @@ fn user(roles: &[&str]) -> Principal {
 fn the_catalogue_holds_the_five_names_with_no_app_installed() {
     let catalogue = platform_catalogue();
     assert_eq!(catalogue.len(), 5);
-    for n in NAMES {
-        let decl = catalogue.get(&name(n)).expect(n);
+    for n in names() {
+        let decl = catalogue.get(&name(&n)).expect(&n);
         assert_eq!(decl.app, PLATFORM_APP);
         assert!(!decl.title.is_empty() && !decl.description.is_empty());
     }
@@ -60,14 +68,14 @@ fn the_catalogue_holds_the_five_names_with_no_app_installed() {
         .map(|(n, _)| n.as_str().to_owned())
         .collect();
     assert_eq!(listed.len(), 5);
-    for n in NAMES {
-        assert!(listed.iter().any(|l| l == n), "{n}");
+    for n in names() {
+        assert!(listed.contains(&n), "{n}");
     }
 }
 
 #[test]
 fn an_app_cannot_shadow_a_platform_permission() {
-    for n in NAMES {
+    for n in names() {
         let mut catalogue = platform_catalogue();
         let decl = AppPermissionDecl {
             app: "notes".to_owned(),
@@ -75,11 +83,11 @@ fn an_app_cannot_shadow_a_platform_permission() {
             description: "d".to_owned(),
         };
         let Err(DeclareError::Duplicate(message)) =
-            declare_app_permission(&mut catalogue, "main", n, decl)
+            declare_app_permission(&mut catalogue, "main", &n, decl)
         else {
             panic!("{n} was not refused");
         };
-        assert!(message.contains(n), "{message}");
+        assert!(message.contains(&n), "{message}");
         assert!(message.contains("notes") && message.contains(PLATFORM_APP));
         assert_eq!(catalogue.len(), 5);
     }
@@ -98,16 +106,14 @@ fn an_app_cannot_shadow_a_platform_permission() {
 fn a_granted_role_is_allowed_an_ungranted_or_unknown_role_is_denied() {
     let grant = AppPermissionGrant {
         role: Role("publisher".to_owned()),
-        permission: name("process_publish_service_principal"),
+        permission: name(&asked()),
     };
     let e = engine(&[grant]);
-    // spot_bpm_documents::engine_permission_name("process.publish_service_principal") is this
-    // name (spot-bpm-documents is not a dependency of spot-cli).
-    let asked = "process_publish_service_principal";
-    let allowed = e.app_permission(&user(&["publisher"]), asked);
+    let asked = asked();
+    let allowed = e.app_permission(&user(&["publisher"]), &asked);
     assert!(allowed.allowed);
     for roles in [&["clerk"][..], &["ghost"][..], &[][..]] {
-        let denied = e.app_permission(&user(roles), asked);
+        let denied = e.app_permission(&user(roles), &asked);
         assert!(!denied.allowed);
         assert_eq!(denied.reason, AppReason::NotGranted);
         // The reason is a bare code: it names neither role nor permission value.
@@ -126,7 +132,7 @@ fn a_grant_of_a_platform_permission_is_not_an_orphan() {
     let grants = [
         AppPermissionGrant {
             role: Role("publisher".to_owned()),
-            permission: name("process_publish_service_principal"),
+            permission: name(&asked()),
         },
         AppPermissionGrant {
             role: Role("publisher".to_owned()),
@@ -142,4 +148,16 @@ fn a_grant_of_a_platform_permission_is_not_an_orphan() {
     let orphans = snapshot.orphan_app_grants();
     assert_eq!(orphans.len(), 1);
     assert_eq!(orphans[0].1.as_str(), "not_declared_anywhere");
+}
+
+#[test]
+fn the_asked_name_is_the_one_the_catalogue_declares_and_every_declared_name_parses() {
+    // A rename in spot-bpm-documents is a conscious change of both sides: this literal is the
+    // second one.
+    assert_eq!(asked(), "process_publish_service_principal");
+    let declared = platform_permissions();
+    assert!(declared.iter().any(|(n, _)| n.as_str() == asked()));
+    for (declared_name, _) in &declared {
+        assert!(AppPermissionName::parse(declared_name.as_str()).is_ok());
+    }
 }

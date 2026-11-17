@@ -102,6 +102,29 @@ class ContractLintTests(unittest.TestCase):
         result, output = self.lint()
         self.assertEqual(result, 0, output)
 
+    def test_push_to_main_release_commit_needs_no_adr(self) -> None:
+        self.write("contracts/storage/VERSION", "0.1.0\n")
+        self.write("contracts/storage/query.wit", "package example:storage;\n")
+        self.commit("release one")
+        self.write("contracts/storage/query.wit", "package example:storage;\nworld v2 {}\n")
+        self.write("contracts/storage/VERSION", "0.2.0\n")
+        self.commit("release two: breaking bump, no ADR in this diff")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            result = contract_lint.run(self.root)
+        self.assertEqual(result, 0, output.getvalue())
+
+    def test_push_to_main_still_requires_a_version_bump(self) -> None:
+        self.write("contracts/storage/VERSION", "0.1.0\n")
+        self.write("contracts/storage/query.wit", "package example:storage;\n")
+        self.commit("release one")
+        self.write("contracts/storage/query.wit", "package example:storage;\nworld v2 {}\n")
+        self.commit("release two without a version bump")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            result = contract_lint.run(self.root)
+        self.assertEqual(result, 1, output.getvalue())
+
     def test_new_contract_without_version_fails(self) -> None:
         self.create_base()
         self.write("contracts/events/events.wit", "package example:events;\n")

@@ -304,3 +304,22 @@ explanation_key = "error.sync_policy.lint_adopt_never"
 params = []
 remedy = "Use the record preset, or set adopt to manual or auto."
 since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.unknown"
+class = "none"
+summary = "The operation was refused: unknown."
+explanation_key = "error.sync_policy.unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy.master_edge_write"
+class = "none"
+summary = "An edge tried to change a hub-authored (master) record."
+explanation_key = "error.sync_policy.master_edge_write"
+params = []
+remedy = "Change master data on the hub; it flows down to the edge."
+since = "0.1.0"
+

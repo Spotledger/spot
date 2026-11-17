@@ -12,7 +12,7 @@ use support::{doc_record, fixture_full, rid};
 
 /// The filter cases: the expression and whether the fixture event matches it.
 ///
-/// The fixture event is `doc_created` on entity `task`, actor `system:test`, with no trace id,
+/// The fixture event is `task_created` on entity `task`, actor `system:test`, with no trace id,
 /// no command id and a correlation id equal to the subject id.
 const CASES: &[(&str, bool)] = &[
     ("doc.subject.entity == 'task'", true),
@@ -65,9 +65,11 @@ async fn filter_matrix() {
         let spec = ConsumerSpec {
             name: name.clone(),
             owner: "owner".to_owned(),
-            topics: vec![TopicSelector::Prefix("doc".to_owned())],
+            topics: vec![TopicSelector::Prefix("task".to_owned())],
             filter: Some((*filter).to_owned()),
             partitions: 1,
+            classes: None,
+            entities: None,
             payload_mode: PayloadMode::IdsOnly,
             start: Start::FromBeginning,
         };
@@ -95,9 +97,11 @@ async fn an_invalid_filter_is_refused_at_registration() {
     let spec = ConsumerSpec {
         name: "bad_filter".to_owned(),
         owner: "owner".to_owned(),
-        topics: vec![TopicSelector::Prefix("doc".to_owned())],
+        topics: vec![TopicSelector::Prefix("task".to_owned())],
         filter: Some("doc.subject.entity ==".to_owned()),
         partitions: 1,
+        classes: None,
+        entities: None,
         payload_mode: PayloadMode::IdsOnly,
         start: Start::FromBeginning,
     };

@@ -217,6 +217,14 @@ impl AuthService for Down {
     fn session<'a>(&'a self, _: &'a RequestCtx) -> BoxFuture<'a, Result<SessionInfo, ApiError>> {
         Box::pin(async move { Err(self.0.clone()) })
     }
+
+    fn audience_of<'a>(
+        &'a self,
+        _: &'a RequestCtx,
+    ) -> BoxFuture<'a, Result<spot_core::Audience, ApiError>> {
+        // Explicit, test-only: every credential is a staff one unless a test says otherwise.
+        Box::pin(async { Ok(spot_core::Audience::Staff) })
+    }
 }
 
 /// A file store whose every call fails the way a port reports `server.unavailable`: through

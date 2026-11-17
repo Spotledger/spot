@@ -11,8 +11,22 @@ use spot_sync_hub::{
     AckBook, HubError, HubRelay, LedgerBook, MemoryStream, RelayConfig, StreamEntry,
 };
 use spot_sync_obligations::{Lane, MandatoryEvent, ObligationSettings};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
+
+/// `RefCell`'s `borrow` and `borrow_mut` over a mutex: the relay's collaborators are `Send`.
+struct SyncCell<T>(std::sync::Mutex<T>);
+
+impl<T> SyncCell<T> {
+    fn new(value: T) -> Self {
+        Self(std::sync::Mutex::new(value))
+    }
+    fn borrow(&self) -> std::sync::MutexGuard<'_, T> {
+        self.0.lock().unwrap()
+    }
+    fn borrow_mut(&self) -> std::sync::MutexGuard<'_, T> {
+        self.0.lock().unwrap()
+    }
+}
 
 type Ledger = AckLedger<MemoryStore, MemorySink>;
 type Relay = HubRelay<SharedQueue, MemoryStream, Src>;
@@ -23,7 +37,7 @@ const NOW: i64 = 1_000_000;
 
 /// One ledger owned by the test and shared by the relays of several tenants.
 #[derive(Clone)]
-struct Shared(Rc<RefCell<Ledger>>);
+struct Shared(Arc<SyncCell<Ledger>>);
 
 impl AckBook for Shared {
     fn on_ack(
@@ -96,8 +110,8 @@ impl AckBook for Shared {
     }
 }
 
-fn ledger() -> Rc<RefCell<Ledger>> {
-    Rc::new(RefCell::new(
+fn ledger() -> Arc<SyncCell<Ledger>> {
+    Arc::new(SyncCell::new(
         AckLedger::with_catalogue(
             MemoryStore::new(),
             MemorySink::new(),
@@ -120,7 +134,7 @@ fn tagged(tenant: &str, position: u64, lane: Lane) -> StreamEntry {
     e
 }
 
-fn relay(tenant: &str, led: &Rc<RefCell<Ledger>>, entries: Vec<StreamEntry>) -> Relay {
+fn relay(tenant: &str, led: &Arc<SyncCell<Ledger>>, entries: Vec<StreamEntry>) -> Relay {
     let mut stream = MemoryStream::new();
     for e in entries {
         stream.append(e);

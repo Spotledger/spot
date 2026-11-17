@@ -1,0 +1,10 @@
+# governance_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "governance_host.state_unavailable"
+class = "none"
+summary = "The grant gate could not read the directory, the SoD files or the portal guard, so it refuses every grant."
+explanation_key = "error.governance_host.state_unavailable"
+params = []
+remedy = "Fix the sod_rules.toml or role_catalogue.toml of the installed apps, or restore the database, and reload."
+since = "0.1.0"

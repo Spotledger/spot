@@ -1,0 +1,27 @@
+[package]
+name = "spot-durability-gate"
+description = "The durability gate (WP-RTB-01.T4, ADR-061 section 4): a tower layer on every mutating request of the native API that, after the handler returned success, waits for the journal to be durable up to the outbox head read after that commit, then answers; under remote-sync with degrade it acknowledges on the local commit after the grace, under halt it refuses before the handler runs and answers journal.commit_outcome_unknown when a committed request could not be confirmed, without a storage contract change"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The middleware: `from_fn_with_state`, `Request`, `Response`, `Next`. Same version as spot-http.
+axum = { version = "0.8.9", default-features = false }
+# The error body.
+serde_json = "1"
+# Typed errors with stable `durability_gate.*` codes.
+thiserror = "2"
+# The wait for the journal.
+tokio = { version = "1", default-features = false, features = ["time", "sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["time", "sync", "rt", "macros"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+axum = { version = "0.8.9", default-features = false, features = ["json", "tokio", "http1"] }
+
+[lints]
+workspace = true

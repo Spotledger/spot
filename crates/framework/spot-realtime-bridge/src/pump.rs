@@ -50,7 +50,9 @@
 //!
 //! Every other event this pump publishes is built from identifiers the storage wrote; a
 //! notice is the one event whose `data` an **app** supplies. The only guard the pump can
-//! offer is the shape rule of `notice_shape_ok` — an object of scalars, record ids and
+//! offer is the shape rule of `notice_shape_ok` — an object of scalars (null, booleans,
+//! **integers**, short strings: a floating-point number is refused, as the events contract's
+//! `notice_scalar` refuses it, because a decimal travels as a string, ADR-12), record ids and
 //! arrays of scalars/ids, at most `NOTICE_MAX_BYTES` serialised, no string over
 //! `NOTICE_MAX_TEXT_BYTES` — which is what keeps the channel to ids and short scalars
 //! (ADR-25), not what makes a value safe. It cannot tell a document number from a secret,
@@ -92,6 +94,7 @@ use std::sync::Arc;
 
 use spot_core::SiteId;
 use spot_events_contract::lifecycle::Operation;
+use spot_field_guard::ProtectionSource;
 use spot_realtime::{RealtimeBus, Room};
 use spot_storage_contract::{
     Change, ChangeFeed, ChangeOp, ErrorKind, FeedPosition, OutboxRecord, RecordId,
@@ -348,6 +351,7 @@ pub struct FeedPump<F: ChangeFeed, T: PumpTelemetry + 'static> {
     head: Option<Arc<dyn FeedHead>>,
     telemetry: Arc<T>,
     config: PumpConfig,
+    names: Option<Arc<dyn ProtectionSource>>,
 }
 
 impl<F: ChangeFeed, T: PumpTelemetry + 'static> FeedPump<F, T> {
@@ -371,7 +375,20 @@ impl<F: ChangeFeed, T: PumpTelemetry + 'static> FeedPump<F, T> {
             head,
             telemetry,
             config,
+            names: None,
         }
+    }
+
+    /// Puts the pump's payloads under the field guard's `Channel::Notification` rule
+    /// (WP-SEC-04.T8): a room event never names a field a protection group, tag or mask covers,
+    /// and a user notice may carry no string that is not a record id, a known DocType or the
+    /// name of an unprotected field (see [`crate::names`]). Opt-in so existing hosts keep their
+    /// behaviour; a host that serves clients must call it. A client that wants the values
+    /// fetches the document through the normal read path.
+    #[must_use]
+    pub fn with_notification_guard(mut self, source: Arc<dyn ProtectionSource>) -> Self {
+        self.names = Some(source);
+        self
     }
 
     /// The site the pump serves.
@@ -536,7 +553,7 @@ impl<F: ChangeFeed, T: PumpTelemetry + 'static> FeedPump<F, T> {
                 "doctype": doctype,
                 "id": id,
                 "version": version,
-                "changed": changed_names(record),
+                "changed": self.visible_changed(doctype, changed_names(record)),
             });
             self.publish_pair(doctype, &id, kind, payload);
             rooms.doctypes.insert(doctype.to_owned());
@@ -554,6 +571,15 @@ impl<F: ChangeFeed, T: PumpTelemetry + 'static> FeedPump<F, T> {
         }
         // Every other topic is skipped: no contract room for app topics yet.
         Mapped::Held
+    }
+
+    /// The changed names a shared room payload may carry: all of them when no guard is
+    /// installed (the legacy behaviour), only unprotected ones with it.
+    fn visible_changed(&self, doctype: &str, names: Vec<String>) -> Vec<String> {
+        match &self.names {
+            Some(source) => crate::names::broadcast_names(source.as_ref(), doctype, &names),
+            None => names,
+        }
     }
 
     /// Publishes a notice into the room of the user the **committed event** names.
@@ -585,6 +611,14 @@ impl<F: ChangeFeed, T: PumpTelemetry + 'static> FeedPump<F, T> {
             return Mapped::Consumed;
         };
         if !notice_shape_ok(body) {
+            self.refuse_notice(topic, record.position);
+            return Mapped::Consumed;
+        }
+        if let Some(source) = &self.names
+            && !crate::names::notice_names_only(body, source.as_ref(), |text| {
+                record_id_text(text).is_some()
+            })
+        {
             self.refuse_notice(topic, record.position);
             return Mapped::Consumed;
         }
@@ -778,11 +812,14 @@ fn notice_value_ok(value: &serde_json::Value) -> bool {
     }
 }
 
-/// One notice scalar: null, a boolean, a number, or a string of at most
-/// [`NOTICE_MAX_TEXT_BYTES`]. An object or a nested array is not a scalar.
+/// One notice scalar: null, a boolean, an **integer**, or a string of at most
+/// [`NOTICE_MAX_TEXT_BYTES`]. A floating-point number is refused (it is a money or quantity value
+/// that lost its exactness; a decimal travels as a string, ADR-12), exactly as the events
+/// contract's `notice_scalar` does. An object or a nested array is not a scalar.
 fn notice_scalar_ok(value: &serde_json::Value) -> bool {
     match value {
-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => true,
+        serde_json::Value::Null | serde_json::Value::Bool(_) => true,
+        serde_json::Value::Number(number) => !number.is_f64(),
         serde_json::Value::String(text) => text.len() <= NOTICE_MAX_TEXT_BYTES,
         serde_json::Value::Array(_) | serde_json::Value::Object(_) => false,
     }

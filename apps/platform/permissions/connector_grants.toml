@@ -1,0 +1,25 @@
+# DocType rights for connectors (WP-INT-05.T3), additive rows like `webhook_grants.toml`.
+# `Tenant Administrator` needs no row: it holds every right by definition.
+#
+# No role can read a credential value: the DocType holds only references, and the vault has no
+# read action. `connector_run` is written only by the connector service.
+
+[[entries]]
+role = "System Manager"
+doctype = "connector"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "System Manager"
+doctype = "connector_run"
+rights = ["read", "report", "select"]
+
+[[entries]]
+role = "Integration Manager"
+doctype = "connector"
+rights = ["read", "report", "select"]
+
+[[entries]]
+role = "Integration Manager"
+doctype = "connector_run"
+rights = ["read", "report", "select"]

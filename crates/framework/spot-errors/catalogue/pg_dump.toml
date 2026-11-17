@@ -1,0 +1,10 @@
+# pg_dump codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "pg_dump.exe"
+class = "none"
+summary = "The operation was refused: exe."
+explanation_key = "error.pg_dump.exe"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

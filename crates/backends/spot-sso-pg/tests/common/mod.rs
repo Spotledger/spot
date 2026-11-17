@@ -43,3 +43,30 @@ pub async fn warm(pool: &Pool, n: usize) {
 pub fn namespaced(kind: &str, provider: &str, id: &str) -> String {
     spot_sso::namespaced(kind, provider, id)
 }
+
+/// The pool size the pending contract suite needs: its racing case takes from thirty-two plain
+/// threads at once.
+pub const WIDE_POOL: usize = 32;
+
+/// A pool that can never connect (nothing listens on port 1): every checkout fails.
+pub fn dead_pool() -> Pool {
+    let mut cfg = deadpool_postgres::Config::new();
+    cfg.host = Some("127.0.0.1".to_owned());
+    cfg.port = Some(1);
+    cfg.dbname = Some("none".to_owned());
+    cfg.user = Some("none".to_owned());
+    cfg.pool = Some(PoolConfig::new(2));
+    cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap()
+}
+
+/// A sealer with a fixed test key and a counting nonce source.
+pub fn sealer(key_byte: u8) -> std::sync::Arc<spot_sso_pg::AesGcmSealer> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let counter = AtomicU64::new(1);
+    let nonces: spot_sso_pg::NonceSource = std::sync::Arc::new(move || {
+        let mut nonce = [0_u8; 12];
+        nonce[..8].copy_from_slice(&counter.fetch_add(1, Ordering::SeqCst).to_be_bytes());
+        nonce
+    });
+    std::sync::Arc::new(spot_sso_pg::AesGcmSealer::new(&[key_byte; 32], nonces).unwrap())
+}

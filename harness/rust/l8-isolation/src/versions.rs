@@ -102,6 +102,18 @@ pub struct ReadEvent {
     pub is_list: bool,
 }
 
+/// How many stale reads the model keeps as examples (the checker keeps 25 witnesses per class).
+pub const STALE_READS_KEPT: usize = 25;
+
+/// Counts a stale read and keeps it only while fewer than [`STALE_READS_KEPT`] are kept, so the
+/// (large) value is not even built once the examples are full.
+fn record_stale(kept: &mut Vec<StaleRead>, total: &mut u64, make: impl FnOnce() -> StaleRead) {
+    *total += 1;
+    if kept.len() < STALE_READS_KEPT {
+        kept.push(make());
+    }
+}
+
 /// A read that missed a write it should have seen.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StaleRead {
@@ -148,8 +160,12 @@ pub struct VersionModel {
     pub reads: Vec<ReadEvent>,
     /// Every write, committed or not, by `(key, value)`.
     pub writes: HashMap<(String, String), WriteRecord>,
-    /// Reads that missed a committed write.
+    /// Reads that missed a committed write: the first [`STALE_READS_KEPT`] only (a backend that
+    /// runs below its claimed level misses writes in most reads, and keeping every miss with the
+    /// list it observed used more than 10 GB on the nightly profile).
     pub stale_reads: Vec<StaleRead>,
+    /// How many reads missed a committed write in all (at least `stale_reads.len()`).
+    pub stale_read_total: u64,
     /// Contradictory version orders.
     pub order_cycles: Vec<OrderCycle>,
     /// Committed transaction ids.
@@ -305,18 +321,26 @@ pub fn infer(history: &TxnHistory) -> VersionModel {
                     order.add_edge(pair[0], pair[1]);
                 }
                 let frontier = resolved.last().copied();
+                // Which versions this read observed (a flag per version, not a scan of `resolved`
+                // for every version: that was quadratic in the list length).
+                let mut observed_here = vec![false; versions.len()];
+                for &i in &resolved {
+                    observed_here[i] = true;
+                }
                 let mut earliest_future: Option<usize> = None;
                 for (i, u) in versions.iter().enumerate() {
-                    if u.initial || resolved.contains(&i) {
+                    if u.initial || observed_here[i] {
                         continue;
                     }
                     if u.end_us < r.reader_start {
-                        model.stale_reads.push(StaleRead {
-                            reader: r.reader,
-                            key: key.clone(),
-                            writer: u.writer,
-                            value: u.value.clone(),
-                            observed: r.observed.clone(),
+                        record_stale(&mut model.stale_reads, &mut model.stale_read_total, || {
+                            StaleRead {
+                                reader: r.reader,
+                                key: key.clone(),
+                                writer: u.writer,
+                                value: u.value.clone(),
+                                observed: r.observed.clone(),
+                            }
                         });
                     } else if u.start_us > r.reader_end {
                         earliest_future = Some(match earliest_future {
@@ -354,12 +378,14 @@ pub fn infer(history: &TxnHistory) -> VersionModel {
                     if let Some(i) = latest_past {
                         // The read saw the initial value although a committed write preceded it:
                         // a stale read.
-                        model.stale_reads.push(StaleRead {
-                            reader: r.reader,
-                            key: key.clone(),
-                            writer: versions[i].writer,
-                            value: versions[i].value.clone(),
-                            observed: r.observed.clone(),
+                        record_stale(&mut model.stale_reads, &mut model.stale_read_total, || {
+                            StaleRead {
+                                reader: r.reader,
+                                key: key.clone(),
+                                writer: versions[i].writer,
+                                value: versions[i].value.clone(),
+                                observed: r.observed.clone(),
+                            }
                         });
                     }
                 } else if let Some(i) = latest_past {

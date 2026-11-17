@@ -147,7 +147,7 @@ fn filter_report(field: &str) -> String {
     )
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_report_filter_sort_group_or_aggregate_on_a_protected_field_is_refused() {
     let w = world().await;
     let secret = corpus().get("card").unwrap().value().to_owned();
@@ -177,7 +177,7 @@ async fn a_report_filter_sort_group_or_aggregate_on_a_protected_field_is_refused
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_same_report_query_is_allowed_for_a_reader_of_the_field() {
     let w = world().await;
     let secret = corpus().get("card").unwrap().value().to_owned();

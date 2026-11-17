@@ -5,8 +5,8 @@ use crate::model::{DestReport, EntryRole, PushOutcome, QueuedBundle, RelayConfig
 use crate::relay::Destination;
 use crate::traits::SendQueue;
 use spot_sync_closure::{
-    BundlePlan, DestinationKnows, ExtrasSet, ImageSource, Position, RecordKey, References,
-    SourceImage, build,
+    BundlePlan, BundleRecord, DestinationKnows, ExtrasSet, ImageSource, Position, RecordKey,
+    References, SourceImage, build,
 };
 use spot_sync_obligations::{Lane, Pending, lane_order};
 use spot_sync_skew::{HoldSet, Outgoing, RecordRef, filter_outgoing};
@@ -26,6 +26,9 @@ pub(crate) struct DestState {
     pub acked: Option<u64>,
     pub catchup_from: Option<u64>,
     pub backpressured: bool,
+    /// Keys answered to this destination's pulls in the current tick (not persisted: a restart
+    /// starts a fresh allowance).
+    pub pulled_keys: usize,
 }
 
 impl DestState {
@@ -40,13 +43,14 @@ impl DestState {
             acked: None,
             catchup_from: None,
             backpressured: false,
+            pulled_keys: 0,
         }
     }
 }
 
 /// The records this destination must not be sent yet: the entries a version-skew hold keeps back
 /// and the dependents withheld behind them. The closure never pulls one of them in as an extra.
-fn held_keys(st: &DestState) -> BTreeSet<RecordKey> {
+pub(crate) fn held_keys(st: &DestState) -> BTreeSet<RecordKey> {
     let mut keys: BTreeSet<RecordKey> = st.held_entries.values().map(|e| e.key.clone()).collect();
     // The hub-side hold queue is the authority; the held entries are what it kept. Read both, so
     // the two can never drift apart unnoticed.
@@ -283,7 +287,12 @@ fn plan_for<Q: SendQueue, I: ImageSource>(
         if !seen.insert(&e.key) {
             continue;
         }
-        let image = image_of(ctx.images, e)?;
+        let image = if e.deleted {
+            // A deleted record has no image: the tombstone is made from the entry itself.
+            SourceImage::tombstone(e.key.clone(), e.position)
+        } else {
+            image_of(ctx.images, e)?
+        };
         match e.role {
             EntryRole::Root => roots.push(image),
             EntryRole::Satellite => satellites.push(image),
@@ -295,16 +304,86 @@ fn plan_for<Q: SendQueue, I: ImageSource>(
         extras: &st.extras,
         held: held_keys(st),
     };
-    build(
+    build_plan(
+        ctx.images,
+        ctx.refs,
+        ctx.cfg,
+        st,
         &roots,
         &satellites,
         &knows,
-        ctx.images,
-        ctx.refs,
+    )
+}
+
+/// The one place a destination's bundles are built and redacted (`excluded_fields.down`): the
+/// stream path (`plan_for`) and the pull path ([`pull_record`]) both go through it, so there is no
+/// second redaction path.
+fn build_plan<I: ImageSource>(
+    images: &I,
+    refs: &dyn References,
+    cfg: &RelayConfig,
+    st: &DestState,
+    roots: &[SourceImage],
+    satellites: &[SourceImage],
+    knows: &dyn DestinationKnows,
+) -> Result<BundlePlan, HubError> {
+    build(
+        roots,
+        satellites,
+        knows,
+        images,
+        refs,
         st.dest.redactor.as_ref(),
-        ctx.cfg.limits,
+        cfg.limits,
     )
     .map_err(HubError::from)
+}
+
+/// The destination's view for a pull: as [`Knows`], except that every reference target counts as
+/// something the node has, so the plan carries the asked record alone. The node asks again for
+/// what that record lacks.
+struct PullKnows<'a>(Knows<'a>);
+
+impl DestinationKnows for PullKnows<'_> {
+    fn owns(&self, _key: &RecordKey) -> bool {
+        true
+    }
+    fn in_scope(&self, key: &RecordKey) -> bool {
+        self.0.in_scope(key)
+    }
+    fn acked_position(&self) -> Option<Position> {
+        self.0.acked_position()
+    }
+    fn extras(&self) -> &ExtrasSet {
+        self.0.extras()
+    }
+    fn held(&self, key: &RecordKey) -> bool {
+        self.0.held(key)
+    }
+}
+
+/// The asked record, redacted for the destination exactly as the stream path redacts it, with no
+/// closure prerequisites. `None` when the closure withheld it (a record it needs is held).
+pub(crate) fn pull_record<I: ImageSource>(
+    images: &I,
+    refs: &dyn References,
+    cfg: &RelayConfig,
+    st: &DestState,
+    image: SourceImage,
+) -> Result<Option<BundleRecord>, HubError> {
+    let key = image.key.clone();
+    let knows = PullKnows(Knows {
+        dest: &st.dest,
+        acked: st.acked,
+        extras: &st.extras,
+        held: held_keys(st),
+    });
+    let plan = build_plan(images, refs, cfg, st, &[image], &[], &knows)?;
+    Ok(plan
+        .bundles
+        .into_iter()
+        .flat_map(|b| b.records)
+        .find(|r| r.key == key))
 }
 
 /// Push a plan; returns `(queued, duplicates)`. Out-of-scope extras are recorded in the
@@ -317,7 +396,17 @@ fn push_plan<Q: SendQueue, I: ImageSource>(
     redelivery: bool,
 ) -> Result<(usize, usize), HubError> {
     let position = sent.iter().map(|e| e.position).max().unwrap_or(0);
+    let floor = sent.iter().map(|e| e.position).min().unwrap_or(position);
     let lane = sent.iter().map(|e| e.lane).min().unwrap_or(Lane::Bulk);
+    // The tombstones the plan carries (a withheld one is not in it): a deleted record leaves the
+    // extras set once its delete is queued.
+    let deleted_keys: Vec<RecordKey> = plan
+        .bundles
+        .iter()
+        .flat_map(|b| &b.records)
+        .filter(|r| r.deleted)
+        .map(|r| r.key.clone())
+        .collect();
     let mut items: Vec<Pending<QueuedBundle>> = plan
         .bundles
         .into_iter()
@@ -329,6 +418,9 @@ fn push_plan<Q: SendQueue, I: ImageSource>(
                 index: u32::try_from(i).unwrap_or(u32::MAX),
                 redelivery,
                 bundle,
+                serve_seq: 0,
+                serve_after: 0,
+                floor,
             },
         })
         .collect();
@@ -342,6 +434,9 @@ fn push_plan<Q: SendQueue, I: ImageSource>(
     }
     for key in plan.out_of_scope_extras {
         st.extras.record_delivered_extra(key);
+    }
+    for key in &deleted_keys {
+        st.extras.forget_deleted_extra(key);
     }
     Ok((queued, dup))
 }

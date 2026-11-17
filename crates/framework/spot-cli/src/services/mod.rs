@@ -110,6 +110,13 @@ pub trait Service: Send + Sync {
     fn shutdown(&self) -> RunFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+    /// A live degradation of a running service: why it is not at full strength right now (a
+    /// lost coordination server, a fallback bus). Read on every readiness call, so it must be an
+    /// in-memory read and carry no key, address or credential. `None` (the default) means
+    /// healthy; a reason makes readiness `degraded:` and never failed.
+    fn degraded(&self) -> Option<String> {
+        None
+    }
 }
 
 /// What a service is doing right now.
@@ -128,7 +135,20 @@ pub enum State {
 pub struct Health(
     Arc<Mutex<BTreeMap<&'static str, (Level, State)>>>,
     Arc<Mutex<Vec<String>>>,
+    Arc<Mutex<Probes>>,
 );
+
+/// The services whose live degradation readiness reads (`Service::degraded`).
+#[derive(Default)]
+struct Probes(Vec<Arc<dyn Service>>);
+
+impl std::fmt::Debug for Probes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Probes")
+            .field("services", &self.0.len())
+            .finish()
+    }
+}
 
 impl Health {
     /// An empty registry.
@@ -139,6 +159,29 @@ impl Health {
     pub fn set(&self, name: &'static str, level: Level, state: State) {
         let mut states = self.0.lock().unwrap_or_else(|p| p.into_inner());
         states.insert(name, (level, state));
+    }
+    /// Registers a service whose [`Service::degraded`] readiness reads.
+    pub fn watch(&self, service: Arc<dyn Service>) {
+        self.2
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .0
+            .push(service);
+    }
+    /// The live degradations of the watched services that are running, as `name (reason)`.
+    pub fn live_degradations(&self) -> Vec<String> {
+        let probes: Vec<Arc<dyn Service>> =
+            self.2.lock().unwrap_or_else(|p| p.into_inner()).0.clone();
+        let states = self.states();
+        probes
+            .iter()
+            .filter(|service| matches!(states.get(service.name()), Some((_, State::Running))))
+            .filter_map(|service| {
+                service
+                    .degraded()
+                    .map(|reason| format!("{} ({reason})", service.name()))
+            })
+            .collect()
     }
     /// The recorded states, in name order.
     pub fn states(&self) -> BTreeMap<&'static str, (Level, State)> {
@@ -179,6 +222,7 @@ impl ReadinessCheck for ServiceHealth {
 
     fn check(&self) -> Pin<Box<dyn Future<Output = CheckResult> + Send + '_>> {
         let states = self.health.states();
+        let live = self.health.live_degradations();
         Box::pin(async move {
             let mut degraded = Vec::new();
             for (name, (level, state)) in &states {
@@ -202,6 +246,9 @@ impl ReadinessCheck for ServiceHealth {
                     }
                 }
             }
+            // A running service that says it is degraded (a lost coordination server) degrades the
+            // site; it never fails it: the site still serves reads.
+            degraded.extend(live);
             if degraded.is_empty() {
                 CheckResult::ok()
             } else {
@@ -248,6 +295,7 @@ impl Services {
     pub fn add(&mut self, service: Arc<dyn Service>) -> &mut Self {
         self.health
             .set(service.name(), service.level(), State::Starting);
+        self.health.watch(Arc::clone(&service));
         self.services.push(service);
         self
     }
@@ -442,8 +490,20 @@ pub struct Registration {
 /// The names of the modules that register themselves from a file: the only `[services.<name>]`
 /// tables outside the typed ones that a configuration may carry.
 pub fn registered_names() -> Vec<&'static str> {
-    REGISTRY.iter().map(|r| r.name).collect()
+    let mut names: Vec<&'static str> = REGISTRY.iter().map(|r| r.name).collect();
+    for name in SETTINGS_ONLY {
+        if !names.contains(name) {
+            names.push(name);
+        }
+    }
+    names
 }
+
+/// `[services.<name>]` tables read by the host itself and not by a registry module: the typed
+/// tables of `config.rs` do not hold them, so the name is listed here to pass the config check.
+/// `idempotency` (WP-PLT-05.T8): the retention of the Idempotency-Key store, read through
+/// `SiteCtx::settings_or_default` while the host builds the store.
+pub const SETTINGS_ONLY: &[&str] = &["idempotency"];
 
 /// Sorts `tables` into one start order and refuses a duplicate name.
 ///
@@ -715,8 +775,32 @@ impl OpenEntry {
     }
 }
 
+/// The open sign-in paths the contract marks public under the reserved auth prefix: single
+/// sign-on (`/api/v1/auth/sso/...`, WP-IAM-05) and nothing else by prefix.
+const OPEN_AUTH_PREFIXES: &[&str] = &["/api/v1/auth/sso/"];
+
+/// The open auth paths exempted one by one: invitation acceptance (WP-IAM-12.T5).
+const OPEN_AUTH_PATHS: &[&str] = &["/api/v1/auth/invitations/accept"];
+
+/// Whether `shape` is one of the auth paths that is open by contract. No wildcard wider than the
+/// two lists above: a sibling (`/api/v1/auth/sso`, `/api/v1/auth/invitations/accept/x`,
+/// `/api/v1/auth/password`) is not exempt, and a `..` segment never is.
+fn open_auth_exempt(shape: &str) -> bool {
+    if OPEN_AUTH_PATHS.contains(&shape) {
+        return true;
+    }
+    OPEN_AUTH_PREFIXES.iter().any(|prefix| {
+        shape.strip_prefix(prefix).is_some_and(|rest| {
+            !rest.is_empty() && !rest.split('/').any(|s| s.is_empty() || s == "..")
+        })
+    })
+}
+
 /// Paths the host owns and an open path may never shadow.
 fn reserved(shape: &str) -> bool {
+    if open_auth_exempt(shape) {
+        return false;
+    }
     shape == "/metrics"
         || shape == "/api/v1/realtime"
         || shape == "/api/v1/auth"
@@ -1262,12 +1346,120 @@ mod registry_tests {
                 pair[1].name
             );
         }
+        // The framework services that `host.rs` built before the registry existed keep the start
+        // order they had (WP-PRD-01.T35 and T36 to T39: pure moves); every other module uses 1000
+        // or more.
         for r in REGISTRY {
             assert!(
-                r.order >= 1000,
+                r.order >= 1000 || LEGACY_ORDER.iter().any(|(n, _)| *n == r.name),
                 "{} must use an ORDER of 1000 or more",
                 r.name
             );
+        }
+    }
+
+    /// The legacy modules and the ORDER each declares today. A module is never renumbered: the
+    /// start order of every site depends on it.
+    const LEGACY_ORDER: [(&str, u32); 10] = [
+        ("metadata", 300),
+        ("customise", 400),
+        ("effect_hold", 550),
+        ("jobs", 600),
+        // The document audit appenders (WP-PRD-01.T22) run after jobs, whose `JobSubmit` they take.
+        ("doc_audit", 650),
+        ("mail", 700),
+        ("realtime", 800),
+        ("files", 900),
+        ("print", 900),
+        ("telemetry", 900),
+    ];
+
+    #[test]
+    fn legacy_modules_keep_the_order_they_had() {
+        for (name, order) in LEGACY_ORDER.iter() {
+            if let Some(r) = REGISTRY.iter().find(|r| r.name == *name) {
+                assert_eq!(r.order, *order, "{name} was renumbered");
+            }
+        }
+    }
+
+    #[test]
+    fn settings_only_tables_are_accepted_and_do_not_shadow_modules() {
+        assert!(registered_names().contains(&"idempotency"));
+        for name in SETTINGS_ONLY {
+            assert!(
+                !REGISTRY.iter().any(|r| r.name == *name),
+                "{name} is a module now: drop it from SETTINGS_ONLY"
+            );
+        }
+    }
+
+    /// Every file under `src/services` that implements `Service` is either a registry module or
+    /// a helper whose services another module's `register` adds. A new file in neither list
+    /// fails here, so a service cannot be written and never started.
+    #[test]
+    fn every_service_impl_is_registered_or_hosted() {
+        // Files that implement `Service` but declare no `ORDER`: another module adds them.
+        const HOSTED: &[&str] = &["ports"];
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/services");
+        let registered: Vec<&str> = REGISTRY.iter().map(|r| r.name).collect();
+        for entry in std::fs::read_dir(&dir).expect("the services directory reads") {
+            let path = entry.expect("a directory entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .expect("a file stem")
+                .to_owned();
+            if stem == "mod" {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).expect("a service file reads");
+            if !source.lines().any(|l| l.contains("impl Service for ")) {
+                continue;
+            }
+            assert!(
+                registered.contains(&stem.as_str()) || HOSTED.contains(&stem.as_str()),
+                "{stem}.rs implements Service but is neither a registry module (ORDER and \
+                 register) nor listed as hosted by another module"
+            );
+        }
+        for name in HOSTED {
+            assert!(
+                !registered.contains(name),
+                "{name} is a registry module now: drop it from HOSTED"
+            );
+        }
+    }
+
+    #[test]
+    fn open_auth_exemptions_are_exactly_sso_and_invitation_accept() {
+        // The two exemptions.
+        assert!(!reserved("/api/v1/auth/sso/google"));
+        assert!(!reserved("/api/v1/auth/sso/{provider}/callback"));
+        assert!(!reserved("/api/v1/auth/invitations/accept"));
+        // A non-public sibling is still the host's.
+        for shape in [
+            "/api/v1/auth",
+            "/api/v1/auth/",
+            "/api/v1/auth/sso",
+            "/api/v1/auth/sso/",
+            "/api/v1/auth/sso/../password",
+            "/api/v1/auth/sso//x",
+            "/api/v1/auth/ssox/y",
+            "/api/v1/auth/invitations",
+            "/api/v1/auth/invitations/accept/x",
+            "/api/v1/auth/invitations/{id}",
+            "/api/v1/auth/password",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/session",
+            "/api/v1/realtime",
+            "/metrics",
+            "/api/health",
+        ] {
+            assert!(reserved(shape), "{shape} must stay reserved");
         }
     }
 

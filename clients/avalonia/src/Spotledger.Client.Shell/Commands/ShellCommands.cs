@@ -109,6 +109,9 @@ public static class ShellCommands
 
         // View: sidebar cycling and the workspaces (all real).
         Def("view.sidebar", "Toggle sidebar", "Open", "View", 'S', "Cycle expanded, icons-only and hidden", search: ["rail", "collapse"]),
+        // Blank mnemonic on purpose (the same rule the workspace commands follow): a letter at the View
+        // level would collide with the chrome's own menu. The bell, the chord and the launcher reach it.
+        Def(ShellViewModel.NotificationsCommandId, "Notifications", "Open", "View", ' ', "Open or close the notifications flyout", search: ["bell", "notices", "alerts"]),
         Def("workspace.home", "Home", "Open", "View", 'H', "Open the Home workspace", search: ["start", "dashboard"]),
         Def("workspace.myTasks", "My Tasks", "Open", "View", 'M', "Open the My Tasks workspace", search: ["tasks", "todo"]),
         Def("workspace.selling", "Selling", "Open", "View", 'E', "Open the Selling workspace"),
@@ -142,6 +145,8 @@ public static class ShellCommands
         // Tools: chrome utilities that genuinely exist.
         Def("tools.keymap", "Keyboard map", "Open", "Tools", 'K', "Show the chords of the active keymap profile", search: ["shortcuts"]),
         Def("tools.density", "Toggle density", "Open", "Tools", 'D', "Switch between Compact and Comfortable", search: ["comfortable", "spacing"]),
+        Def(ShellViewModel.DoNotDisturbCommandId, "Toggle do not disturb", "Open", "Tools", ' ', "Turn notification pop-ups off or on; the bell still counts", search: ["quiet", "mute", "toast"]),
+        Def(ShellViewModel.AutoReloadCommandId, "Toggle reload of unedited forms", "Open", "Tools", ' ', "Reload an open form by itself when someone else changes it and you have not edited it", search: ["refresh", "stale", "live"]),
         Def("tools.locale", "Toggle Urdu (RTL)", "Open", "Tools", 'R', "Switch the shell between English LTR and Urdu RTL", search: ["right to left", "language"]),
 
         // Window: tab management.

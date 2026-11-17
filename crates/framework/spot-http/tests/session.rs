@@ -102,7 +102,7 @@ fn fixture() -> Fixture {
     });
     let mut ports = Ports::new();
     ports.provide::<dyn SessionPort>(fake.clone());
-    let state = RouteState::new(ports.subset(session::session_required_ports()).unwrap());
+    let state = RouteState::new(ports.subset(session::required_ports()).unwrap());
     let acme = SiteId::new("acme").unwrap();
     let router = ServerBuilder::new(
         ServerConfig::default(),
@@ -110,7 +110,7 @@ fn fixture() -> Fixture {
             .add(HOST, acme.clone())
             .add_site_name(acme),
     )
-    .site_routes(session::session_routes().with_state(state))
+    .site_routes(session::routes().with_state(state))
     .build();
     Fixture { router, fake }
 }
@@ -449,11 +449,8 @@ async fn the_wrong_methods_are_refused_before_the_port() {
 
 #[test]
 fn the_group_declares_its_operations_and_needs_the_session_port() {
-    assert_eq!(
-        session::SESSION_SERVES,
-        &["auth_session_list", "auth_session_end"]
-    );
-    assert_eq!(session::session_required_ports().len(), 1);
+    assert_eq!(session::SERVES, &["auth_session_list", "auth_session_end"]);
+    assert_eq!(session::required_ports().len(), 1);
     let registration = session::registration();
     assert_eq!(registration.name, "session");
     assert!(

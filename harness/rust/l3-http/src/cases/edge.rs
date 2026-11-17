@@ -72,8 +72,10 @@ pub async fn a_metadata_change_is_visible_without_a_restart(fixture: &Fixture) -
         ),
     )
     .map_err(|e| failure!("cannot write {}: {e}", doctype.display()))?;
-    spot_cli::request_reload(fixture.root(), fixture.site())
-        .map_err(|e| failure!("cannot request a reload: {e}"))?;
+    tokio::task::block_in_place(|| {
+        spot_cli::request_reload_and_wait(fixture.root(), fixture.site())
+    })
+    .map_err(|e| failure!("cannot request a reload: {e}"))?;
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let meta = fixture.admin().meta("task").await?;

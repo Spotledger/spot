@@ -12,6 +12,13 @@ public interface IWorkspaceOpener
 
     /// <summary>Opens a list tab. Returns false when it cannot (not signed in).</summary>
     Task<bool> OpenListAsync(string doctype);
+
+    /// <summary>
+    /// Test-only: points the shell at <paramref name="url"/> and signs in through the same server picker and
+    /// login view models (so the same <c>ApiConnection.LoginAsync</c>) the screens use. True when the shell
+    /// then holds a session. The password is never stored or logged.
+    /// </summary>
+    Task<bool> SignInAsync(string url, string user, string password);
 }
 
 /// <summary>
@@ -24,6 +31,7 @@ public interface IWorkspaceOpener
 public sealed class BrowserHostState
 {
     private IWorkspaceOpener? _opener;
+    private bool _testSignInEnabled;
 
     private BrowserHostState(BrowserMetrics metrics, CalculationPath calculation, RecentServersBridge recentServers, IBrowserStorage storage)
     {
@@ -44,6 +52,9 @@ public sealed class BrowserHostState
 
     /// <summary>The browser storage (possibly the unavailable one).</summary>
     public IBrowserStorage Storage { get; }
+
+    /// <summary>True when the page was loaded with <c>?testSignIn=1</c> (set once by <c>main.js</c>); false in every real deployment.</summary>
+    public bool TestSignInEnabled => _testSignInEnabled;
 
     /// <summary>The shell's opener, set once the shell exists; null before.</summary>
     public IWorkspaceOpener? Opener => _opener;
@@ -82,6 +93,9 @@ public sealed class BrowserHostState
     /// <summary>Records that the shell is interactive; <c>window.spotBrowser.ready</c> resolves after this.</summary>
     public void MarkReady() => Metrics.MarkReady();
 
+    /// <summary>Turns the test sign-in hook on. Called at most once, at start-up, when the page URL carried the flag.</summary>
+    public void EnableTestSignIn() => _testSignInEnabled = true;
+
     /// <summary>Gives the hooks the shell's opener.</summary>
     public void AttachOpener(IWorkspaceOpener opener)
     {
@@ -118,5 +132,59 @@ public sealed class BrowserHostState
         var opened = await _opener.OpenListAsync(doctype).ConfigureAwait(true);
         Metrics.Mark(opened ? "lastListOpened" : "lastListRefused");
         return opened;
+    }
+
+    /// <summary>
+    /// True only for an absolute http(s) URL whose host is exactly <c>127.0.0.1</c>, <c>localhost</c> or
+    /// <c>[::1]</c> and that carries no user-info. Anything else (a look-alike host, another scheme, a
+    /// relative URL) is refused.
+    /// </summary>
+    public static bool IsLoopbackUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
+        return uri.Host is "127.0.0.1" or "localhost" or "[::1]" or "::1";
+    }
+
+    /// <summary>
+    /// The <c>signIn</c> hook (test only): refused (false, nothing called) unless the test flag is on, the shell
+    /// exists, the URL is on the loopback host and both user and password are present. The password is handed
+    /// to the opener and nowhere else: no metric, label or log line carries it.
+    /// </summary>
+    public async Task<bool> SignInAsync(string url, string user, string password)
+    {
+        if (!_testSignInEnabled || _opener is null || !IsLoopbackUrl(url)
+            || string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
+        {
+            return false;
+        }
+
+        Metrics.Count("signIn");
+        bool signedIn;
+        try
+        {
+            signedIn = await _opener.SignInAsync(url.Trim(), user, password).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The exception text is dropped on purpose: it is not allowed to carry the arguments out.
+            signedIn = false;
+        }
+
+        Metrics.Mark(signedIn ? "lastSignedIn" : "lastSignInRefused");
+        return signedIn;
     }
 }

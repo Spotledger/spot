@@ -1,6 +1,6 @@
 //! The rules of the plan, one table per rule.
 
-use super::{Want, at, backup, cat, fork, ranges, run, snapshot, steps_of};
+use super::{Want, at, backup, cat, fork, in_gen, ranges, run, snapshot, steps_of};
 use crate::{
     Base, JournalCatalog, PlanError, RebuildPlan, SegmentRange, SnapshotInfo, Target, plan,
 };
@@ -149,7 +149,7 @@ fn a_tie_at_one_position_prefers_the_higher_generation() {
         vec![fork(2, 10)],
     );
     let mut with_second = catalog.clone();
-    with_second.segments.extend(ranges(2, &[(11, 20)]));
+    with_second.segments.extend(ranges(2, &[(1, 20)]));
     let plan = whole(with_second);
     assert_eq!(
         plan.base,
@@ -232,21 +232,22 @@ fn a_target_before_the_end_forks() {
 
 #[test]
 fn a_target_inside_an_abandoned_generation_is_refused() {
-    // Generation 1 wrote to 30; a rebuild to 10 forked generation 2, which wrote 11..=20. The
-    // positions 21..=30 of generation 1 are abandoned: the live history does not continue them.
+    // Generation 1 wrote to 30; a rebuild to 10 forked generation 2, which started again at 1 and
+    // wrote 1..=10. The positions 11..=30 of generation 1 are abandoned: the live history does
+    // not continue them.
     let catalog = || {
         let mut segments = one_to_thirty();
-        segments.extend(ranges(2, &[(11, 20)]));
+        segments.extend(ranges(2, &[(1, 10)]));
         cat(vec![], segments, vec![fork(2, 10)])
     };
     run(
         "a target inside an abandoned generation is refused",
         vec![
             (
-                "the live history ends at 20, so 25 is abandoned history",
+                "generation 1's position 25 is abandoned history",
                 catalog(),
                 None,
-                at(25),
+                in_gen(1, 25),
                 Want::Error(PlanError::TargetInsideAbandonedGeneration {
                     generation: 1,
                     position: 25,
@@ -256,21 +257,32 @@ fn a_target_inside_an_abandoned_generation_is_refused() {
                 "the last abandoned position is refused too",
                 catalog(),
                 None,
-                at(30),
+                in_gen(1, 30),
                 Want::Error(PlanError::TargetInsideAbandonedGeneration {
                     generation: 1,
                     position: 30,
                 }),
             ),
             (
-                "a target the live history still covers is planned, and forks into generation 3",
+                "a live position of an older generation cannot be forked from",
                 catalog(),
                 None,
-                at(15),
+                in_gen(1, 5),
+                Want::Error(PlanError::TargetBeforeFork {
+                    generation: 1,
+                    position: 5,
+                    current_generation: 2,
+                }),
+            ),
+            (
+                "a target of the current generation is planned, and forks into generation 3",
+                catalog(),
+                None,
+                at(5),
                 Want::Plan {
                     base: 0,
-                    steps: vec![(1, 1, 10), (2, 11, 15)],
-                    ends_at: 15,
+                    steps: vec![(1, 1, 10), (2, 1, 5)],
+                    ends_at: 5,
                 },
             ),
             (
@@ -280,13 +292,13 @@ fn a_target_inside_an_abandoned_generation_is_refused() {
                 Target::End,
                 Want::Plan {
                     base: 0,
-                    steps: vec![(1, 1, 10), (2, 11, 20)],
-                    ends_at: 20,
+                    steps: vec![(1, 1, 10), (2, 1, 10)],
+                    ends_at: 10,
                 },
             ),
         ],
     );
-    let plan = plan(&catalog(), None, at(15)).expect("15 is live");
+    let plan = plan(&catalog(), None, at(5)).expect("5 is live in generation 2");
     assert_eq!(
         plan.new_generation,
         Some(3),
@@ -295,7 +307,7 @@ fn a_target_inside_an_abandoned_generation_is_refused() {
     assert_eq!(
         plan.fork_point.map(|f| f.abandoned_generation),
         Some(2),
-        "position 15 sits in generation 2, whose positions after it are abandoned"
+        "position 5 sits in generation 2, whose positions after it are abandoned"
     );
 }
 
@@ -310,21 +322,30 @@ fn a_gap_names_the_first_missing_position() {
                 cat(vec![], holed(), vec![]),
                 None,
                 Target::End,
-                Want::Error(PlanError::GapAt { position: 11 }),
+                Want::Error(PlanError::GapAt {
+                    generation: 1,
+                    position: 11,
+                }),
             ),
             (
                 "a hole after a snapshot",
                 cat(vec![snapshot(5, 1, true)], holed(), vec![]),
                 None,
                 Target::End,
-                Want::Error(PlanError::GapAt { position: 11 }),
+                Want::Error(PlanError::GapAt {
+                    generation: 1,
+                    position: 11,
+                }),
             ),
             (
                 "a hole right after the snapshot's position",
                 cat(vec![snapshot(11, 1, true)], holed(), vec![]),
                 None,
                 Target::End,
-                Want::Error(PlanError::GapAt { position: 12 }),
+                Want::Error(PlanError::GapAt {
+                    generation: 1,
+                    position: 12,
+                }),
             ),
             (
                 "a snapshot inside the hole carries the rebuild over it",
@@ -437,14 +458,20 @@ fn a_newer_backup_is_preferred_only_when_the_segments_cover_it() {
                 cat(vec![], ranges(1, &[(1, 10), (21, 30)]), vec![]),
                 Some(backup(10)),
                 Target::End,
-                Want::Error(PlanError::GapAt { position: 11 }),
+                Want::Error(PlanError::GapAt {
+                    generation: 1,
+                    position: 11,
+                }),
             ),
             (
                 "a backup with a hole right after it is refused with the hole, not with no base",
                 cat(vec![], ranges(1, &[(21, 30)]), vec![]),
                 Some(backup(10)),
                 Target::End,
-                Want::Error(PlanError::GapAt { position: 11 }),
+                Want::Error(PlanError::GapAt {
+                    generation: 1,
+                    position: 11,
+                }),
             ),
         ],
     );
@@ -510,6 +537,8 @@ fn a_target_after_the_end_is_refused() {
                 None,
                 at(21),
                 Want::Error(PlanError::TargetBeyondEnd {
+                    generation: 1,
+                    end_generation: 1,
                     end: 20,
                     position: 21,
                 }),
@@ -520,6 +549,8 @@ fn a_target_after_the_end_is_refused() {
                 None,
                 at(99),
                 Want::Error(PlanError::TargetBeyondEnd {
+                    generation: 1,
+                    end_generation: 1,
                     end: 20,
                     position: 99,
                 }),
@@ -546,56 +577,52 @@ fn a_zero_target_plans_an_empty_rebuild_that_forks() {
 #[test]
 fn a_generation_may_only_be_entered_at_a_recorded_fork() {
     let mut segments = ranges(1, &[(1, 10)]);
-    segments.extend(ranges(2, &[(11, 20)]));
-    let unrecorded = cat(vec![], segments.clone(), vec![fork(2, 11)]);
+    segments.extend(ranges(2, &[(1, 10)]));
+    let unrecorded = cat(vec![], segments.clone(), vec![fork(2, 12)]);
     assert_eq!(
         plan(&unrecorded, None, Target::End).unwrap_err(),
         PlanError::UnrecordedFork {
             generation: 2,
-            position: 11
+            position: 1
         },
-        "the fork is recorded at 11, but generation 2 begins at 11 and must fork at 10"
+        "the fork is recorded at 12, but generation 1 ends at 10 and generation 2 must fork there"
     );
     let recorded = cat(vec![], segments, vec![fork(2, 10)]);
     let plan = plan(&recorded, None, Target::End).expect("a recorded fork is the whole point");
-    assert_eq!(steps_of(&plan), vec![(1, 1, 10), (2, 11, 20)]);
+    assert_eq!(steps_of(&plan), vec![(1, 1, 10), (2, 1, 10)]);
     assert_eq!(plan.new_generation, None, "crossing a fork is not forking");
     assert!(plan.preserves_positions);
 }
 
 #[test]
-fn a_snapshot_may_not_change_the_generation_mid_history() {
-    let catalog = cat(
-        vec![snapshot(10, 2, false), snapshot(10, 2, true)],
-        ranges(1, &[(1, 20)]),
-        vec![],
-    );
-    assert_eq!(
-        plan(&catalog, None, Target::End).unwrap_err(),
-        PlanError::UnrecordedFork {
-            generation: 1,
-            position: 11
-        },
-        "a snapshot in generation 2 cannot be continued by generation 1 without a fork"
-    );
+fn a_snapshot_of_a_later_generation_than_the_target_is_never_a_base() {
+    let catalog = cat(vec![snapshot(10, 2, true)], ranges(1, &[(1, 20)]), vec![]);
+    let plan = plan(&catalog, None, Target::End).expect("generation 1 alone carries the rebuild");
+    assert_eq!(plan.base, Base::Empty);
+    assert_eq!(steps_of(&plan), vec![(1, 1, 20)]);
 }
 
 #[test]
 fn the_steps_are_contiguous_from_the_base_to_the_target() {
     let mut segments = ranges(1, &[(1, 10), (11, 20)]);
-    segments.extend(ranges(2, &[(21, 25)]));
+    segments.extend(ranges(2, &[(1, 5)]));
     let catalog = cat(vec![snapshot(5, 1, true)], segments, vec![fork(2, 20)]);
     let plan = plan(&catalog, None, Target::End).expect("contiguous across one fork");
     assert_eq!(
         steps_of(&plan),
-        vec![(1, 6, 10), (1, 11, 20), (2, 21, 25)],
-        "each step starts one after the previous step"
+        vec![(1, 6, 10), (1, 11, 20), (2, 1, 5)],
+        "each step starts one after the previous step of its generation; a new generation starts at 1"
     );
     let mut position = plan.base_position();
+    let mut generation = plan.base.generation();
     for step in &plan.steps {
+        if generation != Some(step.generation()) && generation.is_some() {
+            position = 0;
+        }
         assert_eq!(step.first_seq(), position + 1);
         assert!(step.first_seq() <= step.last_seq());
         position = step.last_seq();
+        generation = Some(step.generation());
     }
     assert_eq!(position, plan.ends_at);
 }
@@ -643,7 +670,7 @@ fn a_snapshot_of_an_abandoned_generation_is_never_the_base() {
     // Generation 1 ran to 100, was cut back to 50 by a point-in-time rebuild, and generation 2
     // continued from 51. The snapshot at 80 holds abandoned history.
     let mut segments = ranges(1, &[(1, 50), (51, 100)]);
-    segments.extend(ranges(2, &[(51, 120)]));
+    segments.extend(ranges(2, &[(1, 70)]));
     let catalog = cat(
         vec![snapshot(40, 1, true), snapshot(80, 1, true)],
         segments,
@@ -658,5 +685,5 @@ fn a_snapshot_of_an_abandoned_generation_is_never_the_base() {
         },
         "the snapshot at 80 belongs to the abandoned part of generation 1"
     );
-    assert_eq!(steps_of(&plan), vec![(1, 41, 50), (2, 51, 120)]);
+    assert_eq!(steps_of(&plan), vec![(1, 41, 50), (2, 1, 70)]);
 }

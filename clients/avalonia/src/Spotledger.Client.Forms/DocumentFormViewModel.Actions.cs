@@ -28,11 +28,12 @@ public sealed partial class DocumentFormViewModel
         var existing = !IsNew;
         var busy = _busy;
         var conflicted = _conflict is not null;
+        var merging = _pendingMerge is not null;
 
         string? Why(bool allowed, string denied) => allowed ? null : denied;
 
         FormAction Make(string id, string label, string? reason, string? gesture) =>
-            new(id, label, reason is null && !busy && !conflicted, busy ? "A request is in flight." : conflicted ? "Resolve the version conflict first." : reason, gesture);
+            new(id, label, reason is null && !busy && !conflicted && !merging, busy ? "A request is in flight." : conflicted ? "Resolve the version conflict first." : merging ? "Finish the merge first." : reason, gesture);
 
         var saveReason = existing
             ? !_rights.Write ? "You may not change this document."
@@ -432,6 +433,19 @@ public sealed partial class DocumentFormViewModel
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads the server's current document into the form, replacing what it shows. Unsaved edits are
+    /// discarded, so a caller with a dirty form asks first (the staleness bar does) or merges instead
+    /// (<see cref="MergeServerChangesAsync"/>). A failure is reported as a message; nothing is thrown.
+    /// </summary>
+    public async Task ReloadAsync()
+    {
+        if (_draft?.DocumentId is { } id)
+        {
+            await ReloadAsync(id);
         }
     }
 

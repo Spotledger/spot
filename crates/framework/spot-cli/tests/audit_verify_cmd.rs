@@ -23,6 +23,8 @@ fn record(n: u64) -> AuditRecord {
         until: None,
         key_id: None,
         path: None,
+        channel: None,
+        os_user: None,
     }
 }
 

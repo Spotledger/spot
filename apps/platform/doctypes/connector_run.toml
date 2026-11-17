@@ -1,0 +1,66 @@
+name = "connector_run"
+label = "Connector Run"
+app = "platform"
+module = "integrations"
+
+# The log of connector runs (WP-INT-05.T3). Written only by the connector service (the system
+# principal): every field is read-only and no shipped grant gives create, write or delete. It holds
+# identifiers, an outcome, a duration and a stable error code: never an input, an output, a header,
+# a credential or any text from the upstream, so a hostile endpoint cannot put content in it.
+
+[[fields]]
+name = "connector"
+label = "Connector"
+type = "link"
+options = "connector"
+required = true
+read_only = true
+index = true
+in_list_view = true
+in_standard_filter = true
+description = "The connector, by name."
+
+[[fields]]
+name = "operation"
+label = "Operation"
+type = "text"
+required = true
+max_chars = 140
+read_only = true
+in_list_view = true
+description = "The operation that was invoked."
+
+[[fields]]
+name = "outcome"
+label = "Outcome"
+type = "select"
+options = "ok\nretry\nfailed\ndead_letter"
+required = true
+read_only = true
+in_list_view = true
+in_standard_filter = true
+description = "How the attempt ended."
+
+[[fields]]
+name = "duration_ms"
+label = "Duration (ms)"
+type = "int"
+required = true
+read_only = true
+description = "How long the attempt took."
+
+[[fields]]
+name = "code"
+label = "Code"
+type = "text"
+max_chars = 80
+read_only = true
+description = "The stable error code, when the attempt failed."
+
+[[fields]]
+name = "attempt"
+label = "Attempt"
+type = "int"
+required = true
+read_only = true
+description = "The attempt number, from 1."

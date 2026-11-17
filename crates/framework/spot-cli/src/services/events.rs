@@ -73,8 +73,8 @@ use spot_field_guard::{
 use spot_http::api::Ports;
 use spot_http::api::codec::parse_record_id;
 use spot_http::api::ports::events::{
-    CheckpointOut, ConsumerOut, ConsumerSpecIn, EventFeed, EventStreamPort, EventsResult,
-    FeedItem, PartitionOut, PayloadModeIn, PullIn, PullOut, StartIn, StreamIn, StreamLimits,
+    CheckpointOut, ConsumerOut, ConsumerSpecIn, EventFeed, EventStreamPort, EventsResult, FeedItem,
+    PartitionOut, PayloadModeIn, PullIn, PullOut, StartIn, StreamIn, StreamLimits,
 };
 use spot_http::api::registry::Code;
 use spot_http::api::router::routes;
@@ -263,10 +263,11 @@ fn api_error(error: StreamError, lease_seconds: u64) -> ApiError {
         StreamError::PositionInvalid { .. } => {
             ApiError::from_code(Code::EventstreamPositionInvalid)
         }
-        StreamError::AckRefused { reason } => {
-            ApiError::new(Code::EventstreamAckRefused, reason)
-        }
+        StreamError::AckRefused { reason } => ApiError::new(Code::EventstreamAckRefused, reason),
         StreamError::SpecInvalid { reason } => spec_invalid(reason),
+        error @ (StreamError::ClassUnknown | StreamError::EntitiesNeedState) => {
+            spec_invalid(error.to_string())
+        }
         StreamError::Feed(storage) => storage_error_to_api(&storage, None),
         StreamError::Coordinator { code, .. } => {
             tracing::warn!(code, "the event stream coordinator refused");
@@ -375,11 +376,7 @@ impl EventStreamPort for EventsPort {
         Box::pin(async move { self.shared.get(ctx, name).await })
     }
 
-    fn delete<'a>(
-        &'a self,
-        ctx: &'a RequestCtx,
-        name: &'a str,
-    ) -> BoxFuture<'a, EventsResult<()>> {
+    fn delete<'a>(&'a self, ctx: &'a RequestCtx, name: &'a str) -> BoxFuture<'a, EventsResult<()>> {
         Box::pin(async move { self.shared.delete(ctx, name).await })
     }
 
@@ -518,8 +515,11 @@ async fn build(ctx: &mut SiteCtx<'_>, settings: Settings) -> Result<Arc<EventsPo
     let site_id = SiteId::new(&site_name).map_err(|e| Error(e.to_string()))?;
     let backend = env.backend.clone();
     let clock = Arc::clone(ctx.clock());
-    let source = SourceId::new(&site_name)
-        .map_err(|_| Error(format!("the site name `{site_name}` is not a valid event source")))?;
+    let source = SourceId::new(&site_name).map_err(|_| {
+        Error(format!(
+            "the site name `{site_name}` is not a valid event source"
+        ))
+    })?;
     let store = Arc::new(PgConsumerStore::new(backend.pool(), site_id.clone()));
     store
         .prepare()
@@ -533,7 +533,12 @@ async fn build(ctx: &mut SiteCtx<'_>, settings: Settings) -> Result<Arc<EventsPo
             .next()
             .unwrap_or("0")
     );
-    let coordinator: Arc<dyn Coordinator> = if env.loaded.common.services.profile == "cluster" {
+    // One coordinator per site: with the cluster-redis plugin on, the host provided its
+    // coordinator before any module registered, and the streams lease through it (never through
+    // PostgreSQL while jobs lease through Redis). Without it nothing changes.
+    let coordinator: Arc<dyn Coordinator> = if let Some(provided) = ctx.port::<dyn Coordinator>() {
+        provided
+    } else if env.loaded.common.services.profile == "cluster" {
         let coordinator = spot_coordinator_pg::PgCoordinator::new(
             backend.pool(),
             spot_coordinator_pg::PgCoordinatorConfig::default(),
@@ -644,12 +649,15 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let mounted = routes::mount(&[routes::events::registration()], &ports, &[]);
     let router = mounted.authenticated;
     if let Some((module, reason)) = mounted.report.skipped.first() {
-        tracing::error!(module = *module, ?reason, "the event stream routes were not mounted");
+        tracing::error!(
+            module = *module,
+            ?reason,
+            "the event stream routes were not mounted"
+        );
     }
     ctx.router_layer(move |base| base.merge(router));
     Ok(())
 }
-
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

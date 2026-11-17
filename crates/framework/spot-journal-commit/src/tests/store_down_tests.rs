@@ -24,7 +24,7 @@ async fn degrade_acks_on_the_local_commit_exposes_the_rpo_and_reships() {
     rig.clock.0.advance(150);
     rig.driver.step().await;
     assert_eq!(
-        rig.driver.status().rpo_breach.unwrap().unshipped_from_seq,
+        rig.driver.status().rpo_breach.unwrap().unshipped_from.seq,
         1
     );
 

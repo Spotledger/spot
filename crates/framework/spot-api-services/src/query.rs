@@ -1,19 +1,25 @@
 //! Validated HTTP filters to typed storage IR, with lexicographic (not offset) cursors.
 //!
-//! `DocumentService` has no top-level query method. This local seam can be replaced by a
-//! permission-filtering repository implementation without changing the HTTP adapter.
+//! `DocumentService` has no top-level query method. This local seam reads through the engine's
+//! permission plan (`Engine::query_plan`), so the row set, `total` and cursor are the caller's.
 use crate::conversion::{api_error, to_api_document};
+use crate::list_guard::ListFieldGuard;
 use crate::meta_resources::def_meta;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value as Json, json};
-use spot_app_api::context::{DocumentService, Invocation};
-use spot_document::engine::Engine;
+use spot_app_api::ErrorClass;
+use spot_app_api::context::{DocumentService, Invocation, Outcome};
+use spot_app_api::prelude::RecordId;
+use spot_app_api::{AppResult, Document};
+use spot_document::engine::{Engine, apply_masks, empty_page};
+use spot_field_guard::Channel;
 use spot_http::api::codec::{decode_scalar, encode_scalar, parse_record_id};
 use spot_http::api::filter::{FilterAst, Op};
 use spot_http::api::meta::{DocTypeMeta, FieldType, MetaField};
 use spot_http::api::registry::Code;
 use spot_http::api::service::{ApiError, BoxFuture, Page, QuerySpec};
 use spot_meta::EffectiveMeta;
+use spot_permissions::Principal;
 use spot_storage_contract::{
     AggFunc, Catalog, CmpOp, Collation, Expr, Name, Nulls, Order, OrderDir, Query, QueryPath,
     ReadSource, Rows, Selection, StorageBackend, Value,
@@ -30,29 +36,110 @@ pub trait QueryService: Send + Sync {
         catalog: Arc<Catalog>,
         query: &'a Query,
     ) -> BoxFuture<'a, Result<Rows, ApiError>>;
+
+    /// Loads the documents of one page, one answer per id in order, each as a single
+    /// [`DocumentService::load`] would answer. The default loads them one by one; an
+    /// implementation that can resolve the principal and read the rows once overrides it.
+    fn load_many<'a>(
+        &'a self,
+        inv: &'a Invocation,
+        doctype: &'a str,
+        ids: &'a [RecordId],
+    ) -> BoxFuture<'a, Vec<AppResult<Outcome<Document>>>>
+    where
+        Self: DocumentService + Sized,
+    {
+        Box::pin(async move {
+            let mut out = Vec::with_capacity(ids.len());
+            for id in ids {
+                out.push(self.load(inv, doctype, *id).await);
+            }
+            out
+        })
+    }
 }
 
-/// The current engine has no permission checks on either loads or queries. Like that engine,
-/// this implementation is for a caller-authorized, single-site backend only. Do not mount it
-/// on an untrusted multi-site router without a site/policy-checking actor resolver or wrapper.
+/// The list path of the engine, under the caller's read rights (WP-SEC-04.T15).
+///
+/// The query is planned through the engine's permission filter
+/// ([`Engine::query_plan`]): the principal's read filter is ANDed into it, so the rows, a
+/// `count(*)` over it and the keyset cursor built from the last row all concern only rows the
+/// caller may read, and a row the caller may not read cannot fail the page, move the cursor or
+/// change `total`. A caller who may read no row gets an empty page without a storage read, and
+/// masked columns are masked after the fetch. A query on a field the caller may not use
+/// unmasked is refused as an unknown field (the no-inference rule of ADR-070 section 12), the
+/// same answer as a field that does not exist. With the compatibility authorizer (no
+/// permission model installed) the query is unchanged, as before.
 impl<B: StorageBackend> QueryService for Engine<B> {
     fn read<'a>(
         &'a self,
-        _inv: &'a Invocation,
+        inv: &'a Invocation,
         catalog: Arc<Catalog>,
         query: &'a Query,
     ) -> BoxFuture<'a, Result<Rows, ApiError>> {
         Box::pin(async move {
-            self.backend()
-                .read(catalog, ReadSource::Primary, query)
+            let Some(plan) = self.query_plan(inv, query).await.map_err(plan_refusal)? else {
+                return Ok(empty_page(query));
+            };
+            let mut rows = self
+                .backend()
+                .read(catalog, ReadSource::Primary, &plan.query)
                 .await
                 .map_err(|e| {
                     api_error(spot_app_api::error::map_storage_error(
                         &e,
                         spot_app_api::error::StorageOp::Other,
                     ))
-                })
+                })?;
+            apply_masks(&mut rows, &plan.masks);
+            Ok(rows)
         })
+    }
+
+    fn load_many<'a>(
+        &'a self,
+        inv: &'a Invocation,
+        doctype: &'a str,
+        ids: &'a [RecordId],
+    ) -> BoxFuture<'a, Vec<AppResult<Outcome<Document>>>> {
+        Box::pin(Engine::load_many(self, inv, doctype, ids))
+    }
+}
+
+/// A refused plan as the API answers it: a field the caller may not use is an unknown field
+/// (never a hint that it exists), anything else keeps its own mapping.
+fn plan_refusal(error: spot_app_api::AppError) -> ApiError {
+    if error.code == "permission.field_denied" {
+        return ApiError::from_code(Code::DocumentUnknownField);
+    }
+    api_error(error)
+}
+
+/// Whether the caller may read at least some rows of `doctype` (WP-SEC-04.T15): the check the
+/// lookup makes on the DocType of the **form** that holds the link field, before it lists
+/// candidates for it. A caller who may not read the form's DocType is refused
+/// (`permission.denied`); asking a lookup for a form one cannot open must not work as a way to
+/// browse the target DocType.
+///
+/// # Errors
+///
+/// `permission.denied` when no row of `doctype` is readable by the caller, and the refusal
+/// or internal error the engine's plan gives otherwise.
+pub async fn require_readable<B: StorageBackend>(
+    engine: &Engine<B>,
+    inv: &Invocation,
+    doctype: &str,
+) -> Result<(), ApiError> {
+    let alias = name("r")?;
+    let mut q = Query::from(&name(doctype)?, &alias, QueryPath::Transactional);
+    q.select.push(Selection {
+        expr: Expr::field(&alias, &name("id")?),
+        alias: name("id")?,
+    });
+    q.limit = Some(1);
+    match engine.query_plan(inv, &q).await.map_err(plan_refusal)? {
+        Some(_) => Ok(()),
+        None => Err(ApiError::from_code(Code::PermissionDenied)),
     }
 }
 
@@ -281,13 +368,61 @@ fn after(orders: &[Order], values: &[Value]) -> Expr {
     Expr::Or(branches)
 }
 
+/// One page of loaded documents, before any outbound channel has seen them.
+pub(crate) struct RawPage {
+    pub(crate) documents: Vec<Document>,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) total: Option<u64>,
+    /// The caller, resolved when a guard was given.
+    pub(crate) principal: Option<Principal>,
+}
+
 pub(crate) async fn list<S: DocumentService + QueryService>(
     service: &S,
     effective: &EffectiveMeta,
     inv: &Invocation,
     doctype: &str,
     spec: &QuerySpec,
+    guard: Option<&ListFieldGuard>,
 ) -> Result<Page, ApiError> {
+    let raw = list_documents(
+        service,
+        effective,
+        inv,
+        doctype,
+        spec,
+        guard.map(|g| (g, Channel::ListColumn)),
+    )
+    .await?;
+    let mut documents = Vec::new();
+    for loaded in raw.documents {
+        let loaded = match (guard, &raw.principal) {
+            (Some(g), Some(p)) => g.redact(Channel::ListColumn, p, doctype, loaded),
+            _ => loaded,
+        };
+        let mut doc = to_api_document(loaded);
+        if !spec.fields.is_empty() {
+            doc.fields.retain(|key, _| spec.fields.contains(key));
+        }
+        documents.push(doc);
+    }
+    Ok(Page {
+        documents,
+        next_cursor: raw.next_cursor,
+        total: raw.total,
+    })
+}
+
+/// The query, its no-inference check for `channel`, and the loaded documents (each as the
+/// engine's own read path lets the caller see it). The caller applies the channel's redaction.
+pub(crate) async fn list_documents<S: DocumentService + QueryService>(
+    service: &S,
+    effective: &EffectiveMeta,
+    inv: &Invocation,
+    doctype: &str,
+    spec: &QuerySpec,
+    guard: Option<(&ListFieldGuard, Channel)>,
+) -> Result<RawPage, ApiError> {
     let def = service.meta(doctype).await.map_err(api_error)?;
     let meta = def_meta(&def)?;
     let catalog = Arc::new(
@@ -296,6 +431,16 @@ pub(crate) async fn list<S: DocumentService + QueryService>(
             .map_err(|_| ApiError::from_code(Code::HttpInternal))?,
     );
     let mut q = compile(&meta, spec)?;
+    // No-inference rule: a filter or sort on a field the caller may not report is refused as an
+    // unknown field before anything is read (so `total` and the order leak nothing either).
+    let principal = match guard {
+        Some((g, channel)) => {
+            let principal = g.principal(inv).await;
+            g.check_query(channel, &principal, doctype, spec)?;
+            Some(principal)
+        }
+        None => None,
+    };
     let total = if spec.with_total {
         let mut count = q.clone();
         count.select = vec![Selection {
@@ -311,6 +456,8 @@ pub(crate) async fn list<S: DocumentService + QueryService>(
         let rows = service.read(inv, catalog.clone(), &count).await?;
         match rows.rows.first().and_then(|r| r.first()) {
             Some(Value::Int(n)) => Some(u64::try_from(*n).map_err(|_| invalid())?),
+            // A caller who may read no row gets an empty page, not a count row: zero.
+            None if rows.rows.is_empty() => Some(0),
             _ => return Err(ApiError::from_code(Code::HttpInternal)),
         }
     } else {
@@ -348,26 +495,66 @@ pub(crate) async fn list<S: DocumentService + QueryService>(
     } else {
         None
     };
-    let mut documents = Vec::new();
+    let mut ids = Vec::with_capacity(kept.len());
     for row in kept {
         let Some(Value::Id(id)) = row.first() else {
             return Err(ApiError::from_code(Code::HttpInternal));
         };
-        let mut doc = to_api_document(
-            service
-                .load(inv, doctype, *id)
-                .await
-                .map_err(api_error)?
-                .value,
-        );
-        if !spec.fields.is_empty() {
-            doc.fields.retain(|key, _| spec.fields.contains(key));
-        }
-        documents.push(doc);
+        ids.push(*id);
     }
-    Ok(Page {
+    // One principal resolution and one read transaction for the page, not one per row.
+    let loaded = service.load_many(inv, doctype, &ids).await;
+    let mut documents = Vec::new();
+    for result in loaded {
+        match result {
+            Ok(outcome) => documents.push(outcome.value),
+            // The row set is already filtered by the caller's read rights. A row that is still
+            // refused (a grant that depends on the document's state) or gone (removed while
+            // paging) is left out of the page; failing the whole page would tell the caller
+            // that a row it cannot see exists. The cursor was built from the key rows, so
+            // the page after this one starts in the right place either way.
+            Err(e) if matches!(e.class, ErrorClass::PermissionDenied | ErrorClass::NotFound) => {}
+            Err(e) => return Err(api_error(e)),
+        }
+    }
+    Ok(RawPage {
         documents,
         next_cursor,
         total,
+        principal,
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use spot_app_api::AppError;
+    use spot_http::api::service::ErrorCode;
+
+    #[test]
+    fn a_field_the_caller_may_not_use_is_answered_as_an_unknown_field() {
+        let refused = AppError::new(
+            ErrorClass::PermissionDenied,
+            "permission.field_denied",
+            "The user may not filter, sort, group or aggregate on that field.",
+        );
+        let answer = plan_refusal(refused);
+        assert_eq!(answer.code, ErrorCode::Registry(Code::DocumentUnknownField));
+        assert!(answer.fields.is_empty(), "no field path in the answer");
+        assert!(answer.details.is_empty(), "no reason in the answer");
+    }
+
+    #[test]
+    fn any_other_refusal_keeps_its_own_mapping() {
+        let refused = AppError::new(
+            ErrorClass::PermissionDenied,
+            "permission.denied",
+            "The query cannot be answered under the user's permissions.",
+        );
+        assert_eq!(
+            plan_refusal(refused).code,
+            ErrorCode::Registry(Code::PermissionDenied)
+        );
+    }
 }

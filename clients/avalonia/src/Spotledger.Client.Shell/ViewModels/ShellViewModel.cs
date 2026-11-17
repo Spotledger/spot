@@ -80,6 +80,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         });
         RegisterChromeHandlers();
+        RegisterNotificationHandlers();
         BuildShellCommands();
         ReSignInCommand = new AsyncRelayCommand(ReSignInAsync, _ => !IsReSignInBusy);
         CancelReSignInCommand = new RelayCommand(_ => CancelReSignIn());
@@ -731,7 +732,7 @@ public sealed partial class ShellViewModel : ObservableObject
         ExpiresAt = string.Empty;
         SessionError = null;
         SelectedWorkspace = "Home";
-        NotificationCount = 0;
+        DetachNotifications();
         StatusMessage = "Ready";
     }
 

@@ -12,7 +12,7 @@ use spot_journal_store::{
     StoredObject,
 };
 
-use crate::{Batch, Durability, ManifestSigner, Relay, RelayConfig, RelayError};
+use crate::{Batch, Durability, ManifestSigner, Relay, RelayConfig, RelayError, TailKeys};
 
 pub(crate) const TENANT: &str = "acme";
 pub(crate) const SOURCE: &str = "acme-site";
@@ -63,8 +63,26 @@ pub(crate) fn batch_in(generation: u64, batch_id: u64, first: u64, last: u64) ->
     }
 }
 
+/// The test tenant's journal key: a fixed KEK, so a reopened relay reads what the first wrote.
+pub(crate) fn tail_keys() -> TailKeys {
+    keys_from(KEK_A)
+}
+
+/// Another tenant's journal key.
+pub(crate) fn other_tail_keys() -> TailKeys {
+    keys_from(KEK_B)
+}
+
+const KEK_A: &str = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+const KEK_B: &str = "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=";
+
+fn keys_from(base64: &str) -> TailKeys {
+    let provider = spot_secrets::EnvKey::from_base64(base64).expect("a 32 byte test key");
+    TailKeys::new(std::sync::Arc::new(provider))
+}
+
 pub(crate) fn cfg(durability: Durability) -> RelayConfig {
-    RelayConfig::new(TENANT, SOURCE, durability)
+    RelayConfig::new(TENANT, SOURCE, durability).with_tail_keys(tail_keys())
 }
 
 pub(crate) fn never_due(durability: Durability) -> RelayConfig {

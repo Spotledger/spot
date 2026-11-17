@@ -90,7 +90,7 @@ impl Controller for Notes {
                     Some(rest) => {
                         let id = rest.split(':').next().unwrap_or_default();
                         match spot_http::api::codec::parse_record_id(id) {
-                            Some(user) => ctx.notify_user(user, json!({ "kind": "note_created" })),
+                            Some(user) => ctx.notify_user(user, json!({ "doctype": "note" })),
                             None => Ok(()),
                         }
                     }

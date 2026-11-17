@@ -12,9 +12,12 @@ rust-version.workspace = true
 serde = { version = "1", features = ["derive"] }
 # Typed errors with stable `journal_rebuild_plan.*` codes.
 thiserror = "2"
+# The unsealed-tail reader of the rebuild plan (WP-JRN-05.T8).
+spot-journal-store = { path = "../spot-journal-store" }
 
 [dev-dependencies]
 proptest = "1"
+futures = "0.3"
 
 [lints]
 workspace = true

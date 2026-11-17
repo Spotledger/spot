@@ -264,6 +264,12 @@ pub enum SecretCaller {
     LoginService,
     /// The bootstrap that creates a site's first records.
     Seed,
+    /// The operator command line (`spot secrets`), for instance a key rotation sweep. It is an
+    /// audit label only, not a permission: holding the capability is the permission.
+    Operator,
+    /// The webhook signing-secret service (WP-INT-01.T5): it seals a webhook's signing secret
+    /// and opens it for the delivery handler that signs with it.
+    Webhooks,
     /// A test. Only compiled with the `testing` feature.
     #[cfg(feature = "testing")]
     Test,
@@ -275,6 +281,8 @@ impl SecretCaller {
         match self {
             Self::LoginService => "login_service",
             Self::Seed => "seed",
+            Self::Operator => "operator",
+            Self::Webhooks => "webhooks",
             #[cfg(feature = "testing")]
             Self::Test => "test",
         }
@@ -285,6 +293,8 @@ impl SecretCaller {
         match name {
             "login_service" => Some(Self::LoginService),
             "seed" => Some(Self::Seed),
+            "operator" => Some(Self::Operator),
+            "webhooks" => Some(Self::Webhooks),
             #[cfg(feature = "testing")]
             "test" => Some(Self::Test),
             _ => None,

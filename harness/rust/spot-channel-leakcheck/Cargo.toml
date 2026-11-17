@@ -24,9 +24,31 @@ spot-reports = { path = "../../../crates/framework/spot-reports" }
 spot-doc-audit = { path = "../../../crates/framework/spot-doc-audit" }
 spot-audit-chain = { path = "../../../crates/framework/spot-audit-chain" }
 spot-activity = { path = "../../../crates/framework/spot-activity" }
+spot-api-services = { path = "../../../crates/framework/spot-api-services" }
+spot-document = { path = "../../../crates/framework/spot-document" }
+spot-seams = { path = "../../../crates/framework/spot-seams" }
+spot-http = { path = "../../../crates/framework/spot-http" }
+spot-realtime = { path = "../../../crates/framework/spot-realtime" }
+spot-realtime-bridge = { path = "../../../crates/framework/spot-realtime-bridge" }
+time = "0.3"
+spot-retrieval = { path = "../../../crates/framework/spot-retrieval" }
+spot-journal-relay = { path = "../../../crates/framework/spot-journal-relay" }
+# The key of the relay's sealed tail chunks.
+spot-secrets = { path = "../../../crates/framework/spot-secrets" }
+spot-journal-store = { path = "../../../crates/framework/spot-journal-store" }
+spot-journal-segment = { path = "../../../crates/framework/spot-journal-segment" }
+spot-journal-manifest = { path = "../../../crates/framework/spot-journal-manifest" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-iam-scim = { path = "../../../crates/framework/spot-iam-scim" }
+spot-iam-access = { path = "../../../crates/framework/spot-iam-access" }
+spot-iam-directory = { path = "../../../crates/framework/spot-iam-directory" }
+# The data subscription under test (WP-SEC-04.T11), and the in-process coordinator its engine needs.
+spot-event-stream = { path = "../../../crates/framework/spot-event-stream" }
+spot-coordinator = { path = "../../../crates/framework/spot-coordinator" }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 rust_decimal = "1"
 serde_json = "1"
-tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "time", "sync"] }
 
 [lints]
 workspace = true

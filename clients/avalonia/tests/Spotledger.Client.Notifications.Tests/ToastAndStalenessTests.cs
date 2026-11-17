@@ -1,4 +1,7 @@
+using Avalonia;
+using Avalonia.Headless.XUnit;
 using Spotledger.Client.Realtime;
+using Spotledger.Client.Theme;
 using Xunit;
 
 namespace Spotledger.Client.Notifications.Tests;
@@ -45,6 +48,30 @@ public sealed class ToastAndStalenessTests
         Assert.NotNull(queue.Current);
         time.Advance(TimeSpan.FromSeconds(1));
         Assert.Null(queue.Current);
+    }
+
+    [AvaloniaFact]
+    public void TheDefaultDurationIsTheToastTokenAndStaysSixSeconds()
+    {
+        var application = Application.Current!;
+        Assert.Equal(TimeSpan.FromSeconds(6), ToastTray.DefaultDuration);
+        using (var queue = new ToastTray(new FakeTime()))
+        {
+            Assert.Equal(TimeSpan.FromSeconds(6), queue.Duration);
+        }
+
+        application.Resources[Tokens.TokenToastDuration] = TimeSpan.FromSeconds(10);
+        try
+        {
+            using var themed = new ToastTray(new FakeTime());
+            Assert.Equal(TimeSpan.FromSeconds(10), themed.Duration);
+            using var explicitDuration = new ToastTray(new FakeTime(), TimeSpan.FromSeconds(2));
+            Assert.Equal(TimeSpan.FromSeconds(2), explicitDuration.Duration);
+        }
+        finally
+        {
+            application.Resources.Remove(Tokens.TokenToastDuration);
+        }
     }
 
     [Fact]

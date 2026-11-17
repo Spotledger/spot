@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# remove and purge never delete the state directory or the operator's keys:
+# the control database and the CA material belong to the operator.
+#DEBHELPER#
+
+exit 0

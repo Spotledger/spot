@@ -24,7 +24,7 @@ use spot_http::api::registry::Code;
 use spot_http::api::service::ApiError;
 use spot_http::request::RequestId;
 
-use crate::services::{CheckFuture, Level, RunFuture, Service};
+use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 
 /// The Prometheus text exposition content type.
 pub const CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
@@ -129,4 +129,18 @@ impl Service for Telemetry {
             Ok(())
         })
     }
+}
+
+/// This module's start order: the one it had in the host's table before it moved here.
+pub const ORDER: u32 = 900;
+
+/// Metrics: the `/metrics` route (when enabled) and the optional recorder service, so a
+/// recorder that cannot install degrades the site, not stops it.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
+    let metrics = ctx.env()?.loaded.common.services.metrics.clone();
+    if metrics.enabled {
+        ctx.router_layer(|site_router| site_router.merge(router()));
+    }
+    ctx.add(Telemetry::new(metrics.enabled, metrics.require_auth));
+    Ok(())
 }

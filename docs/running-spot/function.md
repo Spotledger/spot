@@ -65,6 +65,22 @@ credential is a guest call; a credential that does not resolve, or a session tha
 its password yet, is refused, never treated as a guest. The `admin` app's own methods (the
 customise admin API, `GET` for `list` only) are served by the host before this registry.
 
+## Guest calls over HTTP
+
+A request to `GET|POST /api/v1/method/<app>/<module>/<name>` that carries **no `Authorization`
+header at all** reaches the function service as an anonymous caller (WP-PLT-17.T3). It is served
+only for a function declared `guest = true`, only over a read verb, and under the guest rate limit;
+anything else it asks for answers exactly as an unknown function (`404 method.not_found`). Every
+anonymous caller shares the one `anonymous` bucket, so the limit is per function for all guests
+together: the n+1th anonymous call in a window is `429` with `Retry-After`.
+
+A request that carries an `Authorization` header is never a guest. If its credential does not
+resolve (malformed, expired, revoked, for another site, or a session that has not chosen its
+password yet) it is refused with the usual `auth.*` or `permission.denied` answer and no handler
+runs. Reports, documents and the admin methods still require a credential. Under `spot serve --dev`
+the dev credential is added to a request that has no header, so a guest call there runs as the dev
+user.
+
 ## Operating it
 
 - **Level: required**, with nothing to degrade: the registry is in memory and is built when the site
@@ -82,9 +98,15 @@ customise admin API, `GET` for `list` only) are served by the host before this r
   | `bucket_cap` | `10000` | more buckets than this make the next call evict idle ones |
 
 - **Listing**: `FunctionService::list` returns every function with its declaring app, verbs, guest
-  flag, limit, argument schema and override (who and why); the admin app's `list` serves it.
+  flag, limit, argument schema and override (who and why). The Administrator reads the answer as the
+  function `platform/functions/list` (`GET /api/v1/method/platform/functions/list`): per function
+  `{key, app, module, name, verbs, guest, limit, arguments_schema}`, never a handler, a bucket or
+  a caller. Everyone else (a viewer, a scoped administrator, a guest) gets the answer of an
+  unknown function, `404 method.not_found`. The behaviour lives in `services/functions_admin.rs`;
+  it is mounted once the platform app declares the function (see WP-PLT-17.T7's report).
 - **Eviction**: idle buckets are dropped by the job `platform:function_evict_idle`; the host
-  registers the handler, a schedule enqueues it. There is no timer of its own, and `bucket_cap`
-  bounds memory when no schedule runs.
+  registers the handler, and the platform app's `[[schedules]]` entry `function_evict_idle`
+  (`0 */5 * * * *`: every five minutes, queue `short`) enqueues it. There is no timer of its own,
+  and `bucket_cap` bounds memory if the schedule does not run.
 - **Audit**: target `spot::audit::function` logs a line per call that reached the registry: caller,
   function address, verb, outcome code. Never an argument, a result, a token or a header.

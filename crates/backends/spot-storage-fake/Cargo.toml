@@ -11,6 +11,8 @@ rust-version.workspace = true
 spot-storage-contract = { path = "../../../contracts/storage" }
 # Lock waits: `Notify` and the lock timeout.
 tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# `OffsetDateTime` of the command ledger records (storage contract 0.3.0, WP-DOC-04.T8).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
 # JSON values are validated, as PostgreSQL's `jsonb` would.
 serde_json = "1"
 # Query evaluation: exact decimal arithmetic, and text ordering by the catalog's collation

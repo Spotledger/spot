@@ -17,6 +17,8 @@ use spot_sync_node::{AppliedRecord, AppliedSet, ApplyRefusal, BundleApply};
 #[derive(Clone, Debug, Default)]
 pub struct MemStore {
     records: BTreeMap<(String, RecordKey), u64>,
+    /// The version of the latest delete applied, per `(tenant, key)`.
+    tombstones: BTreeMap<(String, RecordKey), u64>,
     history: Vec<(String, RecordKey, u64)>,
     applies: u64,
     duplicates: u64,
@@ -114,6 +116,7 @@ impl MemStore {
     /// Forget everything: a wiped or replaced node.
     pub fn wipe(&mut self) {
         self.records.clear();
+        self.tombstones.clear();
         self.history.clear();
     }
 
@@ -138,6 +141,35 @@ impl BundleApply for MemStore {
             .is_some_and(|version| *version >= min_version)
     }
 
+    fn has_tombstone(&self, tenant: &str, key: &RecordKey, min_version: u64) -> bool {
+        self.tombstones
+            .get(&(tenant.to_owned(), key.clone()))
+            .is_some_and(|version| *version >= min_version)
+    }
+
+    fn delete(
+        &mut self,
+        tenant: &str,
+        key: &RecordKey,
+        version: u64,
+        _position: u64,
+    ) -> Result<(), ApplyRefusal> {
+        let slot = (tenant.to_owned(), key.clone());
+        if self
+            .tombstones
+            .get(&slot)
+            .is_some_and(|held| *held >= version)
+        {
+            return Ok(());
+        }
+        // A record re-created after the delete stays: the delete is older than it.
+        if self.records.get(&slot).is_none_or(|held| *held <= version) {
+            self.records.remove(&slot);
+        }
+        self.tombstones.insert(slot, version);
+        Ok(())
+    }
+
     fn apply_bundle(&mut self, tenant: &str, bundle: &Bundle) -> Result<AppliedSet, ApplyRefusal> {
         if let Some(poison) = &self.refuse_next
             && bundle.records.iter().any(|record| &record.key == poison)
@@ -151,6 +183,14 @@ impl BundleApply for MemStore {
         self.applies += 1;
         let mut set = AppliedSet::default();
         for record in &bundle.records {
+            if record.deleted {
+                self.delete(tenant, &record.key, record.position, record.position)?;
+                set.records.push(AppliedRecord {
+                    key: record.key.clone(),
+                    version: record.position,
+                });
+                continue;
+            }
             let slot = (tenant.to_owned(), record.key.clone());
             match self.records.get(&slot).copied() {
                 Some(held) if held == record.position => self.duplicates += 1,

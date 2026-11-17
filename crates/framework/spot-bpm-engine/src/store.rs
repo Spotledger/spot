@@ -15,11 +15,17 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use spot_dag_exec::{ExecError, ExecStore, InMemoryExecStore, RunPlan, RunStatus};
+use spot_dag_exec::{
+    ExecError, ExecStore, InMemoryExecStore, NodeStatus, RunPlan, RunStatus, Step,
+};
 
 use crate::case::{Attempt, CaseRecord, CaseUpdate, ChildLink, TimerRecord};
 use crate::error::{EngineError, EngineResult};
 use crate::handler::CaseId;
+use crate::node_run_log::{
+    Checkpoint, MAX_PAGE, NodeRunDraft, NodeRunLog, NodeRunRecord, NodeRunSeq, OpenNode,
+    StoredEffect, derive_node_runs, require_instant, validate_consumer,
+};
 
 /// A boxed, `Send` future: the return type of every [`CaseStore`] method, so the trait stays
 /// object-safe and a backend can be used through `Box<dyn CaseStore>`.
@@ -80,10 +86,27 @@ pub trait CaseStoreFactory: Send + Sync {
 /// one map for the Case-level state, behind a lock.
 ///
 /// Clones share the same data, so a factory can hand out "reopened" stores over one backend.
+///
+/// The store is bound to one tenant for the node-run log: [`InMemoryCaseStore::with_tenant`] makes
+/// an independent store, [`InMemoryCaseStore::view_for`] another tenant's view of the same data.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryCaseStore {
+    tenant: String,
     exec: InMemoryExecStore,
     aux: Arc<Mutex<BTreeMap<CaseId, Aux>>>,
+    log: Arc<Mutex<LogState>>,
+}
+
+/// The dedupe key of one logged transition: tenant, case, node, attempt and state token.
+type SeenKey = (String, String, String, u32, &'static str);
+
+/// The node-run log of every tenant over one in-memory backend.
+#[derive(Debug, Default)]
+struct LogState {
+    next: BTreeMap<String, i64>,
+    records: Vec<(String, NodeRunRecord)>,
+    seen: std::collections::BTreeSet<SeenKey>,
+    checkpoints: BTreeMap<(String, String), Checkpoint>,
 }
 
 impl InMemoryCaseStore {
@@ -91,6 +114,66 @@ impl InMemoryCaseStore {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An empty store bound to `tenant`, sharing nothing with any other store.
+    #[must_use]
+    pub fn with_tenant(tenant: impl Into<String>) -> Self {
+        let tenant = tenant.into();
+        Self {
+            exec: InMemoryExecStore::with_tenant(tenant.clone()),
+            tenant,
+            ..Self::default()
+        }
+    }
+
+    /// A store bound to `tenant` over the same data as this one. Its node-run log holds only
+    /// `tenant`'s records.
+    #[must_use]
+    pub fn view_for(&self, tenant: impl Into<String>) -> Self {
+        let tenant = tenant.into();
+        Self {
+            exec: self.exec.view_for(tenant.clone()),
+            tenant,
+            aux: Arc::clone(&self.aux),
+            log: Arc::clone(&self.log),
+        }
+    }
+
+    fn log_lock(&self) -> MutexGuard<'_, LogState> {
+        self.log
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Appends the drafts of one commit, skipping any `(case, node, attempt, state)` already
+    /// logged (a replay that reached the store a second time).
+    fn append_log(&self, run: &spot_dag_exec::Run, drafts: Vec<NodeRunDraft>) {
+        let mut log = self.log_lock();
+        for draft in drafts {
+            let key = (
+                self.tenant.clone(),
+                run.id.to_string(),
+                draft.node.to_string(),
+                draft.attempt,
+                draft.state.token(),
+            );
+            if !log.seen.insert(key) {
+                continue;
+            }
+            let next = log.next.entry(self.tenant.clone()).or_insert(0);
+            *next += 1;
+            let seq = NodeRunSeq(*next);
+            let record = NodeRunRecord::new(
+                seq,
+                run.id.clone(),
+                run.dag_key.clone(),
+                run.dag_version,
+                run.version,
+                draft,
+            );
+            log.records.push((self.tenant.clone(), record));
+        }
     }
 
     fn lock(&self) -> MutexGuard<'_, BTreeMap<CaseId, Aux>> {
@@ -112,9 +195,10 @@ impl InMemoryCaseStore {
         }
     }
 
-    /// Merges an update into the stored Case-level state.
-    fn merge(id: &CaseId, aux: &mut Aux, update: &CaseUpdate) {
-        let _ = id;
+    /// Merges an update into the stored Case-level state. Returns `true` when the exactly-once
+    /// guard kept an earlier (higher-numbered) attempt over the update's attempt.
+    fn merge(aux: &mut Aux, update: &CaseUpdate) -> bool {
+        let mut kept_earlier = false;
         if let Some(variables) = &update.variables {
             aux.variables = variables.clone();
         }
@@ -126,6 +210,10 @@ impl InMemoryCaseStore {
             if replace {
                 aux.attempts.insert(attempt.node.clone(), attempt.clone());
             }
+            kept_earlier = aux
+                .attempts
+                .get(&attempt.node)
+                .is_some_and(|existing| existing.attempt > attempt.attempt);
         }
         if let Some(timer) = &update.timer {
             let replace = aux
@@ -142,6 +230,7 @@ impl InMemoryCaseStore {
         if let Some(child) = &update.child {
             aux.children.insert(child.node.clone(), child.clone());
         }
+        kept_earlier
     }
 }
 
@@ -193,6 +282,20 @@ impl CaseStore for InMemoryCaseStore {
         update: CaseUpdate,
     ) -> CaseFuture<'a, CaseRecord> {
         Box::pin(async move {
+            // Fail closed before anything changes: an attempt or timer needs its instant.
+            require_instant(&update)?;
+            let before = self.exec.load_run(id).await.map_err(map_exec)?;
+            let open: Vec<(spot_dag::NodeId, u32)> = before
+                .as_ref()
+                .map(|run| {
+                    run.nodes
+                        .iter()
+                        .filter(|(_, state)| state.status == NodeStatus::Running)
+                        .map(|(node, state)| (node.clone(), state.attempts))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let before_version = before.as_ref().map(|run| run.version);
             let run = match &update.transition {
                 Some(transition) => self
                     .exec
@@ -200,12 +303,8 @@ impl CaseStore for InMemoryCaseStore {
                     .await
                     .map_err(map_exec)?,
                 None => {
-                    let current = self
-                        .exec
-                        .load_run(id)
-                        .await
-                        .map_err(map_exec)?
-                        .ok_or_else(|| EngineError::CaseNotFound { id: id.to_string() })?;
+                    let current =
+                        before.ok_or_else(|| EngineError::CaseNotFound { id: id.to_string() })?;
                     if current.version != expected_version {
                         return Err(EngineError::VersionConflict {
                             current: current.version,
@@ -215,11 +314,40 @@ impl CaseStore for InMemoryCaseStore {
                     current
                 }
             };
-            {
+            let transition_applied = update.transition.is_some()
+                && before_version.is_some_and(|version| run.version > version);
+            let (kept_earlier_attempt, attempts) = {
                 let mut guard = self.lock();
                 let aux = guard.entry(id.clone()).or_default();
-                Self::merge(id, aux, &update);
-            }
+                let kept = Self::merge(aux, &update);
+                let attempts = aux
+                    .attempts
+                    .iter()
+                    .map(|(node, attempt)| (node.clone(), attempt.attempt))
+                    .collect::<BTreeMap<_, _>>();
+                (kept, attempts)
+            };
+            let open = if matches!(
+                update.transition.as_ref().map(|t| &t.step),
+                Some(Step::Cancel { .. })
+            ) {
+                open.into_iter()
+                    .map(|(node, dag_attempt)| OpenNode {
+                        attempt: attempts.get(&node).copied().unwrap_or(dag_attempt),
+                        node,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let effect = StoredEffect {
+                kept_earlier_attempt,
+                transition_applied,
+                open,
+                attempts,
+            };
+            let drafts = derive_node_runs(&update, &effect)?;
+            self.append_log(&run, drafts);
             Ok(self.assemble(run))
         })
     }
@@ -273,6 +401,75 @@ impl CaseStore for InMemoryCaseStore {
     }
 }
 
+impl NodeRunLog for InMemoryCaseStore {
+    fn list_after<'a>(
+        &'a self,
+        after: NodeRunSeq,
+        limit: u32,
+    ) -> CaseFuture<'a, Vec<NodeRunRecord>> {
+        Box::pin(async move {
+            let take = usize::try_from(limit.min(MAX_PAGE)).unwrap_or(0);
+            let log = self.log_lock();
+            Ok(log
+                .records
+                .iter()
+                .filter(|(tenant, record)| tenant == &self.tenant && record.seq > after)
+                .map(|(_, record)| record.clone())
+                .take(take)
+                .collect())
+        })
+    }
+
+    fn load_checkpoint<'a>(&'a self, consumer: &'a str) -> CaseFuture<'a, Option<Checkpoint>> {
+        Box::pin(async move {
+            validate_consumer(consumer)?;
+            let log = self.log_lock();
+            Ok(log
+                .checkpoints
+                .get(&(self.tenant.clone(), consumer.to_owned()))
+                .cloned())
+        })
+    }
+
+    fn save_checkpoint<'a>(
+        &'a self,
+        consumer: &'a str,
+        expected: NodeRunSeq,
+        next: Checkpoint,
+    ) -> CaseFuture<'a, bool> {
+        Box::pin(async move {
+            validate_consumer(consumer)?;
+            if next.seq < expected {
+                return Err(EngineError::StoreFailed {
+                    detail: "a checkpoint cannot move backwards".to_owned(),
+                });
+            }
+            let mut log = self.log_lock();
+            let key = (self.tenant.clone(), consumer.to_owned());
+            let stored = log
+                .checkpoints
+                .get(&key)
+                .map_or(NodeRunSeq(0), |checkpoint| checkpoint.seq);
+            if stored != expected {
+                return Ok(false);
+            }
+            log.checkpoints.insert(key, next);
+            Ok(true)
+        })
+    }
+
+    fn prune_before<'a>(&'a self, before: NodeRunSeq) -> CaseFuture<'a, u64> {
+        Box::pin(async move {
+            let mut log = self.log_lock();
+            let count = log.records.len();
+            let tenant = self.tenant.clone();
+            log.records
+                .retain(|(owner, record)| owner != &tenant || record.seq >= before);
+            Ok(u64::try_from(count - log.records.len()).unwrap_or(u64::MAX))
+        })
+    }
+}
+
 /// A factory over one shared in-memory backend.
 #[derive(Debug, Clone)]
 pub struct InMemoryCaseStoreFactory {
@@ -304,5 +501,26 @@ impl Default for InMemoryCaseStoreFactory {
 impl CaseStoreFactory for InMemoryCaseStoreFactory {
     fn open(&self) -> Box<dyn CaseStore> {
         Box::new(self.store.clone())
+    }
+}
+
+/// A [`NodeRunLogFactory`](crate::node_run_log::NodeRunLogFactory) over one in-memory backend:
+/// each tenant gets its own view of the same data.
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryNodeRunLogFactory {
+    root: InMemoryCaseStore,
+}
+
+impl InMemoryNodeRunLogFactory {
+    /// A factory over an empty backend.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl crate::node_run_log::NodeRunLogFactory for InMemoryNodeRunLogFactory {
+    fn open(&self, tenant: &str) -> Box<dyn crate::node_run_log::LoggedCaseStore> {
+        Box::new(self.root.view_for(tenant))
     }
 }

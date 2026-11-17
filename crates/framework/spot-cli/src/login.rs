@@ -1,18 +1,21 @@
-//! Real sign-in for a site: the sign-in service's ports backed by storage and the site file.
+//! Real sign-in for a site: the sign-in service over the storage-backed stores of `spot-login`
+//! (WP-PLT-02.T8).
 //!
-//! Credential *shape* lives in the platform app, but its secret fields have no storage column
-//! until the secrets service lands (WP-SEC-10). This host therefore keeps each user's Argon2id
-//! verifier in the protected `site.toml`, next to the API key digests, exactly as T2 did for
-//! `spot set-password`. Everything else about a user (name, e-mail, state) is read from the
-//! platform records as the system principal.
+//! Sessions, the per-account throttle counters, password verifiers, second factors, recovery
+//! codes and API key digests are records of the site database; every credential travels the
+//! secrets service (`spot_login::LoginStores`, sealed fields). A restart or a reload keeps every
+//! session and every lockout, and two nodes on one database share both.
 //!
-//! A one-time first sign-in secret is stored once, as an Argon2id verifier marked `first_sign_in`
-//! with an `expires_at`. It is **not** an API key: sent as a bearer credential it is
-//! refused. Once it has expired it is refused as a wrong password, with the same work done as for
-//! any wrong password. A session it starts is remembered as restricted, and until the user
-//! chooses a password the request gate (`crate::gate`) allows nothing but the password change,
-//! sign-out and reading the session.
-
+//! What still lives in `site.toml`: **one-time first sign-in secrets** (`first_sign_in = true`)
+//! until the user chooses a password. They are short-lived (72 hours by default), are not API
+//! keys, and are refused once expired (with the same work as for any wrong password).
+//! A session one of them starts is restricted, and until the user chooses a password the request
+//! gate (`crate::gate`) allows nothing but the password change, sign-out and reading the session
+//!. Chosen-password verifiers and API key digests that an operator command stages in
+//! the file (`spot set-password`, `spot create-user`) are imported into the sealed fields by the
+//! `login_stores` service at every start and reload, in one write per user, and then removed from
+//! the file (see `crate::services::login_stores`).
+//!
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -25,17 +28,17 @@ use spot_http::api::service::{
 };
 use spot_login::model::{KeyRecord, KeyState, UserRecord, UserState};
 use spot_login::ports::{Argon2Hasher, BoxFuture as PortFuture, KeyStore, UserDirectory};
-use spot_login::{LoginConfig, LoginService};
+use spot_login::{LoginConfig, LoginService, StorageKeyStore, StorageUserDirectory};
 use spot_platform_app::doctype;
 use spot_postgres::PgBackend;
-use spot_sessions::InMemorySessionStore;
 use spot_storage_contract::{
-    Catalog, DocumentData, DocumentStore, Expr, Isolation, Name, Query, QueryExecutor, QueryPath,
-    RecordId, RowLock, Selection, StorageBackend, Transaction, TxOptions, Value,
+    Catalog, DocumentStore, Isolation, Name, RecordId, RowLock, StorageBackend, Transaction,
+    TxOptions, Value,
 };
 
 use crate::audit::{
-    AuditedThrottleStore, AuditingEvents, BoundedThrottleStore, PathClass, Recorder,
+    AuditedAdmission, AuditedThrottleStore, AuditingEvents, BoundedThrottleStore, PathClass,
+    Recorder,
 };
 use crate::config::{self, Key};
 use crate::gate::RestrictedSessions;
@@ -56,13 +59,6 @@ fn options() -> Result<TxOptions> {
     ))
 }
 
-fn storage_error(e: spot_storage_contract::StorageError) -> spot_login::LoginError {
-    spot_login::LoginError::new(
-        spot_login::LoginErrorKind::StoreFailed,
-        format!("user store failed: {e}"),
-    )
-}
-
 /// One password verifier as the sign-in service sees it.
 #[derive(Clone)]
 pub struct Entry {
@@ -71,15 +67,15 @@ pub struct Entry {
     expired: bool,
 }
 
-/// One stored verifier, with when a one-time secret stops working.
+/// One staged one-time secret, with when it stops working.
 #[derive(Clone)]
 struct Stored {
     hash: PasswordHash,
-    first_sign_in: bool,
     expires_at: Option<i64>,
 }
 
-/// The site's password verifiers, cached in memory and written through to `site.toml`.
+/// The one-time first sign-in secrets still in `site.toml`, cached in memory and written
+/// through. Everything else the file used to hold is in the site database (module docs).
 pub struct Credentials {
     root: PathBuf,
     site: String,
@@ -91,17 +87,18 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    /// Reads the verifiers of `site`. A malformed verifier is a configuration error.
+    /// Reads the one-time secrets of `site`. A malformed verifier is a configuration error. A
+    /// verifier that is not a one-time secret is **not** read here: the `login_stores` service
+    /// imports it into the database (and it is never a sign-in path from the file).
     pub fn load(root: &Path, site: &config::Site, clock: Arc<dyn Clock>) -> Result<Self> {
         let mut entries = BTreeMap::new();
-        for credential in &site.credentials {
+        for credential in site.credentials.iter().filter(|c| c.first_sign_in) {
             let hash = PasswordHash::parse(&credential.password_hash)
                 .map_err(|_| Error("invalid password verifier in site.toml".into()))?;
             entries.insert(
                 credential.user.clone(),
                 Stored {
                     hash,
-                    first_sign_in: credential.first_sign_in,
                     expires_at: credential.expires_at,
                 },
             );
@@ -122,69 +119,51 @@ impl Credentials {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// The verifier for a user id, when the user has a password or a one-time secret. A
-    /// one-time secret that has expired, or that carries no expiry (an earlier version wrote
-    /// it), is returned as `expired` with a verifier nothing matches.
+    /// The one-time verifier for a user id, when the user still has one. One that has expired,
+    /// or that carries no expiry (an earlier version wrote it), is returned as `expired` with a
+    /// verifier nothing matches.
     pub fn get(&self, user: &RecordId) -> Option<Entry> {
         let now = self.clock.now_utc().unix_timestamp();
         self.lock().get(&user.to_string()).map(|stored| {
-            let expired = stored.first_sign_in && !stored.expires_at.is_some_and(|at| now < at);
+            let expired = !stored.expires_at.is_some_and(|at| now < at);
             Entry {
                 hash: if expired {
                     self.dummy.clone()
                 } else {
                     stored.hash.clone()
                 },
-                first_sign_in: stored.first_sign_in,
+                first_sign_in: true,
                 expired,
             }
         })
     }
 
-    /// Whether the user's verifier is still a one-time first sign-in secret (even an expired
-    /// one: the user has not chosen a password, so it is still restricted).
+    /// Whether the user still holds a one-time first sign-in secret (even an expired one: the
+    /// user has not chosen a password, so it is still restricted).
     pub fn is_first_sign_in(&self, user: &RecordId) -> bool {
-        self.lock()
-            .get(&user.to_string())
-            .is_some_and(|entry| entry.first_sign_in)
+        self.lock().contains_key(&user.to_string())
     }
 
-    /// Replaces a user's verifier with a chosen password.
-    pub fn set(&self, user: RecordId, hash: PasswordHash) -> Result<()> {
+    /// Forgets (and removes from the file) the user's one-time secret: a chosen password ends it.
+    pub fn clear(&self, user: RecordId) -> Result<()> {
         let user = user.to_string();
-        let stored = CredentialWrite {
-            user: user.clone(),
-            hash: hash.phc_string().to_owned(),
-        };
+        if !self.lock().contains_key(&user) {
+            return Ok(());
+        }
         sitefile::update(&self.root, &self.site, |site| {
-            site.credentials.retain(|c| c.user != user);
-            site.credentials.push(config::Credential {
-                user: stored.user.clone(),
-                password_hash: stored.hash.clone(),
-                first_sign_in: false,
-                expires_at: None,
-            });
+            site.credentials
+                .retain(|c| !(c.user == user && c.first_sign_in));
             Ok(())
         })?;
-        self.lock().insert(
-            user,
-            Stored {
-                hash,
-                first_sign_in: false,
-                expires_at: None,
-            },
-        );
+        self.lock().remove(&user);
         Ok(())
     }
 }
 
-struct CredentialWrite {
-    user: String,
-    hash: String,
-}
-
-/// A user directory over the site's platform `user` records and the site's verifiers.
+/// A user directory over the site's `user` records (credentials sealed, `spot_login`'s stores)
+/// with the site file's one-time first sign-in secrets laid over it.
 pub struct SiteDirectory {
+    inner: Arc<StorageUserDirectory<PgBackend>>,
     backend: PgBackend,
     catalog: Arc<Catalog>,
     credentials: Arc<Credentials>,
@@ -192,36 +171,18 @@ pub struct SiteDirectory {
 
 impl SiteDirectory {
     /// A directory over one site's storage.
-    pub fn new(backend: PgBackend, catalog: Arc<Catalog>, credentials: Arc<Credentials>) -> Self {
+    pub fn new(
+        stores: &Arc<spot_login::LoginStores<PgBackend>>,
+        backend: PgBackend,
+        catalog: Arc<Catalog>,
+        credentials: Arc<Credentials>,
+    ) -> Self {
         Self {
+            inner: Arc::new(stores.user_directory()),
             backend,
             catalog,
             credentials,
         }
-    }
-
-    /// The user's record id for a sign-in name, case-insensitively.
-    async fn find_id(
-        &self,
-        identifier: &str,
-    ) -> std::result::Result<Option<RecordId>, spot_login::LoginError> {
-        let identifier = identifier.trim().to_lowercase();
-        let mut tx = self
-            .backend
-            .begin(
-                self.catalog.clone(),
-                options().map_err(|e| {
-                    spot_login::LoginError::new(
-                        spot_login::LoginErrorKind::StoreFailed,
-                        e.to_string(),
-                    )
-                })?,
-            )
-            .await
-            .map_err(storage_error)?;
-        let result = find_by(&mut tx, &identifier).await;
-        let _ = tx.rollback().await;
-        result
     }
 
     /// Whether this sign-in name still holds a one-time first sign-in secret.
@@ -230,37 +191,24 @@ impl SiteDirectory {
         identifier: &str,
     ) -> std::result::Result<bool, spot_login::LoginError> {
         Ok(self
-            .find_id(identifier)
+            .inner
+            .find_by_identifier(identifier)
             .await?
-            .is_some_and(|id| self.credentials.is_first_sign_in(&id)))
+            .is_some_and(|user| self.credentials.is_first_sign_in(&user.id)))
     }
 
-    async fn record(
-        &self,
-        id: RecordId,
-    ) -> std::result::Result<Option<UserRecord>, spot_login::LoginError> {
-        let mut tx = self
-            .backend
-            .begin(
-                self.catalog.clone(),
-                options().map_err(|e| {
-                    spot_login::LoginError::new(
-                        spot_login::LoginErrorKind::StoreFailed,
-                        e.to_string(),
-                    )
-                })?,
-            )
-            .await
-            .map_err(storage_error)?;
-        let user = name(doctype::USER).map_err(|e| {
-            spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-        })?;
-        let loaded = tx.load(&user, id, RowLock::None).await;
-        let _ = tx.rollback().await;
-        let Some(loaded) = loaded.map_err(storage_error)? else {
-            return Ok(None);
-        };
-        Ok(record_of(id, &loaded.data, self.credentials.get(&id)))
+    /// The stored record with a staged one-time secret laid over it: the secret is the
+    /// verifier, and an invitation with a live one is signable (the first sign-in asks for a
+    /// password before the client can do anything else). A disabled or anonymised user stays so.
+    fn overlay(&self, mut user: UserRecord) -> UserRecord {
+        if let Some(entry) = self.credentials.get(&user.id) {
+            let live = entry.first_sign_in && !entry.expired;
+            user.password_hash = Some(entry.hash);
+            if live && matches!(user.state, UserState::Invited) {
+                user.state = UserState::Active;
+            }
+        }
+        user
     }
 }
 
@@ -270,10 +218,11 @@ impl UserDirectory for SiteDirectory {
         identifier: &'a str,
     ) -> PortFuture<'a, std::result::Result<Option<UserRecord>, spot_login::LoginError>> {
         Box::pin(async move {
-            let Some(id) = self.find_id(identifier).await? else {
-                return Ok(None);
-            };
-            self.record(id).await
+            Ok(self
+                .inner
+                .find_by_identifier(identifier)
+                .await?
+                .map(|user| self.overlay(user)))
         })
     }
 
@@ -281,7 +230,26 @@ impl UserDirectory for SiteDirectory {
         &'a self,
         id: RecordId,
     ) -> PortFuture<'a, std::result::Result<Option<UserRecord>, spot_login::LoginError>> {
-        Box::pin(async move { self.record(id).await })
+        Box::pin(async move {
+            Ok(self
+                .inner
+                .find_by_id(id)
+                .await?
+                .map(|user| self.overlay(user)))
+        })
+    }
+
+    fn find_standing_by_id<'a>(
+        &'a self,
+        id: RecordId,
+    ) -> PortFuture<'a, std::result::Result<Option<UserRecord>, spot_login::LoginError>> {
+        Box::pin(async move {
+            Ok(self
+                .inner
+                .find_standing_by_id(id)
+                .await?
+                .map(|user| self.overlay(user)))
+        })
     }
 
     fn set_password_hash<'a>(
@@ -290,7 +258,10 @@ impl UserDirectory for SiteDirectory {
         hash: PasswordHash,
     ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
         Box::pin(async move {
-            self.credentials.set(id, hash).map_err(|e| {
+            // The sealed write first, then the one-time secret ends: a crash in between leaves
+            // both, and the staged secret still expires.
+            self.inner.set_password_hash(id, hash).await?;
+            self.credentials.clear(id).map_err(|e| {
                 spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
             })
         })
@@ -298,179 +269,136 @@ impl UserDirectory for SiteDirectory {
 
     fn record_totp_step<'a>(
         &'a self,
-        _: RecordId,
-        _: u64,
+        id: RecordId,
+        step: u64,
     ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
-        // TOTP secrets have no storage column yet (WP-SEC-10); no user can enrol here.
-        Box::pin(async { Ok(()) })
+        self.inner.record_totp_step(id, step)
     }
 
     fn consume_recovery_digest<'a>(
         &'a self,
-        _: RecordId,
-        _: usize,
+        id: RecordId,
+        index: usize,
     ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
-        Box::pin(async { Ok(()) })
+        self.inner.consume_recovery_digest(id, index)
     }
 
     fn set_second_factor<'a>(
         &'a self,
-        _: RecordId,
-        _: Option<spot_auth::TotpSecret>,
-        _: Vec<spot_auth::recovery::StoredDigest>,
+        id: RecordId,
+        totp: Option<spot_auth::TotpSecret>,
+        recovery: Vec<spot_auth::recovery::StoredDigest>,
     ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
-        Box::pin(async { Ok(()) })
+        self.inner.set_second_factor(id, totp, recovery)
+    }
+
+    fn begin_totp_enrolment<'a>(
+        &'a self,
+        id: RecordId,
+        secret: spot_auth::TotpSecret,
+    ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
+        self.inner.begin_totp_enrolment(id, secret)
+    }
+
+    fn pending_totp<'a>(
+        &'a self,
+        id: RecordId,
+    ) -> PortFuture<'a, std::result::Result<Option<spot_auth::TotpSecret>, spot_login::LoginError>>
+    {
+        self.inner.pending_totp(id)
     }
 }
 
-fn text(fields: &BTreeMap<Name, Value>, field: &str) -> Option<String> {
-    fields.iter().find_map(|(name, value)| {
-        (name.as_str() == field)
-            .then(|| match value {
-                Value::Text(text) => Some(text.clone()),
-                _ => None,
-            })
-            .flatten()
-    })
-}
-
-fn record_of(id: RecordId, data: &DocumentData, credential: Option<Entry>) -> Option<UserRecord> {
-    let user_name = text(&data.fields, "user_name")?;
-    let state = text(&data.fields, "state").and_then(|s| UserState::parse(&s))?;
-    let (password_hash, first_sign_in) = credential
-        .map(|entry| (Some(entry.hash), entry.first_sign_in && !entry.expired))
-        .unwrap_or((None, false));
-    Some(UserRecord {
-        id,
-        user_name,
-        email: text(&data.fields, "email").filter(|e| !e.is_empty()),
-        full_name: text(&data.fields, "full_name").unwrap_or_default(),
-        // An invitation with a one-time secret is signable; the first successful sign-in
-        // asks for a password before the client can do anything else.
-        state: if first_sign_in && matches!(state, UserState::Invited) {
-            UserState::Active
-        } else {
-            // A disabled or anonymised user stays so, whatever verifier is left in the file.
-            state
-        },
-        password_hash,
-        totp_secret: None,
-        recovery_digests: Vec::new(),
-        totp_last_step: None,
-    })
-}
-
-async fn find_by<T: QueryExecutor>(
-    tx: &mut T,
-    identifier: &str,
-) -> std::result::Result<Option<RecordId>, spot_login::LoginError> {
-    let entity = name(doctype::USER).map_err(|e| {
-        spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-    })?;
-    let alias = name("u").map_err(|e| {
-        spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-    })?;
-    let mut query = Query::from(&entity, &alias, QueryPath::Report);
-    query.select = vec![Selection {
-        expr: Expr::field(
-            &alias,
-            &name("id").map_err(|e| {
-                spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-            })?,
-        ),
-        alias: name("v").map_err(|e| {
-            spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-        })?,
-    }];
-    let value = Expr::value(Value::Text(identifier.to_owned()));
-    query.filter = Some(Expr::Or(vec![
-        Expr::field(
-            &alias,
-            &name("user_name").map_err(|e| {
-                spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-            })?,
-        )
-        .eq(value.clone()),
-        Expr::field(
-            &alias,
-            &name("email").map_err(|e| {
-                spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-            })?,
-        )
-        .eq(value),
-    ]));
-    query.limit = Some(1);
-    let rows = tx.query(&query).await.map_err(storage_error)?;
-    Ok(rows.rows.into_iter().flatten().find_map(|value| {
-        if let Value::Id(id) = value {
-            Some(id)
-        } else {
-            None
-        }
-    }))
-}
-
-/// The site's API key verifiers, as the sign-in service's key store.
+/// In-memory API key verifiers: the development token of `spot serve --dev` (never persisted).
 pub struct FileKeyStore {
     keys: Vec<Key>,
 }
 
 impl FileKeyStore {
-    /// A key store over the site file's verifiers.
+    /// A key store over in-memory verifiers.
     pub fn new(keys: Vec<Key>) -> Self {
         Self { keys }
     }
+
+    fn find(&self, key_id: &str) -> std::result::Result<Option<KeyRecord>, spot_login::LoginError> {
+        let found = self.keys.iter().find(|key| key.key_id == key_id);
+        let Some(key) = found else {
+            return Ok(None);
+        };
+        let stored: StoredApiKey = auth::stored(key).map_err(|e| {
+            spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
+        })?;
+        let owner = spot_http::api::codec::parse_record_id(&key.user).ok_or_else(|| {
+            spot_login::LoginError::new(
+                spot_login::LoginErrorKind::StoreFailed,
+                "invalid API key owner",
+            )
+        })?;
+        Ok(Some(KeyRecord {
+            key_id: stored.key_id,
+            digest: stored.digest,
+            owner,
+            state: KeyState::Active,
+            // An expiry that cannot be represented counts as already expired.
+            expires_at: key.expires_at.map(|at| {
+                time::OffsetDateTime::from_unix_timestamp(at)
+                    .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
+            }),
+            scim_only: false,
+        }))
+    }
 }
 
-impl KeyStore for FileKeyStore {
+/// The site's API keys: the database first, then the in-memory development token.
+pub struct SiteKeyStore {
+    stored: StorageKeyStore<PgBackend>,
+    dev: FileKeyStore,
+}
+
+impl SiteKeyStore {
+    /// Keys over the site's storage, plus `dev` in-memory verifiers.
+    pub fn new(stores: &Arc<spot_login::LoginStores<PgBackend>>, dev: Vec<Key>) -> Self {
+        Self {
+            stored: stores.key_store(),
+            dev: FileKeyStore::new(dev),
+        }
+    }
+}
+
+impl KeyStore for SiteKeyStore {
     fn find_by_key_id<'a>(
         &'a self,
         key_id: &'a str,
     ) -> PortFuture<'a, std::result::Result<Option<KeyRecord>, spot_login::LoginError>> {
         Box::pin(async move {
-            let found = self.keys.iter().find(|key| key.key_id == key_id);
-            let Some(key) = found else {
-                return Ok(None);
-            };
-            let stored: StoredApiKey = auth::stored(key).map_err(|e| {
-                spot_login::LoginError::new(spot_login::LoginErrorKind::StoreFailed, e.to_string())
-            })?;
-            let owner = spot_http::api::codec::parse_record_id(&key.user).ok_or_else(|| {
-                spot_login::LoginError::new(
-                    spot_login::LoginErrorKind::StoreFailed,
-                    "invalid API key owner",
-                )
-            })?;
-            Ok(Some(KeyRecord {
-                key_id: stored.key_id,
-                digest: stored.digest,
-                owner,
-                state: KeyState::Active,
-                // An expiry that cannot be represented counts as already expired.
-                expires_at: key.expires_at.map(|at| {
-                    time::OffsetDateTime::from_unix_timestamp(at)
-                        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
-                }),
-            }))
+            if let Some(found) = KeyStore::find_by_key_id(&self.stored, key_id).await? {
+                return Ok(Some(found));
+            }
+            self.dev.find(key_id)
         })
+    }
+
+    fn consume_initial_secret<'a>(
+        &'a self,
+        user: RecordId,
+        presented: &'a spot_auth::OpaqueToken,
+        now: i64,
+    ) -> PortFuture<'a, std::result::Result<(), spot_login::LoginError>> {
+        KeyStore::consume_initial_secret(&self.stored, user, presented, now)
     }
 }
 
-/// The in-memory state a site keeps across a reload, so a reload does not sign everyone out and
-/// does not turn a restricted session into a free one.
+/// What the host keeps per site across a reload: the audit trail, the password-change throttle
+/// and the sessions a one-time secret started.
 ///
-/// **Sessions and throttle counters are per process**: they are not written to the
-/// site database, so a restart signs everyone out and forgets every lockout. This is a stated
-/// limitation, not an accident: persisting them needs the secrets service (WP-SEC-10) for the
-/// session token digests. Both are bounded: a user holds at most the session policy's
-/// `max_per_user` sessions, and the throttle tracks at most
-/// [`THROTTLE_KEY_CAP`](crate::audit::THROTTLE_KEY_CAP) keys, evicting the oldest key that is
-/// not a live lockout and refusing sign-ins (fail closed) if every key is one.
+/// Sessions and the sign-in throttle counters are **not** here any more: they are records of the
+/// site database (`spot_login::LoginStores`), so a restart or a reload keeps them and two nodes
+/// share them. The password-change throttle is still per process and bounded (it is keyed by user
+/// id, which the storage throttle, keyed by sign-in name, cannot hold); its counters reset on a
+/// restart, and the sign-in lockout does not.
 #[derive(Clone)]
 pub struct LoginStores {
-    /// Sessions.
-    pub sessions: Arc<InMemorySessionStore>,
-    /// Sign-in throttle counters (bounded, per process).
+    /// Password-change throttle counters (bounded, per process).
     pub throttle: Arc<BoundedThrottleStore>,
     /// The sessions a one-time secret started.
     pub restricted: Arc<RestrictedSessions>,
@@ -479,18 +407,66 @@ pub struct LoginStores {
 }
 
 impl LoginStores {
-    /// Empty stores over a site's audit recorder.
+    /// Empty per-process state over a site's audit recorder.
     pub fn new(recorder: Arc<Recorder>, clock: Arc<dyn Clock>) -> Self {
         Self {
-            sessions: Arc::default(),
             throttle: Arc::new(BoundedThrottleStore::new(clock)),
             restricted: Arc::default(),
             recorder,
         }
     }
 
-    /// The limitation, as the line the host logs at start.
-    pub const LIMITATION: &'static str = "sessions and sign-in throttle counters are held in this process only: a restart signs every user out and forgets every lockout";
+    /// The one limitation left, as the line the host logs at start.
+    pub const LIMITATION: &'static str = "sessions and sign-in lockouts are stored in the site database and survive a restart; only the password-change throttle is held in this process";
+}
+
+/// The storage the sign-in service runs over: the engine's stores and the pieces `SiteAuth`
+/// needs beside them.
+pub struct SiteStorage {
+    /// The engine, the catalog and the secrets capability of `spot-login`.
+    pub stores: Arc<spot_login::LoginStores<PgBackend>>,
+    /// The database, for the one write `spot-login` has no store method for (activating a user).
+    pub backend: PgBackend,
+    /// The catalog of the platform app.
+    pub catalog: Arc<Catalog>,
+}
+
+impl SiteStorage {
+    /// The stores of `site` over its running engine. The capability is taken once, as
+    /// `SecretCaller::LoginService`.
+    ///
+    /// # Errors
+    ///
+    /// A site name that is not a site id.
+    pub fn new(
+        engine: Arc<spot_document::engine::Engine<PgBackend>>,
+        catalog: Arc<Catalog>,
+        site: &str,
+        clock: Arc<dyn Clock>,
+    ) -> Result<Self> {
+        use spot_app_api::context::{Actor, Invocation};
+        let invocation = Invocation {
+            site: spot_core::SiteId::new(site).map_err(error)?,
+            actor: Actor::System {
+                component: name("login_service")?,
+            },
+            command_id: None,
+            language: None,
+            now: clock.now_utc(),
+        };
+        let backend = engine.backend().clone();
+        let stores = Arc::new(spot_login::LoginStores::new(
+            engine,
+            catalog.clone(),
+            &invocation,
+            clock,
+        ));
+        Ok(Self {
+            stores,
+            backend,
+            catalog,
+        })
+    }
 }
 
 /// The site's `AuthService` and the extra first-sign-in and password-change operations.
@@ -502,44 +478,74 @@ pub struct SiteAuth {
     clock: Arc<dyn Clock>,
     recorder: Arc<Recorder>,
     /// The site file's keys, read only to name the reason a refused key is audited under.
-    keys: Arc<FileKeyStore>,
+    keys: Arc<SiteKeyStore>,
     /// The per-user throttle of the password-change route (WP-PRD-01.T14).
     password_throttle: PasswordThrottle<AuditedThrottleStore<BoundedThrottleStore>>,
+    /// The site's sign-in throttle, for the password-change door (WP-IAM-11.T24). The host sets
+    /// it with [`SiteAuth::with_signin_throttle`]; without it only the per-user throttle above
+    /// counts a change attempt.
+    signin: Option<Arc<crate::services::signin_throttle::SigninThrottle>>,
 }
 
 impl SiteAuth {
-    /// Builds the sign-in service over the site's stores, or over the stores a reload keeps.
+    /// The sign-in service, for the second-factor self-service operations (WP-PLT-02.T9).
+    #[must_use]
+    pub fn login_service(&self) -> &Arc<LoginService> {
+        &self.service
+    }
+
+    /// Builds the sign-in service over the site's database and the per-process state a reload
+    /// keeps. `dev_keys` are the in-memory development verifiers (never persisted); `admission`
+    /// is the throttle every sign-in is admitted through (`spot_login::CoordinatorAdmission` in
+    /// production).
     pub fn new(
         config: LoginConfig,
-        directory: Arc<SiteDirectory>,
+        storage: &SiteStorage,
         credentials: Arc<Credentials>,
-        keys: Vec<Key>,
+        dev_keys: Vec<Key>,
         clock: Arc<dyn Clock>,
         stores: &LoginStores,
+        admission: Arc<dyn spot_login::SignInAdmission>,
     ) -> Result<Self> {
         let hasher = Arc::new(Argon2Hasher::new(config.hash_params.clone()));
+        let directory = Arc::new(SiteDirectory::new(
+            &storage.stores,
+            storage.backend.clone(),
+            storage.catalog.clone(),
+            credentials.clone(),
+        ));
         let password_throttle = PasswordThrottle::new(
             AuditedThrottleStore::new(stores.throttle.clone(), stores.recorder.clone()),
             config.throttle,
             clock.clone(),
         )
         .map_err(|e| Error(e.to_string()))?;
-        let keys = Arc::new(FileKeyStore::new(keys));
+        let keys = Arc::new(SiteKeyStore::new(&storage.stores, dev_keys));
+        let sessions: Arc<dyn spot_sessions::SessionStore> =
+            Arc::new(storage.stores.session_store());
+        let throttle_store = Arc::new(
+            storage
+                .stores
+                .throttle_store(config.throttle.window)
+                .with_lockout(
+                    config.throttle.lockout_after,
+                    config.throttle.lockout_duration,
+                ),
+        );
         let service = LoginService::new(
             config,
-            stores.sessions.clone(),
+            sessions.clone(),
             Arc::new(AuditedThrottleStore::new(
-                stores.throttle.clone(),
+                throttle_store,
                 stores.recorder.clone(),
             )),
             directory.clone(),
             keys.clone(),
-            Arc::new(AuditingEvents::new(
-                stores.recorder.clone(),
-                stores.sessions.clone(),
-            )),
+            Arc::new(AuditingEvents::new(stores.recorder.clone(), sessions)),
             clock.clone(),
             hasher,
+            // A refusal or an outage of the throttle is audited (WP-IAM-11.T23).
+            Arc::new(AuditedAdmission::new(admission, stores.recorder.clone())),
         )
         .map_err(|e| Error(e.to_string()))?;
         Ok(Self {
@@ -551,7 +557,19 @@ impl SiteAuth {
             recorder: stores.recorder.clone(),
             keys,
             password_throttle,
+            signin: None,
         })
+    }
+
+    /// Admits every password change's re-authentication through the throttle's password-change
+    /// door, before the per-user throttle and before the current password is looked at.
+    #[must_use]
+    pub fn with_signin_throttle(
+        mut self,
+        throttle: Arc<crate::services::signin_throttle::SigninThrottle>,
+    ) -> Self {
+        self.signin = Some(throttle);
+        self
     }
 
     /// Signs in and reports whether the session is restricted to choosing a password, which is
@@ -627,7 +645,17 @@ impl SiteAuth {
         ctx: &RequestCtx,
         path: PathClass,
     ) -> std::result::Result<spot_login::Authenticated, ApiError> {
-        let result = self.service.authenticate(ctx).await;
+        let mut result = self.service.authenticate(ctx).await;
+        // A key scoped for SCIM only is the provisioning endpoint's credential, nothing else's.
+        if path != PathClass::Scim
+            && let Ok(principal) = &result
+            && principal.scim_only
+        {
+            result = Err(ApiError::new(
+                spot_http::api::registry::Code::AuthInvalidCredentials,
+                "The credentials are wrong or no longer valid.",
+            ));
+        }
         if let Err(error) = &result
             && error.code.as_str() == "auth.invalid_credentials"
             && let Some(credential) = &ctx.credential
@@ -681,6 +709,18 @@ impl SiteAuth {
         let was_restricted = self.is_restricted(&principal);
         let user = principal.user_id.to_string();
         let request_id = ctx.request_id.as_str();
+        if let Some(handle) = &self.signin {
+            let peer = ctx.peer.map(|ip| ip.to_string());
+            handle
+                .admit(
+                    crate::services::signin_throttle::Door::PasswordChange,
+                    ctx.site.as_str(),
+                    &user,
+                    peer.as_deref(),
+                    Some(request_id),
+                )
+                .await?;
+        }
         // The throttle comes first: a locked user is refused before the password is looked at,
         // so the answer is the same for a right and a wrong one and no hashing is done.
         if let Err(refusal) = self.password_throttle.admit(&user, request_id).await {
@@ -714,7 +754,12 @@ impl SiteAuth {
         activate_user(&self.directory, principal.user_id)
             .await
             .map_err(|e| {
-                ApiError::new(spot_http::api::registry::Code::HttpInternal, e.to_string())
+                let code = if e.to_string().starts_with(PORTAL_ROLE_REFUSED) {
+                    spot_http::api::registry::Code::PermissionDenied
+                } else {
+                    spot_http::api::registry::Code::HttpInternal
+                };
+                ApiError::new(code, e.to_string())
             })?;
         let Some(old) = principal.session_id.as_deref().filter(|_| was_restricted) else {
             return Ok(None);
@@ -896,6 +941,13 @@ impl AuthService for SiteAuth {
     ) -> BoxFuture<'a, std::result::Result<SessionInfo, ApiError>> {
         Box::pin(async move { self.service.session(ctx).await })
     }
+
+    fn audience_of<'a>(
+        &'a self,
+        ctx: &'a RequestCtx,
+    ) -> BoxFuture<'a, std::result::Result<spot_core::Audience, ApiError>> {
+        Box::pin(async move { self.service.audience_of(ctx).await })
+    }
 }
 
 /// Marks a user active after their first password is chosen.
@@ -912,10 +964,77 @@ async fn activate_user(directory: &SiteDirectory, user: RecordId) -> Result<()> 
         return Err(Error("the user record no longer exists".into()));
     };
     let mut data = loaded.data;
+    // Barrier 3 of ADR-083 at first sign-in: a portal user holding a role a portal user may not
+    // hold is not activated. The user stays `invited`, the transaction writes nothing.
+    let portal = data
+        .fields
+        .get(&name("user_type")?)
+        .and_then(crate::services::scim_store::text)
+        .is_some_and(|kind| kind == "portal");
+    if portal && let Err(refusal) = check_portal_assignments(&mut tx, user).await {
+        let _ = tx.rollback().await;
+        return Err(refusal);
+    }
     data.fields
         .insert(name("state")?, Value::Text("active".into()));
     tx.update(&data, loaded.version).await.map_err(error)?;
     tx.commit().await.map_err(error)
+}
+
+/// The prefix of the error `activate_user` returns when the outside-role check refuses, so the
+/// caller can answer a refusal and not a failure.
+const PORTAL_ROLE_REFUSED: &str = "first_sign_in.portal_role_refused";
+
+/// Checks every active role assignment of the portal user `user` against the portal allow-list
+/// (`spot_iam_roles::OutsideGuard`). The role records carry no kind and no duties in storage, so
+/// the guard is built blind (`from_roles`): every stored role counts as a desk role, a role that
+/// cannot be found counts as unknown, and both are refused (closed). A portal user with no
+/// assignment passes.
+///
+/// # Errors
+///
+/// A refusal (`first_sign_in.portal_role_refused`, never naming the role) or a read that failed.
+async fn check_portal_assignments<T: Transaction>(tx: &mut T, user: RecordId) -> Result<()> {
+    use crate::services::scim_store::{idv, rows, text};
+    let unreadable = |_| Error("the role assignments cannot be read".into());
+    let roles = rows(tx, doctype::ROLE, &["id", "role_name"])
+        .await
+        .map_err(unreadable)?;
+    let assignments = rows(tx, doctype::ROLE_ASSIGNMENT, &["user", "role", "state"])
+        .await
+        .map_err(unreadable)?;
+    let names: BTreeMap<RecordId, String> = roles
+        .iter()
+        .filter_map(|r| Some((idv(r.first()?)?, text(r.get(1)?)?)))
+        .collect();
+    let stored: Vec<spot_iam_roles::Role> = names
+        .values()
+        .map(|n| spot_iam_roles::Role::custom(n))
+        .collect();
+    let id = user.to_string();
+    let guard = spot_iam_roles::OutsideGuard::from_roles(&stored, [id.clone()]);
+    for row in &assignments {
+        let mine = row.first().and_then(idv) == Some(user);
+        let active = row.get(2).and_then(text).as_deref() == Some("active");
+        if !(mine && active) {
+            continue;
+        }
+        let allowed = row
+            .get(1)
+            .and_then(idv)
+            .and_then(|role| names.get(&role))
+            .is_some_and(|role| {
+                guard
+                    .check(&id, &spot_iam_roles::RoleName::from(role.as_str()))
+                    .is_ok()
+            });
+        if !allowed {
+            return Err(Error(format!(
+                "{PORTAL_ROLE_REFUSED}: a portal user holds a role a portal user may not hold, so the account stays invited"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The sign-in configuration this host runs with. Sessions are re-checked on every request

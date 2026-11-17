@@ -26,7 +26,10 @@
 //! the site degraded, and the two routes answer `503 server.unavailable` with a retry hint; they
 //! never answer an empty list for a service that cannot answer. Everything else (sign-in,
 //! sign-out, the data routes) is unaffected. The setting is `services.session` (`enabled`,
-//! default true); off, the two routes are not mounted and answer as unserved operations do.
+//! default true); off, the two routes are not mounted and answer as unserved operations do. The
+//! module provides the [`SessionPort`] and the host gives it to the route registry (WP-IAM-07.T3),
+//! so the routes sit behind the router's bearer layer: a request with no or a bad credential is
+//! refused there, before the port is reached.
 //!
 //! # Audit
 //!
@@ -38,18 +41,16 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
-use spot_http::api::Ports;
 use spot_http::api::ports::session::{SessionOut, SessionPort, SessionResult};
 use spot_http::api::registry::Code;
-use spot_http::api::router::routes;
 use spot_http::api::service::{ApiError, BoxFuture, RequestCtx};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
+use crate::Result;
 use crate::live::SiteLive;
 use crate::login::{OwnSession, SESSION_METHOD};
 use crate::services::{CheckFuture, Idle, Level, SiteCtx};
-use crate::{Error, Result};
 
 /// Start order: after the framework's own services.
 pub const ORDER: u32 = 1030;
@@ -155,18 +156,11 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         }));
     }
     let port: Arc<dyn SessionPort> = Arc::new(Sessions { site, live });
-    let mut ports = Ports::new();
-    ports.provide::<dyn SessionPort>(port);
-    // The group is mounted here, not by the route registry (see `routes/session.rs`). The host
-    // authenticates every request before the router sees it, and the port authenticates again.
-    let mounted = routes::mount(&[routes::session::registration()], &ports, &[]);
-    let router = mounted.authenticated;
-    if let Some((module, reason)) = mounted.report.skipped.first() {
-        return Err(Error(format!(
-            "the session routes were not mounted: {module}: {reason:?}"
-        )));
-    }
-    ctx.router_layer(move |base| base.merge(router));
+    // The port goes to the host, which hands it to the router's `ApiServices` (`with_port`): the
+    // route registry then mounts `auth_session_list` and `auth_session_end` once, behind the
+    // router's bearer layer (WP-IAM-07.T3). An absent port leaves the group unmounted, never
+    // half served, and a site with `services.session.enabled = false` provides none.
+    ctx.provide::<dyn SessionPort>(port)?;
     Ok(())
 }
 

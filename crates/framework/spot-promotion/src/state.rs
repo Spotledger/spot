@@ -51,6 +51,23 @@ impl PromotionState {
         }
     }
 
+    /// The state a stable name stands for, or `None` for a name no version of this crate wrote.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        [
+            Self::Requested,
+            Self::Planned,
+            Self::Approved,
+            Self::Rehearsed,
+            Self::Applied,
+            Self::Verified,
+            Self::Failed,
+            Self::Rejected,
+        ]
+        .into_iter()
+        .find(|state| state.as_str() == name)
+    }
+
     /// Whether the promotion is finished and never moves again.
     #[must_use]
     pub fn is_terminal(self) -> bool {
@@ -98,19 +115,24 @@ pub struct Transition {
 /// every step refuses a bundle whose digest is not the one the promotion was requested for.
 #[derive(Clone, Debug)]
 pub struct Promotion {
-    id: RunId,
-    bundle_digest: Digest,
-    from_env: EnvRef,
-    to_env: EnvRef,
-    requester: String,
-    state: PromotionState,
-    plan: Option<PromotionPlan>,
-    rehearsal: Option<RehearsalEvidence>,
-    pre_image: Option<Bundle>,
-    apply: Option<ApplyEvidence>,
-    failure: Option<FailureEvidence>,
-    journal: Vec<Transition>,
-    executions: u32,
+    // The fields are `pub(crate)` for the snapshot module's restore constructor only; every
+    // mutation outside the crate still goes through the service.
+    pub(crate) id: RunId,
+    pub(crate) bundle_digest: Digest,
+    pub(crate) from_env: EnvRef,
+    pub(crate) to_env: EnvRef,
+    pub(crate) requester: String,
+    pub(crate) state: PromotionState,
+    pub(crate) plan: Option<PromotionPlan>,
+    pub(crate) rehearsal: Option<RehearsalEvidence>,
+    pub(crate) pre_image: Option<Bundle>,
+    pub(crate) apply: Option<ApplyEvidence>,
+    pub(crate) failure: Option<FailureEvidence>,
+    pub(crate) journal: Vec<Transition>,
+    pub(crate) executions: u32,
+    /// The store revision this value was loaded at or last saved as; a save is accepted only
+    /// against the revision the store holds.
+    pub(crate) revision: u64,
 }
 
 impl Promotion {
@@ -169,7 +191,21 @@ impl Promotion {
             apply: None,
             failure: None,
             executions: 0,
+            revision: 0,
         })
+    }
+
+    /// The store revision this value was read at (0 for a promotion never saved). A store
+    /// refuses a save whose revision is not the one it holds, so two writers cannot overwrite
+    /// each other.
+    #[must_use]
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Records that the store accepted this value: its revision is now one higher.
+    pub(crate) fn mark_saved(&mut self) {
+        self.revision = self.revision.saturating_add(1);
     }
 
     /// The promotion id.

@@ -558,6 +558,8 @@ fn ensure_spot_conf_included(data_dir: &Path) -> Result<(), ClusterError> {
 }
 
 /// `kill -9 <pid>`, best effort (a pid that already died is not an error).
+#[cfg(unix)]
+#[cfg(unix)]
 fn kill9_pid(pid: u32) {
     let _ = std::process::Command::new("kill")
         .arg("-9")
@@ -567,6 +569,8 @@ fn kill9_pid(pid: u32) {
 }
 
 /// Waits until `/proc/<pid>` is gone, or the timeout elapses.
+#[cfg(unix)]
+#[cfg(unix)]
 fn wait_gone(pid: u32, timeout: Duration) {
     let started = Instant::now();
     while started.elapsed() < timeout {

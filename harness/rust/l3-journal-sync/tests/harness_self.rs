@@ -54,7 +54,7 @@ fn role_fragment_builds_one_fragment_per_role_in_one_place() {
     assert!(fragment.contains("enabled = true"), "{fragment}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn flaky_store_fails_exactly_as_configured() {
     // Fail the next two calls, then succeed.
     let counted = FlakyStore::new(MemoryStore::new(), 11).fail_next(2);
@@ -151,7 +151,7 @@ fn tamper_truncate_and_delete_object_bypass_the_store_guards() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_loopback_proxy_blocks_bytes_both_ways_and_heal_restores_them() {
     // The same mechanism `Node::partition_from`/`Node::heal` use, proven directly: an echo
     // server behind the proxy, so both directions of one connection are exercised.
@@ -226,7 +226,7 @@ fn skip_without_pg(test: &str) -> bool {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_node_starts_and_answers_health_ready() {
     if skip_without_pg("a_node_starts_and_answers_health_ready") {
         return;
@@ -242,7 +242,7 @@ async fn a_node_starts_and_answers_health_ready() {
     assert_eq!(reply.status, 200, "{}", reply.text());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn kill_and_start_keeps_its_data() {
     // What this proves: an un-awaited stop (`Node::kill`, see its doc comment for the honest
     // limits of that name) followed by `Node::start` brings the same node back with the same
@@ -287,7 +287,7 @@ async fn kill_and_start_keeps_its_data() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stop_closes_the_old_address_but_kill_does_not_wait_to() {
     if skip_without_pg("stop_closes_the_old_address_but_kill_does_not_wait_to") {
         return;
@@ -333,7 +333,7 @@ async fn stop_closes_the_old_address_but_kill_does_not_wait_to() {
     assert!(node.is_running());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn partition_from_blocks_sync_traffic_both_ways_and_heal_restores_it() {
     if skip_without_pg("partition_from_blocks_sync_traffic_both_ways_and_heal_restores_it") {
         return;
@@ -391,7 +391,7 @@ async fn partition_from_blocks_sync_traffic_both_ways_and_heal_restores_it() {
     assert_eq!(&buffer, b"during");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn partitioning_two_nodes_leaves_a_third_nodes_traffic_flowing() {
     if skip_without_pg("partitioning_two_nodes_leaves_a_third_nodes_traffic_flowing") {
         return;
@@ -459,7 +459,7 @@ async fn partitioning_two_nodes_leaves_a_third_nodes_traffic_flowing() {
     cluster.node("hub").heal(cluster.node("edge-a"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_nodes_have_distinct_databases() {
     if skip_without_pg("two_nodes_have_distinct_databases") {
         return;
@@ -492,7 +492,7 @@ async fn two_nodes_have_distinct_databases() {
     assert_eq!(names.len(), 2, "the two nodes must not share a database");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fingerprint_is_stable_and_changes_with_the_data() {
     if skip_without_pg("fingerprint_is_stable_and_changes_with_the_data") {
         return;
@@ -533,7 +533,7 @@ async fn fingerprint_is_stable_and_changes_with_the_data() {
     assert_ne!(before, after, "new data must change the fingerprint");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn read_conditions_and_read_audit_are_empty_before_the_tables_exist() {
     if skip_without_pg("read_conditions_and_read_audit_are_empty_before_the_tables_exist") {
         return;
@@ -564,7 +564,7 @@ async fn read_conditions_and_read_audit_are_empty_before_the_tables_exist() {
     assert!(audit.is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn wait_until_waits_at_most_the_given_timeout() {
     // No PostgreSQL needed, but kept next to the PostgreSQL tests: it is the helper every one
     // of them calls to reach readiness.
@@ -592,7 +592,7 @@ async fn wait_until_waits_at_most_the_given_timeout() {
     assert!(result.is_ok());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn teardown_leaves_no_database_or_directory_behind() {
     if skip_without_pg("teardown_leaves_no_database_or_directory_behind") {
         return;
@@ -633,7 +633,7 @@ async fn teardown_leaves_no_database_or_directory_behind() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_failed_start_removes_its_root() {
     if skip_without_pg("a_failed_start_removes_its_root") {
         return;

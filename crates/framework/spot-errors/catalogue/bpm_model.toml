@@ -279,3 +279,21 @@ explanation_key = "error.bpm_model.principal_invalid"
 params = ["node"]
 remedy = "Name the service principal in 1 to 128 bytes with no whitespace or control characters, or remove the field to act as the Case's actor."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.syntax"
+class = "none"
+summary = "The process definition text is not valid syntax."
+explanation_key = "error.bpm_model.syntax"
+params = []
+remedy = "Fix the syntax of the definition and publish again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.text_invalid"
+class = "none"
+summary = "The process definition text could not be read as a process version."
+explanation_key = "error.bpm_model.text_invalid"
+params = []
+remedy = "Fix the definition text so it follows the process format and publish again."
+since = "0.1.0"

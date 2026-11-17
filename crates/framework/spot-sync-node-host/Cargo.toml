@@ -1,0 +1,50 @@
+[package]
+name = "spot-sync-node-host"
+description = "The edge half of sync (WP-RTB-02.T5, ADR-062): the edge-initiated client loop (hello, pull, apply, acknowledge, push) over spot-sync-http with exponential backoff, a circuit breaker and a user-visible offline-since time, a pinned hub certificate, the bundle envelope, the node's outbox sender with its dense push cursor, and enrolment from a one-time code file"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The wire: `Transport`, `CircuitBreaker`, `JitterSource`, `Sleeper`, `ClientIdentity`, `HubTimeSink`, `wire`.
+spot-sync-http = { path = "../spot-sync-http" }
+# `Batch`, `Record`, `Sender`, `Offer`, `Ack`, `Nack`, `NodeId`.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# `NodeIntake`, `BundleApply`, `ParkingStore`, `NodeCatalog`, `ServeStamp`, `Receipt`.
+spot-sync-node = { path = "../spot-sync-node" }
+# `Bundle`: what a served record carries.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# `fingerprint_of`: the one fingerprint form the hub pin is compared in.
+spot-sync-enrol = { path = "../spot-sync-enrol" }
+# `SourceId`.
+spot-events-contract = { path = "../../../contracts/events" }
+# `Clock`: time is an argument, never read ambiently.
+spot-core = { path = "../spot-core" }
+# The shared blocking bridge the PostgreSQL outbox reader and push cursor go through (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+tokio-postgres = "0.7"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+# `Method`, the type `HttpRequest` takes (the same crate axum re-exports).
+http = "1"
+# The pinned-fingerprint server certificate verifier (no system trust store). `ring` is chosen
+# explicitly, as in spot-sync-http, so two crypto providers are never enabled.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+
+[dev-dependencies]
+# `NodeReport`, `Incoming`: the node's own decodable set, for the intake the tests build.
+spot-sync-skew = { path = "../spot-sync-skew" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }
+# A throwaway certificate for the pinning tests.
+rcgen = "0.14"
+# `ManualClock` takes an `OffsetDateTime` origin.
+time = "0.3"
+# Per-test scratch databases for the real-PostgreSQL tests (skipped without SPOT_TEST_PG_URL).
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+
+[lints]
+workspace = true

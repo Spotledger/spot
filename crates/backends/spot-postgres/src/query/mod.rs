@@ -62,7 +62,7 @@ const MARGIN_MS: u128 = 10_000;
 pub(crate) async fn query(tx: &mut PgTransaction, query: &Query) -> StorageResult<Rows> {
     let catalog = Arc::clone(tx.catalog_arc());
     let compiled = compile(query, &catalog, &DefaultSchemaMap).map_err(|e| tx.fail_storage(e))?;
-    refuse_search(query).map_err(|e| tx.fail_storage(e))?;
+    refuse_search(query, tx.serves_search()).map_err(|e| tx.fail_storage(e))?;
     let bound = bind(&compiled.params);
     let args: Vec<(&(dyn ToSql + Sync), Type)> = bound
         .iter()
@@ -97,7 +97,7 @@ pub(crate) async fn read(
         ));
     }
     let compiled = compile(query, &catalog, &DefaultSchemaMap)?;
-    refuse_search(query)?;
+    refuse_search(query, backend.serves_search())?;
     let bound = bind(&compiled.params);
     let mut conn = Pooled::new(backend.checkout().await?);
     let outcome = run_read(backend, &mut conn, &compiled, &bound).await;
@@ -105,15 +105,15 @@ pub(crate) async fn read(
     outcome
 }
 
-/// Search and search rank read the projection table, which WP-STO-13.T1 builds; until then they
-/// answer `Unsupported`, as `Capabilities::search` says. Validation (`InvalidQuery`) has already
-/// run in the compiler, so a malformed term is still `InvalidQuery` (ADR-087 section 7.9).
-fn refuse_search(query: &Query) -> StorageResult<()> {
-    if query.constructs().search {
+/// Search and search rank read the projection table, which the search maintenance hook
+/// (WP-STO-13.T3) prepares and maintains; with no hook installed they answer `Unsupported`, as
+/// `Capabilities::search` says. Validation (`InvalidQuery`) has already run in the compiler, so a
+/// malformed term is still `InvalidQuery` (ADR-087 section 7.9).
+fn refuse_search(query: &Query, serves_search: bool) -> StorageResult<()> {
+    if query.constructs().search && !serves_search {
         return Err(StorageError::new(
             ErrorKind::Unsupported,
-            "search is not supported by this backend yet: the search projection arrives with \
-             WP-STO-13.T1 (ADR-087)",
+            "search is not supported by this backend: no search maintenance is installed on it",
         ));
     }
     Ok(())

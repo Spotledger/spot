@@ -1,0 +1,8 @@
+key: acme/tail/00000000000000000001/00000000000000000001.chunk
+version: 1
+generation: 1
+batch_id: 1
+entries: 3
+seq 1: {"g":1,"seq":1,"data":"entry number 1"}
+seq 2: {"g":1,"seq":2,"data":"entry number 2"}
+seq 3: {"g":1,"seq":3,"data":"entry number 3"}

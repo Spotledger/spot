@@ -1,0 +1,305 @@
+openapi: 3.1.1
+info:
+  title: Spotledger management API
+  version: 0.2.0
+  summary: "The typed management API that the console and the spot CLI both call (ADR-44, ADR-097)."
+  description: |
+    ## ADR note
+
+    ADR-44 (`docs/blueprint/platform.md`, WP-ADM-01) says the console and the `spot` CLI are equal clients of one typed API. This is that API, the **management API** (`docs/adr/ADR-097-management-api-contract-v0.1.md`): a separate listener and a separate contract, so a native-API client (`contracts/native-api`) never sees an administrative operation. Draft, awaiting architecture-owner approval.
+
+    ## Transport and identity
+
+    **Mutual TLS only**: TLS 1.3, with a client certificate whose chain leads to an operator CA the site configures; the certificate subject maps to an operator principal. There is no bearer token, no password and no cookie. A request without a verified client certificate is `401 mgmt.unauthenticated` **before any body is read**.
+
+    ## Signed commands
+
+    Low-risk read operations need the certificate only. Any operation with a risk above `read` needs the **signed envelope** of `spot-signed-command`: an Ed25519 signature over the canonical command with domain separation, the `audience` equal to this site's id, an expiry at most 10 minutes after the issue time, and a nonce that is unique within the durable replay window (WP-ADM-01.T3). **Replay:** a nonce or command id seen inside the window is `409 mgmt.replayed`; the window is durable, so a restart does not reopen it. **Clock skew:** the verifier tolerates at most 2 minutes either way; an envelope issued further in the future, expired, or with a lifetime over 10 minutes is `401 mgmt.signature_expired`. **Approval:** operations of risk `high` and `critical` also need the approval records of WP-MIG-04 or WP-ADM-03 as the catalogue states (`mgmt.approval_required`). The five risk levels are those of `spot-mgmt-ops`: `read`, `low`, `medium`, `high`, `critical`.
+
+    ## Operations are catalogue ids
+
+    An operation id is an entry of the typed catalogue (`spot-mgmt-ops`); an id is never a free-form string and nothing here executes a shell line. Parameters have types and bounds; a secret parameter is never echoed and is rendered as a placeholder.
+
+    ## Audit
+
+    Every request that reaches authentication is audited with the principal (or `unauthenticated` plus the client certificate fingerprint), the operation id, the risk, the outcome and, for a refused or failed command, the reason code. A refusal is audited as carefully as a success.
+
+    ## Limits
+
+    The request body is at most 64 KiB. Rate classes `interactive` and `bulk`. Concurrent commands per site: at most 4. A `critical` operation takes one site-wide exclusive lock. Every error is the same envelope as the native API (`code`, `message`, `request_id`, `retryable`); messages never carry a secret, a path outside the site root or a stack.
+
+    ## Versioning
+
+    Paths are prefixed `/mgmt/v1`. Additive changes bump the minor version; clients ignore unknown response fields.
+
+    ## Site operations (0.2.0)
+
+    The named site operations are listed under `x-spot-operations` (`id`, `summary`, `risk`, `parameters`, `requires`, `idempotent`, `cli`, `audit`) and are invoked as catalogue ids through `mgmt_command_invoke`. Risk: list, show, status and audit are `read`; backup run and verify, restore preflight, plan, approve, reject, rehearse, hold, release and `maintenance.leave` are `low` or `medium` (a change); restore apply, migrate apply, rescue and `maintenance.enter` are `critical` (destructive). **Parameter rules:** `site` is a registered site id, never a path; `plan_hash` is the hex digest of `spot-migration-approval::PlanDigest` and is required by approve, rehearse, apply and rescue (apply runs exactly the approved plan); a backup target is a configured target name, never a free path; `site.restore.apply` needs the single-use `confirm` token produced by `site.restore.preflight`, bound to the backup id, the target and the clock, so a restore cannot be started by one call. **Separation of duties:** approve and reject require an approver different from the plan author (WP-MIG-04.T3).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://{host}:{port}
+    description: The site's management listener (mutual TLS).
+    variables:
+      host: {default: localhost}
+      port: {default: '8443'}
+security:
+  - mtls: []
+tags:
+  - name: management
+
+paths:
+  /mgmt/v1/operations:
+    get:
+      tags: [management]
+      operationId: mgmt_operation_list
+      summary: "The operation catalogue the caller may see"
+      description: |
+        The operation catalogue the caller may see. Requires the client certificate only. Operation ids
+        are dotted catalogue ids; no id is a free-form string executed as a shell line. Audience: the
+        operator principal behind the verified client certificate (ADR-083: never the consumer
+        audience). Permission: an operator principal (the catalogue lists only operations the principal
+        may call). Rate class `interactive`.
+      parameters:
+        - {"name": "risk", "in": "query", "required": false, "schema": {"type": "string", "enum": ["read", "low", "medium", "high", "critical"]}}
+        - {"name": "q", "in": "query", "required": false, "description": "A prefix of the id or a word of the title.", "schema": {"type": "string", "maxLength": 100}}
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtOperationListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/operations/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [management]
+      operationId: mgmt_operation_get
+      summary: "One catalogue operation"
+      description: |
+        One catalogue operation. Parameters come with their types and bounds, risk, and whether a
+        signature or an approval is required. Audience: the operator principal behind the verified
+        client certificate (ADR-083: never the consumer audience). Permission: an operator principal
+        that may call it. Rate class `interactive`. A cross-tenant id answers `404
+        mgmt.unknown_operation` exactly like a missing one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtOperationGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/operations/{id}/validate:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [management]
+      operationId: mgmt_operation_validate
+      summary: "Dry validation of an invocation"
+      description: |
+        Dry validation of an invocation. Parses and checks the parameters against the catalogue and
+        returns the parsed invocation and the **equivalent command line**; it executes nothing and needs
+        no signature. A secret parameter is rendered as `<secret>` and is never echoed. Audience: the
+        operator principal behind the verified client certificate (ADR-083: never the consumer
+        audience). Permission: an operator principal that may call the operation. Rate class
+        `interactive`. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who,
+        what and the outcome; a refusal is audited too. A cross-tenant id answers `404
+        mgmt.unknown_operation` exactly like a missing one.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/MgmtOperationValidateRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtOperationValidateResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/commands:
+    post:
+      tags: [management]
+      operationId: mgmt_command_invoke
+      summary: "Invoke an operation with a signed command"
+      description: |
+        Invoke an operation with a signed command. Answers `202` with a command id; the work is
+        asynchronous. The body is the signed command envelope of `spot-signed-command` (Ed25519, domain
+        separation, `audience` = this site's id, `expires_at` at most 10 minutes after `issued_at`, a
+        nonce unique within the durable replay window). A risk `read` operation needs the certificate
+        only; any higher risk needs the signed envelope; `high` and `critical` operations also need the
+        approval records the catalogue names. Concurrent commands per site are at most 4, and a
+        `critical` operation takes the site-wide exclusive lock (`409 mgmt.conflict` while another
+        command holds it). Audience: the operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal that may call the
+        operation, plus the signature and approvals the operation requires. Rate class `bulk`. Requires
+        an `Idempotency-Key`. Audited: the principal, the operation, the risk, the outcome and the
+        reason code of a refusal; a refusal is audited too, and no audit record carries a secret.
+      parameters:
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/MgmtCommandInvokeRequest"}}}}
+      responses:
+        "202": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtCommandInvokeResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/commands/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [management]
+      operationId: mgmt_command_get
+      summary: "The status of a command"
+      description: |
+        The status of a command. State, progress, the redacted result and the audit reference. Audience:
+        the operator principal behind the verified client certificate (ADR-083: never the consumer
+        audience). Permission: an operator principal that issued it, or one with the audit right. Rate
+        class `interactive`. A cross-tenant id answers `404 mgmt.unknown_command` exactly like a missing
+        one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtCommandGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/commands/{id}/cancel:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [management]
+      operationId: mgmt_command_cancel
+      summary: "Cancel a command"
+      description: |
+        Cancel a command. Stops a queued or running command at its next safe point; an already finished
+        command is unchanged and `409 mgmt.conflict` is not used for it (the answer is its final
+        status). Audience: the operator principal behind the verified client certificate (ADR-083: never
+        the consumer audience). Permission: the operator principal that issued it, or one with the
+        cancel right. Rate class `interactive`. Takes no `Idempotency-Key`: a repeat is a repeat of the
+        action. Audited: who, what and the outcome; a refusal is audited too. A cross-tenant id answers
+        `404 mgmt.unknown_command` exactly like a missing one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtCommandCancelResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /mgmt/v1/health:
+    get:
+      tags: [management]
+      operationId: mgmt_health
+      summary: "Liveness"
+      description: |
+        Liveness. Unauthenticated liveness only: it states that the process answers and nothing else (no
+        version, no site, no state). Audience: anyone, no bearer token (the tenant comes from the site).
+        Permission: none (liveness only). Rate class `interactive`.
+      security: []
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/MgmtHealthResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    mtls:
+      type: mutualTLS
+      description: A client certificate chaining to the site's operator CA (TLS 1.3).
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 1 to 128 visible ASCII characters; a replay returns the first answer.
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The version the change is based on, as returned in `ETag`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    SignedCommand:
+      name: X-Spot-Command
+      in: header
+      required: true
+      description: The signed command envelope (base64url of the `spot-signed-command` JSON); it binds the body by its SHA-256 digest.
+      schema: {type: string, maxLength: 16384}
+  responses:
+    Error:
+      description: Any error. The status and `error.code` follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait, on 429 and 503.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    Identifier:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{0,62}$'
+    RecordId:
+      type: string
+      description: A UUIDv7, canonical lower-case hyphenated form.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    ErrorCode:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, request_id]
+          properties:
+            code: {$ref: "#/components/schemas/ErrorCode"}
+            message: {type: string, maxLength: 1000}
+            retryable: {type: boolean, description: True when the same request may succeed later unchanged.}
+            request_id: {type: string, maxLength: 200}
+            details: {type: object, maxProperties: 20, description: "Code-specific data, documented per code; never a secret, a path outside the site root or a stack."}
+    MgmtOperation: {"type": "object", "additionalProperties": false, "description": "`requires` names what the command must carry: `signature` for any risk above `read`, and `approval:<kind>` for `high` and `critical` operations as the catalogue states. `cli` is the equivalent command pattern.", "required": ["id", "title", "summary", "risk", "parameters", "requires"], "properties": {"id": {"type": "string", "maxLength": 120, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"}, "title": {"type": "string", "maxLength": 200}, "summary": {"type": "string", "maxLength": 1000}, "risk": {"type": "string", "enum": ["read", "low", "medium", "high", "critical"]}, "target": {"type": "string", "maxLength": 60}, "parameters": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["name", "type", "required", "is_secret", "doc"], "properties": {"name": {"type": "string", "maxLength": 64}, "type": {"type": "string", "enum": ["bool", "int", "text", "choice"]}, "required": {"type": "boolean"}, "is_secret": {"type": "boolean"}, "doc": {"type": "string", "maxLength": 500}, "min": {"type": ["integer", "null"], "minimum": -9007199254740991, "maximum": 9007199254740991}, "max": {"type": ["integer", "null"], "minimum": -9007199254740991, "maximum": 9007199254740991}, "max_len": {"type": ["integer", "null"], "minimum": 0, "maximum": 100000}, "pattern": {"type": ["string", "null"], "maxLength": 500}, "choices": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 100}}, "default": {"type": ["string", "null"], "maxLength": 500}}}}, "requires": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 100}}, "idempotent": {"type": "boolean"}, "audit_event": {"type": "string", "maxLength": 120}, "cli": {"type": "string", "maxLength": 500}}}
+    MgmtInvocation: {"type": "object", "additionalProperties": false, "description": "`command_line` is the equivalent command line rendered by the catalogue (`spot-mgmt-ops`), with every secret parameter replaced by the placeholder `<secret>`; `redacted` lists their names.", "required": ["operation", "params", "risk", "requires", "command_line"], "properties": {"operation": {"type": "string", "maxLength": 120}, "params": {"type": "object", "maxProperties": 50, "additionalProperties": {"type": ["string", "integer", "boolean"], "maxLength": 4000}}, "risk": {"type": "string", "enum": ["read", "low", "medium", "high", "critical"]}, "requires": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 100}}, "command_line": {"type": "string", "maxLength": 8000}, "redacted": {"type": "array", "maxItems": 50, "items": {"type": "string", "maxLength": 64}}}}
+    MgmtCommand: {"type": "object", "additionalProperties": false, "description": "The command of `spot-signed-command`: Unix seconds, a 16-byte nonce as 32 lower-case hex characters.", "required": ["version", "id", "op", "params", "audience", "issuer", "issued_at", "expires_at", "nonce"], "properties": {"version": {"type": "integer", "minimum": 1, "maximum": 1}, "id": {"type": "string", "maxLength": 64, "minLength": 1}, "op": {"type": "string", "maxLength": 120}, "params": {"type": "object", "maxProperties": 50, "additionalProperties": {"type": ["string", "integer", "boolean"], "maxLength": 4000}}, "audience": {"type": "string", "maxLength": 200}, "issuer": {"type": "string", "maxLength": 120}, "issued_at": {"type": "integer", "minimum": 0}, "expires_at": {"type": "integer", "minimum": 0}, "nonce": {"type": "string", "maxLength": 32, "minLength": 32}}}
+    MgmtSignature: {"type": "object", "additionalProperties": false, "description": "An Ed25519 signature over the domain-separated canonical command.", "required": ["key_id", "signature"], "properties": {"key_id": {"type": "string", "maxLength": 120}, "signature": {"type": "string", "maxLength": 200}}}
+    MgmtSignedCommand: {"type": "object", "additionalProperties": false, "description": "`signatures` is required for any operation with risk above `read` (and as many as the catalogue states); `approvals` carries the approval records of `high` and `critical` operations.", "required": ["command"], "properties": {"command": {"$ref": "#/components/schemas/MgmtCommand"}, "signatures": {"type": "array", "maxItems": 8, "items": {"$ref": "#/components/schemas/MgmtSignature"}}, "approvals": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 500}}}}
+    MgmtCommandStatus: {"type": "object", "additionalProperties": false, "required": ["id", "operation", "state", "audit_ref", "created_at"], "properties": {"id": {"type": "string", "maxLength": 64}, "operation": {"type": "string", "maxLength": 120}, "state": {"type": "string", "enum": ["queued", "running", "succeeded", "failed", "cancelled", "refused"]}, "progress": {"type": "object", "additionalProperties": false, "properties": {"step": {"type": "string", "maxLength": 120}, "percent": {"type": "integer", "minimum": 0, "maximum": 100}}}, "result": {"type": "object", "maxProperties": 100, "description": "The operation's result, redacted, at most 64 KiB."}, "error_code": {"type": ["string", "null"], "maxLength": 100}, "audit_ref": {"type": "string", "maxLength": 120}, "created_at": {"type": "string", "format": "date-time", "maxLength": 40}, "finished_at": {"type": ["string", "null"], "format": "date-time", "maxLength": 40}}}
+    MgmtPlanSummary: {"type": "object", "additionalProperties": false, "required": ["plan_hash", "risk_class", "estimated_lock_seconds", "steps"], "properties": {"plan_hash": {"type": "string", "maxLength": 64}, "risk_class": {"type": "string", "enum": ["low", "medium", "high"]}, "estimated_lock_seconds": {"type": "integer", "minimum": 0}, "steps": {"type": "integer", "minimum": 0}, "author": {"type": "string", "maxLength": 120}}}
+    MgmtRehearsalReport: {"type": "object", "additionalProperties": false, "required": ["passed", "invariants"], "properties": {"passed": {"type": "boolean"}, "invariants": {"type": "array", "maxItems": 200, "items": {"type": "object", "additionalProperties": false, "required": ["name", "ok"], "properties": {"name": {"type": "string", "maxLength": 120}, "ok": {"type": "boolean"}}}}, "fingerprint_diff": {"type": "array", "maxItems": 200, "items": {"type": "string", "maxLength": 200}}, "replay_diff": {"type": "array", "maxItems": 200, "items": {"type": "string", "maxLength": 200}}}}
+    MgmtApplyProgress: {"type": "object", "additionalProperties": false, "required": ["step", "percent"], "properties": {"step": {"type": "string", "maxLength": 120}, "checkpoint": {"type": "string", "maxLength": 120}, "percent": {"type": "integer", "minimum": 0, "maximum": 100}}}
+    MgmtAuditRef: {"type": "object", "additionalProperties": false, "required": ["record_id", "event"], "properties": {"record_id": {"type": "string", "maxLength": 120}, "event": {"type": "string", "maxLength": 120}}}
+    MgmtOperationListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/MgmtOperation"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    MgmtOperationGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/MgmtOperation"}}}
+    MgmtOperationValidateRequest: {"type": "object", "additionalProperties": false, "required": ["params"], "properties": {"params": {"type": "object", "maxProperties": 50, "additionalProperties": {"type": ["string", "integer", "boolean"], "maxLength": 4000}}}}
+    MgmtOperationValidateResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/MgmtInvocation"}}}
+    MgmtCommandInvokeRequest: {"$ref": "#/components/schemas/MgmtSignedCommand"}
+    MgmtCommandInvokeResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["command_id"], "properties": {"command_id": {"type": "string", "maxLength": 64}}}}}
+    MgmtCommandGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/MgmtCommandStatus"}}}
+    MgmtCommandCancelResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/MgmtCommandStatus"}}}
+    MgmtHealthResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["status"], "properties": {"status": {"type": "string", "const": "live"}}}}}
+
+x-spot-operations:
+  site.backup.run: {"id": "site.backup.run", "summary": "Run a backup of the site to a configured target.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "target", "type": "text", "required": true, "is_secret": false, "doc": "A configured backup target name, never a free path.", "max_len": 100, "pattern": "^[a-z][a-z0-9_-]{0,99}$"}], "requires": ["signature"], "idempotent": false, "cli": "spot backup run --site <site> --target <target>", "audit": "site.backup.run"}
+  site.backup.list: {"id": "site.backup.list", "summary": "List the backups of the site.", "risk": "read", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": [], "idempotent": true, "cli": "spot backup list --site <site>", "audit": "site.backup.list"}
+  site.backup.verify: {"id": "site.backup.verify", "summary": "Verify a backup (manifest and digests) without restoring.", "risk": "low", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "backup_id", "type": "text", "required": true, "is_secret": false, "doc": "A backup id of this site.", "max_len": 64, "pattern": "^[A-Za-z0-9_-]{1,64}$"}], "requires": ["signature"], "idempotent": true, "cli": "spot backup verify --site <site> --backup-id <backup_id>", "audit": "site.backup.verify"}
+  site.restore.preflight: {"id": "site.restore.preflight", "summary": "Check that a restore is possible and issue the single-use confirm token.", "risk": "low", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "backup_id", "type": "text", "required": true, "is_secret": false, "doc": "A backup id of this site.", "max_len": 64, "pattern": "^[A-Za-z0-9_-]{1,64}$"}, {"name": "target", "type": "text", "required": true, "is_secret": false, "doc": "A configured backup target name, never a free path.", "max_len": 100, "pattern": "^[a-z][a-z0-9_-]{0,99}$"}], "requires": ["signature"], "idempotent": false, "cli": "spot restore preflight --site <site> --backup-id <backup_id> --target <target>", "audit": "site.restore.preflight"}
+  site.restore.apply: {"id": "site.restore.apply", "summary": "Restore the site from a backup. A restore cannot be started by one call: it needs the confirm token of the preflight.", "risk": "critical", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "backup_id", "type": "text", "required": true, "is_secret": false, "doc": "A backup id of this site.", "max_len": 64, "pattern": "^[A-Za-z0-9_-]{1,64}$"}, {"name": "target", "type": "text", "required": true, "is_secret": false, "doc": "A configured backup target name, never a free path.", "max_len": 100, "pattern": "^[a-z][a-z0-9_-]{0,99}$"}, {"name": "confirm", "type": "text", "required": true, "is_secret": true, "doc": "The single-use token produced by `site.restore.preflight`, bound to the backup id, the target and the clock.", "max_len": 200}], "requires": ["signature", "approval:restore"], "idempotent": false, "cli": "spot restore apply --site <site> --backup-id <backup_id> --target <target> --confirm <confirm>", "audit": "site.restore.apply"}
+  site.migrate.plan: {"id": "site.migrate.plan", "summary": "Create a migration plan and its digest.", "risk": "low", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": ["signature"], "idempotent": false, "cli": "spot migrate plan --site <site>", "audit": "site.migrate.plan"}
+  site.migrate.show: {"id": "site.migrate.show", "summary": "Show a migration plan: risk class, estimated lock time, steps.", "risk": "read", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}], "requires": [], "idempotent": true, "cli": "spot migrate show --site <site> --plan-hash <plan_hash>", "audit": "site.migrate.show"}
+  site.migrate.approve: {"id": "site.migrate.approve", "summary": "Approve a plan. The approver must differ from the plan author.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}], "requires": ["signature"], "idempotent": true, "cli": "spot migrate approve --site <site> --plan-hash <plan_hash>", "audit": "site.migrate.approve", "separation_of_duties": true}
+  site.migrate.reject: {"id": "site.migrate.reject", "summary": "Reject a plan. The rejecter must differ from the plan author.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}, {"name": "reason", "type": "text", "required": true, "is_secret": false, "doc": "Why (recorded in the audit).", "max_len": 500}], "requires": ["signature"], "idempotent": true, "cli": "spot migrate reject --site <site> --plan-hash <plan_hash> --reason <reason>", "audit": "site.migrate.reject", "separation_of_duties": true}
+  site.migrate.rehearse: {"id": "site.migrate.rehearse", "summary": "Rehearse the approved plan on a copy and report invariants, fingerprint and replay differences.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}], "requires": ["signature", "approval:migration"], "idempotent": false, "cli": "spot migrate rehearse --site <site> --plan-hash <plan_hash>", "audit": "site.migrate.rehearse"}
+  site.migrate.apply: {"id": "site.migrate.apply", "summary": "Apply exactly the approved plan.", "risk": "critical", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}], "requires": ["signature", "approval:migration"], "idempotent": false, "cli": "spot migrate apply --site <site> --plan-hash <plan_hash>", "audit": "site.migrate.apply"}
+  site.migrate.hold: {"id": "site.migrate.hold", "summary": "Hold a running migration at its next checkpoint.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "reason", "type": "text", "required": true, "is_secret": false, "doc": "Why (recorded in the audit).", "max_len": 500}], "requires": ["signature"], "idempotent": true, "cli": "spot migrate hold --site <site> --reason <reason>", "audit": "site.migrate.hold"}
+  site.migrate.release: {"id": "site.migrate.release", "summary": "Release a held migration.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": ["signature"], "idempotent": true, "cli": "spot migrate release --site <site>", "audit": "site.migrate.release"}
+  site.migrate.rescue: {"id": "site.migrate.rescue", "summary": "Roll a failed migration back to its last safe state.", "risk": "critical", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "plan_hash", "type": "text", "required": true, "is_secret": false, "doc": "The hex digest of `spot-migration-approval::PlanDigest` of the approved plan; apply runs exactly that plan.", "max_len": 64, "pattern": "^[0-9a-f]{64}$"}], "requires": ["signature", "approval:migration"], "idempotent": false, "cli": "spot migrate rescue --site <site> --plan-hash <plan_hash>", "audit": "site.migrate.rescue"}
+  site.migrate.audit: {"id": "site.migrate.audit", "summary": "Show the audit trail of migrations of the site.", "risk": "read", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": [], "idempotent": true, "cli": "spot migrate audit --site <site>", "audit": "site.migrate.audit"}
+  site.maintenance.enter: {"id": "site.maintenance.enter", "summary": "Put the site into maintenance mode (it refuses writes).", "risk": "critical", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}, {"name": "reason", "type": "text", "required": true, "is_secret": false, "doc": "Why (recorded in the audit).", "max_len": 500}], "requires": ["signature"], "idempotent": true, "cli": "spot maintenance enter --site <site> --reason <reason>", "audit": "site.maintenance.enter"}
+  site.maintenance.leave: {"id": "site.maintenance.leave", "summary": "Take the site out of maintenance mode.", "risk": "medium", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": ["signature"], "idempotent": true, "cli": "spot maintenance leave --site <site>", "audit": "site.maintenance.leave"}
+  site.status: {"id": "site.status", "summary": "The site's status: version, state, last backup, any held migration.", "risk": "read", "parameters": [{"name": "site", "type": "text", "required": true, "is_secret": false, "doc": "A registered site id (never a path).", "max_len": 63, "pattern": "^[a-z][a-z0-9-]{1,62}$"}], "requires": [], "idempotent": true, "cli": "spot status --site <site>", "audit": "site.status"}
+
+x-spot-error-codes:
+  # code: [HTTP status, retryable, meaning]
+  mgmt.unauthenticated: [401, false, "No verified client certificate (checked before any body is read), or the certificate is not trusted, expired or revoked."]
+  mgmt.forbidden: [403, false, "The operator principal may not call this operation."]
+  mgmt.unknown_operation: [404, false, "No operation with this id in the catalogue that the caller may see."]
+  mgmt.unknown_command: [404, false, "No command with this id that the caller may see."]
+  mgmt.invalid_parameter: [422, false, "A parameter is missing, unknown or out of bounds; details.parameter names it, never its value."]
+  mgmt.signature_invalid: [401, false, "The signed envelope is missing, malformed, wrongly signed, signed by an untrusted key, for another audience, or short of the signatures the operation needs."]
+  mgmt.signature_expired: [401, false, "The envelope is expired, issued in the future beyond the clock skew, or lives longer than 10 minutes."]
+  mgmt.replayed: [409, false, "The nonce or command id was already used inside the durable replay window."]
+  mgmt.approval_required: [403, false, "The operation needs approval records (WP-MIG-04 or WP-ADM-03) that the command does not carry or that do not verify."]
+  mgmt.conflict: [409, true, "Another command holds this operation's lock (or the site-wide exclusive lock of a destructive operation); retry after Retry-After."]
+  mgmt.refused_by_policy: [403, false, "The site's policy refuses the command (a maintenance window, a hold or a separation-of-duties rule); the reason code is audited."]
+  mgmt.not_available_here: [501, false, "The operation is not supported on this platform."]
+  mgmt.rate_limited: [429, true, "Too many requests or too many concurrent commands; wait for Retry-After."]
+  mgmt.body_too_large: [413, false, "The body is larger than 64 KiB."]
+  mgmt.internal: [500, false, "An unexpected server error; the request id identifies it in the logs. The message never carries a secret, a path outside the site root or a stack."]
