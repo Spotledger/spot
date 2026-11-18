@@ -279,7 +279,7 @@ impl Rig {
         }
         for output in outputs {
             assert!(
-                !text(output).contains(&self.password),
+                !common::leaks_password(&text(output), &self.password),
                 "the password reached the output"
             );
         }

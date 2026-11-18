@@ -222,6 +222,9 @@ async fn fuel_wall_clock_and_memory_kill_only_the_call_and_the_server_keeps_serv
         "sleepy".into(),
         AppLimits {
             wall_clock_ms: Some(50),
+            // The site maximum: with the default fuel a fast core burns the whole budget inside
+            // 50 ms and the call is killed for fuel, not for the wall clock.
+            fuel: Some(1_000_000_000),
             ..AppLimits::default()
         },
     );

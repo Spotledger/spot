@@ -5,8 +5,11 @@
 //! which physical disk backs them and how much room they have. It never mounts,
 //! formats or writes. [`crate::target::RemovableTarget`] decides what to do with that.
 
+#[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::error::{BackupError, Result};

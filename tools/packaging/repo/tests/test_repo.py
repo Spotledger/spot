@@ -432,6 +432,8 @@ class ConfigTest(unittest.TestCase):
     def test_no_secret_key_files_in_the_tree(self):
         for root in (REPO / "packaging/linux/repo", TOOLS):
             for path in root.rglob("*"):
+                if "__pycache__" in path.parts or path.suffix == ".pyc":
+                    continue  # bytecode of earlier suites in the same run embeds test key text
                 if path.is_file():
                     self.assertFalse(signing.has_secret_material(path) and path.suffix != ".py", path)
 

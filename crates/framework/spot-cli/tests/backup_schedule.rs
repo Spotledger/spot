@@ -811,7 +811,7 @@ async fn the_backup_runs_and_verifies_in_full_and_a_failing_target_keeps_the_pri
         .and_then(|u| u.password().map(str::to_owned))
         .unwrap_or_default();
     assert!(
-        password.is_empty() || !notices.contains(&password),
+        !common::leaks_password(&notices, &password),
         "no secret in the alert"
     );
     // A site without a key provider and without the override writes nothing.

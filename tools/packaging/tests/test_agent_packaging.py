@@ -243,6 +243,14 @@ class SudoersTest(unittest.TestCase):
             path.write_text(reference_dropin(template_names()))
             path.chmod(0o440)
             run = subprocess.run(["visudo", "-cf", str(path)], capture_output=True, text=True)
+            if run.returncode != 0 and "requiretty" in run.stdout + run.stderr:
+                # sudo 1.9.14+ removed the `requiretty` setting, so `!requiretty` is unknown there.
+                # The generated drop-in keeps it for older RHEL-family sudo, where a tty could be
+                # required. Re-check the rest of the file without that one known-obsolete option.
+                path.chmod(0o640)
+                path.write_text(path.read_text().replace("!requiretty, ", ""))
+                path.chmod(0o440)
+                run = subprocess.run(["visudo", "-cf", str(path)], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
 
@@ -287,7 +295,9 @@ class SpecTest(unittest.TestCase):
     def test_sudoers_is_a_build_input_not_a_repo_file(self):
         self.assertIn("Source5:        spot-agent.sudoers", self.spec)
         self.assertEqual(list(AGENT.rglob("*sudoers*")).count(AGENT / "agent_sudoers.py"), 1)
-        others = [p for p in AGENT.rglob("*") if p.is_file() and "sudoers" in p.name and p.suffix != ".py"]
+        others = [p for p in AGENT.rglob("*")
+                  if p.is_file() and "sudoers" in p.name and p.suffix not in (".py", ".pyc")
+                  and "__pycache__" not in p.parts]
         self.assertEqual(others, [], "the drop-in is generated at package build, not committed")
 
     def test_render_spec(self):

@@ -19,6 +19,27 @@ pub const ADMIN_PASSWORD: &str = "violet-lantern-staple-9-Quartz";
 
 pub mod notes;
 
+/// True when `haystack` shows the database password. A long password is searched for as it is.
+/// A short one (CI uses the throwaway password "spot") is a substring of ordinary words, binary
+/// and role names, so only the forms a leak takes are searched: a connection URL, a key/value
+/// connection string and the environment variable.
+pub fn leaks_password(haystack: &str, password: &str) -> bool {
+    if password.is_empty() {
+        return false;
+    }
+    if password.len() >= 12 {
+        return haystack.contains(password);
+    }
+    [
+        format!(":{password}@"),
+        format!("password={password}"),
+        format!("password = {password}"),
+        format!("PGPASSWORD={password}"),
+    ]
+    .iter()
+    .any(|form| haystack.contains(form.as_str()))
+}
+
 pub struct Root(pub PathBuf);
 impl Drop for Root {
     fn drop(&mut self) {

@@ -80,7 +80,33 @@ pub fn provisioning_sql(
     Ok(statements)
 }
 
+/// Key of the advisory lock that serialises provisioning of the cluster-wide role (the bytes of
+/// "spotai" as a number, fixed so every site and every host process takes the same lock).
+const PROVISION_LOCK: i64 = 0x7370_6f74_6169;
+
+/// How many times a provisioning attempt that lost a catalog race is repeated.
+const PROVISION_ATTEMPTS: u32 = 8;
+
+/// `tuple concurrently updated`: PostgreSQL's answer when two sessions change the same catalog row
+/// (a role, or its settings) at the same moment. It is `XX000` (internal error) with no more
+/// specific code, so it is recognised by that code and its fixed message.
+fn is_catalog_race(error: &tokio_postgres::Error) -> bool {
+    error.as_db_error().is_some_and(|e| {
+        e.code() == &tokio_postgres::error::SqlState::INTERNAL_ERROR
+            && e.message().contains("concurrently updated")
+    })
+}
+
 /// Runs the provisioning statements on the main pool.
+///
+/// The role is cluster-wide while a site is not, so several sites (or several test hosts) start and
+/// provision it at the same moment, and the role's rows in the shared catalogs are not safe against
+/// concurrent change: `CREATE ROLE` answers `role already exists` and `ALTER ROLE` answers `tuple
+/// concurrently updated`, which made the later site answer `503` on `/mcp`. The statements
+/// therefore run one site at a time under a session-level advisory lock, each attempt in one
+/// transaction that is rolled back on any failure, and an attempt that still loses a catalog race
+/// (another writer not holding the lock, such as an operator's own `ALTER ROLE`) is repeated after
+/// a short pause. The statement set is idempotent, so a repeat is safe.
 ///
 /// # Errors
 ///
@@ -91,13 +117,38 @@ pub async fn provision(backend: &PgBackend, statements: &[String]) -> Result<(),
         .get()
         .await
         .map_err(|_| "the database is not available".to_owned())?;
-    for statement in statements {
-        client
-            .batch_execute(statement)
-            .await
-            .map_err(|_| "the database refused the ai role statements".to_owned())?;
+    let refused = |_| "the database refused the ai role statements".to_owned();
+    client
+        .execute("SELECT pg_advisory_lock($1)", &[&PROVISION_LOCK])
+        .await
+        .map_err(refused)?;
+    let mut outcome = Ok(());
+    for attempt in 1..=PROVISION_ATTEMPTS {
+        outcome = async {
+            client.batch_execute("BEGIN").await?;
+            for statement in statements {
+                client.batch_execute(statement).await?;
+            }
+            client.batch_execute("COMMIT").await
+        }
+        .await;
+        let Err(error) = &outcome else { break };
+        let _ = client.batch_execute("ROLLBACK").await;
+        if !is_catalog_race(error) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(u64::from(attempt) * 50)).await;
     }
-    Ok(())
+    // A connection that cannot release the lock is taken out of the pool and dropped, which ends
+    // the session and with it the lock; it is never handed to another caller still holding it.
+    if client
+        .execute("SELECT pg_advisory_unlock($1)", &[&PROVISION_LOCK])
+        .await
+        .is_err()
+    {
+        drop(deadpool_postgres::Object::take(client));
+    }
+    outcome.map_err(refused)
 }
 
 /// The config of the `ai` pool: the site's own, logging in as the role, with the small pool.

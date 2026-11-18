@@ -159,7 +159,7 @@ impl Rig {
         }
         for output in outputs {
             assert!(
-                !text(output).contains(&self.password),
+                !common::leaks_password(&text(output), &self.password),
                 "the password reached the output"
             );
         }
@@ -243,7 +243,11 @@ async fn a_logical_backup_verifies_in_full_and_no_secret_reaches_the_output() {
     rig.no_secret_in(&[&run, &list, &verify]);
     assert!(!records.is_empty(), "the runs are in the audit chain");
     if !rig.password.is_empty() {
-        assert!(records.iter().all(|r| !r.contains(&rig.password)));
+        assert!(
+            records
+                .iter()
+                .all(|r| !common::leaks_password(r, &rig.password))
+        );
     }
     assert_eq!(
         rig.scratch_databases().await,

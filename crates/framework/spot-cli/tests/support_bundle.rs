@@ -293,7 +293,14 @@ async fn since_skips_an_old_log_file_but_keeps_other_categories() {
     plant_secrets(&root);
     // Back-date the log file well past any `--since` window this test uses.
     let log = root.join("sites").join("acme").join("identity-audit.log");
-    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(10 * 24 * 3600);
+    // The command's clock is the manual one in `ctx` (2026-11-08), not the wall clock, so the
+    // file is dated relative to that clock: a wall-clock offset stops being "old" once the real
+    // date passes the manual one by more than the window.
+    let old = std::time::SystemTime::UNIX_EPOCH
+        + std::time::Duration::from_secs(
+            u64::try_from(datetime!(2026-11-08 12:00:00 UTC).unix_timestamp()).unwrap()
+                - 10 * 24 * 3600,
+        );
     let file = std::fs::File::open(&log).unwrap();
     file.set_modified(old).unwrap();
 

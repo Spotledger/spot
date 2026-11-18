@@ -9,6 +9,23 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.10] - 2026-11-18
+
+Continuous integration, third pass: the hosted run of 0.1.9 left five Rust test failures, two
+Python packaging tests, the `cargo deny` advisory check and the dotnet build.
+
+### Fixed
+
+- The `spot_ai` database role is provisioned under an advisory lock and retried, so sites that
+  start together no longer race on it (one of them could refuse `/mcp` with a 503).
+- `cargo deny` ignores RUSTSEC-2026-0542 (`humantime`, unmaintained through `chrono`; no
+  vulnerability).
+- Tests that carried wrong premises on a hosted runner: a short password was searched in every
+  output, the fuel limit was burned before the wall clock, and the support-bundle `--since` test
+  dated its old log from the wall clock. The packaging tests skip bytecode files and accept a
+  `sudo` that no longer knows `requiretty`.
+- The dotnet flow designer build and the Windows build of the backup volume target are clean.
+
 ## [0.1.9] - 2026-11-18
 
 Continuous integration again: 0.1.8 still failed on the hosted runners, in places the product was

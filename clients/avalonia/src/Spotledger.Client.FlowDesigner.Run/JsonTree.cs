@@ -353,7 +353,7 @@ public static class JsonTree
                     }
                     else
                     {
-                        builder.Append(new string(' ', (depth + 1) * 2));
+                        builder.Append(' ', (depth + 1) * 2);
                         Write(builder, child, depth + 1, withName: false);
                     }
 
