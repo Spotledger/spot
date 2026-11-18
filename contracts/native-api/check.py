@@ -967,16 +967,18 @@ def check_signing_secret(spec: dict[str, Any], errors: list[str]) -> None:
     if "The value is never returned" not in get:
         errors.append("rule 21: webhook_signing_secret_get must say the value is never returned")
     body = schemas.get("WebhookSigningSecretPut", {})
-    branches = body.get("oneOf", [])
-    shapes = sorted(tuple(sorted(b.get("properties", {}))) for b in branches)
-    if shapes != [("generate",), ("secret",)]:
-        errors.append(f"rule 21: WebhookSigningSecretPut is exactly one of secret and generate, not {shapes}")
-    for b in branches:
-        if b.get("additionalProperties") is not False:
-            errors.append("rule 21: WebhookSigningSecretPut branches are closed (additionalProperties: false)")
-        sec = b.get("properties", {}).get("secret")
-        if sec is not None and (sec.get("minLength") != 16 or sec.get("maxLength") != 256):
-            errors.append("rule 21: a supplied signing secret is bounded to 16 to 256")
+    # One object with two optional properties and a required-only oneOf. A oneOf of two inline objects makes
+    # Kiota emit a clashing composed wrapper in the request builder (0.26.1), so the union is not spelled that way.
+    if body.get("type") != "object" or sorted(body.get("properties", {})) != ["generate", "secret"]:
+        errors.append("rule 21: WebhookSigningSecretPut is one object with the properties secret and generate")
+    if body.get("additionalProperties") is not False:
+        errors.append("rule 21: WebhookSigningSecretPut is closed (additionalProperties: false)")
+    if sorted(tuple(b.get("required", [])) for b in body.get("oneOf", [])) != [("generate",), ("secret",)] \
+            or any(set(b) != {"required"} for b in body.get("oneOf", [])):
+        errors.append("rule 21: WebhookSigningSecretPut is exactly one of secret and generate (a required-only oneOf)")
+    sec = body.get("properties", {}).get("secret")
+    if sec is not None and (sec.get("minLength") != 16 or sec.get("maxLength") != 256):
+        errors.append("rule 21: a supplied signing secret is bounded to 16 to 256")
     for name in ("WebhookSigningSecretPutResponse", "WebhookSigningSecretStateResponse"):
         schema = schemas.get(name)
         if schema is None:
@@ -1720,8 +1722,8 @@ GROUP_PINS[31] = {'version': '0.25.0',
               'connector_list': ['no credential']}}
 
 
-# Rule 33 (contract 0.26.0, WP-CON-03.T67): the external peer's inbound operation (public, HMAC-signed, one uniform 401, 429 reuses api.rate_limited).
-GROUP_PINS[33] = {'version': '0.26.0',
+# Rule 33 (contract 0.26.1, WP-CON-03.T67): the external peer's inbound operation (public, HMAC-signed, one uniform 401, 429 reuses api.rate_limited).
+GROUP_PINS[33] = {'version': '0.26.1',
  'task': 'WP-CON-03.T67',
  'ops': {'link_inbound': ('post', '/api/v1/link/inbound/{peer}', True, False, False)},
  'once': [],
@@ -1999,10 +2001,9 @@ def self_test() -> int:
             parameters=[{"$ref": "#/components/parameters/IdempotencyKeyRequired"}]),
         "a readable value": lambda s: s["paths"][sr]["get"].update(
             description=s["paths"][sr]["get"]["description"].replace("The value is never returned", "The value")),
-        "a body with both": lambda s: schemas(s)["WebhookSigningSecretPut"]["oneOf"].append(
-            {"type": "object", "additionalProperties": False, "properties": {"secret": {"type": "string", "maxLength": 9}, "generate": {"type": "boolean"}}}),
-        "an open put body": lambda s: schemas(s)["WebhookSigningSecretPut"]["oneOf"][0].pop("additionalProperties"),
-        "an unbounded secret": lambda s: schemas(s)["WebhookSigningSecretPut"]["oneOf"][0]["properties"]["secret"].update(maxLength=100000),
+        "a body with both": lambda s: schemas(s)["WebhookSigningSecretPut"].pop("oneOf"),
+        "an open put body": lambda s: schemas(s)["WebhookSigningSecretPut"].pop("additionalProperties"),
+        "an unbounded secret": lambda s: schemas(s)["WebhookSigningSecretPut"]["properties"]["secret"].update(maxLength=100000),
         "a secret in the get answer": lambda s: schemas(s)["WebhookSigningSecretStateResponse"]["properties"]["data"]["properties"].update(
             secret={"type": "string", "maxLength": 9}),
         "a value in the put answer": lambda s: schemas(s)["WebhookSigningSecretPutResponse"]["properties"]["data"]["properties"].update(

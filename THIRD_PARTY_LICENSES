@@ -2072,7 +2072,7 @@ rusticata-macros 4.1.0
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-9206df1d7b (LICENSE-MIT)
 
-rustix 1.1.5
+rustix 1.1.6
   licence: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
   text: T-954f335b8b (LICENSE-APACHE), T-2f213ec6b1 (LICENSE-Apache-2.0_WITH_LLVM-exception), T-30fefc3a7d (LICENSE-MIT)
 

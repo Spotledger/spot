@@ -83,14 +83,10 @@ fn files_under(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// The project's own README (the one at the root of the generated tree). `app/fixtures/README.md`
+/// is generated too, and directory order is the file system's, so never pick "a" README by walking.
 fn readme_of(dir: &tempfile::TempDir) -> String {
-    let mut files = Vec::new();
-    files_under(dir.path(), &mut files);
-    let readme = files
-        .iter()
-        .find(|p| p.file_name().is_some_and(|n| n == "README.md"))
-        .expect("a generated README");
-    std::fs::read_to_string(readme).unwrap()
+    std::fs::read_to_string(dir.path().join("README.md")).expect("a generated root README")
 }
 
 #[test]

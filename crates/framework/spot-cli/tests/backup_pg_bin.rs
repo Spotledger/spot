@@ -179,3 +179,46 @@ fn a_symlink_to_a_world_writable_directory_is_refused() {
     let _ = std::fs::remove_file(&link);
     assert!(error.contains("world-writable"), "{error}");
 }
+
+/// The usual distribution layout: `pg_dump` in the tools directory is a link to a wrapper that
+/// lives elsewhere (Debian and Ubuntu: `/usr/bin/pg_dump -> ../share/postgresql-common/pg_wrapper`,
+/// the link itself mode 0777). The link's own mode is not the tool's: the file it leads to is.
+fn linked_tools(tag: &str, target_mode: u32) -> (Tools, PathBuf) {
+    let tools = Tools::new(tag, 0o755);
+    let wrapper_dir =
+        std::env::temp_dir().join(format!("spot_pg_bin_wrapper_{tag}_{}", std::process::id()));
+    std::fs::create_dir_all(&wrapper_dir).unwrap();
+    let wrapper = wrapper_dir.join("pg_wrapper");
+    std::fs::write(&wrapper, b"").unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(target_mode)).unwrap();
+    std::fs::remove_file(tools.path().join("pg_dump")).unwrap();
+    std::os::unix::fs::symlink(&wrapper, tools.path().join("pg_dump")).unwrap();
+    (tools, wrapper_dir)
+}
+
+#[test]
+fn a_pg_dump_link_to_a_safe_file_is_accepted() {
+    let (tools, wrapper_dir) = linked_tools("lnk_ok", 0o755);
+    let path = path_of(&[tools.path()]);
+    let found = resolve_pg_bin_dir(None, &no_env, Some(path.as_os_str()));
+    let configured = resolve_pg_bin_dir(Some(tools.path()), &no_env, None);
+    let _ = std::fs::remove_dir_all(&wrapper_dir);
+    assert!(found.is_ok(), "{found:?}");
+    assert!(configured.is_ok(), "{configured:?}");
+}
+
+#[test]
+fn a_pg_dump_link_to_a_world_writable_file_is_refused_and_named() {
+    let (tools, wrapper_dir) = linked_tools("lnk_ww", 0o777);
+    let error = resolve_pg_bin_dir(Some(tools.path()), &no_env, None).unwrap_err();
+    let _ = std::fs::remove_dir_all(&wrapper_dir);
+    assert!(
+        error.contains("backup.target_unsafe") && error.contains("world-writable"),
+        "{error}"
+    );
+    // The message names the file that failed and its mode.
+    assert!(
+        error.contains("pg_wrapper") && error.contains("0777"),
+        "{error}"
+    );
+}

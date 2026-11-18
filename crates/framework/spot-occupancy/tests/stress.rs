@@ -59,11 +59,19 @@ async fn no_double_booking_across_concurrent_takers_racing_the_sweeper() {
     let sweeper = {
         let (svc, clock, done) = (fx.svc.clone(), fx.clock.clone(), done.clone());
         tokio::spawn(async move {
+            let mut busy_sweeps = 0u64;
             while !done.load(Ordering::Relaxed) {
                 clock.advance(secs(120));
-                svc.sweep_all(5).await.unwrap();
+                match svc.sweep_all(5).await {
+                    Ok(_) => {}
+                    // A sweep refused for load (see `busy`) is skipped: the next tick sweeps
+                    // again, and a missed sweep can only leave a hold standing longer.
+                    Err(OccupancyError::Storage(e)) if busy(&e) => busy_sweeps += 1,
+                    Err(e) => panic!("sweep failed unexpectedly: {e}"),
+                }
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
             }
+            busy_sweeps
         })
     };
 
@@ -118,9 +126,9 @@ async fn no_double_booking_across_concurrent_takers_racing_the_sweeper() {
         total.confirms += t.confirms;
     }
     done.store(true, Ordering::Relaxed);
-    sweeper.await.unwrap();
+    let busy_sweeps = sweeper.await.unwrap();
     println!(
-        "stress: attempts~{} ok={} conflicts={} retries_exhausted={} confirms={}",
+        "stress: attempts~{} ok={} conflicts={} retries_exhausted={} confirms={} busy_sweeps={busy_sweeps}",
         per_worker * WORKERS,
         total.ok,
         total.conflicts,
@@ -179,8 +187,16 @@ async fn no_double_booking_across_concurrent_takers_racing_the_sweeper() {
     println!("stress: {} rows, {checked} pairs checked", rows.rows.len());
 }
 
-/// A storage refusal a loaded system may legitimately answer: retries exhausted, or the bounded
-/// wait on a row lock (`storage.lock_timeout`) ran out. Neither can leave a double booking.
+/// A storage refusal a loaded system may legitimately answer: retries exhausted, the bounded
+/// wait on a row lock (`storage.lock_timeout`) ran out, or a statement outlived its 30 s bound
+/// (`storage.statement_timeout`: 32 workers, the sweeper, autovacuum and the server share two
+/// vCPUs on a hosted CI runner, in a debug build). None can leave a double booking: a refused
+/// statement commits nothing, and the overlap check on the final table below is the assertion.
 fn busy(e: &spot_storage_contract::StorageError) -> bool {
-    e.kind.is_retryable() || e.kind == spot_storage_contract::ErrorKind::LockTimeout
+    e.kind.is_retryable()
+        || matches!(
+            e.kind,
+            spot_storage_contract::ErrorKind::LockTimeout
+                | spot_storage_contract::ErrorKind::StatementTimeout
+        )
 }

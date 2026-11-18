@@ -2,6 +2,13 @@
 
 Every change is an ADR plus a semantic version bump (blueprint §4, contracts-first rule). Additive changes bump the minor version and keep the `/api/v1` prefix; breaking changes need a new major version and prefix (see `openapi.yaml`, "Versioning").
 
+## 0.26.1 (draft, awaiting architecture-owner approval)
+
+Fix (generated-client build; the architecture owner gave the lead authority over contract changes on 12 Nov 2026); `/api/v1`, every path, operation and error code are unchanged (192 operations, 149 codes). **The wire format is unchanged:** the same JSON bodies are accepted and refused, with the same statuses.
+- **`WebhookSigningSecretPut`** was a `oneOf` of two inline objects (`{secret}` and `{generate: true}`). Kiota 1.35 emitted a composed wrapper class of the same name inside `SigningSecretRequestBuilder`, next to `Models.WebhookSigningSecretPut`, and `PutAsync` took the wrong one: the generated client did not compile (CS1503), which broke the Avalonia client build. The schema is now one closed object with the optional properties `secret` and `generate` and a required-only `oneOf` (`required: [secret]` or `required: [generate]`). A JSON Schema validator accepts and refuses exactly the same bodies as before (neither, both, `generate: false`, a short or long secret, an extra key).
+- `check.py` rule 21 and its self-tests (the new shape) and `conformance.rs` (version; the existing validator test of the body is unchanged and still passes). The other `oneOf` request body (`SecurityRetentionRunCreateRequest`) generates and compiles as it is.
+- **compatibility.** No client or server change on the wire. A generated client sees one request body type, `WebhookSigningSecretPut`, with the properties `secret` and `generate`, where 0.26.0 produced no compiling client.
+
 ## 0.26.0 (draft, awaiting architecture-owner approval)
 
 Additive (WP-CON-03.T67; the architecture owner gave the lead authority over contract changes on 31 Oct 2026 and for 12 Nov 2026); `/api/v1` and every existing path, operation, property and error code are unchanged. 1 operation (192 in all, 189 without the health probes and the realtime upgrade) and 1 error code (149) are new. Tag `link`.

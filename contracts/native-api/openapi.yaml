@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Spotledger native API
-  version: 0.26.0
+  version: 0.26.1
   summary: The only way clients reach the Spotledger runtime (ADR-09, ADR-15).
   description: |
     Contract v0.4 (WP-CON-03, ADR-055). Normative rules that JSON Schema cannot express are
@@ -7111,18 +7111,19 @@ components:
         data: {$ref: "#/components/schemas/LineageAnswer"}
         messages: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/Message"}}
     WebhookSigningSecretPut:
-      description: Exactly one of a supplied secret and a request that the server generate one.
+      description: |
+        Exactly one of a supplied secret (`secret`) and a request that the server generate one
+        (`generate: true`). Both, neither or any other key is refused. Written as one object with
+        two optional properties and a required-only `oneOf`, not as a `oneOf` of two objects, so
+        that the generated clients get one request body type.
+      type: object
+      additionalProperties: false
+      properties:
+        secret: {type: string, minLength: 16, maxLength: 256, description: "16 to 256 bytes (the server checks bytes, not characters)."}
+        generate: {type: boolean, const: true}
       oneOf:
-        - type: object
-          additionalProperties: false
-          required: [secret]
-          properties:
-            secret: {type: string, minLength: 16, maxLength: 256, description: "16 to 256 bytes (the server checks bytes, not characters)."}
-        - type: object
-          additionalProperties: false
-          required: [generate]
-          properties:
-            generate: {type: boolean, const: true}
+        - required: [secret]
+        - required: [generate]
     WebhookSigningSecretPutResponse:
       type: object
       additionalProperties: false

@@ -43,6 +43,11 @@ async fn the_hot_paths_use_their_indexes() {
     // JIT compilation is pure machine-dependent noise in an `EXPLAIN` run: this connection only.
     c.batch_execute("SET jit = off").await.unwrap();
     // 60,000 jobs: mostly finished, some pending, some running, with idempotency keys.
+    // The running jobs' lease expiries are spread, not one shared instant: a live table has no
+    // physical order in its lease times, and a constant column reads to the planner as perfectly
+    // correlated with the heap, which makes a filtered walk of the lease index look cheaper than
+    // the per-site index the cap count is written for (and the choice flips with the server's
+    // sample, so the test would pass on one machine and fail on another).
     c.batch_execute(
         "INSERT INTO spot_job (site, name, args, queue, state, max_attempts, not_before,
                                idempotency_key, claim_token, claim_worker, lease_expires_at,
@@ -54,7 +59,8 @@ async fn the_hot_paths_use_their_indexes() {
                 CASE WHEN g % 20 IN (14, 15, 16, 17, 19) THEN 'key-' || g END,
                 CASE WHEN g % 20 = 19 THEN g END,
                 CASE WHEN g % 20 = 19 THEN 'w' END,
-                CASE WHEN g % 20 = 19 THEN now() + interval '1 hour' END,
+                CASE WHEN g % 20 = 19
+                     THEN now() + ((g * 7919) % 3600) * interval '1 second' END,
                 CASE WHEN g % 20 < 14 OR g % 20 = 18 THEN now() - interval '100 days' END
          FROM generate_series(1, 60000) g;",
     )

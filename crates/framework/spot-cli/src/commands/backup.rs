@@ -486,13 +486,23 @@ fn check_pg_bin_dir(dir: &Path, source: PgBinSource) -> Result<(), String> {
                 }
                 return Err(unsafe_dir("is unreadable"));
             };
+            // Name the file that failed (after following a link), not just the directory: the
+            // usual client layout is a `pg_dump` link into a wrapper elsewhere, and a refusal must
+            // say which part is unsafe.
+            let named = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
             if meta.permissions().mode() & 0o002 != 0 {
-                return Err(unsafe_dir("or its pg_dump is world-writable"));
+                return Err(unsafe_dir(&format!(
+                    "or its pg_dump is world-writable ({} has mode {:04o})",
+                    named.display(),
+                    meta.permissions().mode() & 0o7777
+                )));
             }
             if me.is_some_and(|me| meta.uid() != 0 && meta.uid() != me) {
-                return Err(unsafe_dir(
-                    "or its pg_dump belongs to neither root nor this user",
-                ));
+                return Err(unsafe_dir(&format!(
+                    "or its pg_dump belongs to neither root nor this user ({} belongs to uid {})",
+                    named.display(),
+                    meta.uid()
+                )));
             }
         }
     }

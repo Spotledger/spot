@@ -256,6 +256,11 @@ impl Node {
         let url = std::env::var("SPOT_TEST_PG_URL").unwrap_or_else(|_| {
             panic!("SPOT_TEST_PG_URL disappeared between TestDb::create and here")
         });
+        // `pool_max_size = 4`: a node opens several pools of this size (the framework, each
+        // site, the journal, the audit chain), three nodes make a topology and the tests of this
+        // binary run in parallel. At 8 the binary peaked at about 140 connections and at 4 about
+        // 93, where the stock `max_connections = 100` of a CI Postgres fails nodes with
+        // "too many clients" (503, "cannot connect"). 4 stays above the 3 the partition registry needs.
         std::fs::write(
             root.join("common.toml"),
             format!(
@@ -265,7 +270,7 @@ impl Node {
                  shutdown_grace = 5\n\
                  [postgres]\n\
                  admin_url = {url:?}\n\
-                 pool_max_size = 8\n\
+                 pool_max_size = 4\n\
                  [services.secrets]\n\
                  kek_file = {:?}\n\
                  [services.signin_throttle]\n\

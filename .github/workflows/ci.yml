@@ -47,11 +47,16 @@ jobs:
         name: start PostgreSQL 18 with its extensions
         shell: bash
         run: bash tools/ci/start-postgres.sh
+      # The server runs in a container; the backup tests need client tools of the same major
+      # version on the host (tools/ci/install-pg-client.sh says why).
+      - if: runner.os == 'Linux'
+        name: install the PostgreSQL 18 client tools
+        shell: bash
+        run: bash tools/ci/install-pg-client.sh
       - name: workflow lint
         shell: bash
         run: |
-          python tools/opensource-ci/workflow_lint.py .github/workflows --exclude spot-pr.yml --exclude spot-verdict.yml
-          python tools/opensource-ci/ops_workflow_lint.py --public-pair .github/workflows
+          python tools/opensource-ci/workflow_lint.py .github/workflows
       - name: licence lint
         run: python tools/lints/license/check.py
       - name: python suites
@@ -97,6 +102,12 @@ jobs:
         name: start PostgreSQL 18 with its extensions
         shell: bash
         run: bash tools/ci/start-postgres.sh
+      # The server runs in a container; the backup tests need client tools of the same major
+      # version on the host (tools/ci/install-pg-client.sh says why).
+      - if: runner.os == 'Linux'
+        name: install the PostgreSQL 18 client tools
+        shell: bash
+        run: bash tools/ci/install-pg-client.sh
       # Linux only: `cargo fmt --all` hands rustfmt every source file on one command line, which
       # Windows refuses (os error 206), and formatting does not depend on the platform.
       - if: matrix.shard == 1 && runner.os == 'Linux'

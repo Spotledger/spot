@@ -543,46 +543,59 @@ async fn check_reports_each_failure_separately() {
     assert!(by_name("clock").ok);
 }
 
-#[test]
-fn no_module_depends_on_the_tenant_data_crates() {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-    let output = std::process::Command::new(cargo)
-        .args(["metadata", "--format-version", "1", "--locked", "--offline"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "cargo metadata failed");
-    let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let nodes = metadata["resolve"]["nodes"].as_array().unwrap();
-    let id_of = |name: &str| -> Option<String> {
-        metadata["packages"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|p| p["name"] == name)
-            .map(|p| p["id"].as_str().unwrap().to_owned())
-    };
-    let root = id_of("spot-control-plane").unwrap();
-    // Walk the whole dependency closure of the control plane.
-    let mut seen = std::collections::BTreeSet::new();
-    let mut stack = vec![root.clone()];
-    while let Some(id) = stack.pop() {
-        if !seen.insert(id.clone()) {
-            continue;
-        }
-        if let Some(node) = nodes.iter().find(|n| n["id"] == id.as_str()) {
-            for dep in node["deps"].as_array().unwrap() {
-                stack.push(dep["pkg"].as_str().unwrap().to_owned());
+/// The packages of the workspace lock file with the names of their dependencies (the lock file
+/// names a dependency as `name`, `name version` or `name version (source)`; only the name is
+/// used, which over-approximates when two versions of one name exist). Read from `Cargo.lock`
+/// rather than from `cargo metadata`: metadata needs the source of every package of every
+/// platform in the registry cache, which a CI shard that built only some of the workspace has
+/// not downloaded (`--offline` then fails with "failed to download"), and the lock file holds
+/// the same graph without touching the registry.
+fn lock_graph() -> std::collections::BTreeMap<String, Vec<String>> {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../Cargo.lock");
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+    let mut graph: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut name: Option<String> = None;
+    let mut in_deps = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line == "[[package]]" {
+            name = None;
+            in_deps = false;
+        } else if let Some(v) = line.strip_prefix("name = ") {
+            let n = v.trim_matches('"').to_owned();
+            graph.entry(n.clone()).or_default();
+            name = Some(n);
+        } else if line == "dependencies = [" {
+            in_deps = true;
+        } else if line == "]" {
+            in_deps = false;
+        } else if in_deps {
+            let dep = line.trim_end_matches(',').trim_matches('"');
+            let dep = dep.split(' ').next().unwrap_or(dep).to_owned();
+            if let Some(n) = &name {
+                graph.entry(n.clone()).or_default().push(dep);
             }
         }
     }
-    let names: std::collections::BTreeSet<String> = metadata["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|p| seen.contains(p["id"].as_str().unwrap()))
-        .map(|p| p["name"].as_str().unwrap().to_owned())
-        .collect();
+    graph
+}
+
+#[test]
+fn no_module_depends_on_the_tenant_data_crates() {
+    let graph = lock_graph();
+    assert!(
+        graph.contains_key("spot-control-plane"),
+        "Cargo.lock does not list spot-control-plane"
+    );
+    // Walk the whole dependency closure of the control plane.
+    let mut names = std::collections::BTreeSet::new();
+    let mut stack = vec!["spot-control-plane".to_owned()];
+    while let Some(name) = stack.pop() {
+        if !names.insert(name.clone()) {
+            continue;
+        }
+        stack.extend(graph.get(&name).into_iter().flatten().cloned());
+    }
     for forbidden in [
         "spot-document",
         "spot-doc-tables",
@@ -597,14 +610,12 @@ fn no_module_depends_on_the_tenant_data_crates() {
         );
     }
     // The storage contract may only be the database driver's own dependency.
-    let root_node = nodes.iter().find(|n| n["id"] == root.as_str()).unwrap();
-    let direct: Vec<&str> = root_node["deps"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|d| d["name"].as_str())
-        .collect();
-    assert!(!direct.contains(&"spot_storage_contract"));
+    assert!(
+        !graph["spot-control-plane"]
+            .iter()
+            .any(|d| d == "spot-storage-contract"),
+        "the control plane depends on the storage contract directly"
+    );
 }
 
 #[test]

@@ -24,6 +24,19 @@ const SECTION: &str = "Import";
 const BUDGET_ROWS: usize = 100_000;
 /// The wall-clock budget of that case on the large runner, in seconds.
 const BUDGET_SECONDS: u64 = 120;
+/// How long the case waits for the import to finish when the budget is not enforced, in seconds:
+/// a debug build on a 2 to 4 vCPU hosted runner needs about four minutes for the rows, and the
+/// case reports the real time instead of a timeout.
+const UNENFORCED_WAIT_SECONDS: u64 = 1_200;
+
+/// Whether the wall-clock budget is a failure. It is a throughput budget of the large runner:
+/// it is enforced in a release build and whenever `L3_ENFORCE_BUDGET=1` (the full e2e script
+/// sets it on every runner but a GitHub-hosted one), and a debug build on a small hosted runner
+/// is not judged against it. The rows, the exact totals and the logged time stay in every run.
+fn budget_enforced() -> bool {
+    !cfg!(debug_assertions)
+        || std::env::var("L3_ENFORCE_BUDGET").is_ok_and(|v| v == "1" || v == "true")
+}
 
 fn run_flow(_shared: &Fixture) -> CaseFuture<'_> {
     Box::pin(async {
@@ -323,9 +336,16 @@ async fn a_hundred_thousand_rows_import_within_the_budget(fixture: &Fixture) -> 
         )
         .await?
         .expect(202)?;
-    // Wait up to five budgets so a slow machine reports its real time instead of a timeout, and
-    // log the throughput; the budget itself is asserted below.
-    let done = wait_for_state(&admin, &id, "done", BUDGET_SECONDS * 3).await?;
+    // Wait up to three budgets (more when the budget is not enforced) so a slow machine reports
+    // its real time instead of a timeout, and log the throughput; the budget itself is asserted
+    // below when it is enforced.
+    let enforced = budget_enforced();
+    let wait = if enforced {
+        BUDGET_SECONDS * 3
+    } else {
+        UNENFORCED_WAIT_SECONDS
+    };
+    let done = wait_for_state(&admin, &id, "done", wait).await?;
     eprintln!(
         "l3: import budget: {BUDGET_ROWS} rows in {:?}",
         started.elapsed()
@@ -335,6 +355,13 @@ async fn a_hundred_thousand_rows_import_within_the_budget(fixture: &Fixture) -> 
         "counts: {}",
         done["counts"]
     );
+    if !enforced {
+        eprintln!(
+            "l3: import budget: the {BUDGET_SECONDS} s budget is not enforced in this build \
+             (debug, L3_ENFORCE_BUDGET unset); the totals above were checked"
+        );
+        return Ok(());
+    }
     ensure!(
         started.elapsed() < Duration::from_secs(BUDGET_SECONDS),
         "{} rows took {:?}, over the {BUDGET_SECONDS} s budget",

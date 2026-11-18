@@ -28,6 +28,19 @@ contrib_package="postgresql-contrib-${pg_major}"
 user="spot"
 password="spot"
 
+# Server settings for the test cluster, the same on the Docker path and the self-hosted path
+# (CI runs both). The stock `max_connections` is 100, and the multi-node harnesses
+# (l3-journal-sync starts a hub and two edges per test, several tests at once; each node opens
+# the pools of the framework, the sites, the journal and the audit chain) exhaust it: a node then
+# answers 503 or cannot connect, which looks like a product failure. Disposable cluster: no
+# fsync, a larger buffer pool, and room for the connections of every parallel test.
+pg_settings=(
+  -c max_connections=400
+  -c shared_buffers=256MB
+  -c max_locks_per_transaction=128
+  -c fsync=off
+)
+
 die() {
   echo "$*" >&2
   exit 1
@@ -127,7 +140,7 @@ if ! command -v docker >/dev/null 2>&1 && [ -x "$pgbin/initdb" ]; then
   for attempt in 1 2 3 4 5; do
     port="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
     if "$pgbin/pg_ctl" -D "$dir/data" -l "$dir/log" -w -t 60 \
-      -o "-p $port -k $dir -c listen_addresses=127.0.0.1 -c fsync=off -c log_line_prefix=%m[%p]" start >/dev/null; then
+      -o "-p $port -k $dir -c listen_addresses=127.0.0.1 ${pg_settings[*]} -c log_line_prefix=%m[%p]" start >/dev/null; then
       break
     fi
     echo "PostgreSQL did not start on port $port (attempt $attempt); log tail:" >&2
@@ -171,9 +184,11 @@ image="${SPOT_PG_IMAGE:-docker.io/library/postgres:$pg_major}"
 # This script owns the container it names: a leftover one from an interrupted job would make
 # `docker run` fail on the name, so it is removed first. Nothing else is ever removed.
 docker rm -f "$container" >/dev/null 2>&1 || true
-docker run -d --name "$container" \
+# `--shm-size`: Docker gives a container 64 MB of /dev/shm, too little for the dynamic shared
+# memory of parallel queries under a busy test run.
+docker run -d --name "$container" --shm-size=512m \
   -e POSTGRES_USER="$user" -e POSTGRES_PASSWORD="$password" \
-  -p "127.0.0.1:$port:5432" "$image" >/dev/null
+  -p "127.0.0.1:$port:5432" "$image" "${pg_settings[@]}" >/dev/null
 ready=""
 for _ in $(seq 1 60); do
   if docker exec "$container" pg_isready -U "$user" -d postgres >/dev/null 2>&1; then

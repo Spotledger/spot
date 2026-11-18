@@ -9,6 +9,28 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.9] - 2026-11-18
+
+Continuous integration again: 0.1.8 still failed on the hosted runners, in places the product was
+right and the harness, the export or the environment was not.
+
+### Fixed
+
+- The lint gates, the Python job, `cargo deny` (rustix 1.1.6, RUSTSEC-2026-0486) and the dotnet
+  client build (the webhook signing-secret request body is one closed object now, native API
+  0.26.1; the wire format is unchanged) pass.
+- The export no longer ships the error catalogues of the compliance service it leaves out.
+- CI Postgres starts with `max_connections=400` and the other settings the suites assume, so the
+  journal-sync end-to-end tests no longer exhaust it; their node pools are smaller.
+- Hosted runners install the PostgreSQL 18 client tools the backup tests run; the refusal message
+  of an unsafe tools directory names the file and its mode.
+- The occupancy stress test treats a statement timeout as a refusal under load, as it already
+  did a lock timeout (the double-booking check is unchanged); the control-plane dependency test
+  reads `Cargo.lock`, not an offline `cargo metadata`; the scaffold licence tests read the root
+  README; the job plan test no longer depends on equal lease times.
+- The 100,000-row import budget (120 s) applies to release builds and the private end-to-end run,
+  not to debug builds on a hosted runner.
+
 ## [0.1.8] - 2026-11-17
 
 A large batch of runtime work (about 270 tasks, integrated and compiled together), and the hosted
