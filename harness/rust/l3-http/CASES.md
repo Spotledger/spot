@@ -7,9 +7,7 @@ per case; a **blocked** case names the work package that owns the missing surfac
 distance between the brief and the product is visible in every run instead of being deleted.
 The pass or fail state is not listed here: the run report carries it.
 
-241 cases, of which 153 are blocked by surfaces the host does not serve yet.
-70 cases, of which 16 are blocked by surfaces the host does not serve yet.
-63 cases, of which 17 are blocked by surfaces the host does not serve yet.
+285 cases, of which 184 are blocked by surfaces the host does not serve yet.
 
 ## Authentication and sessions
 
@@ -371,6 +369,12 @@ The pass or fail state is not listed here: the run report carries it.
 | `graph: the_index_survives_a_restart_and_a_gap_and_equals_the_database` | after a server restart mid-feed the answer is the same; an edge that vanishes behind the feed (a gap) is found by the drift check and the index rebuilds; then the index and a database-only host give the same answer, and a rebuilt index equals the database | case |
 | `graph: two_sites_share_no_edge` | two sites of one server each see only their own edges by query, lineage and list, a record of the other site is the answer of an unknown id, a session of one site is refused on the other, and all of it holds again after a restart rebuilds both indexes | case |
 
+## Scripts
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `script_kinds: an_api_script_is_served_as_its_caller_and_a_scheduled_script_runs_as_its_user` | an API script created as a document is served as a function (`200` for a signed-in user, `404` for nobody (a function that is not declared `guest` does not exist to a guest), `400` for a bad argument, never a guest), and a scheduled script that fires every second writes one document per slot as its `run_as` user; a `run_as` user that does not exist produces no document and a recorded error | case |
+
 ## Connectors
 
 | Case | Pins | Kind |
@@ -408,6 +412,57 @@ The pass or fail state is not listed here: the run report carries it.
 | `access_questions: emergency_access_starts_expires_and_is_reviewed_by_someone_else` | an emergency grant is requested with a reason, limited in time and roles, started through the governed grant path with source `emergency`, reviewed by a controller who is not the beneficiary, and ends at expiry | blocked: WP-IAM-08.T7: emergency access needs the governed grant path with a caller and a stored request; neither exists yet (the gate has no caller and keeps its state in memory) |
 | `access_questions: the_four_questions_answer_from_a_seeded_matrix_for_authorised_askers_only` | what a user can do, who can do an action, who can see a document and what changed between two dates return the expected rows with the producing rule; an unauthorised asker is refused and audited; a document the asker cannot read never appears | blocked: WP-CON-03.T41: the native API contract has no operation for the access questions, so no route can carry them; the module provides the `AccessQuestions` port only |
 
+## Print
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `print: a_template_cannot_inject_or_escape` | a project whose title holds Typst markup prints it literally; a template that reads `/etc/passwd`, or a symlink in the template folder that points outside it, never puts file content in the PDF or the body | case |
+| `print: print_formats` | `?format=invoice` renders `<doctype>.invoice.typ` (its marker is in the PDF text), a well-formed format with no file is `print.format_unknown`, and a name with a separator, a parent step or a percent-encoded variant is `400 api.invalid_request` without echoing the name or reading a file | case |
+| `print: print_is_deterministic_and_bounded` | the same document and format twice give the same page count and text, a task with a 2,000-row checklist prints or is refused with an envelope inside the client timeout (never a hang), and 20 parallel prints each answer 200, or 429 or 503 with `Retry-After` | case |
+| `print: print_money_stays_exact` | a Time Entry's `0.25` and `0.75` hours print as the stored decimals through the `number` filter (no float noise; the sample's smallest value is 0.25, so the classic 0.1 + 0.2 pair cannot be stored), and a template that does arithmetic on the decimal does not print a computed sum | case |
+| `print: print_of_an_unreadable_or_missing_document_is_one_404` | a document that does not exist and an unknown DocType give the same `404 document.not_found` body (request id aside), and so does a document the caller may not read when the sample roles have one | case |
+| `print: print_requires_sign_in` | an anonymous `GET /print/...` is 401 and the body is not a PDF | case |
+| `print: print_returns_a_pdf_with_the_right_headers` | a signed-in member prints a project with the built-in layout: 200, `Content-Type: application/pdf`, a body that starts `%PDF-`, `Content-Disposition` `inline; filename="project-<id>.pdf"` (built from the validated path names, no title, no separator, no extra quote), `Cache-Control: private, no-store` and `nosniff` | case |
+| `print: print_shows_what_the_caller_may_read_and_nothing_else` | a template printing a task's subject and its confidential details shows the subject to a Viewer and never the details' cleartext (hidden or masked exactly as `GET /resource` reads it), and shows a Project Manager what the read path shows them | case |
+
+## Identity lifecycle
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `identity.administration_surface_is_served_and_authenticated` | the user, invitation and API-key lists answer an administrator 200 with a `data` array and a caller with no credential 401 (never 404), a Viewer is refused 403 | case |
+| `identity.anonymise_keeps_id` | an anonymised user keeps its id, document links still resolve, name, e-mail and linked identities are gone from the directory, the lists and the audit read model, and sign-in fails | blocked: WP-IAM-12.T3: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.assignment_sources` | a rule-owned assignment cannot be edited or removed by hand, ends when its rule stops matching, and a manual assignment of the same role survives; the same for an identity-provider-owned one | blocked: WP-IAM-04.T3: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.impersonation_limits` | support impersonation of a normal user works and the trail carries both identities; an administrator or a break-glass user is refused; an impersonated session cannot create a key, change a password or end the real user's other sessions | blocked: WP-IAM-12.T3: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.key_never_exceeds_owner` | a key wider than its owner is refused, a narrower one works only in its scope, loses a right when the owner does, and stops when the owner is disabled | blocked: WP-IAM-07.T3: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.last_administrator_protected` | the only Tenant Administrator cannot be disabled, demoted or left by an assignment end or a rule change; with a second one it can; two concurrent demotions leave one | blocked: WP-IAM-12.T2: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.leaver_ends_everything` | disabling a user ends two sessions, a key and an invitation within one second; enabling does not bring them back; the actions are audited | blocked: WP-IAM-12.T2: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.request_finishes_under_its_snapshot` | a slow request that started before a role change finishes under the old rights and the next request sees the new ones | blocked: WP-IAM-03.T2: the case needs a controllable delay in the harness's host, which the fixture does not offer |
+| `identity.scoped_roles` | one user is Manager for Company A and Viewer for Company B and sees exactly that; a write on a Company B document is refused; the permission explanation agrees | blocked: WP-IAM-03.T2: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+| `identity.upgrade_diff_leaves_copies` | a newer reference pack shows a diff, the customised copy stays byte-identical and the reference role changes | blocked: WP-IAM-03.T2: the case needs a harness helper to perform a step-up and to give a user created through `identity_user_create` a password; `fixture.rs` has neither and is not an owned path of this task |
+
+## Incoming mail
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `mail_intake: two_messages_become_two_documents_as_the_run_as_user_and_a_repeat_poll_creates_none` | with `[services.mail_intake]` pointing at the fake IMAP server, two messages create two documents whose creator is the `run_as` user, a second poll creates none, an auto-reply is dropped, and a message the DocType refuses is rejected without stopping the next one | case |
+
+## Occupancy
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `occupancy: a_consumer_claims_for_itself_and_cannot_release_anothers_hold` | a consumer principal holds as `consumer:<id>`, and releasing another principal's hold is `403 occupancy.not_holder` | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: a_write_on_a_node_that_does_not_own_the_unit_is_partition_not_owner` | a claim for a unit whose owning node is another answers `403 partition.not_owner` without touching storage | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: an_expired_unswept_hold_is_replaced_and_the_old_confirm_is_hold_expired` | an expired hold nobody swept is taken over by a new claim in one transaction, and the old holder's late confirm is `409 occupancy.hold_expired` | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: one_hundred_thousand_attempts_across_fifty_units_leave_no_overlap` | 10^5 claim attempts across 50 units over HTTP leave no overlapping rows, checked by a direct SQL overlap query | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: tenant_b_cannot_see_or_affect_tenant_as_units` | with the same unit id on two tenants, one tenant's holds are neither visible nor blocking to the other | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: two_concurrent_claims_of_one_interval_have_exactly_one_winner` | two claims of one interval race over HTTP: one answers `201`, the other `409 occupancy.conflict`, and the conflict body names no holder | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy: two_hundred_concurrent_takers_on_twenty_units_never_double_book` | 200 concurrent takers on 20 units: no unit is double booked and the confirmed rows equal the distinct winners | blocked: WP-STO-14.T3 follow-up: the fixture's sample app declares no `occupancy` entity and common.toml no `[services.occupancy]`, so the hosting module is inert on the fixture's site |
+| `occupancy_consumer: a_consumer_bearer_is_refused_on_every_non_listed_route` | a consumer bearer on any staff route answers `403 permission.denied` | blocked: WP-STO-14.T4 follow-up: no consumer login service exists (ADR-083 task 14) to mint a consumer bearer, and the fixture's sample app declares no `occupancy` entity |
+| `occupancy_consumer: a_consumer_cannot_release_or_read_anothers_hold` | another consumer's release answers `occupancy.not_holder`, and the interval state it may read is `busy` with no holder | blocked: WP-STO-14.T4 follow-up: no consumer login service exists (ADR-083 task 14) to mint a consumer bearer, and the fixture's sample app declares no `occupancy` entity |
+| `occupancy_consumer: a_consumer_claims_and_releases_its_own_hold` | a consumer bearer claims `201`, the hold's holder is `consumer:<id>`, and the same consumer releases it | blocked: WP-STO-14.T4 follow-up: no consumer login service exists (ADR-083 task 14) to mint a consumer bearer, and the fixture's sample app declares no `occupancy` entity |
+| `occupancy_consumer: a_consumer_session_of_another_site_is_no_session` | a consumer session issued on another site answers `401 auth.invalid_credentials` | blocked: WP-STO-14.T4 follow-up: no consumer login service exists (ADR-083 task 14) to mint a consumer bearer, and the fixture's sample app declares no `occupancy` entity |
+| `occupancy_consumer: staff_behaviour_is_unchanged_by_the_consumer_resolver` | a staff bearer keeps its rights (`occupancy_manage` reads and manages any hold) | blocked: WP-STO-14.T4 follow-up: no consumer login service exists (ADR-083 task 14) to mint a consumer bearer, and the fixture's sample app declares no `occupancy` entity |
+
 ## Sealed fields
 
 | Case | Pins | Kind |
@@ -420,6 +475,23 @@ The pass or fail state is not listed here: the run report carries it.
 | `sealed_fields: an_offline_reveal_answers_reveal_offline_and_serves_no_cached_value` | with the hub unreachable the reveal answers `sealed_fields.reveal_offline` and never a stored or cached plaintext | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
 | `sealed_fields: the_database_dump_holds_no_plaintext_of_a_sealed_or_encrypted_field` | a dump of the node's database searched for the planted values finds none | blocked: WP-SEC-10.T6 follow-up: the engine has no write-transform seam and no read-mask seam for sealed values, and the harness starts no second node |
 | `sealed_fields: the_hub_reveals_a_sealed_value_to_an_authorised_user_online_and_audits_it` | the reveal route returns the value once, to a user holding the reveal right, and writes one audit record naming the field and document but not the value | blocked: WP-SEC-10.T6 follow-up: no reveal route is mounted by the host and no hub is reachable from a second node |
+
+## Field-level security, every channel
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `field_security.document_read` | a denied user's document carries no key for the protected field and not its value; a reading user's document carries it | case |
+| `field_security.event_stream_and_notification` | the data subscription and the realtime payload `changed` never carry the protected value for a denied user | blocked: WP-SEC-04.T15: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.every_channel_listed` | the case fails when a `spot-field-guard` `Channel` variant has no case in this file | blocked: WP-SEC-04.T17: `l3-http` has no dev-dependency on `spot-field-guard` and `Cargo.toml` is not an owned path of this task; the lead widens the paths and the case reads the enum then |
+| `field_security.export_and_bulk` | document export, bulk export and the incremental extraction omit the protected field for a denied user | blocked: WP-INT-03.T2: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.journal_and_audit_read_model` | the audit read model shows a non-system reader names only, never values | blocked: WP-SEC-04.T11: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.link_title_and_lookup` | a link title and a lookup never show the protected value to a denied user | blocked: WP-SEC-04.T14: the shared fixture has only a denied (Viewer) and a reading (Manager) user over one hidden field; a masked and a revealing grant need a fixture DocType with a masked field, which `fixture.rs` does not build |
+| `field_security.list_and_columns` | a denied user filtering, sorting or projecting on the protected field gets exactly the answer a field that does not exist gets, and no answer holds the value; a reading user's filter finds the document | case |
+| `field_security.print_and_report` | a print and a report omit the protected field for a user without the report right | blocked: WP-SEC-04.T13: the shared fixture has only a denied (Viewer) and a reading (Manager) user over one hidden field; a masked and a revealing grant need a fixture DocType with a masked field, which `fixture.rs` does not build |
+| `field_security.scim` | the SCIM resource of a user whose attribute is protected omits it for a denied caller | blocked: WP-SEC-04.T14: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.search` | the canary is not in the search index for a denied user, a revealer finds the document, and removing the grant removes the hit | blocked: WP-SEC-04.T12: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.trace` | every read that returned a value or a mask appears in the field access trace, and the trace never holds the value | blocked: WP-SEC-04.T12: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
+| `field_security.version_history` | the version history shows a denied user no protected value | blocked: WP-SEC-04.T16: the case body is not written yet: the channel's HTTP shape could not be observed without a running stack; it is the follow-up of WP-SEC-04.T17 |
 
 ## AI isolation
 
@@ -506,23 +578,3 @@ The pass or fail state is not listed here: the run report carries it.
 | `support_access: a_two_person_consent_cannot_be_confirmed_by_its_own_requester` | when the policy asks for a second administrator, the user who gave the consent cannot also confirm it | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
 | `support_access: an_expired_consent_a_consent_for_another_scope_and_another_tenants_request_are_refused` | each refusal carries its stable code, writes an audit record and leaves no credential; the other tenant's request answers like a missing one | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
 | `support_access: an_operator_cannot_delete_an_archive_object_or_alter_a_chain_entry` | a delete or rewrite of an archive object, or an edit of a chain entry, is refused and the chain still verifies | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
-| `function: a_declared_function_is_served_with_its_verbs_schema_limit_and_sign_in_rules` | a function an app declares is called with `GET` and `POST` as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function is `404`, nobody signed in is `401`, a user the function refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After` | case |
-
-## Print
-
-| Case | Pins | Kind |
-| --- | --- | --- |
-| `print: a_template_cannot_inject_or_escape` | a project whose title holds Typst markup prints it literally; a template that reads `/etc/passwd`, or a symlink in the template folder that points outside it, never puts file content in the PDF or the body | case |
-| `print: print_formats` | `?format=invoice` renders `<doctype>.invoice.typ` (its marker is in the PDF text), a well-formed format with no file is `print.format_unknown`, and a name with a separator, a parent step or a percent-encoded variant is `400 api.invalid_request` without echoing the name or reading a file | case |
-| `print: print_is_deterministic_and_bounded` | the same document and format twice give the same page count and text, a task with a 2,000-row checklist prints or is refused with an envelope inside the client timeout (never a hang), and 20 parallel prints each answer 200, or 429 or 503 with `Retry-After` | case |
-| `print: print_money_stays_exact` | a Time Entry's `0.25` and `0.75` hours print as the stored decimals through the `number` filter (no float noise; the sample's smallest value is 0.25, so the classic 0.1 + 0.2 pair cannot be stored), and a template that does arithmetic on the decimal does not print a computed sum | case |
-| `print: print_of_an_unreadable_or_missing_document_is_one_404` | a document that does not exist and an unknown DocType give the same `404 document.not_found` body (request id aside), and so does a document the caller may not read when the sample roles have one | case |
-| `print: print_requires_sign_in` | an anonymous `GET /print/...` is 401 and the body is not a PDF | case |
-| `print: print_returns_a_pdf_with_the_right_headers` | a signed-in member prints a project with the built-in layout: 200, `Content-Type: application/pdf`, a body that starts `%PDF-`, `Content-Disposition` `inline; filename="project-<id>.pdf"` (built from the validated path names, no title, no separator, no extra quote), `Cache-Control: private, no-store` and `nosniff` | case |
-| `print: print_shows_what_the_caller_may_read_and_nothing_else` | a template printing a task's subject and its confidential details shows the subject to a Viewer and never the details' cleartext (hidden or masked exactly as `GET /resource` reads it), and shows a Project Manager what the read path shows them | case |
-## Incoming mail
-
-| Case | Pins | Kind |
-| --- | --- | --- |
-| `mail_intake: two_messages_become_two_documents_as_the_run_as_user_and_a_repeat_poll_creates_none` | with `[services.mail_intake]` pointing at the fake IMAP server, two messages create two documents whose creator is the `run_as` user, a second poll creates none, an auto-reply is dropped, and a message the DocType refuses is rejected without stopping the next one | blocked: WP-PLT-11.T2: spot-mail's fake IMAP server is test support inside its `tests/` folder, not a crate or a `testing` feature a harness can use |
-| `script_kinds: an_api_script_is_served_as_its_caller_and_a_scheduled_script_runs_as_its_user` | an API script created as a document is served as a function (`200` for a signed-in user, `404` for nobody (a function that is not declared `guest` does not exist to a guest), `400` for a bad argument, never a guest), and a scheduled script that fires every second writes one document per slot as its `run_as` user; a `run_as` user that does not exist produces no document and a recorded error | case |

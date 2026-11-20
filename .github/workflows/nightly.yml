@@ -68,6 +68,24 @@ jobs:
         name: install the PostgreSQL 18 client tools
         shell: bash
         run: bash tools/ci/install-pg-client.sh
+      # The L3 mail-intake case needs the fake IMAP server's certificate to be one the process
+      # trusts (harness/rust/l3-http/src/cases/mail_intake.rs): a throwaway self-signed one, added
+      # to a copy of the system roots so nothing else loses its trust store.
+      - if: runner.os == 'Linux'
+        name: certificate for the L3 mail-intake case
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/l3-imap"
+          mkdir -p "$d"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=127.0.0.1 \
+            -addext subjectAltName=IP:127.0.0.1 -addext basicConstraints=critical,CA:FALSE \
+            -keyout "$d/key.pem" -out "$d/cert.pem"
+          cat /etc/ssl/certs/ca-certificates.crt "$d/cert.pem" > "$d/trusted.pem"
+          {
+            echo "L3_IMAP_CERT=$d/cert.pem"
+            echo "L3_IMAP_KEY=$d/key.pem"
+            echo "SSL_CERT_FILE=$d/trusted.pem"
+          } >> "$GITHUB_ENV"
       # Linux only: `cargo fmt --all` hands rustfmt every source file on one command line, which
       # Windows refuses (os error 206), and formatting does not depend on the platform.
       - if: matrix.shard == 1 && runner.os == 'Linux'
@@ -87,20 +105,20 @@ jobs:
           ' "${{ matrix.shard }}")
           echo "shard ${{ matrix.shard }}/4: $names"
           echo "SHARD_CRATES=$names" >> "$GITHUB_ENV"
-      - name: tests and ignored tests (ten crates at a time)
+      - name: tests and ignored tests (four crates at a time)
         shell: bash
         run: |
           PY=$(command -v python3 || command -v python)
           NAMES="$SHARD_CRATES"
           # spot-idle-connections' ignored test has its own step below (it needs a raised descriptor limit).
-          # Build, run and delete in chunks of ten crates: one `cargo test` over the whole shard
+          # Build, run and delete in chunks of four crates: one `cargo test` over the whole shard
           # keeps every test binary on disk at once (105 GB for shard 3, a full disk and a linker
           # bus error). Dependencies stay cached between chunks; only the test executables go.
           rc=0
           set -- $NAMES
           while [ $# -gt 0 ]; do
             chunk=(); n=0
-            while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
+            while [ $# -gt 0 ] && [ $n -lt 4 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
             cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" || rc=1
             cargo test --locked --no-fail-fast "${chunk[@]}" || rc=1
             ignored=()
