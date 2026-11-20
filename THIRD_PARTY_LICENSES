@@ -456,55 +456,55 @@ cpufeatures 0.3.1
   licence: MIT OR Apache-2.0
   text: T-e8541ea93f (LICENSE-APACHE), T-ea753cf1e3 (LICENSE-MIT)
 
-cranelift-assembler-x64 0.136.5
+cranelift-assembler-x64 0.136.7
   licence: Apache-2.0 WITH LLVM-exception
-  text: not bundled in the source; see https://crates.io/crates/cranelift-assembler-x64/0.136.5
+  text: not bundled in the source; see https://crates.io/crates/cranelift-assembler-x64/0.136.7
 
-cranelift-assembler-x64-meta 0.136.5
+cranelift-assembler-x64-meta 0.136.7
   licence: Apache-2.0 WITH LLVM-exception
-  text: not bundled in the source; see https://crates.io/crates/cranelift-assembler-x64-meta/0.136.5
+  text: not bundled in the source; see https://crates.io/crates/cranelift-assembler-x64-meta/0.136.7
 
-cranelift-bforest 0.136.5
+cranelift-bforest 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-bitset 0.136.5
+cranelift-bitset 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-cranelift-codegen 0.136.5
+cranelift-codegen 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-codegen-meta 0.136.5
+cranelift-codegen-meta 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-codegen-shared 0.136.5
+cranelift-codegen-shared 0.136.7
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-control 0.136.5
+cranelift-control 0.136.7
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-entity 0.136.5
+cranelift-entity 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-frontend 0.136.5
+cranelift-frontend 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-isle 0.136.5
+cranelift-isle 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle
 
-cranelift-native 0.136.5
+cranelift-native 0.136.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-cranelift-srcgen 0.136.5
+cranelift-srcgen 0.136.7
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
@@ -672,9 +672,9 @@ either 1.18.0
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-fdd1c2117b (LICENSE-MIT)
 
-email-encoding 0.4.2
+email-encoding 0.4.3
   licence: MIT OR Apache-2.0
-  text: T-283ea6cc29 (LICENSE-APACHE), T-c57966c52f (LICENSE-MIT)
+  text: T-283ea6cc29 (LICENSE-APACHE), T-3a04a22103 (LICENSE-MIT)
 
 email_address 0.2.9
   licence: MIT
@@ -1272,7 +1272,7 @@ left-right 0.11.8
   licence: MIT OR Apache-2.0
   text: T-954f335b8b (LICENSE-APACHE), T-1c3d20e4b1 (LICENSE-MIT)
 
-lettre 0.11.23
+lettre 0.11.24
   licence: MIT
   text: T-96543c7a9e (LICENSE)
 
@@ -1836,11 +1836,11 @@ psm 0.1.32
   licence: MIT OR Apache-2.0
   text: T-041f184d92 (LICENSE-APACHE), T-5299390bd4 (LICENSE-MIT)
 
-pulley-interpreter 49.0.5
+pulley-interpreter 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime/tree/main/pulley
 
-pulley-macros 49.0.5
+pulley-macros 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros
 
@@ -2884,51 +2884,51 @@ wasmprinter 0.258.3
   licence: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
   text: T-954f335b8b (LICENSE-APACHE), T-2f213ec6b1 (LICENSE-Apache-2.0_WITH_LLVM-exception), T-30fefc3a7d (LICENSE-MIT)
 
-wasmtime 49.0.5
+wasmtime 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-wasmtime-environ 49.0.5
+wasmtime-environ 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-wasmtime-internal-component-macro 49.0.5
+wasmtime-internal-component-macro 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-wasmtime-internal-component-util 49.0.5
+wasmtime-internal-component-util 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-wasmtime-internal-core 49.0.5
+wasmtime-internal-core 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
-  text: not bundled in the source; see https://crates.io/crates/wasmtime-internal-core/49.0.5
+  text: not bundled in the source; see https://crates.io/crates/wasmtime-internal-core/49.0.6
 
-wasmtime-internal-cranelift 49.0.5
+wasmtime-internal-cranelift 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-wasmtime-internal-fiber 49.0.5
+wasmtime-internal-fiber 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-wasmtime-internal-jit-debug 49.0.5
+wasmtime-internal-jit-debug 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-wasmtime-internal-jit-icache-coherence 49.0.5
+wasmtime-internal-jit-icache-coherence 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-wasmtime-internal-unwinder 49.0.5
+wasmtime-internal-unwinder 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: T-2f213ec6b1 (LICENSE)
 
-wasmtime-internal-versioned-export-macros 49.0.5
+wasmtime-internal-versioned-export-macros 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
-wasmtime-internal-wit-bindgen 49.0.5
+wasmtime-internal-wit-bindgen 49.0.6
   licence: Apache-2.0 WITH LLVM-exception
   text: not bundled in the source; see https://github.com/bytecodealliance/wasmtime
 
@@ -9259,6 +9259,31 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------
+
+[T-3a04a22103]
+MIT License
+
+Copyright (c) 2021-2026 Paolo Barbolini <paolo@paolobarbolini.it>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ------------------------------------------------------------
 
@@ -24582,31 +24607,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-
-------------------------------------------------------------
-
-[T-c57966c52f]
-MIT License
-
-Copyright (c) 2021-2024 Paolo Barbolini <paolo@paolo565.org>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 ------------------------------------------------------------
 

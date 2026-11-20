@@ -9,6 +9,21 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.12] - 2026-11-20
+
+Continuous integration fixes after 0.1.11, no new features.
+
+### Fixed
+
+- Security advisories: `lettre` 0.11.24 (RUSTSEC-2026-0560 to 0565) and `wasmtime` 49.0.6
+  (RUSTSEC-2026-0566 to 0573).
+- The Rust test shards no longer fill the runner disk: each shard builds, runs and deletes test
+  executables ten crates at a time, and incremental builds are off.
+- The exported tree ships `apps/scripting`, which its tests read, and the two runbook tests
+  format cleanly under the public paths.
+- The python suites find the workflow files, the release workflow and the guide where the public
+  tree has them.
+
 ## [0.1.11] - 2026-11-19
 
 Continuous integration (the last red lint gate and the nightly profiles) and a large batch of

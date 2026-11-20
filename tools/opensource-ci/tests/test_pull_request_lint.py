@@ -18,7 +18,11 @@ sys.path.insert(0, str(HERE.parent))
 import workflow_lint  # noqa: E402
 
 REPO = HERE.parents[2]
+# The shipped files live in opensource/workflows in the private repository and in .github/workflows
+# in the exported tree (the same files).
 WORKFLOWS = REPO / "opensource" / "workflows"
+if not WORKFLOWS.is_dir():
+    WORKFLOWS = REPO / ".github" / "workflows"
 OPS_WORKFLOWS = REPO / "opensource" / "ops" / "workflows"
 GUARD = workflow_lint.PR_GUARD
 SHIPPED = ("ci.yml", "hygiene.yml", "ui.yml")
@@ -240,6 +244,7 @@ class EventPinTests(unittest.TestCase):
             with self.subTest(path.name):
                 self.assertEqual(self.triggers(path), set())
 
+    @unittest.skipUnless(OPS_WORKFLOWS.is_dir(), "opensource/ops is private-only: it is not part of the public export")
     def test_in_the_ops_directory_only_the_verdict_workflow_and_the_private_commands_use_issue_comment(self) -> None:
         users = {p.name for p in OPS_WORKFLOWS.glob("*.yml") if "issue_comment" in self.triggers(p)}
         self.assertEqual(users, {"spot-verdict.yml", "ops-commands.yml"})

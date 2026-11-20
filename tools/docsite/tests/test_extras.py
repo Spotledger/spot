@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import shutil
 import sys
 import tempfile
@@ -16,6 +17,7 @@ DOCSITE = HERE.parent
 sys.path.insert(0, str(DOCSITE))
 
 import build  # noqa: E402
+import extras  # noqa: E402
 import wit  # noqa: E402
 
 FIXTURE = HERE / "fixtures" / "mini"
@@ -218,9 +220,12 @@ class GuidesAndFormats(unittest.TestCase):
         self.assertIn("Files", page(out, "guides/index.html"))
 
     def test_a_link_to_a_file_the_site_does_not_render_fails(self):
+        # The guide sits one level deeper in the private repo than in the public
+        # tree, so the link to the fixture ADR is computed from where the guide is.
+        adr = posixpath.relpath("docs/adr/ADR-900-tiny-test-contract.md",
+                                posixpath.dirname(extras.GUIDE_INDEX))
         root = tree({
-            "docs/running-spot.md": "# Running\n\n[gone](running-spot/gone.md) and "
-                                            "[other](../adr/ADR-900-tiny-test-contract.md).\n",
+            extras.GUIDE_INDEX: f"# Running\n\n[gone](running-spot/gone.md) and [other]({adr}).\n",
         })
         site, _ = build_tree(root)
         self.assertTrue(any("gone.md" in p and "does not exist" in p for p in site.problems))

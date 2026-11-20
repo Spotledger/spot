@@ -1,0 +1,22 @@
+# The optional `scripting` app (WP-EXT-06.T6): the two kinds of Server Script that are not
+# document events.
+#
+# An API Script is a TypeScript function served as the whitelisted function
+# `scripting/<module>/<function>`; it runs as its caller and is never callable by a guest.
+# A Scheduled Script is a TypeScript function that runs on a cron schedule as the user named in
+# its `run_as` field. Neither kind can run as a system principal.
+#
+# The app has no controller of its own and declares no events: the compile-on-save controllers
+# of its two DocTypes are installed by the host (the `script_kinds` service, WP-EXT-06.T7),
+# and the runtime that serves the scripts is `spot-server-scripts`.
+[app]
+name = "scripting"
+version = "1.0.0"
+title = "Scripting: API and scheduled scripts"
+
+# The permission that lets a user elevate an API script (WP-EXT-06.T8). Granting it is role data
+# (`permissions/app_permissions.toml`); the Tenant Administrator holds it by default.
+[[permissions]]
+name = "scripts_elevate"
+title = "Elevate scripts"
+description = "Lets a user make an API script (or a document-event Server Script) act as the platform instead of as the triggering user. Every elevated run is audited."

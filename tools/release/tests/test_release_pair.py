@@ -18,6 +18,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 WORKFLOW = REPO / "opensource" / "workflows" / "release.yml"
+if not WORKFLOW.exists():  # the exported tree carries the same file under .github/workflows
+    WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
 CHECK = REPO / "tools" / "release" / "check_release.py"
 VERIFY = REPO / "tools" / "release" / "verify_download.py"
 TAG = "v0.1.0-rc.1"

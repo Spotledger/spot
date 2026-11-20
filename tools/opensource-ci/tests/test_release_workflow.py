@@ -12,6 +12,8 @@ import workflow_lint  # noqa: E402
 
 REPO = HERE.parents[2]
 WORKFLOW = REPO / "opensource" / "workflows" / "release.yml"
+if not WORKFLOW.exists():  # the exported tree carries the same file under .github/workflows
+    WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 FORBIDDEN_IN_RUN = re.compile(r"\$\{\{[^}]*\b(?:github\.event\.|inputs\.|github\.head_ref)[^}]*\}\}")
 
@@ -42,7 +44,7 @@ def load():
 
 
 @unittest.skipIf(workflow_lint.yaml is None, "PyYAML is not installed")
-@unittest.skipUnless(WORKFLOW.exists(), "opensource/workflows/release.yml is private-only: it is not part of the public export")
+@unittest.skipUnless(WORKFLOW.exists(), "the release workflow is not present in this tree")
 class ReleaseWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

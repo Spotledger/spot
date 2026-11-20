@@ -32,6 +32,9 @@ env:
   # runner's disk ("No space left on device" while compiling spot-cli tests). Backtraces keep
   # function names; only line tables and variable info are dropped.
   CARGO_PROFILE_DEV_DEBUG: "0"
+  # No incremental state either: a CI build runs once, and the incremental directories double
+  # the size of every crate's output (shard 3 of the first public run filled the 145 GB disk).
+  CARGO_INCREMENTAL: "0"
 jobs:
   python:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -91,11 +94,11 @@ jobs:
         shell: bash
         run: |
           df -h /
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
           df -h /
-          # The workspace's test binaries do not fit beside the checkout on the system disk (the
-          # linker died with a bus error, the symptom of a full disk). The runner's second disk,
-          # /mnt, has about 66 GB: build there. rust-cache reads the target directory from cargo.
+          # /mnt is a directory on the same 145 GB disk as / (the first public run showed both df
+          # lines identical), not a second disk. The target directory lives there only by habit;
+          # the space comes from the cleanup above and from the chunked test run below.
           sudo mkdir -p /mnt/cargo-target
           sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
           echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
@@ -121,20 +124,44 @@ jobs:
         run: cargo fmt --all -- --check
       - if: matrix.shard == 1
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - name: test this shard of the workspace (every fourth crate by sorted name)
+      - name: test this shard of the workspace (every fourth crate by sorted name, ten crates at a time)
         shell: bash
         run: |
           PY=$(command -v python3 || command -v python)
-          packages=$(cargo metadata --no-deps --format-version 1 | "$PY" -c '
+          NAMES=$(cargo metadata --no-deps --format-version 1 | "$PY" -c '
           import json, sys
           m = json.load(sys.stdin)
           members = set(m["workspace_members"])
           names = sorted(p["name"] for p in m["packages"] if p["id"] in members)
-          print(" ".join("-p " + n for n in names[int(sys.argv[1]) - 1::4]))
+          print(" ".join(names[int(sys.argv[1]) - 1::4]))
           ' "${{ matrix.shard }}")
-          echo "shard ${{ matrix.shard }}/4: $(echo "$packages" | wc -w | tr -d ' ') arguments"
-          # shellcheck disable=SC2086
-          cargo test --locked --no-fail-fast $packages
+          echo "shard ${{ matrix.shard }}/4: $(echo "$NAMES" | wc -w | tr -d ' ') crates"
+          # Build, run and delete in chunks of ten crates: one `cargo test` over the whole shard
+          # keeps every test binary on disk at once (105 GB for shard 3, a full disk and a linker
+          # bus error). Dependencies stay cached between chunks; only the test executables go.
+          rc=0
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0
+            while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
+            cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" || rc=1
+            cargo test --locked --no-fail-fast "${chunk[@]}" || rc=1
+            "$PY" -c '
+          import json, os, sys
+          for line in open(sys.argv[1]):
+              try:
+                  m = json.loads(line)
+              except ValueError:
+                  continue
+              exe = m.get("executable")
+              if m.get("reason") == "compiler-artifact" and exe and m.get("profile", {}).get("test"):
+                  try:
+                      os.remove(exe)
+                  except OSError:
+                      pass
+          ' "$RUNNER_TEMP/test-exes.json"
+          done
+          exit $rc
       # ADR-061 section 6: a patch that changes a stored shape ships the upcaster that rewrites
       # the images written before it. Linux only: the journal fixtures are byte files.
       - if: runner.os == 'Linux' && matrix.shard == 1
@@ -234,7 +261,7 @@ jobs:
         shell: bash
         run: |
           df -h /
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
           df -h /
       - name: find the solution
         id: detect

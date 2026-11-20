@@ -50,7 +50,7 @@ and only Rust (nightly) and jco (experimental) reach 0.3. The sample app's world
 so WASI 0.3 async is **not exercised** by any template; a future async world would be the place
 to test it.
 
-The product host pins **wasmtime 49.0.5** (`crates/framework/spot-wasm/Cargo.toml`) but does
+The product host pins **wasmtime 49.0.6** (`crates/framework/spot-wasm/Cargo.toml`) but does
 **not** enable `component-model-async`, and provides **no WASI** at all.
 
 ## The matrix

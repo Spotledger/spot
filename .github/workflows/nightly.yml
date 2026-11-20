@@ -24,6 +24,9 @@ env:
   # runner's disk ("No space left on device" while compiling spot-cli tests). Backtraces keep
   # function names; only line tables and variable info are dropped.
   CARGO_PROFILE_DEV_DEBUG: "0"
+  # No incremental state either: a CI build runs once, and the incremental directories double
+  # the size of every crate's output (shard 3 of the first public run filled the 145 GB disk).
+  CARGO_INCREMENTAL: "0"
 jobs:
   rust:
     name: rust full (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
@@ -45,9 +48,9 @@ jobs:
         shell: bash
         run: |
           df -h /
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
           df -h /
-          # Build on the runner's second disk, /mnt (about 66 GB), as ci.yml does.
+          # /mnt is a directory on the root disk, as ci.yml explains.
           sudo mkdir -p /mnt/cargo-target
           sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
           echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
@@ -84,23 +87,44 @@ jobs:
           ' "${{ matrix.shard }}")
           echo "shard ${{ matrix.shard }}/4: $names"
           echo "SHARD_CRATES=$names" >> "$GITHUB_ENV"
-      - name: tests
+      - name: tests and ignored tests (ten crates at a time)
         shell: bash
         run: |
-          packages=""; for n in $SHARD_CRATES; do packages="$packages -p $n"; done
-          # shellcheck disable=SC2086
-          cargo test --locked --no-fail-fast $packages
-      - name: ignored and slow tests
-        shell: bash
-        run: |
-          # spot-idle-connections has its own step below (it needs a raised descriptor limit).
-          packages=""
-          for n in $SHARD_CRATES; do
-            if [ "$RUNNER_OS" = Linux ] && [ "$n" = spot-idle-connections ]; then continue; fi
-            packages="$packages -p $n"
+          PY=$(command -v python3 || command -v python)
+          NAMES="$SHARD_CRATES"
+          # spot-idle-connections' ignored test has its own step below (it needs a raised descriptor limit).
+          # Build, run and delete in chunks of ten crates: one `cargo test` over the whole shard
+          # keeps every test binary on disk at once (105 GB for shard 3, a full disk and a linker
+          # bus error). Dependencies stay cached between chunks; only the test executables go.
+          rc=0
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0
+            while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
+            cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" || rc=1
+            cargo test --locked --no-fail-fast "${chunk[@]}" || rc=1
+            ignored=()
+            for a in "${chunk[@]}"; do
+              if [ "$a" != -p ] && [ "$RUNNER_OS" = Linux ] && [ "$a" = spot-idle-connections ]; then continue; fi
+              [ "$a" = -p ] || ignored+=(-p "$a")
+            done
+            if [ ${#ignored[@]} -gt 0 ]; then cargo test --locked --no-fail-fast "${ignored[@]}" -- --ignored || rc=1; fi
+            "$PY" -c '
+          import json, os, sys
+          for line in open(sys.argv[1]):
+              try:
+                  m = json.loads(line)
+              except ValueError:
+                  continue
+              exe = m.get("executable")
+              if m.get("reason") == "compiler-artifact" and exe and m.get("profile", {}).get("test"):
+                  try:
+                      os.remove(exe)
+                  except OSError:
+                      pass
+          ' "$RUNNER_TEMP/test-exes.json"
           done
-          # shellcheck disable=SC2086
-          cargo test --locked --no-fail-fast $packages -- --ignored
+          exit $rc
       # The 10,000-connection run needs 20,612 descriptors; a skipped run is a red nightly.
       - if: runner.os == 'Linux'
         name: 10,000 idle connections
@@ -170,7 +194,7 @@ jobs:
         shell: bash
         run: |
           df -h /
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
           df -h /
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with: { global-json-file: clients/avalonia/global.json }
@@ -206,7 +230,7 @@ jobs:
         shell: bash
         run: |
           df -h /
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
           df -h /
       - name: install the toolchain pinned in rust-toolchain.toml
         shell: bash

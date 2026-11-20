@@ -10,7 +10,7 @@ rust-version.workspace = true
 [dependencies]
 # The runtime. Pinned with `=`, the same version and features `spot-wasm` uses, so a
 # connector runs on the identical engine configuration as an app.
-wasmtime = { version = "=49.0.5", default-features = false, features = ["component-model", "pooling-allocator", "async", "cranelift", "runtime", "std"] }
+wasmtime = { version = "=49.0.6", default-features = false, features = ["component-model", "pooling-allocator", "async", "cranelift", "runtime", "std"] }
 # The shared sandbox vocabulary: limits, the tick, the typed `wasm.*` errors.
 spot-wasm = { path = "../spot-wasm" }
 spot-egress = { path = "../spot-egress" }

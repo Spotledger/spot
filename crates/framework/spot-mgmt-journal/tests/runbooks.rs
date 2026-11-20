@@ -17,10 +17,8 @@ use spot_mgmt_ops::{Catalogue, Risk, SECRET_PLACEHOLDER, Shell, parse::parse, re
 const PREFIX: &str = "journal";
 const OTHER_PREFIX: &str = "sync";
 
-const JOURNAL_RECOVERY: &str =
-    include_str!("../../../../docs/runbooks/journal-recovery.md");
-const BRANCH_NODE: &str =
-    include_str!("../../../../docs/runbooks/branch-node-lifecycle.md");
+const JOURNAL_RECOVERY: &str = include_str!("../../../../docs/runbooks/journal-recovery.md");
+const BRANCH_NODE: &str = include_str!("../../../../docs/runbooks/branch-node-lifecycle.md");
 const PAGES: [(&str, &str); 2] = [
     ("journal-recovery.md", JOURNAL_RECOVERY),
     ("branch-node-lifecycle.md", BRANCH_NODE),
