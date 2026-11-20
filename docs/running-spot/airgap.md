@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Air-gapped operation: `spot airgap`
 
 A server with no route to the outside is installed and upgraded from signed files on removable media. Nothing is trusted because of where it came from; only a signature that chains to a root pinned on the server is.

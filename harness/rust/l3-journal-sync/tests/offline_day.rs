@@ -92,7 +92,10 @@ async fn setting() -> Option<Cluster> {
         .await?;
     if !serves_sync(cluster.node("hub")).await {
         println!(
-            "SKIPPED: the hub does not serve sync yet (WP-RTB-02.T4 to T8, RTB-03.T2/T3 hosting)"
+            "SKIPPED: the hub does not serve sync yet (the enrol endpoint of WP-RTB-02.T13 \
+             answers 404/501); the overnight return also needs the sync listener to merge \
+             `CatchupRoutes` (WP-RTB-02.T15), a `CatchupFeed` from the hub host, and \
+             RTB-03.T2/T3 hosting"
         );
         return None;
     }

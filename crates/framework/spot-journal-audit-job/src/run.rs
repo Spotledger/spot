@@ -5,7 +5,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use spot_conditions::{AuditSink, ConditionEngine};
 use spot_journal_audit::VerifiedPosition;
-use spot_journal_audit_run::{AuditRun, AuditRunError, Clock, FailureStage, run_audit};
+use spot_journal_audit_run::{
+    AuditOptions, AuditRun, AuditRunError, ClassifierKind, Clock, EventClassifier, FailureStage,
+    REBUILD_UNKNOWN_TOPIC, UnknownTopics, run_audit,
+};
 use spot_journal_manifest::VerifyingKeys;
 use spot_journal_rebuild::RebuildKeys;
 use spot_journal_store::TenantId;
@@ -14,7 +17,7 @@ use tokio::runtime::Handle;
 use crate::cadence::{TenantAuditPlan, due};
 use crate::conditions;
 use crate::error::AuditJobError;
-use crate::providers::{AuditInputs, ResultSink, TenantDirectory};
+use crate::providers::{AuditInputs, ResultSink, TenantDirectory, TenantInputs};
 
 /// Where and why a tenant's audit did not finish. Stable names and codes only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,7 +27,32 @@ pub struct FailureInfo {
     pub stage: &'static str,
     /// The stable code of the failing crate's error.
     pub code: &'static str,
+    /// Why, for the condition's remedy: `unknown_topics` when the rebuild stopped at a topic the
+    /// classifier did not know (strict policy), `audit_failed` for every other failure.
+    pub reason: &'static str,
 }
+
+impl FailureInfo {
+    /// A failure at `stage` with `code`; the reason follows from the code.
+    #[must_use]
+    pub fn new(stage: &'static str, code: &'static str) -> Self {
+        Self {
+            stage,
+            code,
+            reason: if code == REBUILD_UNKNOWN_TOPIC {
+                REASON_UNKNOWN_TOPICS
+            } else {
+                REASON_AUDIT_FAILED
+            },
+        }
+    }
+}
+
+/// [`FailureInfo::reason`] of a rebuild that stopped at an unknown topic.
+pub const REASON_UNKNOWN_TOPICS: &str = "unknown_topics";
+
+/// [`FailureInfo::reason`] of every other failure.
+pub const REASON_AUDIT_FAILED: &str = "audit_failed";
 
 /// How one tenant's audit ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,6 +82,11 @@ pub struct TenantResult {
     pub run: Option<AuditRun>,
     /// The code of the condition framework's refusal, if raising or clearing failed.
     pub condition_failure: Option<&'static str>,
+    /// Which classifier decided this tenant's run (`registry` or `injected`).
+    pub classifier: ClassifierKind,
+    /// The topics the classifier did not know: names only, at most 50, then a count. Under the
+    /// strict policy a failed run lists the one topic that stopped it.
+    pub unknown_topics: UnknownTopics,
 }
 
 impl TenantResult {
@@ -94,10 +127,39 @@ impl RunSummary {
 }
 
 fn refused(error: &AuditJobError) -> TenantOutcome {
-    TenantOutcome::Failed(FailureInfo {
-        stage: "refused",
-        code: error.code(),
-    })
+    TenantOutcome::Failed(FailureInfo::new("refused", error.code()))
+}
+
+/// What an audit of one tenant produced besides the outcome.
+struct Audited {
+    outcome: TenantOutcome,
+    run: Option<AuditRun>,
+    classifier: ClassifierKind,
+}
+
+impl Audited {
+    fn without_run(outcome: TenantOutcome) -> Self {
+        Self {
+            outcome,
+            run: None,
+            classifier: ClassifierKind::Registry,
+        }
+    }
+}
+
+/// The unknown topics a run reports: a completed run's list, or the one topic that stopped a
+/// strict rebuild.
+fn unknown_topics_of(run: Option<&AuditRun>) -> UnknownTopics {
+    match run {
+        Some(AuditRun::Completed(report)) => report.unknown_topics.clone(),
+        Some(AuditRun::Failed(failure)) => failure
+            .unknown_topic
+            .as_deref()
+            .map_or_else(UnknownTopics::none, |name| {
+                UnknownTopics::from_names([name], false)
+            }),
+        None => UnknownTopics::none(),
+    }
 }
 
 fn failure_stage(stage: FailureStage) -> &'static str {
@@ -114,56 +176,78 @@ fn audit_tenant(
     plan: &TenantAuditPlan,
     inputs: &dyn AuditInputs,
     clock: &dyn Clock,
-) -> (TenantOutcome, Option<AuditRun>) {
-    let mut opened = match inputs.open(&plan.tenant) {
+) -> Audited {
+    let opened = match inputs.open(&plan.tenant) {
         Ok(opened) => opened,
         Err(error) => {
-            return (
-                TenantOutcome::Failed(FailureInfo {
-                    stage: "inputs",
-                    code: error.code(),
-                }),
-                None,
-            );
+            return Audited::without_run(TenantOutcome::Failed(FailureInfo::new(
+                "inputs",
+                error.code(),
+            )));
         }
     };
-    if opened.options.tenant != plan.tenant {
-        return (
-            refused(&AuditJobError::TenantMismatch { side: "inputs" }),
-            None,
-        );
+    let TenantInputs {
+        options,
+        live,
+        mut scratch,
+        store,
+        manifest_keys,
+        snapshot_keys,
+        registry,
+        classifier,
+        strict_topics,
+    } = opened;
+    if options.tenant != plan.tenant {
+        return Audited::without_run(refused(&AuditJobError::TenantMismatch { side: "inputs" }));
     }
-    let manifest: &VerifyingKeys = &opened.manifest_keys;
+    // This tenant's classifier and policy, and nobody else's: they live in this call only. A
+    // classifier the host already put in the options stays unless the inputs carry one, and the
+    // policy is relaxed when either says so (neither can silently make the other strict again).
+    let mut options: AuditOptions<'_> = options;
+    if let Some(classifier) = classifier.as_ref() {
+        options.classifier = Some(classifier.as_ref() as &dyn EventClassifier);
+    }
+    options.strict_topics = options.strict_topics && strict_topics;
+    let kind = if options.classifier.is_some() {
+        ClassifierKind::Injected
+    } else {
+        ClassifierKind::Registry
+    };
+    let manifest: &VerifyingKeys = &manifest_keys;
     let keys = RebuildKeys {
         manifest,
-        snapshot: opened.snapshot_keys.as_ref(),
+        snapshot: snapshot_keys.as_ref(),
     };
     let run = exec.block_on(run_audit(
-        opened.store.as_ref(),
+        store.as_ref(),
         &keys,
-        opened.registry.as_ref(),
-        opened.live.as_ref(),
-        opened.scratch.as_mut(),
-        &opened.options,
+        registry.as_ref(),
+        live.as_ref(),
+        scratch.as_mut(),
+        &options,
         clock,
     ));
-    match run {
+    let (outcome, run) = match run {
         Err(error) => (
-            TenantOutcome::Failed(FailureInfo {
-                stage: "refused",
-                code: AuditRunError::code(&error),
-            }),
+            TenantOutcome::Failed(FailureInfo::new("refused", AuditRunError::code(&error))),
             None,
         ),
-        Ok(run @ AuditRun::Failed(failure)) => (
-            TenantOutcome::Failed(FailureInfo {
-                stage: failure_stage(failure.stage),
-                code: failure.code,
-            }),
-            Some(run),
-        ),
-        Ok(run) if run.is_clean() => (TenantOutcome::Clean, Some(run)),
-        Ok(run) => (TenantOutcome::Mismatch, Some(run)),
+        Ok(run) => {
+            let outcome = match &run {
+                AuditRun::Failed(failure) => TenantOutcome::Failed(FailureInfo::new(
+                    failure_stage(failure.stage),
+                    failure.code,
+                )),
+                _ if run.is_clean() => TenantOutcome::Clean,
+                _ => TenantOutcome::Mismatch,
+            };
+            (outcome, Some(run))
+        }
+    };
+    Audited {
+        outcome,
+        run,
+        classifier: kind,
     }
 }
 
@@ -203,21 +287,20 @@ pub fn run_due<S: AuditSink>(
         let caught = catch_unwind(AssertUnwindSafe(|| {
             audit_tenant(exec, &plan, inputs, clock)
         }));
-        let (outcome, run) = caught.unwrap_or_else(|_| {
-            (
-                TenantOutcome::Failed(FailureInfo {
-                    stage: "panic",
-                    code: AuditJobError::TenantPanicked.code(),
-                }),
-                None,
-            )
+        let audited = caught.unwrap_or_else(|_| {
+            Audited::without_run(TenantOutcome::Failed(FailureInfo::new(
+                "panic",
+                AuditJobError::TenantPanicked.code(),
+            )))
         });
         let mut result = TenantResult {
             tenant: plan.tenant,
             started_millis: now_millis,
             finished_millis: clock.now_millis().max(now_millis),
-            outcome,
-            run,
+            unknown_topics: unknown_topics_of(audited.run.as_ref()),
+            classifier: audited.classifier,
+            outcome: audited.outcome,
+            run: audited.run,
             condition_failure: None,
         };
         if let Err(AuditJobError::ConditionFailed { code }) = conditions::apply(conditions, &result)

@@ -39,6 +39,7 @@
 use rust_decimal::Decimal;
 use spot_app_api::prelude::Value;
 use spot_meta::{FieldSpec, FieldType};
+use spot_spatial_text::{RangeOf, TextError, parse_point, parse_range};
 use time::format_description::BorrowedFormatItem;
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 
@@ -235,12 +236,12 @@ pub fn convert(
                 spec.name
             )));
         }
-        // No cell-text form exists yet for a position or a range.
-        FieldType::Geo | FieldType::Range => {
-            return Err(ConversionError::bad(format!(
-                "field `{}` holds a position or a range, which has no cell-text form yet",
-                spec.name
-            )));
+        // A position or a range, in the one cell-text form the export prints (ADR-087):
+        // `POINT(lon lat)` and `[start,end)`; see `spot-spatial-text`.
+        FieldType::Geo => Value::GeoPoint(parse_point(cell).map_err(|e| spatial_error(spec, &e))?),
+        FieldType::Range => {
+            let of = range_kind(spec)?;
+            Value::Range(parse_range(cell, of).map_err(|e| spatial_error(spec, &e))?)
         }
         // A table's columns are child fields; a table itself is never a mapped value.
         FieldType::Table | FieldType::TableMultiselect => {
@@ -258,6 +259,24 @@ pub fn convert(
         }
     };
     Ok(Some(value))
+}
+
+/// The kind of a range field, from its definition's format (`date_range` or `instant_range`,
+/// the two the metadata compiler accepts).
+fn range_kind(spec: &FieldSpec) -> Result<RangeOf, ConversionError> {
+    match spec.format.as_deref() {
+        Some("date_range") => Ok(RangeOf::Date),
+        Some("instant_range") => Ok(RangeOf::DateTime),
+        _ => Err(ConversionError::bad(format!(
+            "field `{}` is a range whose format is neither `date_range` nor `instant_range`",
+            spec.name
+        ))),
+    }
+}
+
+/// A refused position or range cell: the field, the reason and the (shortened) cell text.
+fn spatial_error(spec: &FieldSpec, error: &TextError) -> ConversionError {
+    ConversionError::bad(format!("field `{}`: {error}", spec.name))
 }
 
 fn bad_text(spec: &FieldSpec, cell: &str) -> String {
@@ -859,12 +878,21 @@ mod tests {
     }
 
     #[test]
-    fn geo_and_range_have_no_cell_text_form_yet() {
+    fn geo_and_range_cells_convert() {
         let f = formats();
-        for ty in [FieldType::Geo, FieldType::Range] {
-            let e = convert(&spec("place", ty), "1,2", &opts(), &f).unwrap_err();
-            assert!(e.message.contains("no cell-text form"), "{}", e.message);
-        }
+        let geo = spec("place", FieldType::Geo);
+        let got = convert(&geo, "POINT(67.0011 24.8607)", &opts(), &f).unwrap();
+        assert!(matches!(got, Some(Value::GeoPoint(_))));
+        let e = convert(&geo, "POINT(181 0)", &opts(), &f).unwrap_err();
+        assert_eq!(e.code, BAD_VALUE);
+        assert!(e.message.contains("place"), "{}", e.message);
+        let mut range = spec("span", FieldType::Range);
+        range.format = Some("date_range".to_owned());
+        let got = convert(&range, "[2026-01-01,2026-02-01)", &opts(), &f).unwrap();
+        assert!(matches!(got, Some(Value::Range(_))));
+        // A range with no usable format cannot say what its bounds are.
+        let bare = spec("span", FieldType::Range);
+        assert!(convert(&bare, "[1,2)", &opts(), &f).is_err());
     }
 
     #[test]

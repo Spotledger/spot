@@ -131,6 +131,14 @@ fn run_postgres(args: &[String]) {
         unsafe {
             libc::signal(libc::SIGINT, libc::SIG_IGN);
         }
+    } else {
+        // A real postmaster installs its own SIGINT handler, so it shuts down whatever it
+        // inherited. This fake relies on the default action, and a test run started in the
+        // background of a non-interactive shell (`cmd &`, a service, a detached runner) hands
+        // its children SIGINT as ignored: restore the default so the fast stop works there.
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+        }
     }
 
     write_pid_file(&data_dir, port);

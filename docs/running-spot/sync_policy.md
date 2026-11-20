@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # sync_policy
 
 What syncs is a policy on the DocType in metadata (class, direction, owner scope, excluded

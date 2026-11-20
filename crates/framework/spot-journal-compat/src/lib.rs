@@ -40,7 +40,7 @@
 //! | 10 | `account` a2 deleted (a tombstone) |
 //! | 11 | `account` a1 updated to version 4 |
 //! | 12 | a domain event (`doc_posted`), which a rebuild counts and does not replay |
-//! | 13 | an audit entry (`sys_role_changed`), which it does replay |
+//! | 13 | an audit entry (`identity_role_changed`), which it does replay |
 //!
 //! Positions 1–5 are the first segment and the snapshot's range; 6–13 the second.
 

@@ -29,7 +29,7 @@ use spot_field_guard::{Channel, FieldGuard, QueryField, QueryUse};
 use spot_http::api::service::{Message, MessageLevel, ReportColumn, ReportResult};
 use spot_perm_query::{PermissionFilter, ReadFilter, ReadTarget};
 use spot_permissions::{MaskFormat, PermissionEngine, Principal};
-use spot_storage_contract::{Expr, Name, Query, RecordId, Rows, StorageError, Value};
+use spot_storage_contract::{ErrorKind, Expr, Name, Query, RecordId, Rows, StorageError, Value};
 
 use crate::compiled::{
     CREATED_BY, ColumnOrigin, CompiledFilter, CompiledParameter, CompiledReport, Rhs,
@@ -774,8 +774,33 @@ fn map_perm(e: spot_perm_query::PermQueryError) -> ReportError {
     }
 }
 
-fn map_storage_error(e: StorageError) -> ReportError {
-    ReportError::new(codes::INVALID_DEFINITION, e.to_string())
+/// What a client may learn of a storage failure: a fixed text per class, never the storage
+/// error's explanation, an entity, a field or a constraint name (they can carry SQL, table and
+/// column names). The stable storage code is kept on the error for the operator's log line.
+pub fn map_storage_error(e: StorageError) -> ReportError {
+    let code = e.kind.code();
+    let mapped = match e.kind {
+        ErrorKind::StatementTimeout => ReportError::new(
+            codes::TIMEOUT,
+            "The report took longer than the site's statement timeout and was stopped.",
+        ),
+        ErrorKind::Unavailable
+        | ErrorKind::LockTimeout
+        | ErrorKind::LockNotAvailable
+        | ErrorKind::SerializationFailure
+        | ErrorKind::Deadlock => ReportError::new(
+            codes::UNAVAILABLE,
+            "The site cannot run the report right now; try again shortly.",
+        ),
+        ErrorKind::InvalidQuery | ErrorKind::UnknownField | ErrorKind::UnknownEntity => {
+            ReportError::new(
+                codes::INVALID_DEFINITION,
+                format!("the report's query was refused by the storage layer ({code})"),
+            )
+        }
+        _ => ReportError::new(codes::FAILED, "The report could not be run."),
+    };
+    mapped.caused_by(code)
 }
 
 fn millis(started: Instant) -> u64 {

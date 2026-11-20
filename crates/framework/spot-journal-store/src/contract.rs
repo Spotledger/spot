@@ -264,6 +264,8 @@ where
             ));
         }
     }
+    // Snapshot retention goes through its own, narrower method.
+    check_delete_snapshot(&store, &segment, &snapshot, &snapshot_object).await?;
     match store.delete(&key(Layout::tail_chunk(TENANT, 1, 9))?).await {
         Err(StoreError::NotFound { .. }) => {}
         other => {
@@ -370,6 +372,102 @@ where
 }
 
 /// The stored bytes at `contested`.
+/// The three deletion rules of [`JournalStore::delete_snapshot`].
+async fn check_delete_snapshot<S: JournalStore>(
+    store: &S,
+    segment: &str,
+    snapshot_prefix: &str,
+    snapshot_object: &str,
+) -> Result<(), String> {
+    let refused = |outcome: Result<(), StoreError>, what: &str| match outcome {
+        Err(StoreError::DeleteRefused { .. } | StoreError::KeyInvalid(_)) => Ok(()),
+        other => Err(format!(
+            "delete_snapshot of {what} must be refused, not {other:?}"
+        )),
+    };
+    refused(store.delete_snapshot(segment).await, "a segment")?;
+    check(
+        store.head(segment).await.map_err(failed)?.is_some(),
+        "a refused delete_snapshot leaves the segment in place",
+    )?;
+    let manifest = key(Layout::manifest(TENANT, 1))?;
+    refused(store.delete_snapshot(&manifest).await, "a manifest")?;
+    check(
+        store.head(&manifest).await.map_err(failed)?.is_some(),
+        "a refused delete_snapshot leaves the manifest in place",
+    )?;
+    let tail = key(Layout::tail_chunk(TENANT, 1, 77))?;
+    refused(store.delete_snapshot(&tail).await, "a tail chunk")?;
+    refused(
+        store.delete_snapshot(snapshot_prefix).await,
+        "a bare snapshot prefix",
+    )?;
+    let lookalikes = [
+        format!("{TENANT}/snapshots/../segments/x"),
+        format!(
+            "{TENANT}/snapshotsX/{}/{}/base",
+            Layout::padded(1),
+            Layout::padded(1)
+        ),
+        format!("{TENANT}/snapshots/"),
+        String::new(),
+    ];
+    for bad in &lookalikes {
+        refused(
+            store.delete_snapshot(bad).await,
+            "a traversal or look-alike key",
+        )?;
+    }
+    // `delete` stays as strict as ever, and the refusals above removed nothing.
+    match store.delete(snapshot_object).await {
+        Err(StoreError::DeleteRefused { .. }) => {}
+        other => {
+            return Err(format!(
+                "delete of a snapshot object must still fail with DeleteRefused, not {other:?}"
+            ));
+        }
+    }
+    check(
+        store.head(snapshot_object).await.map_err(failed)?.is_some(),
+        "the snapshot object is still there before delete_snapshot",
+    )?;
+    let missing = key(Layout::snapshot_object(TENANT, 1, 1, "never-written"))?;
+    match store.delete_snapshot(&missing).await {
+        Err(StoreError::NotFound { .. }) => {}
+        other => {
+            return Err(format!(
+                "delete_snapshot of a missing snapshot object must fail with NotFound, not {other:?}"
+            ));
+        }
+    }
+    store
+        .delete_snapshot(snapshot_object)
+        .await
+        .map_err(failed)?;
+    check(
+        store.get(snapshot_object).await.map_err(failed)?.is_none(),
+        "a deleted snapshot object reads as None",
+    )?;
+    check(
+        !store
+            .list(&format!("{TENANT}/snapshots/"), None, 100)
+            .await
+            .map_err(failed)?
+            .iter()
+            .any(|entry| entry.key == snapshot_object),
+        "a deleted snapshot object is gone from the listing",
+    )?;
+    match store.delete_snapshot(snapshot_object).await {
+        Err(StoreError::NotFound { .. }) => {}
+        other => {
+            return Err(format!(
+                "a second delete_snapshot must fail with NotFound, not {other:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 async fn stored_bytes<S: JournalStore>(store: &S, contested: &str) -> Result<Vec<u8>, String> {
     store
         .get(contested)

@@ -4,7 +4,7 @@
 //! another tenant's Case is never touched.
 //!
 //! Every test needs a server and skips cleanly (returning early) without one. The two migration
-//! tables are created by the host (`spot-cli`), so the test creates them with the same DDL.
+//! tables come from `prepare_migration_tables` (WP-BPM-09.T8), the same function the host calls.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
@@ -12,34 +12,20 @@ mod common;
 use common::*;
 use serde_json::{Value as Json, json};
 use spot_bpm_engine::{CaseId, CaseStore};
-use spot_bpm_pg::{MigrationMove, MigrationOutcome, PgCaseStore, SkipReason};
+use spot_bpm_pg::{
+    MigrationMove, MigrationOutcome, PgCaseStore, SkipReason, prepare_migration_tables,
+};
 use spot_postgres::testing::TestDb;
-
-const HOST_TABLES: &str = "\
-CREATE TABLE IF NOT EXISTS spot_bpm_migration (\
-  tenant text NOT NULL, id text NOT NULL, process text NOT NULL, from_version integer NOT NULL, \
-  to_version integer NOT NULL, mapping jsonb NOT NULL, state text NOT NULL, \
-  cursor text NOT NULL DEFAULT '', moved bigint NOT NULL DEFAULT 0, \
-  skipped bigint NOT NULL DEFAULT 0, failed bigint NOT NULL DEFAULT 0, started_by text NOT NULL, \
-  idem_key text, started_at timestamptz NOT NULL, ended_at timestamptz, lease_holder text, \
-  lease_until timestamptz, PRIMARY KEY (tenant, id));\
-CREATE TABLE IF NOT EXISTS spot_bpm_migration_audit (\
-  tenant text NOT NULL, migration_id text NOT NULL, case_id text NOT NULL, \
-  plan_digest text NOT NULL, payload text NOT NULL, at timestamptz NOT NULL, \
-  PRIMARY KEY (tenant, case_id, plan_digest));";
 
 const MIGRATION: &str = "mig-1";
 
-/// A scratch database with the Case tables and the host's migration tables.
+/// A scratch database with the Case tables and the migration tables.
 async fn setup() -> Option<(TestDb, PgCaseStore)> {
     let db = TestDb::create().await?;
-    let store = PgCaseStore::new(pool(&db, 6, "bpm-migration")).with_tenant("site_a");
+    let pool = pool(&db, 6, "bpm-migration");
+    let store = PgCaseStore::new(pool.clone()).with_tenant("site_a");
     store.prepare().await.unwrap();
-    db.raw_client()
-        .await
-        .batch_execute(HOST_TABLES)
-        .await
-        .unwrap();
+    prepare_migration_tables(&pool).await.unwrap();
     Some((db, store))
 }
 

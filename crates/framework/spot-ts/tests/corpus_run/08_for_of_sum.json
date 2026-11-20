@@ -1,0 +1,11 @@
+{
+  "case": "for_of",
+  "entry": "sum",
+  "args": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "expect": 10
+}

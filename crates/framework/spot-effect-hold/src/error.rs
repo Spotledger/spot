@@ -89,6 +89,12 @@ pub enum Error {
         /// The site.
         site: String,
     },
+    /// A retention policy is out of range.
+    #[error("the retention policy is invalid: {reason}")]
+    RetentionInvalid {
+        /// Which bound was broken (a fixed sentence).
+        reason: String,
+    },
     /// Recording a hold transition in the audit chain failed.
     #[error("recording the hold transition in the audit chain failed: {reason}")]
     AuditFailed {
@@ -113,6 +119,7 @@ impl Error {
             Error::NeverHoldNotAllowed { .. } => codes::NEVER_HOLD_NOT_ALLOWED,
             Error::InvalidInput { .. } => codes::INVALID_INPUT,
             Error::ReleaseInProgress { .. } => codes::RELEASE_IN_PROGRESS,
+            Error::RetentionInvalid { .. } => codes::RETENTION_INVALID,
             Error::AuditFailed { .. } => codes::AUDIT_FAILED,
         }
     }

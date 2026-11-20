@@ -30,6 +30,9 @@ pub enum AgentError {
     AuditFailed(String),
     /// A command-line argument is wrong.
     Usage(String),
+    /// The host has no hardware-backed key store and the operator did not accept software
+    /// keys (`--allow-software-keys`), or a rotation would loosen the stored policy.
+    SoftwareKeysNotAllowed,
 }
 
 impl AgentError {
@@ -49,6 +52,7 @@ impl AgentError {
             Self::TransportUnavailable => "agent.transport_unavailable",
             Self::AuditFailed(_) => "agent.audit_failed",
             Self::Usage(_) => "agent.usage",
+            Self::SoftwareKeysNotAllowed => "agent.software_keys_not_allowed",
         }
     }
 
@@ -57,7 +61,7 @@ impl AgentError {
     #[must_use]
     pub fn exit_code(&self) -> i32 {
         match self {
-            Self::Usage(_) => 2,
+            Self::Usage(_) | Self::SoftwareKeysNotAllowed => 2,
             Self::NotEnrolled | Self::AlreadyEnrolled => 3,
             Self::StatePermissions(_) => 4,
             _ => 1,
@@ -80,6 +84,10 @@ impl fmt::Display for AgentError {
             Self::KeyStoreUnavailable => "the requested key store is not available on this host",
             Self::TokenInvalid => "the enrolment token was refused",
             Self::TransportUnavailable => "no gateway transport is available in this build",
+            Self::SoftwareKeysNotAllowed => {
+                "this host has no hardware-backed key store; pass --allow-software-keys at \
+                 enrolment to accept software keys (the choice is recorded in the audit log)"
+            }
         };
         write!(f, "{}: {}", self.code(), detail)
     }

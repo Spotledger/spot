@@ -39,7 +39,7 @@ use crate::error::StoreError;
 use crate::layout::Key;
 use crate::store::{
     JournalStore, ObjectEntry, ObjectMeta, StoreFuture, StoredObject, etag, guard_delete,
-    guard_put_replace, length, page,
+    guard_delete_snapshot, guard_put_replace, length, page,
 };
 
 /// The directory under the root the store owns for staged writes. It is not part of the key
@@ -308,6 +308,21 @@ impl JournalStore for FolderStore {
         Box::pin(async move {
             let key = key.to_owned();
             guard_delete(&key)?;
+            let path = self.path_of(&key);
+            match std::fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    Err(StoreError::NotFound { key })
+                }
+                Err(error) => Err(io_error("delete", &key, &error)),
+            }
+        })
+    }
+
+    fn delete_snapshot<'a>(&'a self, key: &'a str) -> StoreFuture<'a, ()> {
+        Box::pin(async move {
+            let key = key.to_owned();
+            guard_delete_snapshot(&key)?;
             let path = self.path_of(&key);
             match std::fs::remove_file(&path) {
                 Ok(()) => Ok(()),

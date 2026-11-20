@@ -85,3 +85,12 @@ explanation_key = "error.migration_audit.chain_broken"
 params = ["message"]
 remedy = "Treat the migration records as tampered; investigate the exact sequence number the verifier named."
 since = "0.1.0"
+
+[[entry]]
+code = "migration_audit.finish_pending"
+class = "Unavailable"
+summary = "A migration run finished but its finish record could not be written to the audit chain yet."
+explanation_key = "error.migration_audit.finish_pending"
+params = []
+remedy = "Nothing was lost: the operation's own result stands and the record is kept in memory. Restore the audit store; the host retries the write (retry_pending_finishes)."
+since = "0.1.0"

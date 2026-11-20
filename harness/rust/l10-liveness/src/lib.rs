@@ -91,6 +91,13 @@ pub trait LivenessHost {
     fn probe(&mut self, _layer: Probe) -> ProbeOutcome {
         ProbeOutcome::NotSupported
     }
+
+    /// The per-change bound of the 200-change scenario for this host. The default is the shared
+    /// [`SEQUENTIAL_BUDGET`]; a host whose changes do real database work records its own,
+    /// larger bound (and its measurement) where it is defined.
+    fn per_change_budget(&self) -> std::time::Duration {
+        SEQUENTIAL_BUDGET
+    }
 }
 
 /// Builds fresh hosts, one per scenario (the L3 suite's `Fixture`, for this suite).

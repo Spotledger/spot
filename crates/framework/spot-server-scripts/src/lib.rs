@@ -29,6 +29,11 @@
 //!   `host.throw`, `host.format_money`, `host.round`, and the engine's `host.now`). There is no
 //!   network, no filesystem, no environment and no `fetch`.
 //! - [`ScriptLimits`], [`ScriptLog`] and [`ScriptRun`]: per-script limits and observability.
+//! - [`kinds`] (WP-EXT-06.T6): the other two kinds. An **API script** is served as a whitelisted
+//!   function and runs as its caller (never a guest); a **scheduled script** runs on a cron
+//!   schedule as its `run_as` user (never a system principal). Both reach documents through
+//!   a [`ScriptDocumentAccess`], the port the document-event controller's `HookContext` also
+//!   sits behind.
 //!
 //! # Running as the triggering user
 //!
@@ -36,8 +41,8 @@
 //! it is given is built through the host's [`FieldView`] (the same field access the API uses),
 //! and every `host.get`/`host.query`/`host.insert`/`host.update` goes through the step's
 //! [`HookContext`](spot_app_api::HookContext), whose own authorizer decides whether the acting
-//! user may read the field, run the query or write the document. Elevation is a later, audited,
-//! per-script flag and is not part of this task.
+//! user may read the field, run the query or write the document. Elevation is a separate, audited,
+//! per-script flag ([`elevation`], WP-EXT-06.T8) and is off by default.
 //!
 //! # Determinism and limits
 //!
@@ -48,18 +53,29 @@
 //! `after_commit` the failure is logged and the script is disabled after a run of consecutive
 //! failures.
 
+mod access;
 mod codes;
 mod compile;
 mod controller;
+pub mod elevation;
 mod error;
 mod host;
+pub mod kinds;
 mod limits;
 mod log;
 mod record;
 mod store;
 mod view;
 
-pub use codes::{COMPILE_FAILED, LIMIT_EXCEEDED, PHASE_VIOLATION, RECORD_INVALID, STORE_FAILED};
+pub use access::{
+    HookAccess, ScriptAccessFactory, ScriptDocumentAccess, ScriptQueries, ServiceAccess,
+    ServiceAccessFactory,
+};
+pub use codes::{
+    COMPILE_FAILED, ELEVATION_AUDIT_FAILED, ELEVATION_FORBIDDEN, ELEVATION_NOT_ALLOWED,
+    ELEVATION_REASON_REQUIRED, ELEVATION_RESET, FUNCTION_CONFLICT, GUEST_REFUSED, LIMIT_EXCEEDED,
+    PHASE_VIOLATION, RECORD_INVALID, RUN_AS_UNAVAILABLE, SCHEDULE_INVALID, STORE_FAILED,
+};
 pub use compile::{CompileOutcome, ServerScriptController, compile_source};
 pub use controller::ScriptController;
 pub use error::map_script_error;

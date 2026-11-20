@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Rehearsing a migration: `spot migrate-rehearse`
 
 A rehearsal runs an **approved** plan on a copy of your site, so you learn what the apply will do

@@ -87,7 +87,7 @@ pub(crate) struct Feed<'a> {
     pending: VecDeque<SegmentSummary>,
     open: Option<OpenSegment>,
     peak: usize,
-    resolve: &'a dyn Fn(&str) -> (EventClass, bool),
+    resolve: &'a (dyn Fn(&str) -> (EventClass, bool) + Sync),
 }
 
 impl<'a> Feed<'a> {
@@ -103,7 +103,7 @@ impl<'a> Feed<'a> {
         steps: &'a [Step],
         base_generation: Option<u64>,
         first_seq: u64,
-        resolve: &'a dyn Fn(&str) -> (EventClass, bool),
+        resolve: &'a (dyn Fn(&str) -> (EventClass, bool) + Sync),
     ) -> Self {
         Self {
             store,

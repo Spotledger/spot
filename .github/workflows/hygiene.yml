@@ -1,9 +1,12 @@
 # Gate G7 on the pinned reference corpus (WP-TST-13.T2), for the exported tree. Runs on
-# GitHub-hosted runners; the public repository takes no pull requests, so the triggers are push
-# to main, a weekly schedule and a manual run. No secrets. the project process notes.
+# GitHub-hosted runners; the triggers are push to main, a pull request from a branch of this same
+# repository, a weekly schedule and a manual run. A fork's pull request runs nothing (the
+# same-repository guard on the job). No secrets. the project process notes.
 name: hygiene
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   schedule:
     - cron: "0 3 * * 1"
@@ -15,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   scan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres the hygiene scan compares source text with a reference corpus; it touches no database.
     name: hygiene scan and seeded recall
     runs-on: ubuntu-latest

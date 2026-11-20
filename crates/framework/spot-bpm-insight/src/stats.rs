@@ -92,6 +92,15 @@ pub struct StepStats {
     pub p99: Option<Millis>,
     /// The longest completed-attempt cycle time.
     pub max: Option<Millis>,
+    /// The longest waiting time of any single completed attempt (an exact maximum, not a
+    /// histogram bucket); `None` until an attempt completes, `Some(0)` for a zero-length one. A
+    /// state written before this field existed reads as `None`.
+    #[serde(default)]
+    pub max_wait: Option<Millis>,
+    /// The longest work time of any single completed attempt, by the same rule as
+    /// [`max_wait`](Self::max_wait).
+    #[serde(default)]
+    pub max_work: Option<Millis>,
     /// How many times an attempt at this step entered a wait.
     pub queue_entered: u64,
     /// How many times an attempt at this step left a wait.
@@ -162,6 +171,8 @@ mod tests {
             p90: Some(Millis::from_seconds(15)),
             p99: Some(Millis::from_seconds(15)),
             max: Some(Millis::from_seconds(15)),
+            max_wait: Some(Millis::from_seconds(12)),
+            max_work: Some(Millis::from_seconds(4)),
             queue_entered: 4,
             queue_left: 3,
             queue_growth: 1,
@@ -177,6 +188,25 @@ mod tests {
         assert_eq!(stats.failure_rate().per_mille(), 250);
         assert_eq!(stats.wait_per_mille(), 750);
         assert_eq!(stats.mean(), Some(Millis::from_seconds(10)));
+    }
+
+    #[test]
+    fn the_longest_wait_and_work_round_trip_and_default_when_absent() {
+        let stats = stats();
+        let json = serde_json::to_string(&stats).unwrap();
+        let back: StepStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, stats);
+        assert_eq!(back.max_wait, Some(Millis::from_seconds(12)));
+
+        // A document stored before the two fields existed still reads, with both `None`.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let object = value.as_object_mut().unwrap();
+        assert!(object.remove("max_wait").is_some());
+        assert!(object.remove("max_work").is_some());
+        let old: StepStats = serde_json::from_value(value).unwrap();
+        assert_eq!(old.max_wait, None);
+        assert_eq!(old.max_work, None);
+        assert_eq!(old.completed, stats.completed);
     }
 
     #[test]

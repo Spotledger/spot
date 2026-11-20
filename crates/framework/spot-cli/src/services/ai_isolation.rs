@@ -319,6 +319,17 @@ impl AgentAdmission for Isolation {
     }
 }
 
+/// Gauge: the AIMD concurrency limit now in force for AI traffic (0 sheds all of it).
+const AIMD_LIMIT: &str = "spot_ai_isolation_aimd_limit";
+/// Gauge: AI calls running now.
+const IN_FLIGHT: &str = "spot_ai_isolation_in_flight";
+/// Counter: AI calls shed because people were waiting.
+const SHED_TOTAL: &str = "spot_ai_isolation_shed_total";
+/// Counter: AI calls refused by a concurrency or rate limit or an open breaker.
+const REFUSED_TOTAL: &str = "spot_ai_isolation_refused_total";
+/// Gauge: circuit breakers not closed (open or probing).
+const BREAKERS_OPEN: &str = "spot_ai_isolation_breakers_open";
+
 /// The service: runs the load sampler and publishes the metrics.
 struct IsolationService {
     isolation: Arc<Isolation>,
@@ -347,21 +358,16 @@ impl IsolationService {
 
     fn publish(&self) {
         let report = self.isolation.health();
-        metrics::gauge!("ai_isolation_aimd_limit").set(f64::from(report.aimd_limit));
-        metrics::gauge!("ai_isolation_in_flight").set(f64::from(report.in_flight));
-        metrics::gauge!("ai_isolation_shed_total").set(f64::from(
-            u32::try_from(report.shed_total).unwrap_or(u32::MAX),
-        ));
-        metrics::gauge!("ai_isolation_refused_total").set(f64::from(
-            u32::try_from(report.refused_total).unwrap_or(u32::MAX),
-        ));
+        metrics::gauge!(AIMD_LIMIT).set(f64::from(report.aimd_limit));
+        metrics::gauge!(IN_FLIGHT).set(f64::from(report.in_flight));
+        metrics::counter!(SHED_TOTAL).absolute(report.shed_total);
+        metrics::counter!(REFUSED_TOTAL).absolute(report.refused_total);
         let open = report
             .breakers
             .iter()
             .filter(|b| b.state != spot_ai_isolation::BreakerState::Closed)
             .count();
-        metrics::gauge!("ai_isolation_breakers_open")
-            .set(f64::from(u32::try_from(open).unwrap_or(u32::MAX)));
+        metrics::gauge!(BREAKERS_OPEN).set(f64::from(u32::try_from(open).unwrap_or(u32::MAX)));
     }
 }
 

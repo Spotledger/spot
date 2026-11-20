@@ -17,6 +17,11 @@
 //! * **Idempotence**: a tenant whose result was recorded in the current period is not due.
 //!   [`ResultSink::record`] must make the directory return [`TenantResult::started_millis`] as
 //!   the tenant's `last_run_millis`.
+//! * **Classifiers**: [`TenantInputs::classifier`] and [`TenantInputs::strict_topics`] are per
+//!   tenant. The default is the platform registry with the strict policy; a tenant whose journal
+//!   holds application topics gets a classifier from the host. A run that failed only because of
+//!   an unknown topic raises `JOURNAL_AUDIT_FAILED` with the reason `unknown_topics` and never the
+//!   mismatch condition: the data was not compared.
 //! * **The job**: [`handler`] runs a pass on the blocking pool and registers under [`JOB_NAME`].
 //!
 //! # Wiring order (the host)
@@ -53,4 +58,7 @@ pub use conditions::{
 pub use error::AuditJobError;
 pub use job::{AuditJob, JOB_NAME, SyncClock, handler};
 pub use providers::{AuditInputs, ResultSink, TenantDirectory, TenantInputs};
-pub use run::{FailureInfo, RunSummary, TenantOutcome, TenantResult, run_due};
+pub use run::{
+    FailureInfo, REASON_AUDIT_FAILED, REASON_UNKNOWN_TOPICS, RunSummary, TenantOutcome,
+    TenantResult, run_due,
+};

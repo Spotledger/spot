@@ -53,7 +53,7 @@ Rules:
 
 ## Adding a dependency
 
-Per the project coding rules, a dependency (Rust crate, NuGet package, Python library)
+Per the agent rules on dependencies, a dependency (Rust crate, NuGet package, Python library)
 is added only when the task brief allows it. Otherwise raise it under
 `## Open questions` and stop. The licence bar is the `[licenses]` allow list in
 `deny.toml`; a dependency carrying a different licence needs a lead decision

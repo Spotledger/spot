@@ -49,8 +49,11 @@ pub mod db {
     use spot_sandbox::mask::{MaskKind, Masker, SandboxKey, kind_for};
     use spot_sandbox::plan::{FieldPlan, MaskingPolicy};
     use spot_sandbox::scan::SourceIndex;
+    use spot_sandbox::tables::{TablePlan, TableRef, plan_tables};
+    use std::collections::BTreeSet;
 
-    /// Tables that hold copies of values and cannot be shown clean: emptied, never masked.
+    /// The prefixes `create` emptied before WP-ALM-05.T4. **No longer used**: the registry in
+    /// `spot_sandbox::tables` decides every table. Kept so code that names it still compiles.
     pub const PURGE_PREFIXES: [&str; 4] = [
         "spot_search",
         "spot_embedding",
@@ -145,8 +148,88 @@ pub mod db {
         pub fields: usize,
         /// Rows rewritten.
         pub rows: u64,
-        /// Tables emptied because they hold copies.
+        /// The names of every table truncated (`Empty`, `Rebuild` and unclassified).
         pub purged: Vec<String>,
+        /// Tables truncated because the registry says `Empty`, or because it does not know them.
+        pub emptied: usize,
+        /// Derived tables truncated to be rebuilt by the clone's own services.
+        pub rebuilt: usize,
+        /// Framework tables copied as they are (`Keep`).
+        pub kept: usize,
+        /// Tables the registry does not know: emptied, and named here so the operator sees them.
+        pub unclassified: Vec<String>,
+    }
+
+    /// `schema`.`table` as quoted identifiers.
+    fn qualified(table: &TableRef) -> Result<String, String> {
+        Ok(format!("{}.{}", quote(&table.schema)?, quote(&table.name)?))
+    }
+
+    /// The tables of the clone that are not documents: `public` and the migration control
+    /// schema, whose copied gate would close the clone.
+    async fn framework_tables(client: &deadpool_postgres::Object) -> Result<Vec<TableRef>, String> {
+        let rows = client
+            .query(
+                "SELECT table_schema::text, table_name::text FROM information_schema.tables \
+                 WHERE table_type = 'BASE TABLE' \
+                 AND table_schema IN ('public', 'spot_migration_control')",
+                &[],
+            )
+            .await
+            .map_err(server_error)?;
+        Ok(rows
+            .iter()
+            .map(|row| TableRef {
+                schema: row.get(0),
+                name: row.get(1),
+            })
+            .collect())
+    }
+
+    /// Truncates what the registry says to truncate, in one statement (so tables that reference
+    /// each other go together; a reference from a table that stays is an error, never a
+    /// cascade into documents), and returns the plan.
+    async fn apply_table_plan(
+        client: &deadpool_postgres::Object,
+        documents: &BTreeSet<String>,
+    ) -> Result<TablePlan, String> {
+        let plan = plan_tables(&framework_tables(client).await?, documents);
+        let names = plan
+            .to_truncate()
+            .into_iter()
+            .map(qualified)
+            .collect::<Result<Vec<_>, _>>()?;
+        if !names.is_empty() {
+            client
+                // The audit chain and the outbox refuse a truncate unless their maintenance
+                // settings are on, the documented restore path: a clone starts its own chain and
+                // its own outbox, so this is one. The settings are local to the transaction and
+                // switched off again right after.
+                .batch_execute(&format!(
+                    "SET LOCAL spot.audit_maintenance = 'on'; \
+                     SET LOCAL spot.feed_maintenance = 'on'; \
+                     TRUNCATE {} RESTART IDENTITY; \
+                     SET LOCAL spot.audit_maintenance = 'off'; \
+                     SET LOCAL spot.feed_maintenance = 'off'",
+                    names.join(", ")
+                ))
+                .await
+                .map_err(|e| {
+                    // The SQLSTATE only: it says why (a foreign key, a lock, a missing table)
+                    // and never carries a value.
+                    let state = e
+                        .as_db_error()
+                        .map_or("none", |d| d.code().code())
+                        .to_owned();
+                    // An access (42) or state (55) error names only the object it refused.
+                    let object = e
+                        .as_db_error()
+                        .filter(|d| matches!(&d.code().code()[..2], "42" | "55"))
+                        .map_or(String::new(), |d| format!(": {}", d.message()));
+                    format!("framework tables could not be emptied (SQLSTATE {state}{object})")
+                })?;
+        }
+        Ok(plan)
     }
 
     /// The constant a closed date, time or instant column is reset to.
@@ -195,9 +278,7 @@ pub mod db {
                 let class = classes
                     .get(&definition.name, &spec.name)
                     .cloned()
-                    .unwrap_or_else(|| {
-                        FieldClass::plain(&definition.name, &spec.name, spec.ty)
-                    });
+                    .unwrap_or_else(|| FieldClass::plain(&definition.name, &spec.name, spec.ty));
                 let kind = kind_for(&class, &policy);
                 if !kind.masks() {
                     continue;
@@ -239,7 +320,9 @@ pub mod db {
                 if let Some(constant) = fixed_value(&spec.ty) {
                     // A date or instant carries no pseudonym: every row gets the one constant, so
                     // no original survives (and a column that is NOT NULL stays valid).
-                    let reset = format!("UPDATE {table} SET {column} = {constant} WHERE {column} IS NOT NULL");
+                    let reset = format!(
+                        "UPDATE {table} SET {column} = {constant} WHERE {column} IS NOT NULL"
+                    );
                     let touched = client
                         .execute(&reset, &[])
                         .await
@@ -265,8 +348,7 @@ pub mod db {
                     for row in rows {
                         let ctid: String = row.get(0);
                         let original: String = row.get(1);
-                        let Ok(number) = original.parse::<serde_json::Number>()
-                        else {
+                        let Ok(number) = original.parse::<serde_json::Number>() else {
                             return Err(format!("{at}: a number could not be read"));
                         };
                         let masked = match masker.mask_value(kind, &Value::Number(number), "") {
@@ -277,12 +359,17 @@ pub mod db {
                         client
                             .execute(&update, &[&masked, &ctid])
                             .await
-                            .map_err(|_| format!("{at}: a masked value was refused by the column"))?;
+                            .map_err(|_| {
+                                format!("{at}: a masked value was refused by the column")
+                            })?;
                         stats.rows += 1;
                     }
                     continue;
                 }
-                if matches!(spec.ty, FieldType::Bytes | FieldType::Geo | FieldType::Range) {
+                if matches!(
+                    spec.ty,
+                    FieldType::Bytes | FieldType::Geo | FieldType::Range
+                ) {
                     client
                         .batch_execute(&format!("UPDATE {table} SET {column} = NULL"))
                         .await
@@ -323,24 +410,13 @@ pub mod db {
                 }
             }
         }
-        let tables = client
-            .query(
-                "SELECT table_name FROM information_schema.tables \
-                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'",
-                &[],
-            )
-            .await
-            .map_err(server_error)?;
-        for row in tables {
-            let name: String = row.get(0);
-            if PURGE_PREFIXES.iter().any(|p| name.starts_with(p)) {
-                client
-                    .batch_execute(&format!("TRUNCATE {}", quote(&name)?))
-                    .await
-                    .map_err(|_| format!("{name}: could not be emptied"))?;
-                stats.purged.push(name);
-            }
-        }
+        let documents: BTreeSet<String> = definitions.iter().map(|d| d.name.clone()).collect();
+        let plan = apply_table_plan(&client, &documents).await?;
+        stats.purged = plan.to_truncate().iter().map(|t| t.key()).collect();
+        stats.emptied = plan.empty.len();
+        stats.rebuilt = plan.rebuild.len();
+        stats.kept = plan.keep.len();
+        stats.unclassified = plan.unclassified.iter().map(TableRef::key).collect();
         client.batch_execute("COMMIT").await.map_err(server_error)?;
         Ok((stats, index))
     }
@@ -712,10 +788,20 @@ async fn build(
 
     hold(ctx, name).await?;
     Ok(format!(
-        "{} field(s) masked in {} row(s), {} table(s) emptied, {scanned} column(s) scanned clean, outbound effects held",
+        "{} field(s) masked in {} row(s), tables: {} emptied, {} to rebuild, {} kept{}, {scanned} column(s) scanned clean, outbound effects held",
         stats.fields,
         stats.rows,
-        stats.purged.len()
+        stats.emptied,
+        stats.rebuilt,
+        stats.kept,
+        if stats.unclassified.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ", unclassified_table (emptied, classify in spot-sandbox/src/tables.rs): {}",
+                stats.unclassified.join(", ")
+            )
+        }
     ))
 }
 

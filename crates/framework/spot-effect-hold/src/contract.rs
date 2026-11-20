@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use spot_core::SiteId;
 
-use crate::effect::{EffectId, EffectRef, EffectState, NewEffect, Transition};
+use crate::effect::{EffectId, EffectRef, EffectState, NewEffect, PayloadRef, Transition};
 use crate::error::{Error, Result};
 use crate::hold::{HoldState, MigrationId};
 use crate::store::{LedgerStore, ReleaseCursor};
@@ -106,6 +106,18 @@ where
     report.cases.push(case(
         "sequence_is_monotonic",
         sequence_is_monotonic(&make()).await,
+    ));
+    report.cases.push(case(
+        "purge_by_age_and_state",
+        purge_by_age_and_state(&make()).await,
+    ));
+    report.cases.push(case(
+        "purge_is_bounded_and_site_scoped",
+        purge_is_bounded_and_site_scoped(&make()).await,
+    ));
+    report.cases.push(case(
+        "purge_queues_payload_handles_until_the_last_reference",
+        purge_queues_payload_handles_until_the_last_reference(&make()).await,
     ));
 
     report
@@ -543,6 +555,185 @@ async fn sequence_is_monotonic(store: &Arc<dyn LedgerStore>) -> Result<()> {
             });
         }
         last = record.sequence.0;
+    }
+    Ok(())
+}
+
+fn with_payload(site: &SiteId, key: &str) -> NewEffect {
+    let mut new = effect(site, key, 1);
+    new.effect.payload_ref = PayloadRef::stored(format!("blob-{key}"), "hash", 10);
+    new
+}
+
+async fn payload_of(
+    store: &Arc<dyn LedgerStore>,
+    site: &SiteId,
+    id: EffectId,
+) -> Result<PayloadRef> {
+    let all = [
+        EffectState::Held,
+        EffectState::Releasing,
+        EffectState::Dispatched,
+        EffectState::Discarded,
+        EffectState::NeedsConfirmation,
+    ];
+    match store
+        .list_effects(site, &all)
+        .await?
+        .iter()
+        .find(|r| r.id == id)
+    {
+        Some(record) => Ok(record.payload_ref.clone()),
+        None => fail("payload", "the effect is missing"),
+    }
+}
+
+/// Only released and discarded effects are purgeable, only when strictly older than the limit, the
+/// row and its dedupe key stay, a held or releasing effect is never touched, and a second purge
+/// purges nothing new.
+async fn purge_by_age_and_state(store: &Arc<dyn LedgerStore>) -> Result<()> {
+    let site = site("purge-age.example");
+    let held = store.append_effect(with_payload(&site, "held")).await?;
+    let released = store.append_effect(with_payload(&site, "released")).await?;
+    let discarded = store
+        .append_effect(with_payload(&site, "discarded"))
+        .await?;
+    let releasing = store
+        .append_effect(with_payload(&site, "releasing"))
+        .await?;
+    for (id, next) in [
+        (released, EffectState::Dispatched),
+        (discarded, EffectState::Discarded),
+        (releasing, EffectState::Releasing),
+    ] {
+        store
+            .transition_effect_at(id, EffectState::Held, next, None, 1_000)
+            .await?;
+    }
+    let every = [
+        EffectState::Held,
+        EffectState::Releasing,
+        EffectState::Dispatched,
+        EffectState::Discarded,
+    ];
+    // Exactly at the limit is kept.
+    if store.purge_payloads(&site, &every, 1_000, 100).await? != 0 {
+        return fail("purge", "an effect exactly at the limit was purged");
+    }
+    // One microsecond past the limit: the released and the discarded effect, nothing else.
+    if store.purge_payloads(&site, &every, 1_001, 100).await? != 2 {
+        return fail(
+            "purge",
+            "expected the released and the discarded effect to be purged",
+        );
+    }
+    for id in [released, discarded] {
+        if payload_of(store, &site, id).await? != PayloadRef::Absent {
+            return fail("purge", "a terminal effect kept its payload reference");
+        }
+    }
+    for id in [held, releasing] {
+        if payload_of(store, &site, id).await? == PayloadRef::Absent {
+            return fail("purge", "a held or releasing effect was purged");
+        }
+    }
+    // Idempotent, and the row and the dedupe key stay.
+    if store.purge_payloads(&site, &every, i64::MAX, 100).await? != 0 {
+        return fail("purge", "a second purge purged something new");
+    }
+    if store.append_effect(with_payload(&site, "released")).await? != released {
+        return fail("purge", "the dedupe key of a purged effect was lost");
+    }
+    if state_of(store, &site, released).await?.0 != EffectState::Dispatched {
+        return fail("purge", "the row of a purged effect changed state");
+    }
+    Ok(())
+}
+
+/// A purge respects its limit, and never touches another site's rows.
+async fn purge_is_bounded_and_site_scoped(store: &Arc<dyn LedgerStore>) -> Result<()> {
+    let one = site("purge-one.example");
+    let other = site("purge-other.example");
+    let mut ids = Vec::new();
+    for key in ["a", "b", "c"] {
+        let id = store.append_effect(with_payload(&one, key)).await?;
+        store
+            .transition_effect_at(id, EffectState::Held, EffectState::Dispatched, None, 10)
+            .await?;
+        ids.push(id);
+    }
+    let foreign = store.append_effect(with_payload(&other, "x")).await?;
+    store
+        .transition_effect_at(
+            foreign,
+            EffectState::Held,
+            EffectState::Dispatched,
+            None,
+            10,
+        )
+        .await?;
+    let states = [EffectState::Dispatched];
+    if store.purge_payloads(&one, &states, 100, 2).await? != 2 {
+        return fail("purge", "the limit was not respected");
+    }
+    if store.purge_payloads(&one, &states, 100, 2).await? != 1 {
+        return fail("purge", "the remainder was not purged");
+    }
+    if payload_of(store, &other, foreign).await? == PayloadRef::Absent {
+        return fail("purge", "another site's payload reference was purged");
+    }
+    Ok(())
+}
+
+/// A purge queues the handles it clears, in the same step; a handle another effect still references
+/// is not offered for deletion until that reference is purged too; completing removes the entry;
+/// another site's queue is separate.
+async fn purge_queues_payload_handles_until_the_last_reference(
+    store: &Arc<dyn LedgerStore>,
+) -> Result<()> {
+    let site = site("purge-queue.example");
+    let other = self::site("purge-queue-other.example");
+    let mut ids = Vec::new();
+    for key in ["a", "b"] {
+        let mut new = with_payload(&site, key);
+        new.effect.payload_ref = PayloadRef::stored("shared-handle", "hash", 10);
+        ids.push(store.append_effect(new).await?);
+    }
+    for (id, at) in ids.iter().zip([1_000, 5_000]) {
+        store
+            .transition_effect_at(*id, EffectState::Held, EffectState::Dispatched, None, at)
+            .await?;
+    }
+    let states = [EffectState::Dispatched];
+    if store.purge_payloads(&site, &states, 2_000, 100).await? != 1 {
+        return fail("purge_queue", "the first reference was not purged");
+    }
+    if !store.pending_payload_deletes(&site, 10).await?.is_empty() {
+        return fail(
+            "purge_queue",
+            "a handle another effect still references was offered for deletion",
+        );
+    }
+    if store.purge_payloads(&site, &states, 6_000, 100).await? != 1 {
+        return fail("purge_queue", "the last reference was not purged");
+    }
+    if store.pending_payload_deletes(&site, 10).await? != vec!["shared-handle".to_owned()] {
+        return fail(
+            "purge_queue",
+            "the freed handle was not queued for deletion",
+        );
+    }
+    if !store.pending_payload_deletes(&other, 10).await?.is_empty() {
+        return fail(
+            "purge_queue",
+            "another site's queue holds this site's handle",
+        );
+    }
+    store
+        .complete_payload_delete(&site, "shared-handle")
+        .await?;
+    if !store.pending_payload_deletes(&site, 10).await?.is_empty() {
+        return fail("purge_queue", "a completed handle is still queued");
     }
     Ok(())
 }

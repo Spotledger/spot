@@ -8,14 +8,20 @@ use serde_json::{Value as Json, json};
 use spot_app_api::error::FieldPath;
 use spot_app_api::prelude::{OffsetDateTime, RecordId};
 use spot_app_api::{
-    AppError, AppResult, BoxFuture, Controller, ErrorClass, HookContext, Phase, StepDecl, StepName,
+    Actor, AppError, AppResult, BoxFuture, Controller, ErrorClass, HookContext, Phase, StepDecl,
+    StepName,
 };
 use spot_money::currency::CurrencyTable;
 use spot_ts::{Compiled, HostBridge, ScriptEngine, ScriptError, ScriptId};
 use spot_ts_transpile::{Diagnostic, Options};
 
 use crate::SERVER_SCRIPT_DOCTYPE;
+use crate::access::HookAccess;
 use crate::codes;
+use crate::elevation::{
+    ElevatedAccess, ElevatedKind, Elevation, ElevationSession, ElevationWiring, RunIdentity,
+    ScriptElevation,
+};
 use crate::host::{
     HostRequest, MethodCaller, ScriptBridge, TypedThrow, service, typed_throw_error,
 };
@@ -64,6 +70,8 @@ pub struct ScriptController {
     log: Arc<ScriptLog>,
     currencies: Option<Arc<CurrencyTable>>,
     method_caller: Option<Arc<dyn MethodCaller>>,
+    elevation: Option<ElevationWiring>,
+    elevated: BTreeMap<String, ScriptElevation>,
     prepared: Mutex<HashMap<String, Arc<Prepared>>>,
     state: Mutex<HashMap<String, ScriptState>>,
 }
@@ -103,6 +111,8 @@ impl ScriptController {
             log: Arc::new(ScriptLog::new(ScriptLimits::default().log_capacity)),
             currencies: None,
             method_caller: None,
+            elevation: None,
+            elevated: BTreeMap::new(),
             prepared: Mutex::new(HashMap::new()),
             state: Mutex::new(HashMap::new()),
         })
@@ -140,6 +150,20 @@ impl ScriptController {
     #[must_use]
     pub fn with_method_caller(mut self, caller: Arc<dyn MethodCaller>) -> ScriptController {
         self.method_caller = Some(caller);
+        self
+    }
+
+    /// The same controller able to run the scripts `flags` marks elevated as the platform, audited
+    /// through `wiring`. Default deny: without this, or for a script not flagged, a script runs
+    /// as the triggering user.
+    #[must_use]
+    pub fn with_elevation(
+        mut self,
+        wiring: ElevationWiring,
+        flags: Vec<ScriptElevation>,
+    ) -> ScriptController {
+        self.elevation = Some(wiring);
+        self.elevated = flags.into_iter().map(|f| (f.name.clone(), f)).collect();
         self
     }
 
@@ -216,6 +240,7 @@ impl ScriptController {
         compiled: &Arc<Compiled>,
         args: &Json,
         ctx: &mut dyn HookContext,
+        mut elevated: Option<&mut ElevatedAccess>,
     ) -> (Result<Json, ScriptError>, RunStats) {
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<HostRequest>();
         let now = now_millis(ctx.invocation());
@@ -239,13 +264,14 @@ impl ScriptController {
                 outcome = &mut run => break outcome,
                 request = receiver.recv() => {
                     if let Some(request) = request {
-                        let reply = service(
-                            ctx,
-                            self.method_caller.as_deref(),
-                            &request.name,
-                            request.args,
-                        )
-                        .await;
+                        let reply = match elevated.as_deref_mut() {
+                            Some(access) => service(access, &request.name, request.args).await,
+                            None => {
+                                let mut access =
+                                    HookAccess::new(&mut *ctx, self.method_caller.as_deref());
+                                service(&mut access, &request.name, request.args).await
+                            }
+                        };
                         let _ = request.reply.send(reply);
                     }
                 }
@@ -425,8 +451,60 @@ impl Controller for ScriptController {
                 }
             };
 
-            let (result, stats) = self.execute(script, &compiled, &args, ctx).await;
+            let proof = self.elevated.get(&script.name).and_then(Elevation::granted);
+            let mut session = match (proof, &self.elevation) {
+                (Some(proof), Some(wiring)) => {
+                    let user = match &ctx.invocation().actor {
+                        Actor::User { id, .. } => id.to_string(),
+                        other => format!("{other:?}"),
+                    };
+                    let began = ElevationSession::begin(
+                        wiring,
+                        proof,
+                        RunIdentity {
+                            script: script.name.clone(),
+                            kind: ElevatedKind::DocumentEvent,
+                            doctype: Some(self.doctype.clone()),
+                            operation: script.event.as_str().to_owned(),
+                            triggering_user: user,
+                        },
+                        ctx.invocation(),
+                    )
+                    .await;
+                    match began {
+                        Ok(session) => Some(session),
+                        Err(error) => {
+                            // No audit, no elevated run: nothing was started or written.
+                            self.record_failure(script, &error.code, now, elapsed(started))
+                                .await;
+                            return Err(error);
+                        }
+                    }
+                }
+                _ => None,
+            };
+            let (result, stats) = self
+                .execute(
+                    script,
+                    &compiled,
+                    &args,
+                    ctx,
+                    session.as_mut().map(ElevationSession::access),
+                )
+                .await;
             let duration_ms = elapsed(started);
+            if let Some(session) = session {
+                let outcome = match (&stats.typed_throw, &result) {
+                    (Some(thrown), _) => thrown.code.clone(),
+                    (None, Ok(_)) => "ok".to_owned(),
+                    (None, Err(error)) => error.code().to_owned(),
+                };
+                if let Err(error) = session.finish(&outcome).await {
+                    self.record_failure(script, &error.code, now, duration_ms)
+                        .await;
+                    return Err(error);
+                }
+            }
 
             if let Some(thrown) = &stats.typed_throw {
                 let error = typed_throw_error(thrown, &script.name);
@@ -550,7 +628,7 @@ fn compile_error(script: &ServerScript, diagnostics: &[Diagnostic]) -> AppError 
 }
 
 /// The invocation's time in milliseconds since the Unix epoch (the only clock a script sees).
-fn now_millis(inv: &spot_app_api::Invocation) -> i64 {
+pub(crate) fn now_millis(inv: &spot_app_api::Invocation) -> i64 {
     inv.now
         .unix_timestamp()
         .saturating_mul(1_000)
@@ -559,7 +637,7 @@ fn now_millis(inv: &spot_app_api::Invocation) -> i64 {
 
 /// A deterministic seed for a script's pseudo-random numbers: the same script at the same
 /// invocation time gives the same sequence.
-fn seed_for(name: &str, now_millis: i64) -> u64 {
+pub(crate) fn seed_for(name: &str, now_millis: i64) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     for byte in name.as_bytes() {
         hash ^= u64::from(*byte);

@@ -98,13 +98,26 @@ pub(crate) struct StepAgg {
     pub(crate) work: Millis,
     pub(crate) wait: Millis,
     pub(crate) cycles: Histogram,
+    pub(crate) max_wait: Option<Millis>,
+    pub(crate) max_work: Option<Millis>,
     pub(crate) queue_entered: u64,
     pub(crate) queue_left: u64,
     pub(crate) waiting: u64,
     pub(crate) max_waiting: u64,
 }
 
+/// Raises an optional maximum to `value` when `value` is larger (or the slot is empty).
+fn raise(slot: &mut Option<Millis>, value: Millis) {
+    *slot = Some(slot.map_or(value, |current| current.max(value)));
+}
+
 impl StepAgg {
+    /// Records one completed attempt's work and wait time in the exact maxima.
+    fn note_longest(&mut self, work: Millis, wait: Millis) {
+        raise(&mut self.max_wait, wait);
+        raise(&mut self.max_work, work);
+    }
+
     fn new(kind: &NodeKind) -> Self {
         Self {
             kind: kind.clone(),
@@ -116,6 +129,8 @@ impl StepAgg {
             work: Millis::ZERO,
             wait: Millis::ZERO,
             cycles: Histogram::new(),
+            max_wait: None,
+            max_work: None,
             queue_entered: 0,
             queue_left: 0,
             waiting: 0,
@@ -143,6 +158,8 @@ impl StepAgg {
             p90: as_millis(cycles.percentile(90)),
             p99: as_millis(cycles.percentile(99)),
             max: as_millis(cycles.max()),
+            max_wait: self.max_wait,
+            max_work: self.max_work,
             queue_entered: self.queue_entered,
             queue_left: self.queue_left,
             queue_growth: i64::try_from(self.queue_entered).unwrap_or(i64::MAX)
@@ -248,6 +265,29 @@ impl Insight {
     #[must_use]
     pub fn stuck_cases(&self, now: OffsetDateTime, policy: &StuckPolicy) -> Vec<StuckCase> {
         stuck_cases(&self.open, now, policy)
+    }
+
+    /// The open attempt that has waited longest at `now`: its process version, node and current
+    /// wait (`now - since`, never negative). Only a waiting attempt counts; a running one does
+    /// not. Ties are broken by process version, then node (then run) so the answer is stable.
+    /// `now` is an argument: no clock is read.
+    #[must_use]
+    pub fn longest_open_wait(&self, now: OffsetDateTime) -> Option<(ProcessKey, NodeId, Millis)> {
+        self.open
+            .iter()
+            .filter(|attempt| attempt.state == RunState::Waiting)
+            .map(|attempt| {
+                let waited = Millis::between(attempt.since, now).max(Millis::ZERO);
+                (attempt, waited)
+            })
+            .min_by(|(a, wait_a), (b, wait_b)| {
+                wait_b
+                    .cmp(wait_a)
+                    .then_with(|| a.process.cmp(&b.process))
+                    .then_with(|| a.node.cmp(&b.node))
+                    .then_with(|| a.case.cmp(&b.case))
+            })
+            .map(|(attempt, waited)| (attempt.process.clone(), attempt.node.clone(), waited))
     }
 
     /// The same insight seen through a viewer's process-level read permission.
@@ -475,6 +515,7 @@ impl Accumulator {
         step.attempts += 1;
         step.completed += 1;
         step.cycles.record(0);
+        step.note_longest(Millis::ZERO, Millis::ZERO);
         match kind {
             CloseKind::Done => step.done += 1,
             CloseKind::Failed => step.failed += 1,
@@ -502,6 +543,7 @@ impl Accumulator {
         step.work += track.work;
         step.wait += track.wait_time;
         step.cycles.record(cycle.as_millis());
+        step.note_longest(track.work, track.wait_time);
         match kind {
             CloseKind::Done => step.done += 1,
             CloseKind::Failed => step.failed += 1,

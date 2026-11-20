@@ -1,0 +1,11 @@
+kind = "scheduled"
+pattern = "nightly roll-up as run_as"
+[expect]
+ok = true
+host_calls = 2
+message = "2023-11-14T22:13:20Z"
+[[expect.documents]]
+doctype = "log_entry"
+field = "reference"
+value = "scripting:corpus:2023-11-14T22:13:20Z"
+count = 1

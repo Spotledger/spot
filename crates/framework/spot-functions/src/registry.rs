@@ -11,15 +11,17 @@ use spot_manifest::HttpVerb;
 use crate::args::{Context, FunctionHandlerInfo};
 use crate::builder::{Entry, FunctionInfo};
 use crate::codes;
+use crate::gate::{GateKey, LocalGate, RateGate};
 use crate::key::FunctionKey;
-use crate::limit::RateLimiter;
 use crate::schema::validate_arguments;
 
 /// A validated, immutable registry of whitelisted functions. Build one with
 /// [`FunctionRegistryBuilder`](crate::FunctionRegistryBuilder).
 pub struct FunctionRegistry {
     entries: BTreeMap<FunctionKey, Entry>,
-    limiter: RateLimiter,
+    gate: Arc<dyn RateGate>,
+    /// The default in-process gate, kept by its concrete type so a test can swap its clock.
+    local: Arc<LocalGate>,
 }
 
 impl FunctionRegistry {
@@ -27,15 +29,35 @@ impl FunctionRegistry {
         entries: BTreeMap<FunctionKey, Entry>,
         clock: Arc<dyn spot_core::clock::Clock>,
     ) -> Self {
+        let local = Arc::new(LocalGate::new(clock));
         FunctionRegistry {
             entries,
-            limiter: RateLimiter::new(clock),
+            gate: Arc::clone(&local) as Arc<dyn RateGate>,
+            local,
         }
     }
 
-    /// Replaces the limiter's clock (tests swap in a manual clock).
+    /// Replaces the rate gate. The default is the in-process [`LocalGate`]; a host that runs
+    /// several nodes installs a gate over a shared store so a declared limit holds for the site.
+    /// Apply it right after the registry is built (and again after every rebuild: a registry
+    /// built afresh has the default gate).
+    #[must_use]
+    pub fn with_gate(mut self, gate: Arc<dyn RateGate>) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    /// The registry's own in-process gate, by its concrete type: the fallback a distributed gate
+    /// uses when its shared store cannot be reached.
+    #[must_use]
+    pub fn local_gate(&self) -> Arc<LocalGate> {
+        Arc::clone(&self.local)
+    }
+
+    /// Replaces the clock of the default local gate's buckets (tests swap in a manual clock). A
+    /// gate installed with [`FunctionRegistry::with_gate`] keeps its own clock.
     pub fn set_clock(&self, clock: Arc<dyn spot_core::clock::Clock>) {
-        self.limiter.set_clock(clock);
+        self.local.set_clock(clock);
     }
 
     /// Every function, with its declaring app, verbs, guest flag, limit, schema, and who
@@ -58,15 +80,16 @@ impl FunctionRegistry {
             .collect()
     }
 
-    /// Drops every rate-limit bucket idle for longer than `older_than`, bounding memory;
-    /// returns how many were dropped.
+    /// Drops every local rate-limit bucket idle for longer than `older_than`, bounding memory;
+    /// returns how many were dropped (a distributed gate keeps none, or only its fallback's).
     pub fn evict_idle_buckets(&self, older_than: Duration) -> usize {
-        self.limiter.evict_idle(older_than)
+        self.gate.evict_idle(older_than)
     }
 
-    /// How many rate-limit buckets exist (hosts watch the memory bound).
+    /// How many local rate-limit buckets exist (hosts watch the memory bound); a distributed
+    /// gate reports 0.
     pub fn bucket_count(&self) -> usize {
-        self.limiter.len()
+        self.gate.bucket_count()
     }
 
     /// The handler that runs for `key` (the override's, when one overrides), plus its
@@ -141,9 +164,13 @@ impl FunctionRegistry {
             None => (entry.handler.clone(), entry.decl.limit),
         };
         if let Some(limit) = limit {
-            let bucket = (key.to_string(), ctx.caller.bucket());
-            self.limiter
-                .check(&bucket, limit.permits, limit.per)
+            let bucket = GateKey {
+                function: key.to_string(),
+                caller: ctx.caller.bucket(),
+            };
+            self.gate
+                .admit(&bucket, limit.permits, limit.per)
+                .await
                 .map_err(|e| {
                     AppError::new(
                         ErrorClass::Unavailable,

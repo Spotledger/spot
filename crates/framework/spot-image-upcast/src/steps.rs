@@ -24,7 +24,7 @@ use crate::image::Image;
 ///
 /// Boxed rather than a bare function pointer so a builder can carry its field names and default
 /// values without every patch declaring a `fn`.
-pub type Step = Box<dyn Fn(&mut Image) -> Result<(), UpcastError>>;
+pub type Step = Box<dyn Fn(&mut Image) -> Result<(), UpcastError> + Send + Sync>;
 
 /// The source field name, kept alive by the closure.
 fn name(field: &str) -> String {
@@ -163,7 +163,7 @@ pub fn move_field_to_child(child: &str, parent_field: &str, row_field: &str) -> 
 #[must_use]
 pub fn retype_field<F>(field: &str, convert: F) -> Step
 where
-    F: Fn(&Value) -> Result<Value, String> + 'static,
+    F: Fn(&Value) -> Result<Value, String> + Send + Sync + 'static,
 {
     let field = name(field);
     Box::new(move |image: &mut Image| {

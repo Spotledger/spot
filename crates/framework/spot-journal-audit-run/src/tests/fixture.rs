@@ -41,6 +41,13 @@ pub(crate) enum Ev {
         n: u64,
         version: u64,
     },
+    /// A non-state entry (domain or audit, or an unregistered topic): it changes no record.
+    Topic { topic: &'static str, n: u64 },
+}
+
+/// A non-state entry on `topic` about record `n`.
+pub(crate) fn topic(topic: &'static str, n: u64) -> Ev {
+    Ev::Topic { topic, n }
 }
 
 pub(crate) fn put(n: u64, version: u64) -> Ev {
@@ -61,43 +68,54 @@ pub(crate) fn delete(n: u64, version: u64) -> Ev {
 }
 
 pub(crate) fn line(event: &Ev, position: Position, source: &str) -> String {
-    let (entity, id, version, data) = match event {
+    let (topic, entity, id, version, data) = match event {
         Ev::Put {
             entity,
             n,
             version,
             body,
         } => (
+            "doc_state",
             *entity,
             *n,
-            *version,
+            Some(*version),
             json!({"op": "insert", "entity_schema": 1, "image": body}),
         ),
         Ev::Delete { entity, n, version } => (
+            "doc_state",
             *entity,
             *n,
-            *version,
+            Some(*version),
             json!({"op": "delete", "entity_schema": 1, "image": {"gone": true}}),
         ),
+        Ev::Topic { topic, n } => (
+            *topic,
+            "account",
+            *n,
+            None,
+            json!({"note": "a fact, not a state"}),
+        ),
     };
-    json!({
+    let mut envelope = json!({
         "event_id": uuid(1_000_000 + position.seq),
-        "topic": "doc_state",
+        "topic": topic,
         "schema_version": 1,
         "source_id": source,
         "position": {"generation": position.generation, "seq": position.seq},
         "transaction": uuid(2_000_000 + position.seq),
         "ordinal": 0,
         "subject": {"entity": entity, "id": uuid(id)},
-        "subject_version": version,
         "meta": {
             "occurred_at": "2026-01-01T00:00:00Z",
             "actor": {"kind": "system", "component": "scheduler"},
             "correlation_id": uuid(3_000_000 + position.seq),
         },
         "data": data,
-    })
-    .to_string()
+    });
+    if let Some(version) = version {
+        envelope["subject_version"] = json!(version);
+    }
+    envelope.to_string()
 }
 
 type Model = BTreeMap<(String, String), (u64, Value)>;
@@ -117,6 +135,7 @@ fn model(events: &[Ev], upto: usize) -> Model {
             Ev::Delete { entity, n, .. } => {
                 out.remove(&(entity.to_string(), uuid(*n)));
             }
+            Ev::Topic { .. } => {}
         }
     }
     out
@@ -298,6 +317,7 @@ impl Journal {
                 Ev::Delete { entity, n, version } => {
                     live.remove(seq, entity, &uuid(*n), *version);
                 }
+                Ev::Topic { .. } => live.set_head(spot_journal_audit::Position::new(1, seq)),
             }
         }
         live

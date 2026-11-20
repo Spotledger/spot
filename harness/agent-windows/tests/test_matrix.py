@@ -121,6 +121,22 @@ class TestShippedMatrix(unittest.TestCase):
             {target.name for target in self.matrix.targets},
         )
 
+    def test_shipped_labels_are_neutral(self) -> None:
+        for target in self.matrix.targets:
+            self.assertEqual(target.runner_labels, ("Windows", "windows-vm"), target.name)
+
+    def test_runner_labels_come_from_the_environment_when_set(self) -> None:
+        same = orchestrator.with_runner_labels(self.matrix, {})
+        self.assertEqual(same, self.matrix)
+        changed = orchestrator.with_runner_labels(
+            self.matrix, {orchestrator.RUNNER_LABELS_ENV: "label-a, label-b ,"}
+        )
+        for target in changed.targets:
+            self.assertEqual(target.runner_labels, ("label-a", "label-b"))
+        # Only the labels change.
+        self.assertEqual([t.name for t in changed.targets], [t.name for t in self.matrix.targets])
+        self.assertEqual(changed.tests, self.matrix.tests)
+
     def test_missing_capabilities_reports_the_gap(self) -> None:
         target = self.matrix.target("windows-11")
         test = self.matrix.real_test("services")

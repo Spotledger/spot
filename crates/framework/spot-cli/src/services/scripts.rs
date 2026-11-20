@@ -112,6 +112,8 @@ use crate::services::realtime::{OfflineSlot, door_slot, finalise_door, refusal_e
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
+#[path = "scripts/elevation.rs"]
+pub mod elevation;
 #[path = "scripts/engine.rs"]
 mod engine;
 #[path = "scripts/hub.rs"]
@@ -123,11 +125,17 @@ mod settings;
 #[path = "scripts/ts.rs"]
 mod ts;
 
-pub use engine::{AuthorizerView, EngineAccess, EngineMethodCaller, EngineScriptDocuments};
+pub use elevation::{
+    ChainElevationAudit, ElevationEntry, ElevationLog, ElevationStep, PermissionCheck,
+    SlotPermissions,
+};
+pub use engine::{
+    AuthorizerView, EngineAccess, EngineMethodCaller, EngineScriptDocuments, LivePermissionCheck,
+};
 pub use hub::{ScriptAdmin, ScriptHub};
 pub use runtime::{Runtime, ScriptSlot, SlotState, slot};
 pub use settings::Settings;
-pub use ts::{DirModules, SlotView, register_controllers, typescript_factory};
+pub use ts::{DirModules, SlotView, register_admin, register_controllers, typescript_factory};
 // Helpers the sibling files share (visible to this module's tree only).
 use hub::*;
 
@@ -151,17 +159,20 @@ const NOT_READY: &str = spot_server_scripts::STORE_FAILED;
 const MAX_SCRIPTS_PER_DOCTYPE: u32 = 256;
 
 /// The DocTypes no script may be attached to: the platform's credential, session, authorisation
-/// and webhook records, and the Server Script record itself (a script that rewrites scripts is a
-/// privilege escalation). Everything else, including every app DocType, is scriptable.
-pub const RESERVED: [&str; 14] = [
+/// and webhook records, and the three script records themselves (`server_script`, `api_script`,
+/// `scheduled_script`: a script that rewrites scripts is a privilege escalation, and the
+/// elevation flag lives on them). Everything else, including every app DocType, is scriptable.
+pub const RESERVED: [&str; 16] = [
     "api_key",
     "api_key_scope",
+    "api_script",
     "linked_identity",
     "login_attempt",
     "role",
     "role_assignment",
     "role_assignment_scope",
     "role_duty",
+    "scheduled_script",
     "server_script",
     "session",
     "user",
@@ -356,12 +367,36 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let store: Arc<dyn ScriptStore> = Arc::new(spot_server_scripts::DocumentScriptStore::new(
         Arc::new(documents),
     ));
+    // Who holds a named permission: a module that provides the port decides, else the site's own
+    // permission engine does.
+    let permissions: Arc<dyn PermissionCheck> = ctx
+        .port::<dyn PermissionCheck>()
+        .unwrap_or_else(|| Arc::new(LivePermissionCheck::new(Arc::clone(&live))));
+    // Elevation (WP-EXT-06.T10) needs somewhere to audit: the port `ElevationLog`, bound to the
+    // audit chain appender by the module that owns the chain. Without it no script is ever
+    // elevated (default deny), whatever its record says.
+    let wiring = ctx.port::<dyn ElevationLog>().map(|log| {
+        let engine_of = Arc::clone(&live);
+        spot_server_scripts::elevation::ElevationWiring {
+            factory: Arc::new(crate::services::script_kinds::EngineAccessFactory::new(
+                Arc::new(move || engine_of.engine()),
+            )),
+            audit: Arc::new(ChainElevationAudit::new(log)),
+        }
+    });
+    if wiring.is_none() {
+        tracing::info!(site = %site_name, "no elevation log is provided: scripts are never elevated");
+    }
     let (view, caller) = offline_seams(
         Arc::new(AuthorizerView::new(Arc::clone(&live))),
         Arc::new(EngineMethodCaller::new(live)),
         &scripts_door,
     );
-    let mut runtime = Runtime::new(settings, slot.script_engine().clone(), store, view, caller);
+    let mut runtime = Runtime::new(settings, slot.script_engine().clone(), store, view, caller)
+        .with_permissions(permissions);
+    if let Some(wiring) = wiring {
+        runtime = runtime.with_elevation(wiring);
+    }
     runtime.generation = generation;
     slot.set(SlotState::Ready(Arc::new(runtime)));
     ctx.add(Arc::new(ScriptsService {
@@ -399,6 +434,8 @@ mod tests {
     #[test]
     fn reserved_doctypes_are_not_scriptable() {
         assert!(!is_scriptable("server_script"));
+        assert!(!is_scriptable("api_script"));
+        assert!(!is_scriptable("scheduled_script"));
         assert!(!is_scriptable("session"));
         assert!(is_scriptable("invoice"));
     }

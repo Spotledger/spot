@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # AI workload isolation
 
 Twenty parallel agents must not make interactive users wait. With `[services.ai_isolation]` switched on,
@@ -52,8 +54,9 @@ Other refusals the same way: per-agent or per-tenant concurrency or rate spent, 
 
 ## Observing it
 
-Gauges on `/metrics` (when metrics are on): `ai_isolation_aimd_limit`, `ai_isolation_in_flight`,
-`ai_isolation_shed_total`, `ai_isolation_refused_total`, `ai_isolation_breakers_open`. A limit of 0 means AI
+On `/metrics` (when metrics are on), gauges `spot_ai_isolation_aimd_limit`, `spot_ai_isolation_in_flight`
+and `spot_ai_isolation_breakers_open`, and counters `spot_ai_isolation_shed_total` and
+`spot_ai_isolation_refused_total`. A limit of 0 means AI
 traffic is being shed because people are waiting. An open breaker names itself in the log; the typed report
 is `Isolation::health()` (the `spot-ai-isolation` health report: breaker scopes, states and when each next
 admits a probe).

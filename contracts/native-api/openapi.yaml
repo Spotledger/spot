@@ -2836,7 +2836,7 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/WebhookSigningSecretPutResponse"}
-              example: {data: {key_version: 2, fingerprint: "0123456789ab", secret: "kq3Zt1m0WcVJb8x2uQnR5eYhLd7SfAaPgT4oXvC9iBw"}}
+              example: {data: {key_version: 2, fingerprint: "0123456789ab", secret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}
         default: {$ref: "#/components/responses/Error"}
     get:
       tags: [webhook]

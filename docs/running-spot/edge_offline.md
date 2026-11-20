@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # edge_offline
 
 Offline operation of an edge: leased naming ranges, the identity lease and the balance policy.

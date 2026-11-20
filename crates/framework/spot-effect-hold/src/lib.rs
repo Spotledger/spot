@@ -46,7 +46,9 @@ pub mod effect;
 pub mod error;
 pub mod gate;
 pub mod hold;
+pub mod payload;
 pub mod request;
+pub mod retention;
 pub mod scope;
 pub mod service;
 pub mod store;
@@ -57,7 +59,9 @@ pub mod contract;
 
 mod serde_site;
 
-pub use audit::{AuditEvent, AuditKind, AuditSink, ChainAudit, RecordingAudit};
+pub use audit::{
+    AuditEvent, AuditKind, AuditSink, ChainAudit, ChainAuditSink, RecordingAudit, chain_scope,
+};
 pub use class::{ClassPolicy, EffectClass, OnDiscard, OnRelease, PolicyConfig, PolicyTable};
 pub use dispatch::{Dispatcher, Notice, Notifier, RecordingDispatcher, RecordingNotifier};
 pub use effect::{
@@ -67,10 +71,12 @@ pub use effect::{
 pub use error::{Error, Result};
 pub use gate::{Admission, EdgeSyncGate, Gate, HoldSnapshot, HoldTicket, QueueGate};
 pub use hold::{HoldState, MigrationId};
+pub use payload::{InMemoryPayloadStore, PayloadStore, drain_payload_deletes};
 pub use request::{
     MAX_HELD_PER_REQUEST, RequestAdmission, RequestDiscardReport, RequestReleaseReport,
     RequestTicket,
 };
+pub use retention::{PurgeReport, RetentionPolicy, purge_expired, purge_expired_with_payloads};
 pub use scope::{HoldScope, RequestId};
 pub use service::{DiscardReport, HoldService, ReleasePlan, ReleaseReport};
 pub use store::{InMemoryLedger, LedgerStore, ReleaseCursor, UnavailableLedger};

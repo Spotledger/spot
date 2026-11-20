@@ -57,6 +57,53 @@ const LOCK_TIMEOUT: &str = "30s";
 struct DbColumn {
     ty: String,
     not_null: bool,
+    /// Marked by [`PgBackend::retire_column`]: the catalog no longer has the field, the data
+    /// stays.
+    retired: bool,
+}
+
+/// The comment [`PgBackend::retire_column`] puts on a column the catalog no longer has.
+/// `prepare` tolerates a column with this comment; any other column the catalog lacks is
+/// still refused as a drop.
+pub(crate) const RETIRED_COMMENT: &str = "spot:retired";
+
+impl PgBackend {
+    /// Retires a column whose field was removed from the metadata: the column and its data stay
+    /// (a runtime change never drops data), `NOT NULL` is lifted so inserts that no longer
+    /// carry the field still work, and the column is marked so that `prepare` with a catalog
+    /// that lacks it no longer refuses it as a drop. Idempotent; a column that does not exist
+    /// is left alone.
+    ///
+    /// # Errors
+    ///
+    /// The database's failure, mapped to a [`StorageError`].
+    pub async fn retire_column(&self, table: &str, column: &str) -> StorageResult<()> {
+        let mut conn = self.checkout().await?;
+        let tx = conn.transaction().await.map_err(db)?;
+        tx.execute(
+            "SELECT set_config('lock_timeout', $1, true)",
+            &[&LOCK_TIMEOUT],
+        )
+        .await
+        .map_err(db)?;
+        tx.execute("SELECT pg_advisory_xact_lock($1)", &[&ADVISORY_KEY])
+            .await
+            .map_err(db)?;
+        if table_exists(&tx, table).await? {
+            let have = db_columns(&tx, table).await?;
+            if have.get(column).is_some_and(|c| !c.retired || c.not_null) {
+                tx.batch_execute(&format!(
+                    "ALTER TABLE {t} ALTER COLUMN {c} DROP NOT NULL; \
+                     COMMENT ON COLUMN {t}.{c} IS '{RETIRED_COMMENT}'",
+                    t = quote(table),
+                    c = quote(column),
+                ))
+                .await
+                .map_err(db)?;
+            }
+        }
+        tx.commit().await.map_err(db)
+    }
 }
 
 /// Makes the database able to hold the catalog's entities.
@@ -331,10 +378,11 @@ async fn db_columns(
 ) -> StorageResult<BTreeMap<String, DbColumn>> {
     let rows = tx
         .query(
-            "SELECT a.attname::text, format_type(a.atttypid, a.atttypmod), a.attnotnull \
+            "SELECT a.attname::text, format_type(a.atttypid, a.atttypmod), a.attnotnull, \
+                    coalesce(col_description(a.attrelid, a.attnum) = $2, false) \
              FROM pg_attribute a \
              WHERE a.attrelid = to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped",
-            &[&quote(table)],
+            &[&quote(table), &RETIRED_COMMENT],
         )
         .await
         .map_err(db)?;
@@ -346,6 +394,7 @@ async fn db_columns(
                 DbColumn {
                     ty: r.get(1),
                     not_null: r.get(2),
+                    retired: r.get(3),
                 },
             )
         })
@@ -376,8 +425,8 @@ async fn ensure_table(tx: &Transaction<'_>, entity: &EntityDef) -> StorageResult
             }
         }
     }
-    for name in have.keys() {
-        if !want.iter().any(|c| &c.name == name) {
+    for (name, existing) in &have {
+        if !existing.retired && !want.iter().any(|c| &c.name == name) {
             return Err(invalid(format!(
                 "column `{table}.{name}` is in the database but no longer in the catalog; \
                  dropping a column is not an additive change"

@@ -96,6 +96,10 @@ pub struct FinishEvent {
     pub outcome: Outcome,
     /// Unix microseconds.
     pub at: i64,
+    /// The stable `migration.*` code of why the run did not complete, when it did not (never
+    /// free text with a value in it). `None` for a success and for a record written before this
+    /// field existed.
+    pub reason: Option<String>,
 }
 
 /// One decoded lifecycle event.
@@ -221,7 +225,28 @@ pub(crate) fn applied_record(actor: &str, id: &RunId, event: &ApplyEvent) -> Aud
 pub(crate) fn finished_record(actor: &str, id: &RunId, event: &FinishEvent) -> AuditRecord {
     let mut payload = Payload::new();
     put_text(&mut payload, "outcome", event.outcome.as_str());
+    if let Some(reason) = &event.reason {
+        put_text(&mut payload, "reason", reason);
+    }
     record(kinds::RUN_FINISHED, actor, id, event.at, payload)
+}
+
+/// A finish record with a hand-built payload: how the tests write a record of an older shape.
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+pub(crate) fn finished_record_for_test(
+    actor: &str,
+    id: &str,
+    at: i64,
+    payload: Payload,
+) -> AuditRecord {
+    record(
+        kinds::RUN_FINISHED,
+        actor,
+        &RunId::new(id).unwrap(),
+        at,
+        payload,
+    )
 }
 
 /// Decodes one audit record into a lifecycle event, or `None` when it is not a run event.

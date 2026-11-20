@@ -18,7 +18,7 @@
 //! - **Limits** ([`limits`]): fuel, wall clock, memory, host calls and output size per call, from
 //!   the defaults, per-app overrides and site maxima in `[services.apps]`. An overrun kills only
 //!   that instance, answers `app.limit_exceeded`, writes an audit record (app and limit, never a
-//!   payload) to `spot::audit::apps`, counts `app_kills_total{app,limit}`, and feeds a circuit
+//!   payload) to `spot::audit::apps`, counts `spot_app_kills_total{app,limit}`, and feeds a circuit
 //!   breaker that disables an app killed `breaker_kills` times in `breaker_window_seconds`.
 //! - **Network** ([`egress`]): the approved hosts intersected with `egress_allow`, through
 //!   `spot-egress` (private, loopback, link-local and metadata addresses refused after

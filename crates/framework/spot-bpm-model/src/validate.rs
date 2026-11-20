@@ -70,6 +70,11 @@ pub mod codes {
     /// A document or trigger node names a lifecycle operation that does not
     /// exist.
     pub const UNKNOWN_OPERATION: &str = "bpm_model.unknown_operation";
+    /// A trigger's start roles, input schema, condition, zone or missed-run
+    /// setting is malformed or out of range.
+    pub const TRIGGER_FIELD_INVALID: &str = "bpm_model.trigger_field_invalid";
+    /// A trigger sets a field its trigger type does not read.
+    pub const TRIGGER_FIELD_MISPLACED: &str = "bpm_model.trigger_field_misplaced";
     /// A trigger node is missing what its trigger type needs.
     pub const TRIGGER_INCOMPLETE: &str = "bpm_model.trigger_incomplete";
     /// An edge condition or a rule does not parse.
@@ -216,6 +221,8 @@ pub fn describe_code(code: &str) -> &'static str {
         codes::UNKNOWN_DOCTYPE => "a node names a document type that does not exist",
         codes::UNKNOWN_OPERATION => "a node names an operation that is not known",
         codes::TRIGGER_INCOMPLETE => "a trigger is missing a required setting",
+        codes::TRIGGER_FIELD_INVALID => "a trigger setting has an invalid value",
+        codes::TRIGGER_FIELD_MISPLACED => "a trigger sets a field its type does not read",
         codes::EXPRESSION => "an expression does not parse",
         codes::SUBPROCESS_UNKNOWN => "a sub-process names a process that does not exist",
         codes::SUBPROCESS_CYCLE => "sub-processes call each other in a cycle",
@@ -707,6 +714,9 @@ fn check_trigger(
     meta: &dyn MetaView,
     problems: &mut Vec<Problem>,
 ) {
+    for code in crate::validate_trigger::check_fields(config) {
+        problems.push(Problem::at(code, version.version, &node.id));
+    }
     match config.trigger {
         TriggerType::DocumentEvent => {
             let Some(doctype) = &config.doctype else {

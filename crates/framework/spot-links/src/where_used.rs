@@ -4,17 +4,35 @@
 //! reference edge that points at the target is followed once. The edge set comes from the
 //! derived [`GraphModel`](spot_graph_model::GraphModel); the reference edges the model omits —
 //! a link field inside a child DocType, which reports its **parent** document instead of the
-//! row — are walked from the definitions. Each edge is one storage query.
+//! row — are walked from the definitions.
+//!
+//! # Cost model
+//!
+//! Each reference edge costs **two small queries, independent of how many documents refer to
+//! the target**: one aggregate (`count(distinct <referring id>)`) and one sample query that
+//! groups by the referring id, orders it ascending and carries `limit`, so no more than
+//! `limit` ids per edge ever leave storage. An edge with no referrer costs the count query
+//! only. A document referred to by 500,000 rows therefore costs two queries per edge, not
+//! 500,000 ids in memory. The delete and cancel refusals run this on the hot path of every
+//! delete, which is why the cost matters.
+//!
+//! The one exception is a group fed by **several edges** (two child tables of one parent that
+//! both have a link field of the same name, or such a field next to a top-level one): two
+//! edges can then refer to the same referring document, and a sum of counts would count it
+//! twice. For that group only, the ids of its edges are fetched and deduplicated, as before.
+//! Such groups are rare (a DocType whose child tables reuse a field name).
+//!
+//! # Permissions
 //!
 //! Permission filtering is the caller's: this takes a [`LinkChecks`] whose `query` the caller
-//! (the engine's authorizer) has already scoped, so it never sees a document the caller may not
-//! read, and it says so rather than leaking a count.
+//! (the engine's authorizer) has already scoped. The counts come from that scoped repository
+//! too, so neither a count nor a sample ever reveals a document the caller may not read.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use spot_app_api::error::AppError;
 use spot_app_api::prelude::{
-    Expr, Name, Nulls, Order, OrderDir, Query, QueryPath, RecordId, Selection, Value,
+    AggFunc, Expr, Name, Nulls, Order, OrderDir, Query, QueryPath, RecordId, Selection, Value,
 };
 use spot_app_api::{AppResult, ErrorClass};
 use spot_graph_model::{EdgeSource, GraphModel, Ownership, TargetShape};
@@ -26,6 +44,10 @@ use crate::validate::dynamic_target;
 
 /// How many referencing ids a group carries by default.
 pub const DEFAULT_SAMPLE: usize = 20;
+
+/// The most referencing ids a group carries, whatever `limit` asks for: a larger `limit` is
+/// clamped to this, not refused.
+pub const MAX_SAMPLE: usize = 1_000;
 
 /// The documents that refer to one document, grouped by referring DocType and field.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,7 +76,8 @@ pub struct ReferrerGroup {
 }
 
 /// Which documents refer to `doctype`/`id`: the one-hop incoming traversal, grouped by DocType
-/// and field, with counts and at most `limit` ids per group (`0` means [`DEFAULT_SAMPLE`]).
+/// and field, with counts and at most `limit` ids per group (`0` means [`DEFAULT_SAMPLE`]; more
+/// than [`MAX_SAMPLE`] is clamped to it).
 ///
 /// `checks` must be scoped by the caller: its query sees only documents the caller may read, so
 /// neither the groups nor the total reveal a document outside the caller's reach. A child row's
@@ -78,34 +101,37 @@ pub async fn where_used(
             format!("The DocType `{doctype}` does not exist."),
         ));
     }
-    let limit = if limit == 0 { DEFAULT_SAMPLE } else { limit };
+    let limit = if limit == 0 {
+        DEFAULT_SAMPLE
+    } else {
+        limit.min(MAX_SAMPLE)
+    };
     let plans = referring_plans(&meta, doctype);
 
-    let mut groups: BTreeMap<(String, String), Vec<RecordId>> = BTreeMap::new();
+    let mut by_group: BTreeMap<(String, String), Vec<&Plan>> = BTreeMap::new();
     for plan in &plans {
-        let ids = run_plan(checks, plan, id).await?;
-        if ids.is_empty() {
-            continue;
-        }
-        groups
+        by_group
             .entry((plan.reporting.clone(), plan.field_name.clone()))
             .or_default()
-            .extend(ids);
+            .push(plan);
     }
 
-    let mut out = Vec::with_capacity(groups.len());
+    let mut out = Vec::with_capacity(by_group.len());
     let mut total = 0u64;
-    for ((reporting, field), mut ids) in groups {
-        ids.sort_unstable();
-        ids.dedup();
-        let count = u64::try_from(ids.len()).unwrap_or(u64::MAX);
+    for ((reporting, field), group_plans) in by_group {
+        let (count, sample) = match group_plans.as_slice() {
+            [only] => count_and_sample(checks, only, id, limit).await?,
+            many => shared_group(checks, many, id, limit).await?,
+        };
+        if count == 0 {
+            continue;
+        }
         total = total.saturating_add(count);
-        ids.truncate(limit);
         out.push(ReferrerGroup {
             doctype: reporting,
             field,
             count,
-            sample: ids,
+            sample,
         });
     }
     Ok(WhereUsed {
@@ -258,32 +284,109 @@ pub(crate) fn parent_map(meta: &EffectiveMeta) -> BTreeMap<String, String> {
     map
 }
 
-/// Runs one incoming-edge query and returns the referring document ids, smallest first.
-async fn run_plan(
-    checks: &mut dyn LinkChecks,
-    plan: &Plan,
-    id: RecordId,
-) -> AppResult<Vec<RecordId>> {
+/// The base query of one edge: the edge's entity filtered to rows that refer to `id`.
+fn edge_query(plan: &Plan, id: RecordId) -> AppResult<(Query, Expr)> {
     let alias = name("referrer")?;
     let id_field = name(if plan.parent { "parent" } else { "id" })?;
     let id_expr = Expr::field(&alias, &id_field);
     let mut query = Query::from(&plan.entity, &alias, QueryPath::Transactional);
-    query.select.push(Selection {
-        expr: id_expr.clone(),
-        alias: name("id")?,
-    });
     let mut filters = vec![Expr::field(&alias, &plan.field).eq(Expr::value(Value::Id(id)))];
     if let (Some(type_field), Some(type_value)) = (&plan.type_field, &plan.type_value) {
         filters
             .push(Expr::field(&alias, type_field).eq(Expr::value(Value::Text(type_value.clone()))));
     }
     query.filter = Some(Expr::And(filters));
+    Ok((query, id_expr))
+}
+
+/// One edge, the cheap way: an aggregate for the exact count, then (only when something
+/// refers) a sample query that returns at most `limit` ids, smallest first.
+async fn count_and_sample(
+    checks: &mut dyn LinkChecks,
+    plan: &Plan,
+    id: RecordId,
+    limit: usize,
+) -> AppResult<(u64, Vec<RecordId>)> {
+    let (mut count_query, id_expr) = edge_query(plan, id)?;
+    // `distinct`: a child-table edge counts its parent document once however many rows refer.
+    count_query.select.push(Selection {
+        expr: Expr::Agg {
+            func: AggFunc::Count,
+            arg: Some(Box::new(id_expr.clone())),
+            distinct: true,
+        },
+        alias: name("n")?,
+    });
+    let rows = checks.query(&count_query).await?;
+    let count = match rows.rows.first().and_then(|row| row.first()) {
+        Some(Value::Int(n)) => u64::try_from(*n).unwrap_or(0),
+        _ => 0,
+    };
+    if count == 0 {
+        return Ok((0, Vec::new()));
+    }
+
+    let (mut sample_query, _) = edge_query(plan, id)?;
+    sample_query.select.push(Selection {
+        expr: id_expr.clone(),
+        alias: name("id")?,
+    });
+    // Group by the id to deduplicate parents of several matching rows; order by the key.
+    sample_query.group_by.push(id_expr.clone());
+    sample_query.order_by.push(Order {
+        expr: id_expr,
+        dir: OrderDir::Asc,
+        nulls: Nulls::Last,
+    });
+    sample_query.limit = Some(u32::try_from(limit).unwrap_or(u32::MAX));
+    let rows = checks.query(&sample_query).await?;
+    let mut sample = Vec::new();
+    for row in &rows.rows {
+        if let Some(Value::Id(found)) = row.first() {
+            sample.push(*found);
+        }
+    }
+    sample.truncate(limit);
+    Ok((count, sample))
+}
+
+/// A group fed by several edges, where two edges can refer to the same referring document: the
+/// ids of all its edges are fetched and deduplicated, so the count stays exact. This is the
+/// case that needs it: a parent with two child tables that each have a link field of the same
+/// name, or such a child field next to a top-level field of that name.
+async fn shared_group(
+    checks: &mut dyn LinkChecks,
+    plans: &[&Plan],
+    id: RecordId,
+    limit: usize,
+) -> AppResult<(u64, Vec<RecordId>)> {
+    let mut ids = Vec::new();
+    for plan in plans {
+        ids.extend(all_ids(checks, plan, id).await?);
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    let count = u64::try_from(ids.len()).unwrap_or(u64::MAX);
+    ids.truncate(limit);
+    Ok((count, ids))
+}
+
+/// Every referring document id of one edge, smallest first (the shared-group path only).
+async fn all_ids(
+    checks: &mut dyn LinkChecks,
+    plan: &Plan,
+    id: RecordId,
+) -> AppResult<Vec<RecordId>> {
+    let (mut query, id_expr) = edge_query(plan, id)?;
+    query.select.push(Selection {
+        expr: id_expr.clone(),
+        alias: name("id")?,
+    });
     query.order_by.push(Order {
         expr: id_expr,
         dir: OrderDir::Asc,
         nulls: Nulls::Last,
     });
-
     let rows = checks.query(&query).await?;
     let mut ids = Vec::new();
     for row in &rows.rows {

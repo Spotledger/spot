@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Grant approval (`[services.governance_approval]`)
 
 Connects the grant gate (`governance`) to the process engine: a grant that needs approval starts an approval

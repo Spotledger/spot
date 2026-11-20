@@ -16,6 +16,15 @@
 //! - [`RUN_DOCTYPE`] (`bpm_case`): one row per run, with `process`, `process_version`, `status`,
 //!   `started_at`, `ended_at` and `week` (the ISO week of `ended_at`).
 //!
+//! # Where "Longest wait" comes from
+//!
+//! A host that serves the per-step rows of [`CYCLE_TIME_BY_STEP`] from [`StepStats`](crate::StepStats)
+//! should fill the "Longest wait" column (`wait_ms`) from `StepStats::max_wait` (the exact longest
+//! wait of one completed attempt at the step, `None` while nothing has completed) and, where it
+//! shows a longest work time, from `StepStats::max_work`. The `wait_ms` column of the shipped
+//! definition already aggregates `max` over the projected rows, so the definition is unchanged.
+//! `Insight::longest_open_wait` answers the different question of who is waiting longest now.
+//!
 //! The DocType and field names are the BPM projection's to own; this crate fixes the shape the
 //! reports need and the host supplies the metadata (see the report's `## Open questions`).
 //!

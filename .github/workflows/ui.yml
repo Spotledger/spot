@@ -1,13 +1,16 @@
 # UI budgets and pixels for the exported tree (WP-OSS-03.T2, the project process notes).
-# Ported from the private ui.yml: GitHub-hosted runners, triggers are push to main and a manual
-# run (no pull_request, no schedule, no secrets). Dropped: the ui_scope.py step that skipped the
-# job for pull requests that touched no UI input (there are no pull requests, so it always ran),
-# and the vars.SPOT_CI_OS / SPOT_RUNNER* / SPOT_UI_BROWSER_VISUAL repository variables. Linux is
+# Ported from the private ui.yml: GitHub-hosted runners, triggers are push to main, a pull request
+# from a branch of this same repository and a manual run (no schedule, no secrets; the
+# same-repository guard on every job makes a fork's pull request run nothing). Dropped: the
+# ui_scope.py step that skipped the job for pull requests that touched no UI input (the job always
+# runs, as it does on a push), and the vars.SPOT_CI_OS / SPOT_RUNNER* / SPOT_UI_BROWSER_VISUAL repository variables. Linux is
 # the default; a manual run may name Windows in the os input (JSON list, for example
 # ["windows-latest"]) and may render baselines (generate_baselines) or run the browser visual job.
 name: ui
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -32,6 +35,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ui:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres the headless UI tests and the budget gates use no database.
     name: UI budgets and pixels (${{ matrix.os }})
     timeout-minutes: 30
@@ -136,7 +140,7 @@ jobs:
   browser-visual:
     # lint-allow: no-postgres the browser visual comparison uses no database.
     name: browser visual baselines (linux, opt-in)
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.browser_visual == 'true'
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name == 'workflow_dispatch' && github.event.inputs.browser_visual == 'true')
     timeout-minutes: 60
     runs-on: ubuntu-latest
     defaults:

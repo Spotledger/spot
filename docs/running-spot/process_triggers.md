@@ -19,6 +19,16 @@ degrades readiness and the processes it would start, never document serving.
 
 Manual and API starts are the process API's (`process_api`), not this module's.
 
+## When the trigger set changes
+
+The module provides itself as a port (`TriggerReload`). A publish or a retire in `process_versions`
+calls it as soon as the version is stored, so a new, changed or retired trigger takes effect when
+that call returns; the 15 s pass runs the very same reload and is only the backstop (a site where
+`process_versions` is off, a failed reload, a node that did not take the call). A reload that finds
+the published set unchanged does nothing; a reload that fails leaves the previous set in force and
+is returned to the caller. Reloading twice never starts a second schedule slot (the slot key is the
+dedup key), and one site's reload never reads or changes another site's triggers.
+
 Every Case id is derived from the start key, so a redelivery, a second node or a restart finds the
 Case that is already there and starts nothing.
 

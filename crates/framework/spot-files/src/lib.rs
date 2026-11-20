@@ -26,5 +26,6 @@ pub mod store;
 
 #[cfg(any(feature = "s3", feature = "azure"))]
 pub use object::{
-    AzureConfig, AzureCredential, ObjectFileStore, PART_SIZE, S3Config, SINGLE_PUT_LIMIT,
+    AzureConfig, AzureCredential, EgressHttp, ObjectFileStore, PART_SIZE, S3Config,
+    SINGLE_PUT_LIMIT,
 };

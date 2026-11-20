@@ -5,6 +5,8 @@
 //! - no slot is handed over twice;
 //! - no slot is missed under `catch_up` (the delivered set is exactly the firings), and under
 //!   `run_once` the last firing is always delivered and nothing is delivered out of order;
+//! - under `skip`, exactly the firings a tick reaches within the grace period are delivered (the
+//!   expectation is replayed from the recorded ticks);
 //! - fencing tokens only increase.
 //!
 //! The failing seed is printed. Clock skew is at most `SKEW` seconds either way, a tick is
@@ -22,8 +24,8 @@ use jiff::Timestamp;
 use spot_core::ManualClock;
 use spot_scheduler::scheduler::sink;
 use spot_scheduler::{
-    InMemoryHighWater, InMemoryLeaseStore, LeaseStore, MissedRunPolicy, Scheduler, SchedulerConfig,
-    leader_lease_name,
+    DEFAULT_SKIP_GRACE, InMemoryHighWater, InMemoryLeaseStore, LeaseStore, MissedRunPolicy,
+    Scheduler, SchedulerConfig, leader_lease_name,
 };
 
 const SEEDS: u64 = 200;
@@ -130,6 +132,9 @@ fn run_seed(seed: u64) -> Result<(), String> {
     let mut store_token = 0_u64;
     let mut first_now: Option<Timestamp> = None;
     let mut last_now: Option<Timestamp> = None;
+    // Every tick that planned (an `Ok` tick), in the order the ticks ran, with the instant its
+    // own clock read: the exact `skip` expectation below replays them.
+    let mut ok_ticks: Vec<Timestamp> = Vec::new();
 
     // A simulated day, then a quiet tail with every node alive so the last runs are handed over.
     let total = STEPS_PER_DAY + 8;
@@ -159,6 +164,7 @@ fn run_seed(seed: u64) -> Result<(), String> {
             match nodes[n].tick(now_clock, s.as_ref()) {
                 Ok(_) => {
                     let now = spot_scheduler::scheduler::timestamp_of(now_clock);
+                    ok_ticks.push(now);
                     first_now.get_or_insert(now);
                     last_now = Some(last_now.map_or(now, |l| l.max(now)));
                     let held = nodes[n]
@@ -229,8 +235,36 @@ fn run_seed(seed: u64) -> Result<(), String> {
                 }
             }
             MissedRunPolicy::Skip => {
-                if let Some(bad) = got.iter().find(|g| !expected.contains(g)) {
-                    return Err(format!("{}: {bad} is not a firing", s.name));
+                // Exact: a firing is delivered when, and only when, the first tick that
+                // reaches it (the first `Ok` tick, in run order, whose window `(mark, now]`
+                // holds it) is at most the grace after it. The mark is the largest `now` of
+                // any earlier tick (the first tick plans from just before its own `now`), so
+                // clock skew between nodes is part of the model.
+                let mut expected_skip: BTreeSet<Timestamp> = BTreeSet::new();
+                let mut mark: Option<Timestamp> = None;
+                for &now in &ok_ticks {
+                    let window_from =
+                        mark.unwrap_or_else(|| now - jiff::Span::new().nanoseconds(1));
+                    for f in s.due_between(window_from, now, usize::MAX) {
+                        let age = now.as_nanosecond() - f.as_nanosecond();
+                        let grace = i128::try_from(DEFAULT_SKIP_GRACE.as_nanos()).unwrap_or(0);
+                        if age <= grace {
+                            expected_skip.insert(f);
+                        }
+                    }
+                    mark = Some(mark.map_or(now, |m| m.max(now)));
+                }
+                let got: BTreeSet<_> = got.iter().copied().collect();
+                if got != expected_skip {
+                    let missing = expected_skip.difference(&got).next();
+                    let extra = got.difference(&expected_skip).next();
+                    return Err(format!(
+                        "{}: skip must deliver exactly the on-time firings: missing \
+                         {missing:?}, forbidden {extra:?} ({} delivered, {} expected)",
+                        s.name,
+                        got.len(),
+                        expected_skip.len()
+                    ));
                 }
             }
         }

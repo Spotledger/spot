@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Applying a migration: `spot migrate-apply`
 
 The lifecycle as one worked example (the verbs are `spot migrate-plan`, `migrate-approve`,

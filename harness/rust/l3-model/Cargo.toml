@@ -1,0 +1,25 @@
+[package]
+name = "spot-l3-model"
+version = "0.1.0"
+description = "L3 model-based lifecycle test (WP-TST-10.T5): seeded random sequences of create, update, post, cancel, correct, delete and rename calls through the document engine, compared step by step with a pure reference state machine, with shrinking and a replayable seed"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The engine over the sample DocTypes, the six principals and the seeded `Rng`.
+spot-l7-engine = { path = "../l7-engine" }
+spot-l7-invariants = { path = "../l7-invariants" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-document = { path = "../../../crates/framework/spot-document" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[dev-dependencies]
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+
+[lints]
+workspace = true

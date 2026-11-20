@@ -5,6 +5,7 @@
 //! | `spot_effect_hold_effect` | one row per held effect: the site, its place in the site's original order (`seq`), the idempotency key, the class and kind, the ordering source and outbox event, the creation instant, the payload reference, the migration that held it, its state, how many times a release took it into `releasing` (`attempts`) and an optional note |
 //! | `spot_effect_hold_sequence` | the high-water mark of each site's sequence, so a number is allocated inside the insert transaction and never reused |
 //! | `spot_effect_hold_state` | one row per site that was ever held: the [`HoldState`](spot_effect_hold::HoldState) as `jsonb`, compared and swapped whole |
+//! | `spot_effect_hold_payload_delete` | the handles of purged payload references whose stored bytes are still to be deleted, queued in the same statement that clears the reference (WP-MIG-08.T7) |
 //! | `spot_effect_hold_checkpoint` | a release's progress per `(site, migration)`, so a crash mid-release resumes instead of restarting |
 //!
 //! Indexes (ADR-045: every hot filter is covered):
@@ -15,6 +16,8 @@
 //!   proof that a sequence number is never handed out twice.
 //! - `spot_effect_hold_effect_list_idx (site, status, seq)`: `list_effects` — one site, some states,
 //!   in sequence order.
+//! - `spot_effect_hold_effect_handle_idx` on the payload handle expression: "does any effect still
+//!   reference this handle?" (a payload shared by two holds is deleted with its last reference).
 //!
 //! Every value reaches SQL as a bound parameter (ADR-045); the only text in these statements is
 //! this fixed DDL.
@@ -55,8 +58,16 @@ CREATE TABLE IF NOT EXISTS spot_effect_hold_effect (\
     CONSTRAINT spot_effect_hold_effect_site_seq_uniq UNIQUE (site, seq)); \
 ALTER TABLE spot_effect_hold_effect \
     ADD COLUMN IF NOT EXISTS attempts bigint NOT NULL DEFAULT 0 CHECK (attempts >= 0); \
+ALTER TABLE spot_effect_hold_effect \
+    ADD COLUMN IF NOT EXISTS changed_at bigint; \
 CREATE INDEX IF NOT EXISTS spot_effect_hold_effect_list_idx \
     ON spot_effect_hold_effect (site, status, seq); \
+CREATE INDEX IF NOT EXISTS spot_effect_hold_effect_handle_idx \
+    ON spot_effect_hold_effect ((payload_ref -> 'Stored' ->> 'handle')); \
+CREATE TABLE IF NOT EXISTS spot_effect_hold_payload_delete (\
+    site text NOT NULL, \
+    handle text NOT NULL, \
+    PRIMARY KEY (site, handle)); \
 CREATE TABLE IF NOT EXISTS spot_effect_hold_sequence (\
     site text PRIMARY KEY, \
     last_sequence bigint NOT NULL CHECK (last_sequence > 0)); \

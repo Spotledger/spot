@@ -52,7 +52,7 @@ use spot_rehearsal::{Rehearsal, RehearsalOutcome};
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
 use crate::context::{
-    LifecycleContext, PlanHash, PlanState, RehearsalLedger, RehearsalRecord, off_runtime,
+    AuditSpec, LifecycleContext, PlanHash, PlanState, RehearsalLedger, RehearsalRecord, off_runtime,
 };
 use crate::error::LifecycleError;
 use crate::plan::{check_site, load, map_approval, param, parse_stored, subject};
@@ -288,6 +288,27 @@ fn finish(
     })
 }
 
+/// Rehearses the approved plan `hash` under a run record (permit first, refusals recorded, the
+/// plan's digest on the record, the reason code on a failure). See [`LifecycleContext::audited`];
+/// the errors are those of the body below.
+///
+/// # Errors
+/// As the body; `migration.store_failed` when the run cannot be recorded.
+pub async fn rehearse(
+    ctx: &Arc<LifecycleContext>,
+    host: &Arc<dyn RehearsalHost>,
+    hash: &str,
+) -> Result<RehearseReport, LifecycleError> {
+    let (digest, plan) = {
+        let (ctx, hash) = (Arc::clone(ctx), hash.to_owned());
+        off_runtime(move || ctx.plan_audit(&hash)).await?
+    };
+    ctx.audited(AuditSpec::new("rehearse", digest, plan), |_| {
+        rehearse_body(ctx, host, hash)
+    })
+    .await
+}
+
 /// Rehearses the approved plan `hash`.
 ///
 /// # Errors
@@ -296,7 +317,7 @@ fn finish(
 /// engine failed or ran out of its budget; the result is recorded and the scratch cleaned),
 /// `migration.store_failed`. A rehearsal that completes with a failing verdict is **not** an error:
 /// `passed` is `false` and the plan stays as it was.
-pub async fn rehearse(
+async fn rehearse_body(
     ctx: &Arc<LifecycleContext>,
     host: &Arc<dyn RehearsalHost>,
     hash: &str,

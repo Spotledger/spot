@@ -1,0 +1,32 @@
+[package]
+name = "spot-mail-intake-pg"
+description = "PostgreSQL cursor and seen-message stores for incoming mail (WP-PLT-11.T12): the UID cursor with a fencing-token check in the write, and the Message-ID digest set with retention"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `CursorStore` and `SeenStore` ports and `StoreError`.
+spot-mail-intake = { path = "../../framework/spot-mail-intake" }
+# `MailboxCursor`.
+spot-mail = { path = "../../framework/spot-mail" }
+# `FencingToken`, the token a cursor write carries.
+spot-coordinator = { path = "../../framework/spot-coordinator" }
+# `SiteId`, the site every row belongs to.
+spot-core = { path = "../../framework/spot-core" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+time = "0.3"
+async-trait = "0.1"
+
+[dev-dependencies]
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-mail-intake = { path = "../../framework/spot-mail-intake", features = ["testing"] }
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

@@ -411,7 +411,14 @@ pub fn oidc_etag(config: &ProviderConfig) -> String {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0100_0000_01b3);
     }
-    format!("{hash:016x}")
+    // The contract's `ETag` is a quoted positive integer of at most 18 digits (the routes refuse
+    // anything else): the digest, cut to 59 bits and never zero. The caller quotes it.
+    ((hash & ((1 << 59) - 1)).max(1)).to_string()
+}
+
+/// An `ETag` as the contract writes it: the decimal version in double quotes.
+fn quoted(etag: &str) -> String {
+    format!("\"{etag}\"")
 }
 
 fn view_oidc(config: &ProviderConfig, secret_set: bool) -> Json {
@@ -663,7 +670,7 @@ impl SsoAdmin {
                 self.audit(Some(caller), op, "ok", "");
                 Ok(AdminReply {
                     data: view_saml(id, &provider),
-                    etag: Some(version.to_string()),
+                    etag: Some(quoted(&version.to_string())),
                     next_cursor: None,
                 })
             }
@@ -803,7 +810,7 @@ impl SsoAdminPort for SsoAdmin {
             self.audit(Some(caller), "sso_admin_provider_create", "ok", "");
             Ok(AdminReply {
                 data: view_oidc(&config, set),
-                etag: Some(oidc_etag(&config)),
+                etag: Some(quoted(&oidc_etag(&config))),
                 next_cursor: None,
             })
         })
@@ -820,7 +827,7 @@ impl SsoAdminPort for SsoAdmin {
             self.audit(Some(caller), "sso_admin_provider_get", "ok", "");
             Ok(AdminReply {
                 data: view,
-                etag: Some(etag),
+                etag: Some(quoted(&etag)),
                 next_cursor: None,
             })
         })
@@ -877,7 +884,7 @@ impl SsoAdminPort for SsoAdmin {
             self.audit(Some(caller), "sso_admin_provider_put", "ok", "");
             Ok(AdminReply {
                 data: view_oidc(&config, set),
-                etag: Some(oidc_etag(&config)),
+                etag: Some(quoted(&oidc_etag(&config))),
                 next_cursor: None,
             })
         })
@@ -979,7 +986,7 @@ impl SsoAdminPort for SsoAdmin {
             self.audit(Some(caller), "sso_admin_policy_get", "ok", "");
             Ok(AdminReply {
                 data: policy_body(&policy, version),
-                etag: Some(shown_version(version).to_string()),
+                etag: Some(quoted(&shown_version(version).to_string())),
                 next_cursor: None,
             })
         })
@@ -1061,7 +1068,7 @@ impl SsoAdminPort for SsoAdmin {
             );
             Ok(AdminReply {
                 data: policy_body(&new, version),
-                etag: Some(shown_version(version).to_string()),
+                etag: Some(quoted(&shown_version(version).to_string())),
                 next_cursor: None,
             })
         })

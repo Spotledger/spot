@@ -150,6 +150,17 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    /// The content type as text, for example `application/pdf`.
+    #[must_use]
+    pub fn content_type_text(&self) -> String {
+        let mut headers = lettre::message::header::Headers::new();
+        headers.set(self.content_type.clone());
+        headers
+            .get_raw("Content-Type")
+            .unwrap_or_default()
+            .to_owned()
+    }
+
     /// Builds an attachment, parsing the content type from its string form.
     pub fn new(
         filename: impl Into<String>,

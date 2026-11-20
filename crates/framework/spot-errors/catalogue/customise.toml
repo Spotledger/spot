@@ -4,10 +4,10 @@
 [[entry]]
 code = "customise.forbidden"
 class = "none"
-summary = "The caller does not hold the platform Customise right."
+summary = "Only a Tenant Administrator or a System Manager (an unscoped assignment) may customise the site."
 explanation_key = "error.customise.forbidden"
 params = []
-remedy = "Ask a platform administrator for a role that holds the Customise right, or have one make the change."
+remedy = "Ask a Tenant Administrator or a System Manager for the change, or for the role."
 since = "0.1.0"
 
 [[entry]]

@@ -43,6 +43,19 @@ impl Explanation {
     }
 }
 
+/// Explains one run with its evidence: as [`explain`], and when the finish record carries a
+/// reason code the result sentence names it.
+#[must_use]
+pub fn explain_evidence(evidence: &crate::run::RunEvidence) -> Explanation {
+    let mut explanation = explain(&evidence.run);
+    if let Some(code) = evidence.reason() {
+        explanation
+            .what_happened
+            .push_str(&format!(" Reason {code}."));
+    }
+    explanation
+}
+
 /// Explains one run in plain language.
 #[must_use]
 pub fn explain(run: &MigrationRun) -> Explanation {

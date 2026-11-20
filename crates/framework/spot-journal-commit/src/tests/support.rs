@@ -10,8 +10,8 @@ use spot_journal_durability::{AckGate, GateConfig, OnUnreachable, Policy, Tenant
 use tokio::sync::Notify;
 
 use crate::{
-    ChunkRelay, CommitAnswer, CommitDriver, CommitRequest, CommitSettings, Observer, Runtime,
-    ShipEntry, ShipError, Shipped,
+    BatchLimits, ChunkRelay, CommitAnswer, CommitDriver, CommitRequest, CommitSettings, Observer,
+    Runtime, ShipEntry, ShipError, Shipped,
 };
 
 #[derive(Default)]
@@ -65,6 +65,10 @@ pub(crate) struct RelayState {
     pub(crate) buffered_only: bool,
     /// The generation the relay writes into (a fork opens the next one; `seq` restarts at 1).
     pub(crate) generation: u64,
+    /// Smaller batch limits than the tail chunk's; `None` is the relay default.
+    pub(crate) limits: Option<BatchLimits>,
+    /// The store goes down once this many attempts were made (the failing one included).
+    pub(crate) down_after_attempts: Option<usize>,
 }
 
 impl RelayState {
@@ -103,6 +107,10 @@ impl ChunkRelay for FakeRelay {
         self.state().next_seq
     }
 
+    fn batch_limits(&self) -> BatchLimits {
+        self.state().limits.unwrap_or_else(BatchLimits::tail_chunk)
+    }
+
     async fn ship(
         &mut self,
         batch_id: u64,
@@ -113,6 +121,9 @@ impl ChunkRelay for FakeRelay {
         let first = entries.first().map_or(0, |e| e.seq);
         let last = entries.last().map_or(0, |e| e.seq);
         s.attempts.push((batch_id, first, last));
+        if s.down_after_attempts.is_some_and(|n| s.attempts.len() >= n) {
+            s.down = true;
+        }
         if s.fatal {
             return Err(ShipError::Stopped {
                 code: "journal_relay.split_brain",
@@ -211,6 +222,32 @@ pub(crate) fn rig_in_generation(
     };
     let driver = CommitDriver::new(
         AckGate::new(tenant, gate),
+        relay.clone(),
+        clock.clone(),
+        settings,
+    )
+    .unwrap()
+    .with_observer(recorder.clone());
+    Rig {
+        driver: Arc::new(driver),
+        relay,
+        clock,
+        recorder,
+    }
+}
+
+/// A rig whose relay reports `limits` as its batch limits.
+pub(crate) fn rig_limited(policy: Policy, settings: CommitSettings, limits: BatchLimits) -> Rig {
+    let relay = FakeRelay::new(1);
+    relay.state().limits = Some(limits);
+    let clock = VirtualClock::default();
+    let recorder = Arc::new(Recorder::default());
+    let tenant = TenantDurability {
+        policy,
+        journal_target_configured: true,
+    };
+    let driver = CommitDriver::new(
+        AckGate::new(tenant, GateConfig::default()),
         relay.clone(),
         clock.clone(),
         settings,

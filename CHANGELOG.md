@@ -9,6 +9,43 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.11] - 2026-11-19
+
+Continuous integration (the last red lint gate and the nightly profiles) and a large batch of
+runtime work, written in one pass and compiled, fixed and tested together on PostgreSQL 18: about
+150 tasks across the platform framework, among them the maintenance gate and its reload, the
+sandbox registry, scheduled scripts, the extension commands, customisation with several nodes,
+the SCIM, SSO and SAML administration surfaces, the journal rebuild and sync, the migration
+operations, the process (BPM) triggers and insight, and the identity, field-security and
+mail-intake layers. The layer tests (l3 end to end, l9 volume at 100 000 rows, l10 liveness) pass.
+Not ready: the compliance evidence service is not part of the public tree; contract changes and
+the new public API are listed in the sections below.
+
+### Changed
+
+- A maintenance gate that cannot be read answers `503 server.unavailable` with a `Retry-After`
+  detail, not `server.maintenance`; a reload keeps the running gate instead of layering a fresh
+  one that stayed closed.
+- A projected column the caller may not see is answered as an unknown field (422), like a name
+  the DocType does not have, so a refusal does not reveal that the field exists.
+- A removed custom field keeps its column, marked retired, and `set_meta` no longer refuses; two
+  nodes customising at once no longer overwrite each other's pending change.
+- `spot_job_lease_idx` is a partial index on `lease_expires_at IS NOT NULL`, so the per-site job
+  cap count no longer scans every running job (the schema is updated on `prepare`).
+- New Rust API: `SchemaBackend::retire_column`, `maintenance_gate::refuse`,
+  `spot_pack::check_app_with`; the entry `ctx` of a TypeScript function is frozen and a function
+  result is refused.
+
+### Fixed
+
+- The query lint allows the one host-side file that provisions the `spot_ai` role to name the
+  database driver's error and pool types (0.1.10 failed its lint gates on it).
+- The nightly full Rust job runs in four shards per operating system, as the main CI does, and
+  builds on the larger runner disk, so it no longer runs out of space; the Windows build of the
+  developer-tools DAP test is free of an unused-mutability warning.
+- The L7 checks on PostgreSQL reopen their read snapshot once when the server has ended its idle
+  connection (the long final checks of a 1M-operation run); no check is weakened.
+
 ## [0.1.10] - 2026-11-18
 
 Continuous integration, third pass: the hosted run of 0.1.9 left five Rust test failures, two

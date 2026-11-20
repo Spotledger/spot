@@ -8,7 +8,7 @@
 #   2. the host CA       (host-ca/ca.pem + ca.key): the control plane issues host and agent
 #                         client certificates with it; its key never leaves this machine
 #   3. the licence key   (licence/): signs licences; not read by this file at all, it is
-#                         listed in docs/control-plane-deploy.md for the module that uses it
+#                         listed in the control-plane deployment notes for the module that uses it
 # The listeners must trust different CAs: the service refuses to start otherwise.
 
 region = "eu-1"

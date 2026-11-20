@@ -89,7 +89,12 @@ fn parse_filter(filter: &str) -> Result<EnvFilter, TelemetryError> {
     })
 }
 
-type BoxedLayer = Box<dyn Layer<Registry> + Send + Sync + 'static>;
+/// A second layer for the subscriber [`init_with`] builds (the development tracing tools attach
+/// one). It is a layer over the bare registry, so it can read span data and extensions through
+/// the registry's own lookup.
+pub type BoxLayer = Box<dyn Layer<Registry> + Send + Sync + 'static>;
+
+type BoxedLayer = BoxLayer;
 
 fn format_layer<W>(format: LogFormat, writer: W) -> BoxedLayer
 where
@@ -111,7 +116,12 @@ struct Built {
     otlp: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
 }
 
-fn build<W>(config: &TelemetryConfig, filter: &str, writer: W) -> Result<Built, TelemetryError>
+fn build<W>(
+    config: &TelemetryConfig,
+    filter: &str,
+    writer: W,
+    extra: Option<BoxLayer>,
+) -> Result<Built, TelemetryError>
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
@@ -135,6 +145,13 @@ where
         return Err(TelemetryError::OtlpNotCompiled);
     }
 
+    // The extra layer goes last: after the log layer (and the exporter), so nothing it does can
+    // change what those write. Redaction is by value (`Redacted`, `loggable_headers`): a secret
+    // is already `***` in the event every layer receives, the extra one included.
+    if let Some(extra) = extra {
+        layers.push(extra);
+    }
+
     // The filter is outermost, so it applies to every layer.
     let subscriber = Registry::default().with(layers).with(filter);
     Ok(Built {
@@ -153,12 +170,28 @@ where
 /// An unreachable OTLP endpoint is not an error here: export is asynchronous and best effort.
 /// With `otlp` enabled, call it from inside a Tokio runtime.
 pub fn init(config: TelemetryConfig) -> Result<TelemetryGuard, TelemetryError> {
+    init_with(config, None)
+}
+
+/// [`init`] with a second layer attached to the same subscriber, after the log layer and under
+/// the same filter. `None` is exactly [`init`].
+///
+/// The layer sees what every layer sees: events whose secrets are already [`crate::Redacted`].
+/// It is for development tooling; a production start passes `None`.
+///
+/// # Errors
+///
+/// The errors of [`init`].
+pub fn init_with(
+    config: TelemetryConfig,
+    extra: Option<BoxLayer>,
+) -> Result<TelemetryGuard, TelemetryError> {
     let filter = std::env::var(FILTER_ENV).unwrap_or_else(|_| config.filter.clone());
     if INITIALISED.swap(true, Ordering::SeqCst) {
         return Err(TelemetryError::AlreadyInitialised);
     }
     let result = (|| {
-        let built = build(&config, &filter, io::stdout)?;
+        let built = build(&config, &filter, io::stdout, extra)?;
         metrics::install()?;
         tracing::subscriber::set_global_default(built.subscriber)
             .map_err(|_| TelemetryError::AlreadyInitialised)?;
@@ -186,7 +219,23 @@ pub fn init_for_tests_with<W>(
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
-    let built = build(&config, &config.filter, writer)?;
+    init_for_tests_with_layer(config, writer, None)
+}
+
+/// [`init_for_tests_with`] with a second layer, as [`init_with`] attaches one.
+///
+/// # Errors
+///
+/// A bad filter, or an OTLP config without the `otlp` feature.
+pub fn init_for_tests_with_layer<W>(
+    config: TelemetryConfig,
+    writer: W,
+    extra: Option<BoxLayer>,
+) -> Result<TelemetryGuard, TelemetryError>
+where
+    W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+{
+    let built = build(&config, &config.filter, writer, extra)?;
     // Tests share one process-wide recorder; if another one is installed, metrics are simply
     // not rendered and logging still works.
     let _ = metrics::install();

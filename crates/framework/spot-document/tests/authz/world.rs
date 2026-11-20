@@ -40,6 +40,8 @@ pub fn definitions() -> Vec<Definition> {
         region_link,
         FieldSpec::new("secret_note", FieldType::LongText),
         salary,
+        // The owner rule compares the user with this field: the engine reads the creator from it.
+        FieldSpec::new("created_by", FieldType::Text),
     ];
 
     let mut invoice = Definition::new("sales_invoice");

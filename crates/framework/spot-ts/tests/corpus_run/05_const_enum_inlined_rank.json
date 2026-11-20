@@ -1,0 +1,6 @@
+{
+  "case": "const_enum_inlined",
+  "entry": "rank",
+  "args": 2,
+  "expect": "high"
+}

@@ -43,6 +43,7 @@ fn full_run(
         FinishEvent {
             outcome: Outcome::Verified,
             at: 1_200,
+            reason: None,
         },
     ))
     .unwrap();

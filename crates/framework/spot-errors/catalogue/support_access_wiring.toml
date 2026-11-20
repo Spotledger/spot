@@ -1,0 +1,20 @@
+# support_access_wiring codes (WP-ADM-11.T4): the wiring of the break-glass ports. One [[entry]] per code.
+# No message carries a value: only fixed sentences.
+
+[[entry]]
+code = "support_access_wiring.settings_invalid"
+class = "none"
+summary = "The [services.support_access_wiring] table has an unknown key or a value out of bounds, so the break-glass wiring does not start."
+explanation_key = "error.support_access_wiring.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled, retention_days (1 to 3650) and max_object_bytes (1 to 1073741824) exist."
+since = "0.1.0"
+
+[[entry]]
+code = "support_access_wiring.part_missing"
+class = "none"
+summary = "A real component a break-glass port needs (the audit chain, the file store, the secrets vault or the permission engine) is missing on this site, so no break-glass session can be authorised."
+explanation_key = "error.support_access_wiring.part_missing"
+params = []
+remedy = "Prepare the audit store, enable the files service and the secrets service, then restart the site; the readiness report names the missing part."
+since = "0.1.0"

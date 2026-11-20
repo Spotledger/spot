@@ -45,7 +45,11 @@
 //!   uploaded to S3 would otherwise linger and could be completed into an object
 //!   by a stale client (Azure blocks simply expire).
 //!
-//! The implementation lives in the submodules: [`config`] (the provider settings),
+//! Every HTTP request goes through `spot-egress` (WP-SEC-09.T12): the constructors take an
+//! [`EgressHttp`] (the site's policy-checked connector and sender) and there is no
+//! constructor that builds a client of its own, so the egress lint finds none here.
+//!
+//! The implementation lives in the submodules: [`config`] (the provider settings), [`egress`] (the policy-checked HTTP path),
 //! [`client`] (construction from the enabled feature), [`metadata`] (the mapping
 //! between object-store paths/attributes and the contract's keys and metadata),
 //! [`spool`] (the local spool every put streams through), [`filestore`] (the
@@ -53,6 +57,7 @@
 
 mod client;
 mod config;
+mod egress;
 mod filestore;
 mod metadata;
 mod spool;
@@ -62,6 +67,7 @@ use std::sync::Arc;
 use object_store::ObjectStore;
 
 pub use config::{AzureConfig, AzureCredential, S3Config};
+pub use egress::EgressHttp;
 pub use metadata::{PART_SIZE, SINGLE_PUT_LIMIT};
 
 /// Which backend a store was built for — construction and messages only; the behaviour
@@ -96,5 +102,7 @@ pub struct ObjectFileStore {
     backend: Backend,
 }
 
+#[cfg(test)]
+mod egress_tests;
 #[cfg(test)]
 mod tests;

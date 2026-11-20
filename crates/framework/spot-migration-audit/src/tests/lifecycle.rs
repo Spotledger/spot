@@ -73,6 +73,7 @@ fn full_lifecycle_is_recorded_in_order() {
         FinishEvent {
             outcome: Outcome::Verified,
             at: 1_400,
+            reason: None,
         },
     ))
     .unwrap();
@@ -141,6 +142,7 @@ fn list_filters_by_outcome_actor_and_date() {
         FinishEvent {
             outcome: Outcome::Verified,
             at: 1_200,
+            reason: None,
         },
     ))
     .unwrap();
@@ -151,6 +153,7 @@ fn list_filters_by_outcome_actor_and_date() {
         FinishEvent {
             outcome: Outcome::Failed,
             at: 2_100,
+            reason: None,
         },
     ))
     .unwrap();
@@ -215,6 +218,7 @@ fn duplicate_run_and_non_terminal_finish_are_refused() {
         FinishEvent {
             outcome: Outcome::Applied,
             at: 3,
+            reason: None,
         },
     ))
     .unwrap_err();

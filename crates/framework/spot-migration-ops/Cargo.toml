@@ -36,6 +36,9 @@ spot-expand-contract = { path = "../spot-expand-contract" }
 spot-migration-conflicts = { path = "../spot-migration-conflicts" }
 # The rehearsal engine and its report (WP-MIG-06.T5).
 spot-rehearsal = { path = "../spot-rehearsal" }
+# The rescue journal the verb reads to resume or refuse (WP-MIG-10.T3), and its PostgreSQL implementation.
+spot-rescue = { path = "../spot-rescue" }
+spot-rescue-pg = { path = "../../backends/spot-rescue-pg" }
 # A stored plan is canonical JSON of a `ReleasePlan`; it is parsed back on `show`, `approve` and `rehearse`.
 serde_json = "1"
 # The rehearsal's wall-clock budget (`tokio::time::timeout`): the time is measured by the runtime, never read as a date.

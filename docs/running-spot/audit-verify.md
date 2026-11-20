@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # `spot audit verify`
 
 Checks the hash chain of a site's identity audit trail (sign-in, lockout, password and key-rejection records). It only reads: there is no `--apply`, and it needs nothing beyond the site's own database connection.

@@ -48,6 +48,7 @@ bootstrap.ensure_deps()  # installs + re-execs the command when pins are missing
 import yaml  # noqa: E402  (imports after the bootstrap, on purpose)
 from jinja2 import Environment, FileSystemLoader, StrictUndefined  # noqa: E402
 from markdown_it import MarkdownIt  # noqa: E402
+from extras import Extras, Tools  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
@@ -123,6 +124,7 @@ class Site:
         self.root = root
         self.jinja = jinja
         self.pages: dict[str, str] = {}
+        self.titles: dict[str, str] = {}
         self.problems: list[str] = []
         self.required: dict[str, list[str]] = {"op": [], "schema": [], "code": [], "msg": []}
 
@@ -133,6 +135,7 @@ class Site:
             commit: str | None) -> None:
         """Render one page through the shared template at its repo-site path."""
         prefix = "../" * path.count("/")
+        self.titles[path] = title
         entries = []
         for group in nav:
             entries.append({"label": group[0], "pages": [
@@ -222,6 +225,7 @@ class Gen:
         self.versions = versions or {}
         self.changelogs = changelogs or set()
         self.page = ""  # repo-site path of the page currently being rendered
+        self.extra_groups: list[tuple[str, list[tuple[str, str]]]] = []  # extras.py sidebar
 
     # -- link helpers --------------------------------------------------------
     def at(self, target: str, fragment: str = "") -> str:
@@ -722,6 +726,10 @@ class Gen:
                  self.link("adr/index.html", "", "Decision records")]
         parts.append('<section class="variant"><h2>Reference</h2><p>'
                      + " · ".join(links) + "</p></section>")
+        for label, pages in self.extra_groups:
+            parts.append(f'<section class="variant"><h2>{esc(label)}</h2><p>'
+                         + " · ".join(self.link(href, "", esc(name)) for href, name in pages)
+                         + "</p></section>")
         self.site.add(self.page, "Spotledger contracts", "".join(parts), self.nav(), self.commit)
 
     def nav(self) -> list[tuple[str, list[tuple[str, str]]]]:
@@ -741,6 +749,7 @@ class Gen:
         if self.adrs:
             groups.append(("Reference", [("adr/index.html", "Decision records")]))
         groups.append(("Reference", [("errors.html", "Error codes")]))
+        groups += self.extra_groups
         return groups
 
 def build_rustdoc(root: Path, out: Path) -> set[str]:
@@ -802,7 +811,8 @@ def prepare_out(out: Path) -> Path:
 
 
 def build_site(root: Path, out: Path, skip_rustdoc: bool = False,
-               commit: str | None = None) -> tuple[Site, set[str]]:
+               commit: str | None = None,
+               known_gaps: dict[str, int] | None = None) -> tuple[Site, set[str]]:
     """Generate the whole site into `out`; return (the built site, the rustdoc
     crates that were copied). `root` may point at a fixture tree with the same
     path layout for tests."""
@@ -818,6 +828,12 @@ def build_site(root: Path, out: Path, skip_rustdoc: bool = False,
         rust = build_rustdoc(root, out)
     gen = site.gen = Gen(site, spec, root, rust, contracts, adrs, commit,
                          versions=versions, changelogs=changelogs)
+    extras = Extras(gen, Tools(esc=esc, md_block=md_block, md_inline=md_inline,
+                               json_code=json_code), root,
+                    set(registry) | set(used), known_gaps=known_gaps)
+    extras.prepare()
+    site.gen_extras = extras
+    gen.extra_groups = extras.nav_groups()
     gen.page_index()
     gen.page_native()
     for tag, _ in gen.ops_by_tag():
@@ -836,6 +852,8 @@ def build_site(root: Path, out: Path, skip_rustdoc: bool = False,
     for adr in adrs:
         gen.page_adr(adr)
     gen.page_errors(registry, used)
+    extras.render()
+    (out / "index.json").write_text(extras.index_json(), encoding="utf-8")
     (out / "style.css").write_text(
         (HERE / "templates" / "site.css").read_text(encoding="utf-8"),
         encoding="utf-8")
@@ -881,6 +899,15 @@ def run_check(out: Path, site: Site) -> list[str]:
                 continue
             if frag and frag not in ids[target]:
                 problems.append(f"{rel}: anchor {url!r} has no id on {target}")
+    index_file = out / "index.json"
+    if index_file.exists():
+        entries = json.loads(index_file.read_text(encoding="utf-8"))
+        keys = [(e["section"], e["path"]) for e in entries]
+        if keys != sorted(keys):
+            problems.append("index.json is not sorted by section and path")
+        for entry in entries:
+            if not (out / entry["path"]).exists():
+                problems.append(f"index.json names {entry['path']!r}, which was not written")
     have = set().union(*ids.values()) if ids else set()
     for kind in ("op", "schema", "code", "msg"):
         for anchor in site.required[kind]:
@@ -923,7 +950,7 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out if args.out.is_absolute() else Path.cwd() / args.out
     commit = args.commit if args.commit is not None else default_commit()
     site, rust = build_site(root, out, skip_rustdoc=args.skip_rustdoc, commit=commit)
-    problems = run_check(out, site) if args.check else site.problems
+    problems = site.problems + run_check(out, site) if args.check else site.problems
     for problem in problems:
         print("docsite:", problem)
     if problems:

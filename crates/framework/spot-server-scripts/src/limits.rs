@@ -46,19 +46,30 @@ impl ScriptLimits {
     /// The wall-clock deadline for `script`: its own timeout, or the default, clamped to the
     /// site maximum and to at least one millisecond.
     pub fn timeout_for(&self, script: &ServerScript) -> Duration {
-        let asked = if script.timeout_ms == 0 {
+        self.timeout_for_ms(script.timeout_ms)
+    }
+
+    /// The deadline for a script asking `timeout_ms` (0 means the default), clamped as
+    /// [`ScriptLimits::timeout_for`] does. API and scheduled scripts use this.
+    pub fn timeout_for_ms(&self, timeout_ms: u64) -> Duration {
+        let asked = if timeout_ms == 0 {
             self.default_timeout_ms
         } else {
-            script.timeout_ms
+            timeout_ms
         };
         Duration::from_millis(asked.clamp(1, self.max_timeout_ms.max(1)))
     }
 
     /// The engine limits for `script`.
     pub fn engine_limits(&self, script: &ServerScript) -> Limits {
+        self.engine_limits_for_ms(script.timeout_ms)
+    }
+
+    /// The engine limits for a script asking `timeout_ms`.
+    pub fn engine_limits_for_ms(&self, timeout_ms: u64) -> Limits {
         Limits {
             memory_bytes: self.memory_bytes,
-            wall_clock: self.timeout_for(script),
+            wall_clock: self.timeout_for_ms(timeout_ms),
             instructions: self.instructions,
             host_calls: self.host_calls,
             output_bytes: self.output_bytes,

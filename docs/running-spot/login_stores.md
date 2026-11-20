@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Sign-in stores (`[services.login_stores]`)
 
 Sessions, sign-in lockouts, password verifiers, second factors, recovery codes and API key digests are records of the site database. Every credential is sealed through the secrets service (`[services.secrets]` must be configured). A restart or a reload keeps every session and every lockout, and two nodes on one database share both.

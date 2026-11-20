@@ -10,8 +10,6 @@ use crate::{Appended, Durability, RelayError};
 
 use super::support::*;
 
-const V2_FIXTURE: &str = "tests/fixtures/tail/v2-gen1-batch1.chunk";
-
 async fn encode(
     batch_id: u64,
     entries: &[(spot_events_contract::envelope::Position, Vec<u8>)],
@@ -379,34 +377,4 @@ async fn a_straddling_version_2_chunk_is_refused_as_tampering() {
         .err()
         .expect("refused");
     assert_eq!(error.code(), "journal_relay.chain_broken");
-}
-
-#[tokio::test]
-async fn the_conformance_fixtures_decode_to_the_expected_entries() {
-    // The version 1 fixture is checked in chunk_tests. The version 2 fixture holds the same three
-    // entries under the test tenant key (a fixed KEK, see `support`); it is written by the
-    // ignored test below, because the sealed form carries random nonces.
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(V2_FIXTURE);
-    let Ok(bytes) = std::fs::read(&path) else {
-        eprintln!(
-            "tests/fixtures/tail/v2-gen1-batch1.chunk is not generated yet: run the ignored test write_v2_fixture"
-        );
-        return;
-    };
-    let chunk = read(Some(&tail_keys()), &tail_key(1, 1), &bytes)
-        .await
-        .unwrap();
-    assert_eq!(chunk.version, 2);
-    assert_eq!(chunk.entries, input(1, 1, 3));
-}
-
-/// `cargo test -p spot-journal-relay write_v2_fixture -- --ignored` regenerates the version 2
-/// fixture (and prints the KEK it uses) for a second implementation to test against.
-#[tokio::test]
-#[ignore = "writes tests/fixtures/tail/v2-gen1-batch1.chunk"]
-async fn write_v2_fixture() {
-    let bytes = encode(1, &input(1, 1, 3)).await;
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/tail/v2-gen1-batch1.chunk");
-    std::fs::write(path, bytes).expect("writes the fixture");
 }

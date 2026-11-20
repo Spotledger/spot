@@ -1,0 +1,40 @@
+# heartbeat_host codes: the tenant-host fleet heartbeat emitter (WP-CTL-03.T3), services/heartbeat.rs.
+# Start-up refusals only; a failed shipment is a counter (`spot_heartbeat_failed_total{reason}`),
+# never an error to a user. No message carries a secret: paths are configuration and are named,
+# file content never is.
+
+[[entry]]
+code = "heartbeat_host.credential_file"
+class = "Validation"
+summary = "A heartbeat credential file is missing or unreadable, or the private key is readable by group or others."
+explanation_key = "error.heartbeat_host.credential_file"
+params = []
+remedy = "Enrol the host certificate (docs/running-spot/heartbeat.md), point services.heartbeat.host_cert, host_key and ca_file at readable files, and set the key to mode 0600."
+since = "0.1.0"
+
+[[entry]]
+code = "heartbeat_host.egress_not_allowed"
+class = "Validation"
+summary = "The control plane is not on this site's egress allow-list, so the heartbeat cannot be sent."
+explanation_key = "error.heartbeat_host.egress_not_allowed"
+params = []
+remedy = "Add the host:port the message names to the site's egress allow-list for the heartbeat, then restart."
+since = "0.1.0"
+
+[[entry]]
+code = "heartbeat_host.invalid_setting"
+class = "Validation"
+summary = "A [services.heartbeat] setting is missing or out of range."
+explanation_key = "error.heartbeat_host.invalid_setting"
+params = []
+remedy = "Correct the setting the message names: control_plane is an https://host[:port] URL, interval_seconds is at least 5, sample_budget_ms at least 50, outbox_max_batches at least 4."
+since = "0.1.0"
+
+[[entry]]
+code = "heartbeat_host.no_ports"
+class = "Internal"
+summary = "The heartbeat is enabled but the host provided no samplers or shipper."
+explanation_key = "error.heartbeat_host.no_ports"
+params = []
+remedy = "Run a host build that provides the heartbeat ports, or set services.heartbeat.enabled = false."
+since = "0.1.0"

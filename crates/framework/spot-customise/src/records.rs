@@ -150,6 +150,21 @@ pub enum RecordOp {
     Remove(RecordKey),
 }
 
+impl RecordOp {
+    /// The record this operation writes or deletes.
+    #[must_use]
+    pub(crate) fn key(&self) -> RecordKey {
+        match self {
+            Self::PutDocType(r) => RecordKey::DocType(r.name.clone()),
+            Self::PutField(r) => RecordKey::Field(r.doctype.clone(), r.name.clone()),
+            Self::PutProperty(r) => {
+                RecordKey::Property(r.doctype.clone(), r.field.clone(), r.property.clone())
+            }
+            Self::Remove(key) => key.clone(),
+        }
+    }
+}
+
 /// Everything the store holds, in the order records were first written.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Records {
@@ -171,6 +186,53 @@ impl Records {
             .chain(self.fields.iter().map(|r| r.state))
             .chain(self.properties.iter().map(|r| r.state))
             .any(|s| matches!(s, RecordState::Pending | RecordState::Removing))
+    }
+
+    /// The records of `self` that are unfinished here and were also unfinished in `held`
+    /// (the copy a pipeline step read earlier), limited to `only` when given. A record another
+    /// node finished or rolled back in between is left out: the step must not touch it.
+    #[must_use]
+    pub(crate) fn unfinished_among(&self, held: &Records, only: Option<&[RecordKey]>) -> Records {
+        let open = |s: RecordState| matches!(s, RecordState::Pending | RecordState::Removing);
+        let wanted = |key: RecordKey| only.is_none_or(|keys| keys.contains(&key));
+        Records {
+            doctypes: self
+                .doctypes
+                .iter()
+                .filter(|r| open(r.state))
+                .filter(|r| held.doctype(&r.name).is_some_and(|h| open(h.state)))
+                .filter(|r| wanted(RecordKey::DocType(r.name.clone())))
+                .cloned()
+                .collect(),
+            fields: self
+                .fields
+                .iter()
+                .filter(|r| open(r.state))
+                .filter(|r| {
+                    held.field(&r.doctype, &r.name)
+                        .is_some_and(|h| open(h.state))
+                })
+                .filter(|r| wanted(RecordKey::Field(r.doctype.clone(), r.name.clone())))
+                .cloned()
+                .collect(),
+            properties: self
+                .properties
+                .iter()
+                .filter(|r| open(r.state))
+                .filter(|r| {
+                    held.property(&r.doctype, r.field.as_deref(), &r.property)
+                        .is_some_and(|h| open(h.state))
+                })
+                .filter(|r| {
+                    wanted(RecordKey::Property(
+                        r.doctype.clone(),
+                        r.field.clone(),
+                        r.property.clone(),
+                    ))
+                })
+                .cloned()
+                .collect(),
+        }
     }
 
     /// The custom DocType named `name`.
@@ -307,5 +369,74 @@ impl RecordStore for MemoryRecordStore {
             *guard = next;
         }
         Box::pin(async { Ok(()) })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field(name: &str, state: RecordState) -> FieldRecord {
+        FieldRecord {
+            doctype: "party".to_owned(),
+            name: name.to_owned(),
+            spec: String::new(),
+            insert_after: None,
+            state,
+            reason: None,
+            intent: 1,
+            actor: "t".to_owned(),
+        }
+    }
+
+    fn records(fields: Vec<FieldRecord>) -> Records {
+        Records {
+            fields,
+            ..Records::default()
+        }
+    }
+
+    #[test]
+    fn a_record_another_node_finished_is_left_out_of_a_stale_step() {
+        let held = records(vec![
+            field("a", RecordState::Pending),
+            field("b", RecordState::Pending),
+        ]);
+        // Another node finished `b` and rolled `a` back since `held` was read.
+        let now = records(vec![
+            field("a", RecordState::Failed),
+            field("b", RecordState::Applied),
+            field("c", RecordState::Pending),
+        ]);
+        assert!(now.unfinished_among(&held, None).fields.is_empty());
+        // A record that is unfinished in both is kept; one the step never held is not.
+        let now = records(vec![
+            field("a", RecordState::Pending),
+            field("c", RecordState::Pending),
+        ]);
+        let kept = now.unfinished_among(&held, None);
+        assert_eq!(kept.fields.len(), 1);
+        assert_eq!(kept.fields[0].name, "a");
+    }
+
+    #[test]
+    fn a_step_limited_to_its_own_keys_leaves_the_other_nodes_records_alone() {
+        let held = records(vec![
+            field("mine", RecordState::Pending),
+            field("theirs", RecordState::Pending),
+        ]);
+        let own = [RecordKey::Field("party".to_owned(), "mine".to_owned())];
+        let kept = held.unfinished_among(&held, Some(&own));
+        assert_eq!(kept.fields.len(), 1);
+        assert_eq!(kept.fields[0].name, "mine");
+    }
+
+    #[test]
+    fn an_operation_names_the_record_it_writes() {
+        let op = RecordOp::PutField(field("a", RecordState::Pending));
+        assert_eq!(
+            op.key(),
+            RecordKey::Field("party".to_owned(), "a".to_owned())
+        );
     }
 }

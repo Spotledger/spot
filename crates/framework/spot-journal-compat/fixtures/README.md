@@ -44,6 +44,22 @@ time.
 `cargo run -p spot-journal-compat --bin gen_fixture -- <dir>` writes into another directory, which
 is the easiest way to diff a regeneration.
 
+## Regeneration log
+
+**release-1 regenerated on 2026-11-13** (a deliberate harness change, not a red determinism test).
+The last entry's topic was `sys_role_changed`, a name the events registry does not know. When the
+rebuild executor's default classifier became the registry (WP-JRN-05.T9), an unregistered topic
+was refused, which would have turned the upgrade test red for a reason that has nothing to do
+with upgrades. The entry is now `identity_role_changed` (class audit) with a payload that passes
+`spot_events_contract::identity::validate`. Position, entity and id did not move, so the
+snapshot, the other positions and `golden-state.json` are unchanged; only the second segment and
+the manifest that hashes it changed.
+
+The rule: a fixture may contain only registered topics. `tests/topics_registered.rs` enforces it
+(every topic registered, with the class its table row says, and no table row unused), and
+`tests/rebuild_previous_release.rs` rebuilds with the default options, no injected classifier and
+no relaxed policy.
+
 ## The signing key is a throwaway
 
 `key.pub` is the public half of the TEST-ONLY Ed25519 key hard-coded in
@@ -72,7 +88,7 @@ plaintext — so the fixture also proves a rebuild carries a sealed field throug
 | 10 | `account` a2 deleted (a tombstone) |
 | 11 | `account` a1 updated, version 4 |
 | 12 | a domain event (`doc_posted`): counted, not replayed |
-| 13 | an audit entry (`sys_role_changed`): replayed |
+| 13 | an audit entry (`identity_role_changed`): replayed |
 
 Positions 1–5 are the first segment; 6–13 the second. The three entities cover the three kinds of
 shape change a release can make: a renamed field (`account`, 1 → 2), a dropped field with a

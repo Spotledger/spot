@@ -120,7 +120,9 @@ fn a_record_round_trips_and_a_real_site_has_none() {
 }
 
 /// A clone with personal data in three places: two classified columns, an unclassified one and a
-/// search table that holds a copy.
+/// search table that holds a copy; and a stray column on a document table that the metadata does
+/// not declare (a table the registry does not know is emptied, so the stray copy lives where the
+/// masker does not look: a column of a document table).
 async fn seeded(db: &TestDb) {
     let client = db.raw_client().await;
     client
@@ -131,8 +133,8 @@ async fn seeded(db: &TestDb) {
                ('00000000-0000-7000-8000-000000000002', 'Bob Example', 'bob@example.com', '{CITY}');\
              CREATE TABLE spot_search_copy (id int, body text);\
              INSERT INTO spot_search_copy VALUES (1, '{EMAIL}');\
-             CREATE TABLE ledger_note (id int, note text);\
-             INSERT INTO ledger_note VALUES (1, '{NAME}');"
+             ALTER TABLE customer ADD COLUMN memo text;\
+             UPDATE customer SET memo = '{NAME}' WHERE name = '{NAME}';"
         ))
         .await
         .unwrap();
@@ -154,13 +156,16 @@ async fn masking_removes_the_original_values_and_the_scan_proves_it() {
     assert_eq!(stats.rows, 6);
     assert!(stats.purged.contains(&"spot_search_copy".to_owned()));
     let verdict = verify_clone(&cfg, db.name(), &index).await;
-    let message = verdict.expect_err("the ledger note still holds a name");
-    assert!(message.contains("ledger_note.note"), "{message}");
+    let message = verdict.expect_err("the stray memo column still holds a name");
+    assert!(message.contains("customer.memo"), "{message}");
     assert!(!message.contains(NAME), "the message never carries a value");
 
     // After the stray copy is gone, the clone verifies clean.
     let client = db.raw_client().await;
-    client.batch_execute("TRUNCATE ledger_note").await.unwrap();
+    client
+        .batch_execute("UPDATE customer SET memo = NULL")
+        .await
+        .unwrap();
     let scanned = verify_clone(&cfg, db.name(), &index).await.unwrap();
     assert!(scanned >= 3);
 

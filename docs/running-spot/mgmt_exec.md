@@ -61,3 +61,18 @@ result_window_seconds = 600
 
 The executors register when the journal and sync services provide their implementations of the
 operations; otherwise nothing is registered and the management API answers "not found" for them.
+
+## Ports and their defaults
+
+The executors need three ports. A service that provides one wins; a missing one is built from what
+the site already has, so on a default site the executors register without any extra setup:
+
+| Port | Default when no service provides it |
+| --- | --- |
+| permissions | the administrator-only check: the Tenant Administrator role holds every permission except `journal.erase_subject`, resolved from the site's principal source (an unknown or system principal is denied) |
+| site state | "running": this process is the site, so offline operations (`journal.rebuild.run`, `sync.role.change`) are refused until the site is stopped and the operation is run offline |
+| audit | the site's outbox: one event per outcome, in its own transaction on the site database |
+
+A site where a default cannot be built (the context carries no site environment, for example a
+test host that provided only part of the ports) **refuses to start** with `mgmt_exec.unavailable`
+naming the port. It does not register executors that could not decide or record anything.

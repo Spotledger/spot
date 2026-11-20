@@ -278,6 +278,9 @@ fn plan(catalog: &Catalog, t: &Traversal) -> StorageResult<Option<(String, Param
             t.max_depth
         )));
     }
+    if t.max_nodes == 0 {
+        return Err(invalid("max_nodes must be at least 1".into()));
+    }
     // Sorted and without repeats, so an edge's number orders like its `EdgeSpec`.
     let specs: BTreeSet<&EdgeSpec> = t.edges.iter().collect();
     let edges = specs

@@ -157,3 +157,37 @@ of the hub read the current scripts.
 | `serverscript.record_invalid` on `doctype` | The DocType is reserved. | Use a different DocType. |
 | `serverscript.store_failed` on a write | Scripts are not loaded (start-up) or the store is unavailable. | Wait for start-up; if it persists read `/api/health/ready`. |
 | `services.scripts.<key>: out of range` | A ceiling is outside its bounds. | Fix the value in `common.toml`. |
+
+## Elevation
+
+A script runs as the user who triggered it and can do nothing that user cannot. Some real
+customisations need more (read a rate table the user may not read, write a counter document the
+user may not write). The only way to give a script more is the **`elevated` flag**, and it is off
+everywhere by default.
+
+- **Where it exists.** `server_script` (document events) and `api_script`. A `scheduled_script`
+  has no such field and a document carrying one is refused (`serverscript.elevation_not_allowed`):
+  it runs as its `run_as` user and nothing else.
+- **Who may set it.** Only a holder of the app permission `scripts_elevate`, which the Tenant
+  Administrator holds by default (declared and granted by the `scripting` app). A save that turns
+  the flag on, or edits an elevated script, without it is refused
+  (`serverscript.elevation_forbidden`). Turning the flag off needs no permission. Editing the
+  *source* of an elevated script without the permission switches the flag off and says so: a
+  changed script is a new script.
+- **Always with a reason.** `elevation_reason`, 20 to 500 characters
+  (`serverscript.elevation_reason_required`). The save stamps `elevated_by` and `elevated_at`.
+- **What an elevated run does.** Its host calls (`get`, `query`, `insert`, `update`, `call`) are
+  serviced as the platform instead of the user. Limits, the host surface and the no-network rule
+  are unchanged. The script's `ctx.user` is still the triggering user.
+- **Every elevated run is audited, first.** The run is reserved on the site's audit chain before
+  the engine starts: a chain that cannot take the entry refuses the run and nothing is written
+  (`serverscript.elevation_audit_failed`). When the run ends, even by failing or being killed at
+  its timeout, its outcome is appended; a chain that cannot take that either fails the run.
+  An entry has the script's name and kind, the triggering user, the DocType and operation, the
+  outcome code, the number of host calls and the number that wrote. It never has source,
+  arguments or values.
+- **Default deny on the host.** A flagged script on a host that did not wire elevation runs as
+  its user.
+- **How an auditor lists them.** Elevated scripts: filter the `server_script` or `api_script`
+  list on `Elevated = yes` (the column is in the list view; `elevated_by` and `elevated_at` say
+  who and when). Elevated runs: the audit chain entries of the `script_elevated` component.

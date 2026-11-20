@@ -99,6 +99,17 @@ impl CheckReport {
 /// `native_names` is the optional list of controller names this build provides: `None`
 /// skips the `native:` check, `Some(names)` refuses a `native:` name outside it.
 pub fn check_app(dir: &Path, native_names: Option<&BTreeSet<String>>) -> CheckReport {
+    check_app_with(dir, native_names, &[])
+}
+
+/// [`check_app`] with `platform` DocType definitions in the set the app's DocTypes are checked
+/// against, so a link to a DocType the platform ships (`user`, `file`) resolves. The platform
+/// definitions are context only: faults are reported for the app's files.
+pub fn check_app_with(
+    dir: &Path,
+    native_names: Option<&BTreeSet<String>>,
+    platform: &[spot_meta::Definition],
+) -> CheckReport {
     let mut problems = Vec::new();
     let app = AppDir::read(dir, &mut problems);
     let limits = Limits::new();
@@ -200,8 +211,9 @@ pub fn check_app(dir: &Path, native_names: Option<&BTreeSet<String>>) -> CheckRe
             Vec::new()
         }
     };
-    if let Err(errors) = spot_meta::Registry::build(definitions, &spot_meta::Customisations::new())
-    {
+    let mut checked = platform.to_vec();
+    checked.extend(definitions);
+    if let Err(errors) = spot_meta::Registry::build(checked, &spot_meta::Customisations::new()) {
         for err in errors {
             // The rules' errors name the DocType, not the file; the layout's convention is
             // one file per DocType (`<name>.toml`), so the report puts the fault there.

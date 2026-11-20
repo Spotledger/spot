@@ -1,0 +1,2 @@
+{% for l in lines %}{{ l.desc }}: {{ l.amount | money('PKR') }}
+{% endfor %}Total: {{ total | money('PKR') }}

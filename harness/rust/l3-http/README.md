@@ -45,8 +45,7 @@ tools/ci/e2e/run.sh --quick     # core cases, the pull-request job
 tools/ci/e2e/run.sh             # every case, nightly and before merging to main
 ```
 
-On Windows: `tools\ci\e2e\run.ps1 -Quick` (the runner must export `SPOT_TEST_PG_URL`; see
-the CI runner notes).
+On Windows: `tools\ci\e2e\run.ps1 -Quick` (the runner must export `SPOT_TEST_PG_URL`).
 
 ## What one run does
 

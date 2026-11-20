@@ -1,0 +1,101 @@
+# mail_render codes (WP-PLT-11.T14). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# These ride errors of the mail-render library and the `spot mail-preview` command, never an AppError, so the class is `none`.
+
+[[entry]]
+code = "mail_render.invalid_name"
+class = "none"
+summary = "A template name, locale or file name is not a plain name."
+explanation_key = "error.mail_render.invalid_name"
+params = []
+remedy = "Use a template name of lower-case letters, digits and underscores, and a locale such as en or ur-PK."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.template_not_found"
+class = "none"
+summary = "No template folder of this name exists in the site's or the apps' mail template folders."
+explanation_key = "error.mail_render.template_not_found"
+params = []
+remedy = "Create mail/<name>/ with a subject.txt and a body.txt or body.html under the site's template folder or an app's templates folder."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.template_incomplete"
+class = "none"
+summary = "The template has no subject or no body."
+explanation_key = "error.mail_render.template_incomplete"
+params = []
+remedy = "Add subject.txt and at least one of body.txt and body.html to the template folder."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.file_refused"
+class = "none"
+summary = "A template file is a link, is not a regular file, is over 256 KiB or is not UTF-8 text."
+explanation_key = "error.mail_render.file_refused"
+params = []
+remedy = "Replace the file with a plain UTF-8 file under 256 KiB."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.undefined_variable"
+class = "none"
+summary = "The template uses a variable the context does not have."
+explanation_key = "error.mail_render.undefined_variable"
+params = []
+remedy = "Pass the variable in the context, or remove it from the template; the error names the file, line and variable."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.not_computable"
+class = "none"
+summary = "The template tried to compute with money; amounts can only be formatted."
+explanation_key = "error.mail_render.not_computable"
+params = []
+remedy = "Compute the amount in the sender and pass it in the context; format it with the money filter."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.render_failed"
+class = "none"
+summary = "The template failed to render (syntax, a limit or a filter)."
+explanation_key = "error.mail_render.render_failed"
+params = []
+remedy = "Fix the template at the file and line named in the error."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.subject_invalid"
+class = "none"
+summary = "The rendered subject is empty, longer than 255 characters or holds a line break."
+explanation_key = "error.mail_render.subject_invalid"
+params = []
+remedy = "Keep the subject to one short line and do not put line breaks in values used by it."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.output_too_large"
+class = "none"
+summary = "A rendered part is larger than 1 MiB."
+explanation_key = "error.mail_render.output_too_large"
+params = []
+remedy = "Shorten the template or the data it prints."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.invalid_context"
+class = "none"
+summary = "The JSON context cannot be turned into template data."
+explanation_key = "error.mail_render.invalid_context"
+params = []
+remedy = "Pass a JSON object; write amounts, dates and times as one-key objects named $decimal, $date and $datetime (see the mail templates guide); no fractional numbers."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_render.invalid_message"
+class = "none"
+summary = "The rendered mail does not make a valid message (for example no recipient)."
+explanation_key = "error.mail_render.invalid_message"
+params = []
+remedy = "Give the message a sender and at least one recipient."
+since = "0.1.0"

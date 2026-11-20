@@ -23,7 +23,7 @@ use tracing::{Instrument, Span};
 
 mod batch;
 
-use super::authz::{WriteChange, create_changes, patch_changes};
+use super::authz::{WriteChange, apply_masks, create_changes, empty_page, patch_changes};
 use super::committed::{CommittedBatch, CommittedStep, CommittedSteps, OutboxSink, StepOutcome};
 use super::ctx::Ctx;
 use super::ledger::{Attempted, LedgerCall, command_conflict};
@@ -1873,6 +1873,31 @@ impl<B: StorageBackend> Engine<B> {
             rows.map_err(|e| Failed::Storage(e, StorageOp::Other))
         })
         .await
+    }
+
+    /// A query run as `who`: the read the repository's `query` does inside a step, as a public
+    /// call with a snapshot of its own (WP-EXT-06.T11). An API or scheduled script reads
+    /// through it with the rights of the invocation it runs for, without elevating.
+    ///
+    /// The caller's read rights compile into `query` before it reaches storage (the same
+    /// `query_plan` the repository and the link checks use): the owner restriction and the
+    /// DocType's read filter are combined with the query's own, the columns the caller may
+    /// not read are refused and the masked ones come back masked. A principal that may read no
+    /// row gets an empty page without a storage read; one that has no read right at all gets
+    /// the same refusal a read through the API gets. There is no bypass: an invocation whose
+    /// principal is the system's is the only one the authorizer lets past its checks.
+    ///
+    /// # Errors
+    /// The authorizer's refusal (`permission.denied`; a query that names a sealed or
+    /// blind-index secret column is refused for everyone), or the mapped storage error.
+    pub async fn query_as(&self, who: &Invocation, query: &Query) -> AppResult<Rows> {
+        let snap = self.snapshot();
+        let Some(plan) = self.query_plan(who, query).await? else {
+            return Ok(empty_page(query));
+        };
+        let mut rows = self.query_detached(&snap, &plan.query).await?;
+        apply_masks(&mut rows, &plan.masks);
+        Ok(rows)
     }
 
     /// Writes events to the outbox in a transaction of their own: what a step enqueues after

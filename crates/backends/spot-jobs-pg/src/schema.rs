@@ -14,7 +14,7 @@
 //! - `spot_job_idem_idx` unique `(site, name, idempotency_key)` partial on the live states
 //!   (`pending`, `running`, `retrying`) with a key: idempotency while a job is alive.
 //! - `spot_job_token_idx` unique on `claim_token`: complete and heartbeat.
-//! - `spot_job_lease_idx (lease_expires_at)` on running jobs: the reaper.
+//! - `spot_job_lease_idx (lease_expires_at)` on leased (running) jobs: the reaper.
 //! - `spot_job_site_running_idx (site)` on running jobs: the per-site cap count.
 //! - `spot_job_finished_idx (state, finished_at)` on finished jobs: retention.
 //!
@@ -72,8 +72,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS spot_job_idem_idx
 CREATE UNIQUE INDEX IF NOT EXISTS spot_job_token_idx
     ON spot_job (claim_token) WHERE claim_token IS NOT NULL;
 
+-- The reaper index was first written `WHERE state = 'running'`. That predicate is also provable
+-- from the per-site cap count (`state = 'running' AND site = ...`), and a planner that reads the
+-- lease column as well ordered (leases are handed out in claim order) scanned every running job
+-- for each candidate site instead of using `spot_job_site_running_idx`. A lease exists exactly
+-- while a job runs (`spot_job_running_has_claim`), so the predicate is `lease_expires_at IS NOT
+-- NULL`: the reaper still proves it (its `lease_expires_at <= ...` is strict), the count cannot.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_indexes
+               WHERE schemaname = current_schema() AND indexname = 'spot_job_lease_idx'
+                 AND indexdef LIKE '%state = ''running''%') THEN
+        DROP INDEX spot_job_lease_idx;
+    END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS spot_job_lease_idx
-    ON spot_job (lease_expires_at) WHERE state = 'running';
+    ON spot_job (lease_expires_at) WHERE lease_expires_at IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS spot_job_site_running_idx
     ON spot_job (site) WHERE state = 'running';

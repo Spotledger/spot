@@ -1,0 +1,29 @@
+[package]
+name = "spot-rescue-pg"
+description = "The durable PostgreSQL RescueJournal (WP-MIG-10.T3, ADR-71): the rescue run's write-ahead journal in the spot_rescue_control schema, per site, strictly consecutive sequence, appends serialised by an advisory lock, so a rescue killed in the middle resumes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `RescueJournal`, `JournalRecord`, `JournalEntry`, `Seq`, `BoxFuture`, the engine's `Error`.
+spot-rescue = { path = "../../framework/spot-rescue" }
+# `SiteId`: the one site a journal belongs to.
+spot-core = { path = "../../framework/spot-core" }
+# The pool the host builds.
+deadpool-postgres = "0.14"
+# `jsonb` journal records and the SQLSTATE of a refused statement.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+serde_json = "1"
+# Typed errors with stable `rescue_pg.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Scratch databases for the real-PostgreSQL tests.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

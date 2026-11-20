@@ -97,6 +97,8 @@ GET  /api/v1/events/stream?consumer=billing&partition=0        (Authorization he
 | `window` | `1000` | delivered, unacknowledged events per partition before a stream waits for an ack |
 | `consumer_roles` | `[]` | roles, besides the administrator, that may use the event stream |
 | `stream_roles` | `[]` | roles, besides the administrator, that may stream the reserved topic classes |
+| `lag_warn_events` | `100000` | a consumer further behind than this many events degrades readiness; `0` turns the check off |
+| `metrics_interval_seconds` | `15` | how often the gauges are sampled and readiness re-checked (5 to 3600; less than 5 is a start-up error naming the key) |
 
 **Connection budget.** Open streams are bounded by `max_streams` and `max_streams_per_user`
 (`429 api.rate_limited` with `Retry-After`); the realtime hub keeps its own, separate limit, so a
@@ -129,3 +131,65 @@ without values.
 - Where a document has been deleted, the read filter decides without its committed values.
 - Naming a consumer that belongs to someone else on `PUT` answers `422` (names are unique per
   site): a name is the only thing that can be learnt that way.
+
+## Watching the stream
+
+A sampler runs every `metrics_interval_seconds`. It reads the consumers, refreshes the outbox head
+and asks for the partitions parked past the report time (15 minutes), then publishes the gauges
+below on `/metrics` and works out the readiness reason. A readiness call only reads that result from
+memory. **No label carries a consumer, user, topic or position**: a consumer name is free text
+chosen by an administrator and unbounded. The names of the three most-behind consumers (cut to 40
+characters) appear in the readiness detail only.
+
+| Metric | Kind | Meaning | Alert suggestion |
+| --- | --- | --- | --- |
+| `spot_events_consumers` | gauge | registered consumers | none; a sudden drop to 0 means the table was emptied |
+| `spot_events_open_streams` | gauge | open `event_stream` connections | near `max_streams` for 10 minutes |
+| `spot_events_parked_partitions` | gauge | partitions parked right now | above 0 for 5 minutes |
+| `spot_events_oldest_parked_seconds` | gauge | age of the oldest parked partition, 0 when none | above 3600 |
+| `spot_events_max_lag_events` | gauge | the largest `head.seq - checkpoint.seq` over consumers and partitions of the head's generation | rising for 15 minutes |
+| `spot_events_resync_required` | gauge | consumers whose checkpoint is in an older generation than the head (a restore happened) | above 0 |
+| `spot_events_head_age_seconds` | gauge | time since the sampler last saw the outbox head move | above N while writes continue: the outbox pump is stuck; with no writes it just means quiet |
+| `spot_events_pulled_total` | counter | events handed out by pulls | none |
+| `spot_events_acked_total` | counter | acknowledgements accepted | pulls rising with acks flat: a subscriber that does not acknowledge |
+| `spot_events_redelivered_total` | counter | events delivered again before their acknowledgement (a pull repeated before its ack) | a steady rate means a subscriber crashes between pull and ack |
+| `spot_events_skipped_total` | counter | events in the range the consumer's owner may not read, left out and never named | a jump after a role change |
+| `spot_events_stream_rejections_total{reason}` | counter | streams refused by a connection budget: `site_cap`, `user_cap` | any sustained rate: raise the budget or fix the client |
+| `spot_events_stream_closes_total{reason}` | counter | streams that ended: `client` (the client left, or the idle limit ended it), `shutdown`, `error` (the service ended it: lost lease, revoked rights, a resync) | `error` rising |
+
+Positions of different generations (after a restore) cannot be compared, so a consumer behind a
+generation change counts in `spot_events_resync_required` and never in the lag. A consumer that has
+never acknowledged anything is as far behind as the head's sequence.
+
+**Readiness.** `/api/health/ready` stays `200`. It says `degraded: events (...)` while a partition has
+been parked for at least the report time (naming the count and the oldest age), while a consumer is
+further behind than `lag_warn_events` (naming the number and up to three consumer names), or after
+three failed samples in a row (`cannot sample`). It clears by itself when the condition clears. The
+detail never contains a position, a subject or event content.
+
+**What to do**
+
+- *A parked partition.* The subscriber made no progress for the park timeout. Fix the subscriber,
+  then restart the partition with a lease: `POST /api/v1/events/consumers/<name>/restart` with
+  `{"partition":0,"from":{"kind":"tail"}}` (or `from_position` to replay from a known checkpoint) and
+  the `X-Consumer-Lease` of a pull. Until then the partition consumes nothing.
+- *A lagging consumer.* Is the subscriber slow, is it acknowledging (`pulled` rises, `acked` does
+  not), is its filter so narrow that most of the outbox is skipped? Raise the pull `limit`, run more
+  consumers over more partitions, or accept the lag and raise `lag_warn_events`.
+- *`resync_required`.* The site was restored and the stream's generation changed. The consumer's next
+  pull answers `eventstream.resync_required` naming the retained position; restart it from there, or
+  from the beginning if it must see everything again.
+
+| Symptom | Likely cause | What to check |
+| --- | --- | --- |
+| readiness `degraded: events (cannot sample)` | the consumer store or the outbox cannot be read three samples in a row | the database; the `the event stream could not be sampled` warning names a code, never a value |
+| `max_lag_events` high but the consumer is acknowledging | the outbox is busy with events the filter drops; lag counts every outbox record | the consumer's topics and filter; `skipped_total` |
+| `max_lag_events` flat at 0 with writes happening | the sampler has not seen the head move | `head_age_seconds`; a stuck outbox pump |
+| `parked_partitions` above 0 right after a deployment | the subscriber stopped acknowledging while it restarted | restart the partition once the subscriber is back |
+| `redelivered_total` rising | pulls repeated before their acknowledgement | the subscriber's retry loop; ack before pulling again |
+| `stream_rejections_total{reason="site_cap"}` | more open streams than `max_streams` | raise `max_streams`, or have clients share a consumer's pull |
+| readiness degraded naming a consumer you deleted | the sample is up to one interval old | wait one `metrics_interval_seconds` |
+| `resync_required` above 0 after a restore | checkpoints are from the older generation | restart each named consumer as above |
+
+With very many consumers the sample lists every consumer each interval. The default interval of 15 s
+is comfortable for a few hundred; beyond that raise `metrics_interval_seconds`.

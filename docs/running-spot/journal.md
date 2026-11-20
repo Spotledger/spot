@@ -1,8 +1,10 @@
+Part of [Running Spot](../running-spot.md).
+
 # The journal service (`[services.journal]`)
 
 Ships a site's outbox to an off-site journal: signed manifest, sealed segments and, under `remote-sync`, a tail chunk for every batch. The journal is the outbox stream, sealed; there is no second pipeline (ADR-061 section 1). One shipper task runs per site and only on the node that holds the site's writer lease.
 
-For the design, the outbox barrier and how to recover from a broken chain, read [journal hosting](../journal-hosting.md). This page is what an operator configures and sees.
+For the design, the outbox barrier and how to recover from a broken chain, read journal hosting (the project process notes). This page is what an operator configures and sees.
 
 ## Turning it on
 

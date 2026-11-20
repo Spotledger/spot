@@ -234,6 +234,10 @@ pub struct IncomingMessage {
     /// True when the message announces automated origination (`Auto-Submitted` present and not
     /// `no`, or `Precedence: bulk/auto_reply`): auto-replies must never trigger auto-replies.
     pub auto_submitted: bool,
+    /// The kept headers (WP-PLT-11.T16): at most one value each of `X-Spot-Outgoing`,
+    /// `Auto-Submitted`, `Precedence`, `In-Reply-To` and `References`, bounded in size. Read
+    /// them with [`IncomingMessage::header`]; no other header is ever carried.
+    pub headers: Vec<crate::incoming::SelectedHeader>,
 }
 
 /// Derives the conversation key of a message per the brief: the first `References` id (the

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use spot_app_api::{AppResult, BoxFuture};
 
 use crate::compile::CompileOutcome;
+use crate::elevation::ScriptElevation;
 use crate::log::ScriptRun;
 use crate::record::ServerScript;
 
@@ -16,6 +17,16 @@ use crate::record::ServerScript;
 pub trait ScriptStore: Send + Sync {
     /// The enabled scripts for `doctype`, in name order. A disabled script is not returned.
     fn enabled_for<'a>(&'a self, doctype: &'a str) -> BoxFuture<'a, AppResult<Vec<ServerScript>>>;
+
+    /// The elevation flags of the enabled scripts of `doctype` (WP-EXT-06.T10), by name. A script
+    /// that is not elevated needs no entry. The default answers none: default deny, so a store
+    /// that does not read the flag never elevates anything.
+    fn elevations_for<'a>(
+        &'a self,
+        _doctype: &'a str,
+    ) -> BoxFuture<'a, AppResult<Vec<ScriptElevation>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
 
     /// Records the result of compiling `name`: its hash, or its diagnostics.
     fn record_compile<'a>(
@@ -41,6 +52,7 @@ pub trait ScriptStore: Send + Sync {
 #[derive(Default)]
 pub struct FakeScriptStore {
     scripts: Mutex<BTreeMap<String, ServerScript>>,
+    elevations: Mutex<BTreeMap<String, crate::elevation::ElevationFlag>>,
     compiles: Mutex<Vec<(String, CompileOutcome)>>,
     runs: Mutex<Vec<ScriptRun>>,
     disabled: Mutex<Vec<(String, String)>>,
@@ -64,6 +76,22 @@ impl FakeScriptStore {
     /// Adds or replaces a script.
     pub fn put(&self, script: ServerScript) {
         self.scripts().insert(script.name.clone(), script);
+    }
+
+    /// Marks the script `name` elevated with `flag` (or not elevated, with `None`).
+    pub fn set_elevation(&self, name: &str, flag: Option<crate::elevation::ElevationFlag>) {
+        let mut flags = self
+            .elevations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match flag {
+            Some(flag) => {
+                flags.insert(name.to_owned(), flag);
+            }
+            None => {
+                flags.remove(name);
+            }
+        }
     }
 
     /// The script named `name`, when it is stored.
@@ -122,6 +150,29 @@ impl ScriptStore for FakeScriptStore {
         Box::pin(async move { Ok(scripts) })
     }
 
+    fn elevations_for<'a>(
+        &'a self,
+        doctype: &'a str,
+    ) -> BoxFuture<'a, AppResult<Vec<ScriptElevation>>> {
+        let flags = self
+            .elevations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let found: Vec<ScriptElevation> = self
+            .scripts()
+            .values()
+            .filter(|s| s.enabled && s.doctype == doctype)
+            .filter_map(|s| {
+                flags.get(&s.name).map(|flag| ScriptElevation {
+                    name: s.name.clone(),
+                    flag: Some(flag.clone()),
+                })
+            })
+            .collect();
+        Box::pin(async move { Ok(found) })
+    }
+
     fn record_compile<'a>(
         &'a self,
         _doctype: &'a str,
@@ -166,6 +217,14 @@ impl ScriptStore for FakeScriptStore {
 pub trait ScriptDocuments: Send + Sync {
     /// The enabled `Server Script` documents for `doctype`, in name order.
     fn enabled_for<'a>(&'a self, doctype: &'a str) -> BoxFuture<'a, AppResult<Vec<ServerScript>>>;
+    /// The elevation flags of the enabled scripts of `doctype` (WP-EXT-06.T10); the default
+    /// answers none (default deny).
+    fn elevations_for<'a>(
+        &'a self,
+        _doctype: &'a str,
+    ) -> BoxFuture<'a, AppResult<Vec<ScriptElevation>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     /// Records a compile result on the named script.
     fn record_compile<'a>(
         &'a self,
@@ -194,6 +253,13 @@ impl DocumentScriptStore {
 impl ScriptStore for DocumentScriptStore {
     fn enabled_for<'a>(&'a self, doctype: &'a str) -> BoxFuture<'a, AppResult<Vec<ServerScript>>> {
         self.documents.enabled_for(doctype)
+    }
+
+    fn elevations_for<'a>(
+        &'a self,
+        doctype: &'a str,
+    ) -> BoxFuture<'a, AppResult<Vec<ScriptElevation>>> {
+        self.documents.elevations_for(doctype)
     }
 
     fn record_compile<'a>(

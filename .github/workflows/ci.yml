@@ -1,17 +1,22 @@
 # Public CI for the exported tree (WP-OSS-03.T1, the project process notes).
 #
-# GitHub-hosted runners only. The public repository takes no pull requests, so the triggers are
-# push to main, a weekly schedule and a manual run; there is no pull_request trigger and there
-# are no secrets. tools/opensource-ci/workflow_lint.py enforces these rules on this directory.
+# GitHub-hosted runners only. The triggers are push to main, a pull request from a branch of this
+# same repository (the required checks must report on it), a weekly schedule and a manual run.
+# A pull request runs with a read-only token and no secrets, and every job carries the
+# same-repository guard, so a fork's pull request runs nothing. tools/opensource-ci/workflow_lint.py
+# enforces these rules on this directory.
 #
 # Every job that runs tests first runs `bash tools/ci/start-postgres.sh`: PostgreSQL 18 with
 # postgis, btree_gist, pg_trgm, unaccent and vector, exporting SPOT_TEST_PG_URL and
 # SPOT_REQUIRE_PG=1 so a PostgreSQL-backed test fails instead of skipping. A bare
 # `services: postgres` container is not acceptable: the official image has neither PostGIS nor
-# pgvector. Windows runs only on the weekly schedule and on a manual run.
+# pgvector. Windows runs only on the weekly schedule and on a manual run; a pull request runs
+# Linux only, like a push.
 name: ci
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   schedule:
     - cron: "0 3 * * 0"
@@ -29,11 +34,12 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
 jobs:
   python:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: python suites, licence lint, workflow lint (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'push' || github.event_name == 'pull_request') && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -67,11 +73,12 @@ jobs:
         run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true
 
   rust:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: rust (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'push' || github.event_name == 'pull_request') && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
         # The workspace has hundreds of integration-test binaries; their build output does not fit on
         # one hosted runner. Each shard tests every fourth crate (by sorted name) on its own runner.
         shard: [1, 2, 3, 4]
@@ -161,6 +168,7 @@ jobs:
         run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true
 
   deny:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres cargo deny reads manifests and the lock file; it runs no tests.
     name: cargo deny
     runs-on: ubuntu-latest
@@ -171,6 +179,7 @@ jobs:
         with: { command: check }
 
   gates:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres the lint gates read source files; none runs a test or a database.
     name: lint gates
     runs-on: ubuntu-latest
@@ -191,6 +200,7 @@ jobs:
           done
 
   docs:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres the contract site build reads contracts and builds rustdoc; it runs no tests.
     name: contract documentation site
     runs-on: ubuntu-latest
@@ -205,12 +215,13 @@ jobs:
       - run: python tools/docsite/build.py --out out/docsite --check
 
   dotnet:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # lint-allow: no-postgres the .NET build and its tests use no database.
     name: dotnet (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'push' || github.event_name == 'pull_request') && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:

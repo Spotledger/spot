@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use spot_image_upcast::Registry as UpcastRegistry;
-use spot_journal_audit_run::{AuditOptions, LiveSide, ScratchSide};
+use spot_journal_audit_run::{AuditOptions, EventClassifier, LiveSide, ScratchSide};
 use spot_journal_manifest::VerifyingKeys;
 use spot_journal_snapshot::SnapshotKeys;
 use spot_journal_store::{JournalStore, TenantId};
@@ -45,6 +45,14 @@ pub struct TenantInputs {
     pub snapshot_keys: Arc<dyn SnapshotKeys>,
     /// The upcasters the rebuild applies.
     pub registry: Rc<UpcastRegistry>,
+    /// This tenant's event classifier: the host builds it from the apps the tenant runs (see
+    /// `spot_journal_audit_run::DomainTopicsClassifier`). `None` is the platform registry, the
+    /// safe default. It is used for this tenant's audit only and never for another's.
+    pub classifier: Option<Arc<dyn EventClassifier + Send + Sync>>,
+    /// Refuses a journal with a topic the classifier does not know (`true`, the default of the
+    /// rebuild). `false` audits the tenant with unknown topics treated as domain, listed in the
+    /// result row, with the relaxed policy flagged in the report.
+    pub strict_topics: bool,
 }
 
 /// Opens the inputs of one tenant's audit.

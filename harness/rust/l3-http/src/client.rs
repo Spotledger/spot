@@ -435,6 +435,18 @@ impl Client {
         Ok(self.with_token(token))
     }
 
+    /// `POST /api/v1/auth/step-up` with the signed-in user's password: re-authenticates the
+    /// session for the sensitive operations that need a recent one (`auth.step_up_required`).
+    pub async fn step_up(&self, password: &str) -> Result<Reply, Failure> {
+        self.send_json(
+            "POST",
+            "/api/v1/auth/step-up",
+            &[],
+            &json!({ "password": password }),
+        )
+        .await
+    }
+
     /// `POST /api/v1/auth/logout`.
     pub async fn logout(&self) -> Result<Reply, Failure> {
         self.send("POST", "/api/v1/auth/logout", &[], None).await

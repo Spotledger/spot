@@ -18,6 +18,9 @@ spot-app-api = { path = "../../../contracts/app-api" }
 
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+# The transpiler whose output the corpus test runs; a dev-dependency only, so the engine's runtime
+# dependency set does not change (WP-EXT-08.T3).
+spot-ts-transpile = { path = "../spot-ts-transpile" }
 
 [lints]
 workspace = true

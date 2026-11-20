@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Approving a migration plan: `spot migrate-approve`
 
 ```

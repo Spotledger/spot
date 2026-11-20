@@ -22,6 +22,8 @@ rust_decimal = "1"
 time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
 # JSON string escaping for NDJSON lines.
 serde_json = "1"
+# The one cell-text form of geo points and ranges, shared with the importer (WP-DOC-09.T7).
+spot-spatial-text = { path = "../spot-spatial-text" }
 # HMAC-SHA-256 for the signed export cursor.
 hmac = "0.12"
 sha2 = "0.10"

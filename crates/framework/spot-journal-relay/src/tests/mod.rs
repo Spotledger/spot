@@ -6,6 +6,7 @@ mod catalogue_tests;
 mod chunk_tests;
 mod crash_tests;
 mod fork_tests;
+mod keys_tests;
 mod missing_manifest_tests;
 mod property_tests;
 mod refusal_tests;

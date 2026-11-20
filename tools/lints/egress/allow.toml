@@ -1,0 +1,177 @@
+# Allow-list of the egress lint (WP-SEC-09.T6). It may only shrink: an entry that matches no hit
+# is an error, and `max_gaps` may not be raised. See README.md for the entry format and the kinds.
+# One entry per file. A `gap` is a real hole, not an exemption: it names the follow-up that closes it.
+
+max_gaps = 6
+
+# --- egress-implementation: spot-egress itself ---------------------------------------------
+
+[[allow]]
+path = "crates/framework/spot-egress/src/connector.rs"
+kind = "egress-implementation"
+owner_wp = "WP-SEC-09"
+reason = "EgressConnector: dials only the addresses the Guard vetted and pinned for the request."
+
+[[allow]]
+path = "crates/framework/spot-egress/src/sender.rs"
+kind = "egress-implementation"
+owner_wp = "WP-SEC-09"
+reason = "HttpSender: the hyper client and the TLS connector sit behind EgressConnector, after address vetting and redirect re-validation."
+
+# --- loopback-only ---------------------------------------------------------------------------
+
+[[allow]]
+path = "crates/framework/spot-pg-supervisor/src/supervisor.rs"
+kind = "loopback-only"
+owner_wp = "WP-PG-SUP"
+reason = "tcp_probe connects to the supervised PostgreSQL's own listen address and port (layout.listen first_probe_addr), chosen by the supervisor, and drops the connection at once."
+
+# --- peer-pinned -----------------------------------------------------------------------------
+
+[[allow]]
+path = "crates/framework/spot-sync-http/src/transport.rs"
+kind = "peer-pinned"
+owner_wp = "WP-SYN"
+pinned_at = "spot-sync-http tls.rs client_config: the root store holds only the hub CA and the client presents its own certificate (mutual TLS); the address comes from the operator's sync configuration"
+reason = "The sync channel dials the configured hub address over mutual TLS pinned to the hub CA."
+
+[[allow]]
+path = "crates/framework/spot-sync-http/src/tls.rs"
+kind = "peer-pinned"
+owner_wp = "WP-SYN"
+pinned_at = "this file: client_config and server_config build the hub-CA pinned mutual-TLS configurations; the hit is the accepting side (serve_one takes an accepted TcpStream)"
+reason = "The TLS module of the pinned sync channel; the only TcpStream mention is the accepted socket of the hub server."
+
+[[allow]]
+path = "crates/framework/spot-agent/src/channel/transport.rs"
+kind = "peer-pinned"
+owner_wp = "WP-AGT"
+pinned_at = "this file, TlsTransport::new: the root store holds exactly the certificates of the gateway trust anchor passed in (system roots not added), TLS 1.3, no insecure option; the gateway host and port come from the agent's enrolment configuration"
+reason = "The agent channel dials only the gateway its operator enrolled it with, over TLS pinned to the gateway trust anchor; the agent never listens."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/mgmt.rs"
+kind = "peer-pinned"
+owner_wp = "WP-SEC-04"
+pinned_at = "this file, trust loading in the `mgmt` client: `--ca` is required and is the only root the server certificate is verified against; there is no --insecure and --url must be https"
+reason = "The operator's management client dials the one site the operator names with --url, verified against the operator CA the operator supplies (mutual TLS with the operator certificate)."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/updater.rs"
+kind = "peer-pinned"
+owner_wp = "WP-PRD-03"
+pinned_at = "this file: HttpsClient verifies the certificate and name (platform roots or the operator's trust anchor), refuses non-https and redirects, caps the body; the downloaded manifest, signature and payload are verified against the pinned update-signing keys (verify_update) before any byte is used"
+reason = "The updater fetches only from the update source URL the operator configured; the content is authenticated by the pinned update signature independent of the transport."
+
+[[allow]]
+path = "crates/framework/spot-mgmt-api/src/tls.rs"
+kind = "peer-pinned"
+owner_wp = "WP-SEC-04"
+pinned_at = "this file: the TLS acceptor requires a client certificate that chains to the operator CA; the only TcpStream mention is the accepted socket (serve_one)"
+reason = "The management API's TLS module: the hit is the accepting side, nothing is dialled."
+
+# --- harness ---------------------------------------------------------------------------------
+
+[[allow]]
+path = "harness/rust/l3-http/src/cases/edge.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness: raw sockets to the system under test on loopback, to send malformed requests."
+
+[[allow]]
+path = "harness/rust/l3-http/src/client.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness HTTP client for the system under test."
+
+[[allow]]
+path = "harness/rust/l3-journal-sync/src/client.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness client for the journal sync scenarios."
+
+[[allow]]
+path = "harness/rust/l3-journal-sync/src/proxy.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness fault-injecting proxy between a sync client and hub."
+
+[[allow]]
+path = "harness/rust/l8-faults/src/proxy.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness fault-injecting TCP proxy."
+
+[[allow]]
+path = "harness/rust/l9-scale/src/http.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness load client."
+
+[[allow]]
+path = "harness/rust/l9-scale/src/cluster.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness: dials the loopback ports of the cluster nodes it started, and the fault proxy upstream it was given."
+
+[[allow]]
+path = "harness/rust/spot-mail-fake-imap/src/lib.rs"
+kind = "harness"
+owner_wp = "WP-PLT-11"
+reason = "Test harness fake IMAP server: only the accepted socket type is named; nothing is dialled."
+
+[[allow]]
+path = "harness/rust/spot-idle-connections/src/client.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness client that holds idle connections open."
+
+[[allow]]
+path = "harness/rust/spot-idle-connections/src/run.rs"
+kind = "harness"
+owner_wp = "WP-TST"
+reason = "Test harness runner for the idle-connection scenario."
+
+# --- gaps: real holes, each with its follow-up ---------------------------------------------------
+
+[[allow]]
+path = "crates/framework/spot-http/src/server.rs"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-HTT"
+reason = "Only the accepted (inbound) socket type is named; nothing is dialled. Listed as a gap because no allow-list kind covers an accept-side use; a kind or a narrower rule for it is an open question of WP-SEC-09.T6."
+
+[[allow]]
+path = "crates/framework/spot-mail/Cargo.toml"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-MAIL"
+reason = "Depends on lettre, whose SMTP transport smtp.rs uses; the same hole as smtp.rs (the connection is not built on EgressConnector)."
+
+[[allow]]
+path = "crates/framework/spot-mail/src/smtp.rs"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-MAIL"
+reason = "The lettre SMTP transport dials either the pinned addresses the caller got from the Guard or, when `SmtpConfig::pinned` is None, resolves the host itself at connect time; nothing in the crate forces the Guard step. Close by making `pinned` mandatory (an `Authorized` value) outside tests."
+
+[[allow]]
+path = "crates/framework/spot-mail/src/imap.rs"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-MAIL"
+reason = "dial() connects only to the `pinned` addresses and refuses an empty list, but the addresses are a plain `&[SocketAddr]`: the crate cannot tell that they came from Guard::authorize. Close by taking the guard's `Authorized` value."
+
+[[allow]]
+path = "crates/framework/spot-winsvc/src/app.rs"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-WIN"
+reason = "TcpHealthProbe connects to `app.health_addr` from the service config, which config.rs only checks to be host:port (default 127.0.0.1:8080), so it is not enforced loopback. Close by validating a loopback address in config."
+
+[[allow]]
+path = "crates/framework/spot-winsvc/src/upgrade.rs"
+kind = "gap"
+tracked_by = "WP-SEC-09.T6"
+owner_wp = "WP-WIN"
+reason = "probe_health_ready connects to the same configured health address as app.rs; same fix."

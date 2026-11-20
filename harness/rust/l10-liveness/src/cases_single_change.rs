@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::change::{AddDocTypeDef, Change, FieldSpecInput, Refusal, SetProperty};
 use crate::checks::{apply_ok, apply_refused, check, check_eq, probe};
-use crate::{LivenessHost, Probe, ProbeOutcome, SEQUENTIAL_BUDGET};
+use crate::{LivenessHost, Probe, ProbeOutcome};
 
 // -------------------------------------------------------------------------------------------
 // S01..S08
@@ -490,7 +490,7 @@ pub(super) fn s12_reader_snapshot_consistency(
 }
 
 /// S13 — ADR-05: 200 sequential changes complete, each within the generous per-change budget
-/// the README states ([`SEQUENTIAL_BUDGET`]). Wall time is recorded in the report; the gate is
+/// the README states ([`crate::SEQUENTIAL_BUDGET`]). Wall time is recorded in the report; the gate is
 /// only the gross bound (the README explains why: liveness, not speed).
 pub(super) fn s13_two_hundred_changes_budget(
     host: &mut dyn LivenessHost,
@@ -510,9 +510,10 @@ pub(super) fn s13_two_hundred_changes_budget(
             .apply(&change)
             .map_err(|e| format!("change {k} refused: {e}"))?;
         let per_change = change_at.elapsed();
-        if per_change > SEQUENTIAL_BUDGET {
+        let budget = host.per_change_budget();
+        if per_change > budget {
             return Err(format!(
-                "change {k} took {per_change:?}, above the {SEQUENTIAL_BUDGET:?} budget"
+                "change {k} took {per_change:?}, above the {budget:?} budget"
             ));
         }
         if first_version.is_none() {
@@ -526,7 +527,8 @@ pub(super) fn s13_two_hundred_changes_budget(
         "the recorded versions line up with the final one",
     )?;
     Ok(vec![format!(
-        "200 changes in {total:?} (per-change bound {SEQUENTIAL_BUDGET:?})"
+        "200 changes in {total:?} (per-change bound {:?})",
+        host.per_change_budget()
     )])
 }
 

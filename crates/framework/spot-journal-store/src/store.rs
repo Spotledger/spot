@@ -91,9 +91,18 @@ pub fn etag(bytes: &[u8]) -> String {
 ///   whose keys start with `prefix` and sort strictly after `after`, in ascending byte order. A
 ///   page shorter than `limit` is the end of the listing; asking again with the last key as
 ///   `after` continues it.
-/// * **Deletion is narrow.** [`JournalStore::delete`] exists for tail chunks after compaction.
-///   Anything under `segments/` or `snapshots/` is [`StoreError::DeleteRefused`]: the sealed
-///   record is kept forever.
+/// * **Deletion is narrow, in three rules.**
+///   1. [`JournalStore::delete`] exists for tail chunks after compaction. Anything under
+///      `segments/` or `snapshots/` is [`StoreError::DeleteRefused`]: the sealed record is kept
+///      forever, and `delete` is never loosened for a caller that wants to prune.
+///   2. [`JournalStore::delete_snapshot`] removes one object inside a snapshot prefix that the
+///      caller names by its full key, so snapshot retention can be applied. Segments, manifests,
+///      tail chunks, blobs and a bare snapshot prefix are [`StoreError::DeleteRefused`]; a key
+///      outside the layout (including a traversal or a look-alike prefix) is
+///      [`StoreError::KeyInvalid`]; nothing is removed by prefix, pattern or listing.
+///   3. A store that does not implement `delete_snapshot` refuses it (the trait's default body),
+///      so an implementer written before the method existed keeps compiling and keeps every
+///      snapshot.
 /// * **A key that is not there is `None`, not an error** for [`JournalStore::get`] and
 ///   [`JournalStore::head`]; a failed [`JournalStore::delete`] of a missing key is
 ///   [`StoreError::NotFound`].
@@ -151,6 +160,23 @@ pub trait JournalStore: Send + Sync {
     /// `segments/` or `snapshots/`, [`StoreError::NotFound`] when there is nothing to remove,
     /// [`StoreError::Io`] when the backend fails.
     fn delete<'a>(&'a self, key: &'a str) -> StoreFuture<'a, ()>;
+
+    /// Removes the one snapshot object at `key` (retention, never a segment or a manifest).
+    ///
+    /// The default body refuses, so a store opts in to snapshot deletion explicitly.
+    ///
+    /// # Errors
+    /// [`StoreError::KeyInvalid`] outside the layout, [`StoreError::DeleteRefused`] for a key
+    /// that is not an object inside a snapshot prefix (or when the store does not support
+    /// snapshot deletion), [`StoreError::NotFound`] when there is nothing to remove,
+    /// [`StoreError::Io`] when the backend fails.
+    fn delete_snapshot<'a>(&'a self, key: &'a str) -> StoreFuture<'a, ()> {
+        Box::pin(async move {
+            Err(StoreError::DeleteRefused {
+                key: key.to_owned(),
+            })
+        })
+    }
 }
 
 /// Refuses a key that is not a canonical journal key, or a replacement the rules do not allow.
@@ -180,6 +206,18 @@ pub(crate) fn guard_delete(key: &str) -> Result<Key, StoreError> {
         });
     }
     Ok(parsed)
+}
+
+/// The guard [`JournalStore::delete_snapshot`] applies before touching the backend: the key must
+/// be canonical and name one object inside a snapshot prefix.
+pub(crate) fn guard_delete_snapshot(key: &str) -> Result<Key, StoreError> {
+    let parsed = Key::parse(key)?;
+    match &parsed {
+        Key::Snapshot(snapshot) if snapshot.name.is_some() => Ok(parsed),
+        _ => Err(StoreError::DeleteRefused {
+            key: key.to_owned(),
+        }),
+    }
 }
 
 /// Applies [`JournalStore::list`]'s filter-and-page rule to a listing of keys.

@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 use spot_conditions::{ConditionEngine, MemorySink, Registry};
 use spot_events_contract::envelope::Position;
 use spot_image_upcast::Registry as UpcastRegistry;
-use spot_journal_audit_run::AuditOptions;
 use spot_journal_audit_run::memory::{MemoryLive, MemoryScratch};
+use spot_journal_audit_run::{AuditOptions, EventClassifier};
 use spot_journal_manifest::{Manifest, SegmentSummary, VerifyingKeys, append_segments, sign};
 use spot_journal_rebuild_plan::SegmentRange;
 use spot_journal_segment::{SealedSegment, SegmentConfig, SegmentWriter};
@@ -56,6 +56,27 @@ fn line(n: u64, version: u64, body: &Value, position: Position) -> String {
     .to_string()
 }
 
+/// A non-state entry (a fact on `topic`) at `position`: it changes no record.
+fn topic_line(topic: &str, position: Position) -> String {
+    json!({
+        "event_id": uuid(1_000_000 + position.seq),
+        "topic": topic,
+        "schema_version": 1,
+        "source_id": SOURCE,
+        "position": {"generation": position.generation, "seq": position.seq},
+        "transaction": uuid(2_000_000 + position.seq),
+        "ordinal": 0,
+        "subject": {"entity": "account", "id": uuid(1)},
+        "meta": {
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "actor": {"kind": "system", "component": "scheduler"},
+            "correlation_id": uuid(3_000_000 + position.seq),
+        },
+        "data": {"note": "a fact, not a state"},
+    })
+    .to_string()
+}
+
 fn signing_key() -> SigningKey {
     SigningKey::from_bytes(&[1; 32])
 }
@@ -66,6 +87,8 @@ pub(crate) struct Journal {
     pub(crate) tenant: String,
     pub(crate) store: Arc<MemoryStore>,
     records: u64,
+    /// Whether the last position is a non-state entry on an application topic.
+    with_topic: bool,
     segments: Vec<SealedSegment>,
     keys: Arc<VerifyingKeys>,
 }
@@ -76,8 +99,29 @@ fn body(n: u64) -> Value {
 
 impl Journal {
     pub(crate) fn new(rt: &tokio::runtime::Runtime, tenant: &str, records: u64) -> Self {
+        Self::build(rt, tenant, records, None)
+    }
+
+    /// Like [`Journal::new`], with one more entry after the records: a fact on `topic`, which the
+    /// platform registry does not know when `topic` is an application topic.
+    pub(crate) fn with_topic(
+        rt: &tokio::runtime::Runtime,
+        tenant: &str,
+        records: u64,
+        topic: &str,
+    ) -> Self {
+        Self::build(rt, tenant, records, Some(topic))
+    }
+
+    fn build(
+        rt: &tokio::runtime::Runtime,
+        tenant: &str,
+        records: u64,
+        extra_topic: Option<&str>,
+    ) -> Self {
         let mut segments: Vec<SealedSegment> = Vec::new();
-        let all: Vec<u64> = (1..=records).collect();
+        let total = records + u64::from(extra_topic.is_some());
+        let all: Vec<u64> = (1..=total).collect();
         for (chunk_index, chunk) in all.chunks(2).enumerate() {
             let mut config = match segments.last() {
                 Some(previous) => SegmentConfig::after(SOURCE, 1, previous.hash),
@@ -88,9 +132,11 @@ impl Journal {
             for (offset, n) in chunk.iter().enumerate() {
                 let seq = 1 + (chunk_index * 2 + offset) as u64;
                 let position = Position { generation: 1, seq };
-                writer
-                    .push(position, line(*n, 1, &body(*n), position).as_bytes())
-                    .unwrap();
+                let text = match extra_topic {
+                    Some(topic) if *n > records => topic_line(topic, position),
+                    _ => line(*n, 1, &body(*n), position),
+                };
+                writer.push(position, text.as_bytes()).unwrap();
             }
             segments.push(writer.seal(["v1"]).unwrap());
         }
@@ -132,6 +178,7 @@ impl Journal {
             tenant: tenant.to_owned(),
             store,
             records,
+            with_topic: extra_topic.is_some(),
             segments,
             keys: Arc::new(keys),
         }
@@ -141,6 +188,9 @@ impl Journal {
         let mut live = MemoryLive::new(self.tenant.as_str());
         for n in 1..=self.records {
             live.put(n, "account", &uuid(n), 1, &body(n));
+        }
+        if self.with_topic {
+            live.set_head(spot_journal_audit::Position::new(1, self.records + 1));
         }
         live
     }
@@ -154,7 +204,10 @@ impl Journal {
             1,
             &json!({"name": "SECRET-TAMPERED"}),
         );
-        live.set_head(spot_journal_audit::Position::new(1, self.records));
+        live.set_head(spot_journal_audit::Position::new(
+            1,
+            self.records + u64::from(self.with_topic),
+        ));
         live
     }
 
@@ -183,6 +236,17 @@ impl Journal {
     /// Inputs with the given live side; `truncate` drops the last segment from the plan, so the
     /// rebuild cannot reach the live head.
     pub(crate) fn inputs(&self, live: MemoryLive, truncate: bool) -> TenantInputs {
+        self.inputs_with(live, truncate, None, true)
+    }
+
+    /// Inputs with this tenant's own classifier and policy.
+    pub(crate) fn inputs_with(
+        &self,
+        live: MemoryLive,
+        truncate: bool,
+        classifier: Option<Arc<dyn EventClassifier + Send + Sync>>,
+        strict_topics: bool,
+    ) -> TenantInputs {
         TenantInputs {
             options: self.options(truncate),
             live: Box::new(live),
@@ -191,6 +255,8 @@ impl Journal {
             manifest_keys: Arc::clone(&self.keys),
             snapshot_keys: Arc::new(NoSnapshots),
             registry: Rc::new(UpcastRegistry::new()),
+            classifier,
+            strict_topics,
         }
     }
 }

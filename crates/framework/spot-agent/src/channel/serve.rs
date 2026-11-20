@@ -12,12 +12,17 @@ use super::client::{ChannelError, Client};
 use super::intake::{Pipeline, PipelineParts};
 use super::store::{FileCommandStore, FileNonceStore, nonce_path};
 use super::transport::{TlsTransport, Transport, parse_pem_certificates};
+use crate::audit::event_record;
 use crate::config::AgentConfig;
 use crate::enrol::EnrolGateway;
 use crate::error::AgentError;
 use crate::logging::{Logger, build_redactor};
 use crate::run::{Runtime, Shutdown};
 use crate::state::{StateDir, atomic_write};
+use crate::update::host::running_version;
+use crate::update::schedule::{ReportSink, SAFE_POINT_POLL, UpdateLoop, run_update_loop};
+use crate::update::{HostParts, HostUpdate};
+use spot_agent_core::ResultLog as _;
 
 /// The persisted `status` data.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -238,24 +243,40 @@ pub async fn run_loop(ctx: LoopCtx) -> Result<LoopEnd, AgentError> {
     }
 }
 
-/// The TLS enrolment transport for `url`: trusts exactly the certificates in the CA file.
+/// The TLS transport for `url`. With a CA file the channel is pinned: exactly the
+/// certificates in the file are trusted and the system roots are not consulted. Without one
+/// the system trust store is used.
 ///
 /// # Errors
-/// [`AgentError::Transport`] when no CA file is given (there is no system trust store
-/// fallback) or it is unusable.
+/// [`AgentError::Transport`] when the CA file is unreadable or holds no certificate, or when
+/// no system trust store can be read.
+pub fn build_transport(
+    url: &str,
+    ca: Option<&std::path::Path>,
+) -> Result<Arc<dyn Transport>, AgentError> {
+    match ca {
+        Some(path) => {
+            let pem = std::fs::read_to_string(path)
+                .map_err(|_| AgentError::Transport("cannot read the CA file".to_owned()))?;
+            let _ = parse_pem_certificates(&pem)?;
+            Ok(Arc::new(TlsTransport::new(url, &pem)?))
+        }
+        None => Ok(Arc::new(TlsTransport::with_system_roots(
+            url,
+            super::sysroots::system_roots()?,
+        )?)),
+    }
+}
+
+/// The TLS enrolment transport for `url` (see [`build_transport`] for the trust modes).
+///
+/// # Errors
+/// As [`build_transport`].
 pub fn enrol_gateway(
     url: &str,
     ca: Option<&std::path::Path>,
 ) -> Result<Box<dyn EnrolGateway>, AgentError> {
-    let ca = ca.ok_or_else(|| {
-        AgentError::Transport(
-            "--ca is required: the agent has no system trust store fallback".to_owned(),
-        )
-    })?;
-    let pem = std::fs::read_to_string(ca)
-        .map_err(|_| AgentError::Transport("cannot read the CA file".to_owned()))?;
-    let _ = parse_pem_certificates(&pem)?;
-    let transport: Arc<dyn Transport> = Arc::new(TlsTransport::new(url, &pem)?);
+    let transport = build_transport(url, ca)?;
     Ok(Box::new(super::client::HttpsEnrolGateway::new(transport)))
 }
 
@@ -266,16 +287,12 @@ pub fn enrol_gateway(
 /// Configuration, state and transport errors; revocation ends with `Ok`.
 pub async fn serve(rt: Runtime) -> Result<(), AgentError> {
     let config: &AgentConfig = &rt.config;
-    let ca_path = config.ca.as_deref().ok_or_else(|| {
-        AgentError::ConfigInvalid(
-            "`ca` is required: there is no system trust store fallback".to_owned(),
-        )
-    })?;
-    let pem = std::fs::read_to_string(ca_path)
-        .map_err(|_| AgentError::ConfigInvalid("cannot read the CA file".to_owned()))?;
-    let transport: Arc<dyn Transport> = Arc::new(TlsTransport::new(&config.gateway, &pem)?);
+    let transport = build_transport(
+        &config.gateway,
+        config.ca.as_deref().map(std::path::Path::new),
+    )?;
     let client = Arc::new(Client::new(
-        transport,
+        transport.clone(),
         rt.key_store.clone(),
         rt.identity.agent_id.clone(),
     ));
@@ -298,7 +315,7 @@ pub async fn serve(rt: Runtime) -> Result<(), AgentError> {
         agent_id: rt.identity.agent_id.clone(),
         catalogue,
         trust: rt.trust.clone(),
-        policy: spot_agent_core::Policy::default(),
+        policy: rt.policy.clone(),
         nonce,
         critical: Box::new(|| Box::new(spot_agent_core::NoCritical)),
         log: rt.audit.clone(),
@@ -318,18 +335,94 @@ pub async fn serve(rt: Runtime) -> Result<(), AgentError> {
         "channel",
         "connecting outbound to the gateway (no listening port)",
     );
-    let end = run_loop(LoopCtx {
-        client,
-        pipeline,
-        state: rt.state.clone(),
-        logger: rt.logger.clone(),
-        shutdown: rt.shutdown.clone(),
-        poll_pause: Duration::from_secs(config.poll_seconds),
-        now: now_fn,
-        jitter,
-        max_polls: None,
-    })
-    .await?;
+    let update_loop =
+        build_update_loop(&rt, client.clone(), transport, &pipeline, &now_fn, &jitter);
+    let shutdown = rt.shutdown.clone();
+    let channel = async {
+        let end = run_loop(LoopCtx {
+            client,
+            pipeline,
+            state: rt.state.clone(),
+            logger: rt.logger.clone(),
+            shutdown: rt.shutdown.clone(),
+            poll_pause: Duration::from_secs(config.poll_seconds),
+            now: now_fn,
+            jitter,
+            max_polls: None,
+        })
+        .await;
+        // The update loop ends with the channel: a revoked agent must not keep checking.
+        shutdown.trigger();
+        end
+    };
+    let updates = async {
+        if let Some(ctx) = update_loop {
+            let _ = run_update_loop(ctx).await;
+        }
+    };
+    let (end, ()) = tokio::join!(channel, updates);
+    let end = end?;
     rt.logger.info("channel_end", &format!("{end:?}"));
     Ok(())
+}
+
+/// Builds the scheduled self-update check when `update_check_hours` is not 0. A failure to
+/// set it up is logged and the agent runs without self-update: the check is never a reason
+/// to stop the agent.
+fn build_update_loop(
+    rt: &Runtime,
+    client: Arc<Client>,
+    transport: Arc<dyn Transport>,
+    pipeline: &Arc<Pipeline>,
+    now: &Arc<dyn Fn() -> i64 + Send + Sync>,
+    jitter: &Arc<dyn Fn() -> u64 + Send + Sync>,
+) -> Option<UpdateLoop> {
+    let hours = rt.config.update_check_hours;
+    if hours == 0 {
+        rt.logger
+            .info("update_schedule", "scheduled update checks are off");
+        return None;
+    }
+    let running = match running_version() {
+        Ok(version) => version,
+        Err(error) => {
+            rt.logger.warn("update_schedule", &error.detail());
+            return None;
+        }
+    };
+    let action = Arc::new(HostUpdate::new(HostParts {
+        install_root: std::path::PathBuf::from(rt.config.install_root()),
+        state_root: rt.state.root().to_path_buf(),
+        client,
+        transport,
+        keys: rt.key_store.clone(),
+        agent_id: rt.identity.agent_id.clone(),
+        running,
+    }));
+    let audit = rt.audit.clone();
+    let agent = rt.identity.agent_id.clone();
+    let on_report: ReportSink = Arc::new(move |report, at| {
+        // Result codes and the outcome word only; the audit log never holds details.
+        let _ = audit.append(&event_record(
+            &agent,
+            "agent.update_check",
+            report.outcome(),
+            report.code,
+            at,
+        ));
+    });
+    let backlog = pipeline.clone();
+    let ctx = UpdateLoop {
+        action,
+        interval: Duration::from_secs(hours.saturating_mul(3600)),
+        logger: rt.logger.clone(),
+        shutdown: rt.shutdown.clone(),
+        now: now.clone(),
+        jitter: jitter.clone(),
+        safe_point: Arc::new(move || matches!(backlog.backlog(), Ok(0))),
+        on_report,
+        max_checks: None,
+        safe_point_poll: SAFE_POINT_POLL,
+    };
+    Some(ctx)
 }

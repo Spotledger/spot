@@ -25,6 +25,11 @@ pub struct TrustEntry {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustFile {
+    /// Set at enrolment, by the operator, on a host without hardware-backed keys: software
+    /// administrator keys are accepted and the audit log says so. Absent means `false`
+    /// (hardware-backed keys required). Only enrolment writes it; a rotation keeps it.
+    #[serde(default)]
+    pub software_keys_allowed: bool,
     /// The trusted administrator keys.
     pub admin_keys: Vec<TrustEntry>,
 }
@@ -55,17 +60,38 @@ pub fn parse_trust_anchor(text: &str) -> Result<Vec<[u8; 32]>, AgentError> {
 }
 
 impl TrustFile {
-    /// Builds the file from keys (software protection: the enrolment does not attest).
+    /// Builds the file from keys, recorded as software keys under the strict policy
+    /// (the enrolment does not attest).
     #[must_use]
     pub fn from_keys(keys: &[[u8; 32]]) -> Self {
+        Self::from_keys_with(keys, false, false)
+    }
+
+    /// Builds the file from keys with the protection the enrolment found: `hardware` is
+    /// true only when the identity key store is hardware-backed on this host.
+    /// `software_keys_allowed` is the operator's explicit choice, never a default.
+    #[must_use]
+    pub fn from_keys_with(keys: &[[u8; 32]], hardware: bool, software_keys_allowed: bool) -> Self {
+        let protection = if hardware { "hardware" } else { "software" };
         Self {
             admin_keys: keys
                 .iter()
                 .map(|k| TrustEntry {
                     public_key: STANDARD.encode(k),
-                    protection: "software".to_owned(),
+                    protection: protection.to_owned(),
                 })
                 .collect(),
+            software_keys_allowed,
+        }
+    }
+
+    /// The decision policy for this host: hardware-backed signers are required unless the
+    /// operator accepted software keys at enrolment. Nothing but this file changes it.
+    #[must_use]
+    pub fn to_policy(&self) -> spot_agent_core::Policy {
+        spot_agent_core::Policy {
+            require_hardware_keys: !self.software_keys_allowed,
+            ..spot_agent_core::Policy::default()
         }
     }
 

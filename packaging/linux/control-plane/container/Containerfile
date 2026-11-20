@@ -53,7 +53,7 @@ WORKDIR /var/lib/spot-control-plane
 
 # GET /cp/v1/live on the operator listener. The listener demands a client
 # certificate from the operator CA, so the probe uses a dedicated one mounted
-# read-only (see docs/control-plane-deploy.md); liveness needs no
+# read-only (see the control-plane deployment notes); liveness needs no
 # allow-list entry. The exec form needs no shell.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["/usr/bin/curl", "--fail", "--silent", "--show-error", \

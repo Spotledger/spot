@@ -32,6 +32,8 @@ thiserror = "2"
 [dev-dependencies]
 # Round-trip the wire and persisted types through JSON, as the transport and store will.
 serde_json = "1"
+# Property tests of the wire and the handshake (WP-CTL-09.T9); the version the sibling crates use.
+proptest = "1"
 
 [lints]
 workspace = true

@@ -449,9 +449,9 @@ op = "prepare"
 expect = { error = "unsupported" }
 
 [[case]]
-id = "sch-04-postgres-refuses-a-search-declaration"
+id = "sch-04-postgres-without-the-hook-refuses-a-search-declaration"
 rule = "SEM-SCH-04"
-title = "PostgreSQL refuses a search declaration with Unsupported until the projection exists (WP-STO-13.T1)"
+title = "PostgreSQL without the search hook installed refuses a search declaration with Unsupported; the cases in search.toml install it"
 scope = "postgres"
 catalog = "search"
 op = "prepare"

@@ -63,22 +63,15 @@ pub(crate) fn batch_in(generation: u64, batch_id: u64, first: u64, last: u64) ->
     }
 }
 
-/// The test tenant's journal key: a fixed KEK, so a reopened relay reads what the first wrote.
+/// The test tenant's journal key: the public test keys every caller shares, so a reopened relay
+/// reads what the first wrote.
 pub(crate) fn tail_keys() -> TailKeys {
-    keys_from(KEK_A)
+    TailKeys::for_tests(TENANT)
 }
 
 /// Another tenant's journal key.
 pub(crate) fn other_tail_keys() -> TailKeys {
-    keys_from(KEK_B)
-}
-
-const KEK_A: &str = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
-const KEK_B: &str = "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=";
-
-fn keys_from(base64: &str) -> TailKeys {
-    let provider = spot_secrets::EnvKey::from_base64(base64).expect("a 32 byte test key");
-    TailKeys::new(std::sync::Arc::new(provider))
+    TailKeys::for_tests("other-tenant")
 }
 
 pub(crate) fn cfg(durability: Durability) -> RelayConfig {

@@ -36,6 +36,7 @@ fn queries_stay_fast_on_ten_thousand_runs() {
                 FinishEvent {
                     outcome: Outcome::Verified,
                     at: 2_000 + i as i64,
+                    reason: None,
                 },
             ))
             .unwrap();

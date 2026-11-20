@@ -1,0 +1,23 @@
+kind = "doc_event"
+event = "before_save"
+pattern = "fetch-from fields and a computed title"
+[[before]]
+key = "c1"
+doctype = "customer"
+[before.fields]
+name = "Acme Traders"
+price_list = "Wholesale"
+address = "12 Canal Road, Karachi"
+tier = "gold"
+credit_limit = "1000.00"
+outstanding = "200.00"
+[input.fields]
+customer = "${c1}"
+order_date = "2026-11-02"
+[expect]
+ok = true
+host_calls = 1
+[expect.fields]
+price_list = "Wholesale"
+address = "12 Canal Road, Karachi"
+title = "Acme Traders / 2026-11-02"

@@ -10,6 +10,7 @@ mod policy_tests;
 mod property_tests;
 mod run_tests;
 mod send_tests;
+mod size_tests;
 mod store_down_tests;
 mod support;
 mod withdraw_tests;

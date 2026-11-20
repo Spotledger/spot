@@ -1,0 +1,11 @@
+{
+  "case": "own_runtime",
+  "entry": "generator_run",
+  "args": 4,
+  "expect": [
+    1,
+    2,
+    3,
+    4
+  ]
+}

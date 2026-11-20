@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # `spot console`
 
 An interactive or scripted session over one site's documents, as a named user. Use it to inspect and repair a site from the server without a browser.

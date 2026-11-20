@@ -53,6 +53,8 @@ use tokio::sync::watch;
 
 // The module files live in `secrets/` (the services directory is scanned flat by build.rs, so
 // the path is spelled out).
+#[path = "secrets/kms.rs"]
+pub mod kms;
 #[path = "secrets/rotate.rs"]
 mod rotate;
 #[path = "secrets/scan.rs"]

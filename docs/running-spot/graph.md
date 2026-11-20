@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Graph service (`[services.graph]`)
 
 The graph service answers `POST /api/v1/graph/query` for the signed-in user and keeps a per-site

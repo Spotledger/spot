@@ -185,6 +185,7 @@ where
             FinishEvent {
                 outcome,
                 at: ctx.now(),
+                reason: result.as_ref().err().map(|e| e.code().to_owned()),
             },
         )
         .await

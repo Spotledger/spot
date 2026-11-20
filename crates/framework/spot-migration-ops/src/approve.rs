@@ -31,11 +31,12 @@ use spot_migration_apply::BoxFuture;
 use spot_migration_approval::{Act, Checks, Identity, effective_risk};
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
-use crate::context::{LifecycleContext, PlanState, off_runtime};
+use crate::context::{AuditSpec, LifecycleContext, PlanState, off_runtime};
 use crate::error::LifecycleError;
 use crate::plan::{
     ApprovalView, check_site, load, map_approval, param, parse_stored, settle, subject,
 };
+use spot_migration_audit::{ApprovalDecision, ApprovalEvent};
 
 /// The result of `approve` or `reject`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,7 +65,7 @@ fn identity(ctx: &LifecycleContext) -> Result<Identity, LifecycleError> {
     })
 }
 
-fn decide(
+fn decide_body(
     ctx: &LifecycleContext,
     hash: &str,
     comment: &str,
@@ -142,6 +143,37 @@ fn decide(
         hash: hash.as_str().to_owned(),
         state,
         approvals: status.into(),
+    })
+}
+
+/// The decision under a run record: the plan's digest is on the record, and the decision is
+/// recorded as an approval event (the approver, the decision, the time; never the comment).
+fn decide(
+    ctx: &LifecycleContext,
+    hash: &str,
+    comment: &str,
+    approve: bool,
+) -> Result<DecisionReport, LifecycleError> {
+    let (digest, plan) = ctx.plan_audit(hash);
+    let verb = if approve { "approve" } else { "reject" };
+    ctx.audited_sync(AuditSpec::new(verb, digest, plan), |handle| {
+        let report = decide_body(ctx, hash, comment, approve)?;
+        if let Some(handle) = handle {
+            ctx.record_approval_sync(
+                &handle,
+                ApprovalEvent {
+                    approver: ctx.actor().user_id(),
+                    role: "approver".to_owned(),
+                    decision: if approve {
+                        ApprovalDecision::Approved
+                    } else {
+                        ApprovalDecision::Rejected
+                    },
+                    at: ctx.now(),
+                },
+            )?;
+        }
+        Ok(report)
     })
 }
 

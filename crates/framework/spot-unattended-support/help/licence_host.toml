@@ -1,0 +1,93 @@
+# Help for the licence_host error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "licence_host.egress_not_allowed"
+what_happened = "The control plane is not on this site's egress allow-list, so the licence cannot be renewed online."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Add the host:port the message names to the site's egress allow-list for the licence fetch, then restart.", "If it keeps happening, tell your administrator and quote the code licence_host.egress_not_allowed."]
+audience = "user"
+
+[[help]]
+code = "licence_host.fetch_malformed"
+what_happened = "The control plane's licence answer was not the documented shape."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Report to the operator of the control plane; the installed licence is unchanged.", "If it keeps happening, tell your administrator and quote the code licence_host.fetch_malformed."]
+audience = "admin"
+
+[[help]]
+code = "licence_host.fetch_none"
+what_happened = "The control plane has no licence for this tenant (none issued, or revoked)."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Ask the issuer for a licence for this tenant.", "If it keeps happening, tell your administrator and quote the code licence_host.fetch_none."]
+audience = "user"
+
+[[help]]
+code = "licence_host.fetch_unreachable"
+what_happened = "The control plane could not be reached for a licence renewal."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Nothing to do: the site keeps running and tries again; offline for the grace period is normal. Check the network if it persists.", "If it keeps happening, tell your administrator and quote the code licence_host.fetch_unreachable."]
+audience = "admin"
+
+[[help]]
+code = "licence_host.file_unsafe"
+what_happened = "A licence, key or state file is unreadable, malformed, too large, or writable by group or others."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Restore the file from its source and set its mode so only the owner can write it (for example 0644 or 0600).", "If it keeps happening, tell your administrator and quote the code licence_host.file_unsafe."]
+audience = "user"
+
+[[help]]
+code = "licence_host.invalid_setting"
+what_happened = "A [services.licence] setting is missing or out of range."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the setting the message names: control_plane is an https://host[:port] URL and needs host_cert, host_key and ca_file; required = true needs trusted_keys_file.", "If it keeps happening, tell your administrator and quote the code licence_host.invalid_setting."]
+audience = "user"
+
+[[help]]
+code = "licence_host.keys_invalid"
+what_happened = "The trusted issuer keys file is missing or malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Provide one line per key: `<key id> <64 hex digits> <valid_from> <valid_to or ->`.", "If it keeps happening, tell your administrator and quote the code licence_host.keys_invalid."]
+audience = "user"
+
+[[help]]
+code = "licence_host.no_ports"
+what_happened = "services.licence.control_plane is set but the host provided no licence ports."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Run a host build that provides the licence ports, or clear control_plane to run offline.", "If it keeps happening, tell your administrator and quote the code licence_host.no_ports."]
+audience = "operator"
+
+[[help]]
+code = "licence_host.read_failed"
+what_happened = "A licence-client file could not be read."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the file exists, is readable by the site's user, and the disk is healthy, then retry.", "If it keeps happening, tell your administrator and quote the code licence_host.read_failed."]
+audience = "operator"
+
+[[help]]
+code = "licence_host.revoked"
+what_happened = "The control plane reports this licence revoked."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Contact the issuer; a revoked licence is never installed.", "If it keeps happening, tell your administrator and quote the code licence_host.revoked."]
+audience = "user"
+
+[[help]]
+code = "licence_host.tenant_mismatch"
+what_happened = "The licence names a different tenant than this site."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Install the licence issued for this tenant; ask the issuer for one if you hold only another tenant's file.", "If it keeps happening, tell your administrator and quote the code licence_host.tenant_mismatch."]
+audience = "user"
+
+[[help]]
+code = "licence_host.unlicensed"
+what_happened = "No licence is installed on this site and the site requires one, so only renewal is allowed."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Install a licence with `spot licence install --site <site> <file>` or renew from the control plane with `spot licence renew`.", "If it keeps happening, tell your administrator and quote the code licence_host.unlicensed."]
+audience = "user"
+
+[[help]]
+code = "licence_host.write_failed"
+what_happened = "A licence-client file could not be written."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the directory is writable by the site's user and the disk has space; the old file is untouched.", "If it keeps happening, tell your administrator and quote the code licence_host.write_failed."]
+audience = "operator"

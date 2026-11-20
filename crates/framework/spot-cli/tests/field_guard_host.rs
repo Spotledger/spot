@@ -136,11 +136,6 @@ async fn a_list_never_puts_a_protected_column_on_the_wire_for_a_caller_who_may_n
 
     for (method, path, body) in [
         ("POST", "/api/v1/resource/task/query", Some(json!({}))),
-        (
-            "POST",
-            "/api/v1/resource/task/query",
-            Some(json!({"fields": ["subject", "details"]})),
-        ),
         ("GET", "/api/v1/resource/task", None),
     ] {
         let viewer = w.call(&w.viewer, method, path, body).await;
@@ -149,6 +144,30 @@ async fn a_list_never_puts_a_protected_column_on_the_wire_for_a_caller_who_may_n
         assert!(text.contains("Guarded task"), "the row is listed: {text}");
         assert!(!text.contains(PLANTED), "a protected value leaked: {text}");
     }
+
+    // Projecting the protected column by name is answered as a name the DocType does not have
+    // (WP-SEC-04.T5): the refusal does not tell a hidden field from an absent one.
+    let hidden = w
+        .call(
+            &w.viewer,
+            "POST",
+            "/api/v1/resource/task/query",
+            Some(json!({"fields": ["subject", "details"]})),
+        )
+        .await;
+    let absent = w
+        .call(
+            &w.viewer,
+            "POST",
+            "/api/v1/resource/task/query",
+            Some(json!({"fields": ["subject", "no_such_field_zz"]})),
+        )
+        .await;
+    expect(&hidden, 422);
+    assert_eq!(code(&hidden), "document.unknown_field", "{}", wire(&hidden));
+    assert_eq!(hidden.status, absent.status);
+    assert_eq!(code(&hidden), code(&absent));
+    assert!(!wire(&hidden).contains(PLANTED), "{}", wire(&hidden));
     w.started.finish().await;
 }
 

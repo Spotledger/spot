@@ -7,7 +7,7 @@
 //!
 //! A call that overruns a limit kills only its own instance (the host returns the pool slot and
 //! nothing of the call survives). The runtime then writes an audit record naming the app and the
-//! limit, never the payload, counts `app_kills_total{app,limit}`, and feeds the circuit breaker:
+//! limit, never the payload, counts `spot_app_kills_total{app,limit}`, and feeds the circuit breaker:
 //! an app killed [`BreakerConfig::kills`] times inside the window is disabled until the next load.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -40,6 +40,9 @@ pub const CAPABILITY_DENIED: &str = "app.capability_denied";
 pub const FAILED: &str = "app.failed";
 /// `app.rejected`: the app returned its own error; the message is its sanitised text.
 pub const REJECTED: &str = "app.rejected";
+
+/// Counter: app calls killed for overrunning a limit, by `app` and `limit`.
+const APP_KILLS_TOTAL: &str = "spot_app_kills_total";
 
 /// The one export the hosted world calls: `on-event(event: string) -> result<string, error>`.
 pub const HOOK_EXPORT: &str = "on-event";
@@ -610,7 +613,7 @@ impl AppRuntime {
     }
 
     fn killed(&self, app: &str, limit: &'static str) {
-        metrics::counter!("app_kills_total", "app" => app.to_owned(), "limit" => limit)
+        metrics::counter!(APP_KILLS_TOTAL, "app" => app.to_owned(), "limit" => limit)
             .increment(1);
         self.event(app, "killed", Some(limit.to_owned()));
         let cfg = self.settings.breaker;

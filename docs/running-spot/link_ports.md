@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Link and metering port providers
 
 The link exchange, external link and usage emitter services run over ports the host provides. This page

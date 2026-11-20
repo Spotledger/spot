@@ -240,15 +240,39 @@ fn run_in<'js>(
         .into_function()
         .ok_or_else(|| Exception::throw_message(ctx, &format!("{MISSING_ENTRY}{entry}")))?;
     let argument = ctx.json_parse(args_text)?;
+    freeze_ctx(ctx, &argument)?;
     let mut returned: Value = function.call((argument,))?;
     if let Some(promise) = returned.as_promise().cloned() {
         returned = promise.finish::<Value>()?;
+    }
+    // A function (or any value JSON has no form for) is not a result: say so, never `null`.
+    if returned.is_function() {
+        return Err(Exception::throw_message(
+            ctx,
+            "the result is not JSON: a function cannot be returned",
+        ));
     }
     Ok(ctx
         .json_stringify(returned)?
         .map(|s| s.to_string())
         .transpose()?
         .unwrap_or_else(|| "null".to_owned()))
+}
+
+/// Freezes the `ctx` member of the entry argument (the caller, tenant and function the script
+/// runs as): a script that assigns to it fails inside the script instead of changing what the
+/// rest of the run believes about who it is.
+fn freeze_ctx<'js>(ctx: &Ctx<'js>, argument: &Value<'js>) -> rquickjs::Result<()> {
+    let Some(object) = argument.as_object() else {
+        return Ok(());
+    };
+    let inner: Value = object.get("ctx")?;
+    if inner.is_object() {
+        let global_object: Object = ctx.globals().get("Object")?;
+        let freeze: rquickjs::Function = global_object.get("freeze")?;
+        freeze.call::<_, Value>((inner,))?;
+    }
+    Ok(())
 }
 
 /// Marks the exception `run_in` throws for a missing entry point, so `translate` can tell it from

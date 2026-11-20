@@ -1,0 +1,109 @@
+openapi: 3.1.0
+info: {title: Fixture, version: 1.2.3}
+paths:
+  /items/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {$ref: '#/components/schemas/ItemId'}}
+    get:
+      operationId: item_get
+      summary: Fetch one item.
+      parameters:
+        - {name: fields, in: query, required: false, schema: {type: array, items: {type: string}}, style: form, explode: true}
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: The item.
+          headers: {ETag: {schema: {type: string}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Item'}}}
+        '304': {description: Not modified.}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: item_replace
+      summary: Replace an item.
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Item'}}}
+      responses:
+        '200':
+          description: Replaced.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Item'}}}
+        '422':
+          description: Invalid.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: item_delete
+      responses:
+        '204': {description: Gone.}
+        default: {$ref: '#/components/responses/Error'}
+  /items/{id}/attachment:
+    parameters:
+      - {name: id, in: path, required: true, schema: {$ref: '#/components/schemas/ItemId'}}
+    post:
+      operationId: item_attach
+      summary: Attach files.
+      requestBody:
+        content:
+          multipart/form-data: {schema: {type: object}}
+      responses:
+        '201': {description: Created.}
+        default: {$ref: '#/components/responses/Error'}
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Alive.
+          content: {application/json: {schema: {type: object, properties: {status: {const: live}}, required: [status], additionalProperties: false}}}
+components:
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string}}
+  responses:
+    Error:
+      description: Any error.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  schemas:
+    ItemId: {type: string, format: uuid}
+    Color: {type: string, enum: [red, green]}
+    Item:
+      type: object
+      description: One item.
+      required: [id, name]
+      additionalProperties: false
+      properties:
+        id: {$ref: '#/components/schemas/ItemId'}
+        name: {type: string}
+        note: {type: [string, "null"]}
+        color: {$ref: '#/components/schemas/Color'}
+        count: {type: integer, minimum: 0}
+        created_at: {type: string, format: date-time}
+        tags: {type: array, items: {type: string}}
+        kind: {const: item}
+    Bag:
+      type: object
+      additionalProperties: {type: integer}
+    Shape:
+      oneOf:
+        - {$ref: '#/components/schemas/Item'}
+        - {$ref: '#/components/schemas/Bag'}
+    Combined:
+      allOf:
+        - {$ref: '#/components/schemas/Item'}
+        - {type: object, properties: {extra: {type: boolean}}}
+    Keyed:
+      type: object
+      propertyNames: {pattern: '^[a-z]+$'}
+      additionalProperties: {type: string}
+    NotEmpty: {type: string, not: {const: ''}}
+    Opaque: {type: [string, integer, boolean, "null"]}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}}

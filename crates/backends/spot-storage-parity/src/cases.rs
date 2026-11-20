@@ -28,6 +28,10 @@ pub enum Op {
     /// `[op, entity]`. This is how SEM-HLD-03 is proven: a document created and deleted in one
     /// transaction leaves no entry (ADR-053 change feed).
     Changes,
+    /// Runs the graph traversal of `traversal`; the outcome is the reached nodes as
+    /// `entity:name@depth<predecessor:edge` lines, or the error kind. With `write` lines, those
+    /// documents are inserted in the same transaction first and the traversal must see them.
+    Traverse,
 }
 
 /// Which backends a case is run on. A construct the fake does not model is tested on PostgreSQL
@@ -92,6 +96,9 @@ pub struct Expect {
     /// No fixed answer: every backend must give what the reference (PostgreSQL) gives.
     #[serde(default)]
     pub same_as_reference: bool,
+    /// The reached nodes of a traversal, in order, as `entity:name@depth` for a start node and
+    /// `entity:name@depth<predecessor:edge` otherwise.
+    pub nodes: Option<Vec<String>>,
     /// Compare rows as a set (for results without a defined order).
     #[serde(default)]
     pub unordered: bool,
@@ -117,6 +124,18 @@ pub struct Case {
     /// what happens **without** an extension leaves this empty.
     #[serde(default)]
     pub extensions: Vec<String>,
+    /// The case needs the search projection: the PostgreSQL scratch database gets `pg_trgm` and
+    /// `unaccent`, and the backend is connected with the search hook installed before `prepare`
+    /// (ADR-087 section 7, SEM-SCH-04). Default false: a case that asserts what happens
+    /// **without** the hook leaves it out. Only a case scoped to `postgres` may ask, because the
+    /// fake has no inverted index.
+    #[serde(default)]
+    pub needs_search: bool,
+    /// Fields of `item` the harness puts in a protection group when it installs the search hook
+    /// (what the permission layer does for a protected field). Needs `needs_search`. A protected
+    /// field that is also declared searchable is refused by `prepare` (SEM-SCH-02).
+    #[serde(default)]
+    pub search_protected: Vec<String>,
     /// The tenant collation; default `en`.
     pub collation: Option<String>,
     /// Commands run before the operation; each must succeed.
@@ -138,7 +157,15 @@ pub struct Case {
     /// outcome.
     #[serde(default)]
     pub write: Vec<String>,
-    /// The catalogue: `main` (default) or `long` (63-character names).
+    /// Commands run after the setup that **must fail**: the write is rolled back and the failure
+    /// is not the verdict, the operation that follows is (a rolled-back write leaves nothing,
+    /// SEM-SCH-07). A command that succeeds makes the case broken.
+    #[serde(default)]
+    pub try_write: Vec<String>,
+    /// The traversal, for `op = "traverse"`.
+    pub traversal: Option<crate::dsl::TraversalSpec>,
+    /// The catalogue: `main` (default), `geo`, `range`, `search`, `search_rank` or `long`
+    /// (63-character names).
     pub catalog: Option<String>,
     /// The expected outcome.
     pub expect: Expect,
@@ -261,17 +288,39 @@ pub fn load_register(dir: &Path) -> Result<Vec<Divergence>, String> {
 pub fn check_shape(c: &Case) -> Result<(), String> {
     let kinds = [
         c.expect.rows.is_some(),
+        c.expect.nodes.is_some(),
         c.expect.error.is_some(),
         c.expect.ok,
         c.expect.same_as_reference,
     ];
     if kinds.iter().filter(|k| **k).count() != 1 {
         return Err(format!(
-            "case `{}` needs exactly one of expect.rows, expect.error, expect.ok, expect.same_as_reference",
+            "case `{}` needs exactly one of expect.rows, expect.nodes, expect.error, expect.ok, expect.same_as_reference",
             c.id
         ));
     }
-    c.scope()?;
+    let scope = c.scope()?;
+    if c.needs_search {
+        if scope != Scope::Postgres {
+            return Err(format!(
+                "case `{}` needs the search projection, so it must be scoped to `postgres`: the \
+                 fake has no inverted index (SEM-SCH-04)",
+                c.id
+            ));
+        }
+        if !matches!(c.catalog.as_deref(), Some("search" | "search_rank")) {
+            return Err(format!(
+                "case `{}` needs the search projection, so its catalog must be `search` or \
+                 `search_rank`",
+                c.id
+            ));
+        }
+    } else if !c.search_protected.is_empty() {
+        return Err(format!(
+            "case `{}` lists search_protected fields but does not set needs_search",
+            c.id
+        ));
+    }
     for e in &c.extensions {
         if !EXTENSIONS.contains(&e.as_str())
             && c.expect.error.as_deref() != Some(EXTENSION_NOT_ALLOWED)
@@ -292,9 +341,59 @@ pub fn check_shape(c: &Case) -> Result<(), String> {
         // deletes in one transaction.
         Op::Prepare => true,
         Op::Changes => !c.write.is_empty(),
+        Op::Traverse => c.traversal.is_some(),
     };
     if !ok {
         return Err(format!("case `{}` is missing what its `op` needs", c.id));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CASE: &str = r#"
+[[case]]
+id = "x"
+rule = "SEM-SCH-01"
+title = "t"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+search_protected = ["code"]
+try_write = ['b code="t:b"']
+op = "query"
+query = { select = ["code"] }
+expect = { rows = [] }
+"#;
+
+    #[test]
+    fn needs_search_and_try_write_parse_and_default_to_off() -> Result<(), String> {
+        let cases = parse_cases(CASE)?;
+        assert!(cases[0].needs_search);
+        assert_eq!(cases[0].search_protected, ["code"]);
+        assert_eq!(cases[0].try_write.len(), 1);
+        check_shape(&cases[0])?;
+        let plain = parse_cases(
+            "[[case]]\nid='y'\nrule='SEM-SCH-01'\ntitle='t'\nop='query'\nquery={select=['code']}\nexpect={rows=[]}\n",
+        )?;
+        assert!(
+            !plain[0].needs_search,
+            "a case that does not ask has no hook"
+        );
+        assert!(plain[0].try_write.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn needs_search_needs_postgres_scope_and_a_search_catalogue() -> Result<(), String> {
+        let both = parse_cases(&CASE.replace("scope = \"postgres\"\n", ""))?;
+        assert!(check_shape(&both[0]).is_err());
+        let main = parse_cases(&CASE.replace("catalog = \"search\"\n", ""))?;
+        assert!(check_shape(&main[0]).is_err());
+        let orphan = parse_cases(&CASE.replace("needs_search = true\n", ""))?;
+        assert!(check_shape(&orphan[0]).is_err());
+        Ok(())
+    }
 }

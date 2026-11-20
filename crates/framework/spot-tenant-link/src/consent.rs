@@ -21,7 +21,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use spot_iam_access::{AuthMethod, OperationName, StepUpPolicy};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, actor_ref};
 use crate::model::Party;
 use crate::util::{put_field, put_i64, put_u64};
 
@@ -139,7 +139,7 @@ impl StepUpGate for PolicyStepUp {
             || proof.method.is_weaker_than(self.minimum);
         if stale {
             return Err(Error::StepUpRequired {
-                actor: actor.to_owned(),
+                actor: actor_ref(actor),
             });
         }
         // The tenant policy may add the operation; where it does, its own answer is final.
@@ -151,7 +151,7 @@ impl StepUpGate for PolicyStepUp {
             self.policy
                 .require(&proof.operation, last, now)
                 .map_err(|_| Error::StepUpRequired {
-                    actor: actor.to_owned(),
+                    actor: actor_ref(actor),
                 })?;
         }
         Ok(())
@@ -214,7 +214,7 @@ impl Consent {
         }
         if self.proof.method == AuthMethod::Password {
             return Err(Error::StepUpRequired {
-                actor: self.actor.clone(),
+                actor: actor_ref(&self.actor),
             });
         }
         let now = i64::try_from(at / 1_000).map_err(|_| Error::ConsentInvalid {
@@ -240,7 +240,7 @@ impl Consent {
         self.check_shape(at)?;
         if at.saturating_sub(self.at) > policy.max_age_ms {
             return Err(Error::ConsentStale {
-                actor: self.actor.clone(),
+                actor: actor_ref(&self.actor),
                 max_age_ms: policy.max_age_ms,
             });
         }
@@ -284,11 +284,11 @@ fn actor_ok(actor: &str) -> bool {
 pub fn require_distinct(first: &Consent, second: &Consent) -> Result<()> {
     if first.party == second.party || first.actor == second.actor {
         return Err(Error::ConsentDuplicate {
-            actor: if first.actor == second.actor {
-                first.actor.clone()
+            actor: actor_ref(if first.actor == second.actor {
+                &first.actor
             } else {
-                second.actor.clone()
-            },
+                &second.actor
+            }),
         });
     }
     Ok(())

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Planning a migration: `spot migrate-plan`
 
 A plan says what an upgrade will do, how risky it is and how long it will take, **before**

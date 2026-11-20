@@ -7,6 +7,7 @@ mod fixture;
 mod fork_tests;
 mod property_tests;
 mod run_tests;
+mod topic_tests;
 
 use std::future::Future;
 use std::task::{Context, Poll, Waker};

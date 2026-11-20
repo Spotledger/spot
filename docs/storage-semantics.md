@@ -208,21 +208,24 @@ run on PostgreSQL too, and the change-feed rule of a hold runs on both backends.
 
 ## Search
 
-Search is a read projection (ADR-087 section 7). No backend serves it yet: `spot-postgres`
-refuses a search declaration at `prepare` until WP-STO-13.T1 builds the projection, and the fake
-has no inverted index (SEM-SCH-04). What the storage layer does enforce today is the shared
-validation: a search term is accepted only over fields the entity declares searchable, and a rank
-is valid only as a whole `order_by` key. The behaviour cases arrive with the projection; until
-then the rules that need it are proven by the refusal cases, which fail the moment a backend
-starts serving search without semantics to match.
+Search is a read projection (ADR-087 section 7). PostgreSQL serves it through the
+`spot-pg-search` hook, which a host installs before `prepare`; the parity cases in
+`cases/search.toml` install it the same way (`needs_search`) and run against a real
+`spot_search_doc`. A backend without the hook refuses a search declaration (the case that proves it
+sets no `needs_search`), and the fake has no inverted index (SEM-SCH-04). The storage level is
+permission-free: a field outside the declaration cannot be matched, and who may read a field is
+decided above storage.
 
 | id | status | rule | source |
 | --- | --- | --- | --- |
 | SEM-SCH-01 | decided | Search matches only over fields declared searchable, and a term narrower than a stop word matches nothing rather than everything. | ADR-087 section 7.6 |
 | SEM-SCH-02 | decided | A protected field never enters a search projection, so it cannot affect a match or a rank. | ADR-087 section 7.7 |
 | SEM-SCH-03 | decided | SearchRank is refused outside order_by with InvalidQuery. | ADR-087 section 7.6 |
-| SEM-SCH-04 | decided | The fake answers Unsupported for Search and SearchRank, advertised by Capabilities; it has no inverted index. Search cases run on real PostgreSQL with pg_trgm and unaccent only. Decided 27 Oct 2026 (option B). | ADR-087 section 7.9 |
-| SEM-SCH-05 | decided | A search naming a protected field is refused with permission.field_denied in v1. | ADR-087 section 7.7 |
+| SEM-SCH-04 | decided | The fake answers Unsupported for Search and SearchRank, advertised by Capabilities; it has no inverted index. Search cases run on real PostgreSQL with pg_trgm and unaccent only, with the projection installed (needs_search); a case without the hook asserts the refusal. Decided 27 Oct 2026 (option B). | ADR-087 section 7.9 |
+| SEM-SCH-05 | decided | A search naming a protected field is refused with permission.field_denied in v1. At the permission-free storage level the same search is refused as InvalidQuery, because the field is not declared searchable. | ADR-087 section 7.7 |
+| SEM-SCH-06 | decided | The query text is folded the way the projection folds stored text: case and accents do not change a match (Berlín and berlin find each other); equality and ordering elsewhere stay accent-sensitive. | ADR-087 section 7.6; SEM-TXT-03 |
+| SEM-SCH-07 | decided | The projection is maintained in the write's own transaction: a committed insert is found, an update replaces the old words with the new, a delete removes the document, and a rolled-back write leaves nothing to find. | ADR-087 section 7.3 |
+| SEM-SCH-08 | decided | A rank is an ordering key only: documents order by rank descending (a weight A field outranks a weight D field, more occurrences outrank fewer) and ties break by primary key ascending; a rank value is never compared. | ADR-087 section 7.3 |
 
 ## Extensions
 
@@ -252,3 +255,20 @@ listed one that no longer differs, so the register cannot rot.
 Adding a decided rule without a case fails the build. A rule's status changes only by the
 lead's decision; an implementer never turns an `open` rule into a `decided` one, and never
 loosens an expectation to make a backend pass.
+
+## Graph traversal
+
+A traversal walks link fields breadth first (ADR-50, `contracts/storage/src/graph.rs`). The fake and
+PostgreSQL must answer every traversal question identically; the cases in `cases/graph.toml` and
+the seeded differential test `tests/graph_differential.rs` hold them to it.
+
+| id | status | rule | source |
+| --- | --- | --- | --- |
+| SEM-GRA-01 | decided | Each node is reported once, at its smallest depth from a start node; start nodes are at depth 0; a start node that does not exist is left out. | contracts/storage graph.rs |
+| SEM-GRA-02 | decided | Nodes come ordered by depth, then entity, then id. | contracts/storage graph.rs |
+| SEM-GRA-03 | decided | The predecessor of a node at depth d is the smallest node at depth d-1 that reaches it, by entity then id, with the edge type used from it. | contracts/storage graph.rs |
+| SEM-GRA-04 | decided | Cycles and self-loops terminate and report no node twice. | contracts/storage graph.rs |
+| SEM-GRA-05 | decided | Outgoing follows a link from its holder to its target, Incoming the other way, Both either way; a node reached both ways appears once. | contracts/storage graph.rs |
+| SEM-GRA-06 | decided | Only the named edge types are followed; the parent link of a child entity is an edge named parent. | contracts/storage graph.rs |
+| SEM-GRA-07 | decided | max_depth bounds the depth returned; max_nodes bounds the nodes reached, start nodes included, and more fails with TraversalTooLarge instead of truncating. | contracts/storage graph.rs |
+| SEM-GRA-08 | decided | An edge that is not a link field of the catalogue, a depth of 0 or above 64, an empty edge list or zero max_nodes is refused with InvalidQuery. | contracts/storage graph.rs |

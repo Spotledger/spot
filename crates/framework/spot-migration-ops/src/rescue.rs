@@ -27,9 +27,10 @@ use std::sync::Arc;
 use spot_mgmt_ops::{OpId, Validated};
 use spot_migration_apply::BoxFuture;
 use spot_migration_plan::ReleasePlan;
+use spot_rescue::{RescueJournal, RunProgress};
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
-use crate::context::{LifecycleContext, PlanHash, PlanState, off_runtime};
+use crate::context::{AuditSpec, LifecycleContext, PlanHash, PlanState, off_runtime};
 use crate::error::LifecycleError;
 use crate::plan::{check_site, load, param, parse_stored};
 
@@ -101,6 +102,13 @@ pub trait RescueHost: Send + Sync {
     /// Whether the maintenance gate is closed and the effect hold is active.
     fn quiesced(&self) -> BoxFuture<'_, Result<bool, LifecycleError>>;
 
+    /// The durable rescue journal of this site, when the host keeps one (WP-MIG-10.T3): the verb
+    /// reads it to resume an unfinished rescue and to refuse starting a different one. A host
+    /// without a journal (`None`) cannot resume; build one with [`pg_journal`].
+    fn journal(&self) -> Option<Arc<dyn RescueJournal>> {
+        None
+    }
+
     /// Runs the rescue in `mode`: restore (or down-patches), re-entry, the invariant run, and only
     /// after it passes the gate opens. A crash is resumable.
     ///
@@ -139,6 +147,43 @@ pub struct RescueReport {
     pub state: PlanState,
     /// What the host did.
     pub run: HostRun,
+    /// Whether this call took an unfinished rescue over (a restart after a kill) instead of
+    /// starting a new one.
+    pub resumed: bool,
+    /// The attempt number read from the journal after the run (`1` for a first attempt; `0` when
+    /// the host keeps no journal).
+    pub attempt: u32,
+}
+
+/// The PostgreSQL rescue journal of `site`, with its control schema created first (the first rescue
+/// of a site creates it; a creation-time call would be cleaner, see the task report). A host
+/// returns it from [`RescueHost::journal`].
+///
+/// # Errors
+/// `migration.store_failed` when the schema cannot be created.
+pub async fn pg_journal(
+    pool: spot_rescue_pg::Pool,
+    site: &spot_core::SiteId,
+) -> Result<Arc<dyn RescueJournal>, LifecycleError> {
+    spot_rescue_pg::PgRescueSchema::new(pool.clone())
+        .prepare()
+        .await
+        .map_err(|_| LifecycleError::Store)?;
+    Ok(Arc::new(spot_rescue_pg::PgRescueJournal::new(
+        pool,
+        site.clone(),
+    )))
+}
+
+async fn progress_of(host: &Arc<dyn RescueHost>) -> Result<Option<RunProgress>, LifecycleError> {
+    match host.journal() {
+        None => Ok(None),
+        Some(journal) => journal
+            .entries()
+            .await
+            .map(|entries| Some(RunProgress::fold(entries)))
+            .map_err(|_| LifecycleError::Store),
+    }
 }
 
 /// The confirm token: a SHA-256 over the plan hash, the mode, the snapshot time and every count of
@@ -227,7 +272,39 @@ pub async fn preview(
     })
 }
 
+/// Rescues the plan `hash` in `mode` under a run record. The record's start is written before
+/// anything is touched (a rescue cannot start without audit); if the **finish** cannot be written
+/// the rescue's own result is returned and the finish waits for
+/// [`LifecycleContext::retry_pending_finishes`], with the warning code
+/// `migration_audit.finish_pending` visible through [`LifecycleContext::pending_finishes`].
+///
+/// # Errors
+/// As the body; `migration.store_failed` when the run cannot be begun.
+pub async fn rescue(
+    ctx: &Arc<LifecycleContext>,
+    host: &Arc<dyn RescueHost>,
+    hash: &str,
+    mode: Mode,
+    confirm: &str,
+    second_approver: &str,
+) -> Result<RescueReport, LifecycleError> {
+    let (digest, plan) = {
+        let (ctx, hash) = (Arc::clone(ctx), hash.to_owned());
+        off_runtime(move || ctx.plan_audit(&hash)).await?
+    };
+    let mut spec = AuditSpec::new("rescue", digest, plan);
+    spec.keep_finish_on_failure = true;
+    ctx.audited(spec, |_| {
+        rescue_body(ctx, host, hash, mode, confirm, second_approver)
+    })
+    .await
+}
+
 /// Rescues the plan `hash` in `mode`.
+///
+/// An unfinished rescue of the site (its journal says it started and neither opened the site nor
+/// halted) is **resumed** when it restores the same snapshot (`resumed: true`, `attempt` one more),
+/// and refuses a different one with `migration.rescue_refused` before the host runs anything.
 ///
 /// `second_approver` is the person who confirmed besides the actor; it must be named and differ
 /// from the actor (`migration.self_approval`). `confirm` must equal the token [`preview`] issues for
@@ -236,7 +313,7 @@ pub async fn preview(
 /// # Errors
 /// As [`preview`], plus `migration.self_approval`, `migration.rescue_refused` (token, gate or hold),
 /// `migration.apply_failed` (the host's run failed; the plan stays as it was).
-pub async fn rescue(
+async fn rescue_body(
     ctx: &Arc<LifecycleContext>,
     host: &Arc<dyn RescueHost>,
     hash: &str,
@@ -264,7 +341,19 @@ pub async fn rescue(
     if !host.quiesced().await? {
         return Err(LifecycleError::RescueRefused);
     }
+    // An unfinished rescue of this site is resumed when it is the same snapshot, and a different one
+    // is refused: two rescues must never interleave on one site.
+    let before = progress_of(host).await?;
+    let unfinished = before.as_ref().filter(|p| p.in_progress());
+    let resumed = match unfinished {
+        Some(progress) if progress.snapshot.as_deref() == Some(snapshot.id.as_str()) => true,
+        Some(_) => return Err(LifecycleError::RescueRefused),
+        None => false,
+    };
     let run = host.run(mode, &prepared.plan, &snapshot, ctx.now()).await?;
+    let attempt = progress_of(host)
+        .await?
+        .map_or(0, |progress| progress.attempt);
     let (ctx2, prepared2) = (Arc::clone(ctx), Arc::clone(&prepared));
     off_runtime(move || {
         ctx2.plans().mark_state(
@@ -279,6 +368,8 @@ pub async fn rescue(
         hash: prepared.hash.as_str().to_owned(),
         state: PlanState::Superseded,
         run,
+        resumed,
+        attempt,
     })
 }
 

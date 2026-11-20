@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// What the engine-backed adapters share.
 #[derive(Clone)]
 pub struct EngineAccess {
@@ -189,6 +188,42 @@ impl ScriptDocuments for EngineScriptDocuments {
         })
     }
 
+    /// The elevation flag of each enabled script of `doctype`, read from the same documents
+    /// [`ScriptDocuments::enabled_for`] reads. A flag that does not read (no reason, a reason of
+    /// the wrong length) is **not elevated**: default deny.
+    fn elevations_for<'a>(
+        &'a self,
+        doctype: &'a str,
+    ) -> BoxFuture<'a, AppResult<Vec<spot_server_scripts::elevation::ScriptElevation>>> {
+        Box::pin(async move {
+            let ids = self
+                .access
+                .ids_where("doctype", doctype)
+                .await
+                .map_err(store_failed)?;
+            let mut flags = Vec::new();
+            for id in ids {
+                let Some(doc) = self.access.load(id).await.map_err(store_failed)? else {
+                    continue;
+                };
+                let Ok(script) = ServerScript::from_document(&doc) else {
+                    continue;
+                };
+                if !script.enabled {
+                    continue;
+                }
+                if let Ok(Some(flag)) = spot_server_scripts::elevation::read_flag(&doc) {
+                    flags.push(spot_server_scripts::elevation::ScriptElevation {
+                        name: script.name,
+                        flag: Some(flag),
+                    });
+                }
+            }
+            flags.sort_by(|a, b| a.name.cmp(&b.name));
+            Ok(flags)
+        })
+    }
+
     /// The compile step stores the hash on the very document being saved, so there is nothing to
     /// write here: writing it back would re-enter the save.
     fn record_compile<'a>(
@@ -271,6 +306,38 @@ impl FieldView for AuthorizerView {
     }
 }
 
+/// Whether a user holds a named app permission, decided by the site's permission engine as it
+/// stands now (nothing is cached: a revoked grant takes effect on the next save). With no
+/// authorizer attached the answer is no.
+pub struct LivePermissionCheck {
+    live: Arc<SiteLive>,
+}
+
+impl LivePermissionCheck {
+    /// A check over the site's live authorizer.
+    #[must_use]
+    pub fn new(live: Arc<SiteLive>) -> LivePermissionCheck {
+        LivePermissionCheck { live }
+    }
+}
+
+impl PermissionCheck for LivePermissionCheck {
+    fn holds<'a>(&'a self, inv: &'a Invocation, permission: &'a str) -> BoxFuture<'a, bool> {
+        Box::pin(async move {
+            let Some(authorizer) = self.live.authorizer() else {
+                return false;
+            };
+            let principal = authorizer.principal_for(inv).await;
+            spot_document::engine::AppPermissionCheck::holds(
+                &spot_app_permissions::SnapshotAppPermissions::new(authorizer),
+                &principal,
+                permission,
+            )
+            .await
+        })
+    }
+}
+
 /// `host.call`: a whitelisted method, called through the engine as the triggering user.
 pub struct EngineMethodCaller {
     live: Arc<SiteLive>,
@@ -304,4 +371,3 @@ impl MethodCaller for EngineMethodCaller {
         })
     }
 }
-

@@ -24,6 +24,9 @@ async-trait = "0.1"
 thiserror = "2"
 
 [dev-dependencies]
+# The runbook tests check the condition names the pages use (WP-RTB-04.T5).
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+spot-conditions = { path = "../spot-conditions" }
 # The Linux and database modules, so the collision test assembles the real catalogue.
 spot-agent-linux = { path = "../spot-agent-linux" }
 spot-agent-runtime = { path = "../spot-agent-runtime" }

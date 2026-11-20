@@ -28,6 +28,15 @@ remedy = "Do not retry blindly: read the relay's own error code from the driver 
 since = "0.1.0"
 
 [[entry]]
+code = "journal_commit.entry_too_large"
+class = "none"
+summary = "A commit's journal entry alone would make a tail chunk of up to {bytes} bytes, over the {limit} byte limit of the relay, so the driver refused the request before it was queued and nothing was shipped."
+explanation_key = "error.journal_commit.entry_too_large"
+params = ["bytes", "limit"]
+remedy = "Do not retry the same request: split the change so each journal entry is smaller (an entry carries one record image, which should never approach the limit), or find out why the entry is that large. The sequence number was not consumed."
+since = "0.1.0"
+
+[[entry]]
 code = "journal_commit.invalid_setting"
 class = "none"
 summary = "A commit driver setting is outside its allowed range, for example a local commit deadline shorter than the acknowledgement deadline, so the driver was not built."

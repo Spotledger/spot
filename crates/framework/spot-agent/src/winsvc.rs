@@ -406,8 +406,144 @@ pub fn on_control(state: State, event: ControlEvent) -> Reaction {
     }
 }
 
+/// The SCM seam: one `sc.exe` call, argv only. The Windows build runs the real program;
+/// tests use a fake, so the install, uninstall, start, stop and status paths are tested on
+/// any host.
+pub trait Scm {
+    /// Runs `sc.exe args...` and returns its exit code and standard output.
+    ///
+    /// # Errors
+    /// An I/O error when the program cannot be run.
+    fn sc(&self, args: &[String]) -> std::io::Result<(i32, String)>;
+}
+
+/// `sc qc <name>` parsed; `None` when the service does not exist or the call failed.
+pub fn query_with(scm: &dyn Scm, name: &str) -> Option<Existing> {
+    let (code, text) = scm.sc(&["qc".to_owned(), name.to_owned()]).ok()?;
+    if code == 0 { parse_sc_qc(&text) } else { None }
+}
+
+/// Runs the commands in order and stops at the first failure. `sc stop` of a stopped
+/// service (1062) and `sc start` of a running one (1056) are fine.
+pub fn run_all_with(scm: &dyn Scm, commands: &[ScCommand]) -> i32 {
+    for command in commands {
+        let verb = command.first().map(String::as_str);
+        match scm.sc(command) {
+            Ok((0, _)) => {}
+            Ok((1062, _)) if verb == Some("stop") => {}
+            Ok((1056, _)) if verb == Some("start") => {}
+            Ok((5, _)) => return EXIT_ACCESS_DENIED,
+            _ => return EXIT_FAILED,
+        }
+    }
+    EXIT_OK
+}
+
+/// The commands that install (or update) the agent and helper services from `binary`,
+/// given what the SCM already holds.
+///
+/// # Errors
+/// [`PathRefused`] when `binary` is not a safe path.
+pub fn plan_install_all(
+    binary: &str,
+    existing_agent: Option<&Existing>,
+    existing_helper: Option<&Existing>,
+) -> Result<Vec<ScCommand>, PathRefused> {
+    check_binary_path(binary)?;
+    let mut plan = plan_install(existing_agent, &ServiceDef::agent(binary));
+    plan.extend(plan_install(existing_helper, &ServiceDef::helper(binary)));
+    Ok(plan)
+}
+
+/// The commands that remove both services.
+#[must_use]
+pub fn plan_uninstall_all(
+    existing_agent: Option<&Existing>,
+    existing_helper: Option<&Existing>,
+) -> Vec<ScCommand> {
+    let mut plan = plan_uninstall(existing_agent, SERVICE_NAME);
+    plan.extend(plan_uninstall(existing_helper, PRIV_SERVICE_NAME));
+    plan
+}
+
+/// Installs (or updates) the agent and helper services from `binary` through `scm`.
+pub fn install_with(scm: &dyn Scm, binary: &str) -> i32 {
+    let existing_agent = query_with(scm, SERVICE_NAME);
+    let existing_helper = query_with(scm, PRIV_SERVICE_NAME);
+    match plan_install_all(binary, existing_agent.as_ref(), existing_helper.as_ref()) {
+        Ok(plan) => run_all_with(scm, &plan),
+        Err(_) => EXIT_UNSAFE_PATH,
+    }
+}
+
+/// Removes both services through `scm`.
+pub fn uninstall_with(scm: &dyn Scm) -> i32 {
+    let existing_agent = query_with(scm, SERVICE_NAME);
+    let existing_helper = query_with(scm, PRIV_SERVICE_NAME);
+    run_all_with(
+        scm,
+        &plan_uninstall_all(existing_agent.as_ref(), existing_helper.as_ref()),
+    )
+}
+
+/// Starts the agent service (the helper starts with the machine; the agent asks it).
+pub fn start_with(scm: &dyn Scm) -> i32 {
+    run_all_with(scm, &[vec!["start".to_owned(), SERVICE_NAME.to_owned()]])
+}
+
+/// Stops the agent service.
+pub fn stop_with(scm: &dyn Scm) -> i32 {
+    run_all_with(scm, &[vec!["stop".to_owned(), SERVICE_NAME.to_owned()]])
+}
+
+/// The service state word of `sc query` output (`RUNNING`, `STOPPED`, ...), if any.
+#[must_use]
+pub fn parse_sc_state(output: &str) -> Option<String> {
+    output
+        .lines()
+        .find(|line| line.trim_start().starts_with("STATE"))
+        .and_then(|line| line.split_whitespace().last())
+        .map(str::to_owned)
+}
+
+/// The status line and exit code of the agent service: 0 when running, 3 when installed
+/// but not running or not installed (the `systemctl status` convention).
+pub fn status_with(scm: &dyn Scm) -> (i32, String) {
+    match scm.sc(&["query".to_owned(), SERVICE_NAME.to_owned()]) {
+        Ok((0, text)) => match parse_sc_state(&text) {
+            Some(state) if state == "RUNNING" => (EXIT_OK, format!("{SERVICE_NAME}: running")),
+            Some(state) => (3, format!("{SERVICE_NAME}: {}", state.to_ascii_lowercase())),
+            None => (EXIT_FAILED, format!("{SERVICE_NAME}: state unknown")),
+        },
+        Ok((1060, _)) => (3, format!("{SERVICE_NAME}: not installed")),
+        Ok((5, _)) => (EXIT_ACCESS_DENIED, "access denied: run elevated".to_owned()),
+        _ => (
+            EXIT_FAILED,
+            format!("{SERVICE_NAME}: the SCM cannot be queried"),
+        ),
+    }
+}
+
+/// One `sc.exe` command as a line a person can read (and paste): arguments with a space or
+/// a quote are wrapped in double quotes. For `--print`; nothing is ever run through a shell.
+#[must_use]
+pub fn render_sc(command: &ScCommand) -> String {
+    let mut line = String::from("sc.exe");
+    for argument in command {
+        line.push(' ');
+        if argument.contains([' ', '"']) {
+            line.push('"');
+            line.push_str(&argument.replace('"', "\\\""));
+            line.push('"');
+        } else {
+            line.push_str(argument);
+        }
+    }
+    line
+}
+
 #[cfg(windows)]
-pub use scm::{install, run_service, uninstall};
+pub use scm::{RealScm, install, run_service, start, status, stop, uninstall};
 
 /// The SCM-facing implementation (Windows only).
 #[cfg(windows)]
@@ -415,61 +551,51 @@ mod scm {
     use std::process::Command;
 
     use super::{
-        EXIT_ACCESS_DENIED, EXIT_FAILED, EXIT_OK, EXIT_UNSAFE_PATH, Existing, PRIV_SERVICE_NAME,
-        SERVICE_NAME, ServiceDef, check_binary_path, parse_sc_qc, plan_install, plan_uninstall,
+        EXIT_FAILED, Scm, install_with, start_with, status_with, stop_with, uninstall_with,
     };
 
-    fn sc(args: &[String]) -> std::io::Result<(i32, String)> {
-        let out = Command::new("sc.exe").args(args).output()?;
-        Ok((
-            out.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&out.stdout).into_owned(),
-        ))
-    }
+    /// The real `sc.exe`.
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct RealScm;
 
-    fn query(name: &str) -> Option<Existing> {
-        let (code, text) = sc(&["qc".to_owned(), name.to_owned()]).ok()?;
-        if code == 0 { parse_sc_qc(&text) } else { None }
-    }
-
-    fn run_all(commands: &[Vec<String>]) -> i32 {
-        for command in commands {
-            match sc(command) {
-                Ok((0, _)) => {}
-                // `sc stop` on a stopped service (1062) is fine.
-                Ok((1062, _)) if command.first().map(String::as_str) == Some("stop") => {}
-                Ok((5, _)) => return EXIT_ACCESS_DENIED,
-                _ => return EXIT_FAILED,
-            }
+    impl Scm for RealScm {
+        fn sc(&self, args: &[String]) -> std::io::Result<(i32, String)> {
+            let out = Command::new("sc.exe").args(args).output()?;
+            Ok((
+                out.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&out.stdout).into_owned(),
+            ))
         }
-        EXIT_OK
     }
 
     /// Installs (or updates) the agent and helper services from `binary`.
     #[must_use]
     pub fn install(binary: &str) -> i32 {
-        if check_binary_path(binary).is_err() {
-            return EXIT_UNSAFE_PATH;
-        }
-        for def in [ServiceDef::agent(binary), ServiceDef::helper(binary)] {
-            let code = run_all(&plan_install(query(def.name).as_ref(), &def));
-            if code != EXIT_OK {
-                return code;
-            }
-        }
-        EXIT_OK
+        install_with(&RealScm, binary)
     }
 
     /// Removes both services.
     #[must_use]
     pub fn uninstall() -> i32 {
-        for name in [SERVICE_NAME, PRIV_SERVICE_NAME] {
-            let code = run_all(&plan_uninstall(query(name).as_ref(), name));
-            if code != EXIT_OK {
-                return code;
-            }
-        }
-        EXIT_OK
+        uninstall_with(&RealScm)
+    }
+
+    /// Starts the agent service.
+    #[must_use]
+    pub fn start() -> i32 {
+        start_with(&RealScm)
+    }
+
+    /// Stops the agent service.
+    #[must_use]
+    pub fn stop() -> i32 {
+        stop_with(&RealScm)
+    }
+
+    /// The status line and exit code of the agent service.
+    #[must_use]
+    pub fn status() -> (i32, String) {
+        status_with(&RealScm)
     }
 
     /// Runs as the SCM service (needs the `scm` feature; without it the SCM would kill the

@@ -109,6 +109,15 @@ impl SchemaBackend for PgSchema {
         })
     }
 
+    fn retire_column<'a>(&'a self, doctype: &'a str, field: &'a str) -> SchemaFuture<'a, ()> {
+        Box::pin(async move {
+            self.backend
+                .retire_column(doctype, field)
+                .await
+                .map_err(|e| e.to_string())
+        })
+    }
+
     fn backfill<'a>(&'a self, wanted: &'a Catalog, fills: &'a [Fill]) -> SchemaFuture<'a, u64> {
         Box::pin(async move {
             let catalog = Arc::new(wanted.clone());

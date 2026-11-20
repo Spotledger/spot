@@ -3289,12 +3289,16 @@ dependencies = [
 name = "l3-http"
 version = "0.1.0"
 dependencies = [
+ "lopdf",
  "serde_json",
  "spot-auth",
  "spot-cli",
  "spot-core",
+ "spot-field-guard",
  "spot-login",
+ "spot-mail-fake-imap",
  "spot-postgres",
+ "spot-secrets",
  "spot-sessions",
  "tokio",
 ]
@@ -6516,6 +6520,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-app-testkit"
+version = "0.1.0"
+dependencies = [
+ "rust_decimal",
+ "serde_json",
+ "spot-app-api",
+ "spot-app-permissions",
+ "spot-core",
+ "spot-document",
+ "spot-functions",
+ "spot-manifest",
+ "spot-meta",
+ "spot-pack",
+ "spot-permissions",
+ "spot-platform-app",
+ "spot-sample-app",
+ "spot-scaffold",
+ "spot-seams",
+ "spot-storage-contract",
+ "spot-storage-fake",
+ "spot-ts",
+ "spot-ts-transpile",
+ "tempfile",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "spot-audit-chain"
 version = "0.1.0"
 dependencies = [
@@ -7018,6 +7050,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-bulk-actions"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde_json",
+ "sha2 0.10.9",
+ "spot-app-api",
+ "tokio",
+]
+
+[[package]]
 name = "spot-bulk-data"
 version = "0.1.0"
 dependencies = [
@@ -7033,6 +7076,7 @@ dependencies = [
  "spot-meta",
  "spot-perm-query",
  "spot-permissions",
+ "spot-spatial-text",
  "spot-storage-contract",
  "spot-storage-fake",
  "thiserror 2.0.21",
@@ -7168,6 +7212,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "base64 0.22.1",
+ "camino",
  "clap",
  "deadpool-postgres",
  "ed25519-dalek",
@@ -7234,6 +7280,7 @@ dependencies = [
  "spot-conditions",
  "spot-conditions-pg",
  "spot-connectors",
+ "spot-control-plane",
  "spot-controllers",
  "spot-coordinator",
  "spot-coordinator-pg",
@@ -7245,9 +7292,12 @@ dependencies = [
  "spot-data-policy",
  "spot-deep-access",
  "spot-deep-access-pg",
+ "spot-devserver",
+ "spot-devtools",
  "spot-discovery",
  "spot-doc-audit",
  "spot-document",
+ "spot-dts",
  "spot-durability-gate",
  "spot-edge-offline-host",
  "spot-edge-pg",
@@ -7279,6 +7329,7 @@ dependencies = [
  "spot-iam-roles",
  "spot-iam-scim",
  "spot-idempotency-pg",
+ "spot-image-upcast",
  "spot-import",
  "spot-installer",
  "spot-installer-pg",
@@ -7295,6 +7346,8 @@ dependencies = [
  "spot-journal-pii-secrets-pg",
  "spot-journal-privacy",
  "spot-journal-protect",
+ "spot-journal-rebuild",
+ "spot-journal-rebuild-host",
  "spot-journal-rebuild-plan",
  "spot-journal-recovery",
  "spot-journal-relay",
@@ -7304,14 +7357,18 @@ dependencies = [
  "spot-journal-snapshot-pg",
  "spot-journal-store",
  "spot-journal-verify",
+ "spot-license",
  "spot-lineage",
  "spot-link-exchange",
  "spot-link-external",
  "spot-link-transport",
  "spot-login",
  "spot-mail",
+ "spot-mail-intake",
+ "spot-mail-intake-pg",
  "spot-mail-queue",
  "spot-mail-queue-pg",
+ "spot-mail-render",
  "spot-manifest",
  "spot-mcp",
  "spot-meta",
@@ -7329,8 +7386,10 @@ dependencies = [
  "spot-migration-ops-pg",
  "spot-migration-plan",
  "spot-node-role-pg",
+ "spot-occupancy",
  "spot-offline-identity",
  "spot-offline-identity-adapters",
+ "spot-ops-signals",
  "spot-pack",
  "spot-partition",
  "spot-partition-pg",
@@ -7356,10 +7415,12 @@ dependencies = [
  "spot-rule-graph",
  "spot-sample-app",
  "spot-sandbox",
+ "spot-scaffold",
  "spot-scheduler",
  "spot-sealed-fields",
  "spot-seams",
  "spot-secrets",
+ "spot-secrets-kms",
  "spot-server-scripts",
  "spot-sessions",
  "spot-settings",
@@ -7374,6 +7435,7 @@ dependencies = [
  "spot-storage-contract",
  "spot-storage-fake",
  "spot-support-session",
+ "spot-sync-bootstrap",
  "spot-sync-catchup",
  "spot-sync-catchup-host",
  "spot-sync-closure",
@@ -7402,6 +7464,7 @@ dependencies = [
  "spot-throttle-coordinator",
  "spot-ts",
  "spot-ts-controllers",
+ "spot-ts-transpile",
  "spot-unattended-support",
  "spot-updater",
  "spot-views",
@@ -7417,6 +7480,7 @@ dependencies = [
  "toml 0.8.23",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
  "wat",
@@ -8137,6 +8201,7 @@ dependencies = [
  "hyper-util",
  "ipnet",
  "proptest",
+ "rcgen",
  "rustls",
  "serde",
  "spot-core",
@@ -8149,6 +8214,7 @@ dependencies = [
  "tracing",
  "url",
  "webpki-roots",
+ "zeroize",
 ]
 
 [[package]]
@@ -8304,9 +8370,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures-util",
+ "http",
+ "http-body-util",
  "object_store",
  "sha2 0.10.9",
  "spot-core",
+ "spot-egress",
  "tempfile",
  "thiserror 2.0.21",
  "time",
@@ -8739,8 +8808,11 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "spot-app-api",
+ "spot-bulk-data",
  "spot-document",
  "spot-meta",
+ "spot-spatial-text",
+ "spot-storage-contract",
  "thiserror 2.0.21",
  "time",
  "zip",
@@ -9081,7 +9153,6 @@ dependencies = [
  "spot-journal-segment",
  "spot-journal-snapshot",
  "spot-journal-store",
- "spot-secrets",
  "thiserror 2.0.21",
 ]
 
@@ -9293,11 +9364,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-l10-stack"
+version = "0.1.0"
+dependencies = [
+ "spot-app-api",
+ "spot-core",
+ "spot-customise",
+ "spot-document",
+ "spot-l10-liveness",
+ "spot-meta",
+ "spot-meta-live",
+ "spot-postgres",
+ "spot-seams",
+ "spot-storage-contract",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "spot-l3-documents"
 version = "0.1.0"
 dependencies = [
  "serde_json",
  "spot-app-api",
+ "tokio",
+]
+
+[[package]]
+name = "spot-l3-model"
+version = "0.1.0"
+dependencies = [
+ "spot-app-api",
+ "spot-document",
+ "spot-events-contract",
+ "spot-l7-engine",
+ "spot-l7-invariants",
+ "spot-postgres",
+ "spot-storage-contract",
+ "spot-storage-fake",
  "tokio",
 ]
 
@@ -9328,11 +9432,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-l7-events"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "spot-events-contract",
+ "spot-l7-engine",
+ "spot-l7-invariants",
+ "spot-postgres",
+ "spot-storage-contract",
+ "spot-storage-fake",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "spot-l7-invariants"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "spot-postgres",
+ "spot-storage-contract",
+ "spot-storage-fake",
+ "tokio",
+]
+
+[[package]]
+name = "spot-l8-engine-faults"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "spot-app-api",
+ "spot-document",
+ "spot-events-contract",
+ "spot-l7-engine",
+ "spot-l7-invariants",
+ "spot-l8-faults",
  "spot-postgres",
  "spot-storage-contract",
  "spot-storage-fake",
@@ -9366,6 +9504,28 @@ dependencies = [
  "spot-storage-contract",
  "spot-storage-fake",
  "tokio",
+]
+
+[[package]]
+name = "spot-l8-job-faults"
+version = "0.1.0"
+dependencies = [
+ "deadpool-postgres",
+ "serde_json",
+ "spot-app-api",
+ "spot-core",
+ "spot-document",
+ "spot-jobs",
+ "spot-jobs-pg",
+ "spot-l7-engine",
+ "spot-l7-invariants",
+ "spot-l8-faults",
+ "spot-postgres",
+ "spot-seams",
+ "spot-storage-contract",
+ "time",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -9431,6 +9591,7 @@ dependencies = [
 name = "spot-link-exchange"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -9637,6 +9798,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-mail-fake-imap"
+version = "0.1.0"
+dependencies = [
+ "rcgen",
+ "rustls",
+ "spot-mail",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "spot-mail-intake"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "hmac 0.12.1",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spot-coordinator",
+ "spot-core",
+ "spot-egress",
+ "spot-mail",
+ "spot-mail-intake",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "spot-mail-intake-pg"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "deadpool-postgres",
+ "spot-coordinator",
+ "spot-core",
+ "spot-mail",
+ "spot-mail-intake",
+ "spot-pg-migrate",
+ "spot-postgres",
+ "spot-storage-contract",
+ "time",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "spot-mail-queue"
 version = "0.1.0"
 dependencies = [
@@ -9671,6 +9883,19 @@ dependencies = [
  "time",
  "tokio",
  "tokio-postgres",
+]
+
+[[package]]
+name = "spot-mail-render"
+version = "0.1.0"
+dependencies = [
+ "rust_decimal",
+ "serde_json",
+ "spot-mail",
+ "spot-template",
+ "tempfile",
+ "time",
+ "tokio",
 ]
 
 [[package]]
@@ -9807,7 +10032,9 @@ dependencies = [
  "serde_json",
  "spot-agent-linux",
  "spot-agent-runtime",
+ "spot-conditions",
  "spot-mgmt-ops",
+ "spot-sync-conditions",
  "thiserror 2.0.21",
  "tokio",
 ]
@@ -9962,6 +10189,8 @@ dependencies = [
  "spot-migration-plan",
  "spot-permissions",
  "spot-rehearsal",
+ "spot-rescue",
+ "spot-rescue-pg",
  "spot-snapshot",
  "thiserror 2.0.21",
  "tokio",
@@ -10147,6 +10376,14 @@ dependencies = [
  "spot-quarantine",
  "spot-sync-protocol",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "spot-ops-signals"
+version = "0.1.0"
+dependencies = [
+ "metrics",
+ "spot-telemetry",
 ]
 
 [[package]]
@@ -10682,6 +10919,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-rescue-pg"
+version = "0.1.0"
+dependencies = [
+ "deadpool-postgres",
+ "serde_json",
+ "spot-core",
+ "spot-postgres",
+ "spot-rescue",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "spot-retrieval"
 version = "0.1.0"
 dependencies = [
@@ -10838,6 +11089,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-secrets-kms"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "hmac 0.12.1",
+ "http",
+ "rand 0.9.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spot-core",
+ "spot-egress",
+ "spot-secrets",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "url",
+ "zeroize",
+]
+
+[[package]]
 name = "spot-self-model"
 version = "0.1.0"
 dependencies = [
@@ -10864,14 +11138,18 @@ dependencies = [
 name = "spot-server-scripts"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "serde_json",
  "spot-app-api",
  "spot-controllers",
  "spot-core",
  "spot-document",
+ "spot-functions",
+ "spot-manifest",
  "spot-meta",
  "spot-money",
  "spot-permissions",
+ "spot-scheduler",
  "spot-seams",
  "spot-storage-contract",
  "spot-storage-fake",
@@ -10879,6 +11157,7 @@ dependencies = [
  "spot-ts-transpile",
  "time",
  "tokio",
+ "toml 0.8.23",
 ]
 
 [[package]]
@@ -11024,6 +11303,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spot-spatial-text"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "rust_decimal",
+ "spot-storage-contract",
+ "time",
+]
+
+[[package]]
 name = "spot-sso"
 version = "0.1.0"
 dependencies = [
@@ -11091,6 +11380,8 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "spot-l7-invariants",
+ "spot-pg-search",
  "spot-postgres",
  "spot-storage-contract",
  "spot-storage-fake",
@@ -11266,10 +11557,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "spot-journal-snapshot",
  "spot-pg-bridge",
  "spot-postgres",
  "spot-sync-bootstrap",
  "spot-sync-catchup",
+ "spot-sync-closure",
  "spot-sync-skew",
  "thiserror 2.0.21",
  "tokio",
@@ -11717,6 +12011,7 @@ name = "spot-tenant-link"
 version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -11807,6 +12102,7 @@ dependencies = [
  "rquickjs",
  "serde_json",
  "spot-app-api",
+ "spot-ts-transpile",
  "thiserror 2.0.21",
  "tokio",
 ]

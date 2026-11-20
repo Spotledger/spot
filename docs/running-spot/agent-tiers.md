@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Agent identity and tiers
 
 When an AI agent connects through the MCP endpoint (`docs/running-spot/mcp.md`) it is held to a
@@ -33,7 +35,7 @@ Registered agents are kept in three tables of the site's database, created at st
 
 ## What is refused, and how you see it
 
-Before every `tools/call`, the gate refuses, in this order, with a permission error and one stable code:
+Before every MCP tools/call request, the gate refuses, in this order, with a permission error and one stable code:
 
 1. `agent.suspended` / `agent.retired`: the agent may not act at all, from its next call.
 2. `agent.above_tier`: the tool needs more than the agent's tier. Tools are classified by name: reads

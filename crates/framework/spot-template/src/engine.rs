@@ -463,7 +463,8 @@ fn undefined_variable(
     line: usize,
 ) -> String {
     let expr = match (error.range(), compiled.get(name)) {
-        (Some(range), Some(entry)) => entry.source.get(range).map(str::to_owned),
+        (Some(range), Some(entry)) => filtered_input(&entry.source, range.start)
+            .or_else(|| entry.source.get(range).map(str::to_owned)),
         _ => None,
     }
     .or_else(|| {
@@ -488,6 +489,18 @@ fn undefined_variable(
         }
         None => "unknown".to_owned(),
     }
+}
+
+/// When the failing range starts at a filter (`value | money('PKR')` fails at `money(...)`), the
+/// expression the filter was applied to: the variable the author must define is the one it
+/// starts with, never the filter's name. `None` when the range is not a filter application.
+fn filtered_input(source: &str, start: usize) -> Option<String> {
+    let before = source.get(..start)?.trim_end();
+    let before = before.strip_suffix('|')?;
+    let open = before.rfind("{{")?;
+    let expr = &before[open + 2..];
+    // A `{{ … }}` that already closed belongs to an earlier expression.
+    (!expr.contains("}}")).then(|| expr.to_owned())
 }
 
 fn source_line(compiled: &HashMap<String, Compiled>, name: &str, line: usize) -> String {

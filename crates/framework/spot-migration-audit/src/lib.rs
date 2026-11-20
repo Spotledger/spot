@@ -87,7 +87,7 @@ pub use error::{MigrationAuditError, codes};
 pub use events::{
     ApplyEvent, ApprovalEvent, FinishEvent, RehearsalEvent, RunSpec, SUBJECT_DOCTYPE, kinds,
 };
-pub use explain::{Explanation, explain};
+pub use explain::{Explanation, explain, explain_evidence};
 pub use permit::{Permit, RUN_PERMISSION, RoleAccess, RunAccess, permit};
 pub use recorder::{ChainRunRecorder, RunHandle, RunRecorder};
 pub use run::{

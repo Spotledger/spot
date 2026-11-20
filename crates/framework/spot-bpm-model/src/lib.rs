@@ -47,6 +47,7 @@ pub mod model;
 pub mod text;
 pub mod tomlutil;
 pub mod validate;
+mod validate_trigger;
 
 pub use compile::{CompiledProcess, compile, compile_checked};
 pub use error::{ModelError, TextError};
@@ -55,10 +56,10 @@ pub use id::NodeId;
 pub use model::{
     AgentConfig, AllowAllMeta, CaseState, DecisionConfig, DocumentAction, DocumentConfig,
     DraftMode, Edge, EmptyMeta, FormConfig, IntegrationConfig, JoinRule, Limits, LogicConfig,
-    LogicType, MAX_LOOP_ITERATIONS, MetaView, Node, NodeKind, Participant, ParticipantKind,
-    Participants, Process, ProcessVersion, RejectAction, RetryPolicy, Rule, RunStatus,
-    SendMessageConfig, SubProcessConfig, TimeoutAction, TriggerConfig, TriggerType, UnknownNode,
-    VersionStatus, WaitConfig, WaitMessageConfig, WaitType,
+    LogicType, MAX_LOOP_ITERATIONS, MetaView, MissedPolicy, Node, NodeKind, Participant,
+    ParticipantKind, Participants, Process, ProcessVersion, RejectAction, RetryPolicy, Rule,
+    RunStatus, SendMessageConfig, SubProcessConfig, TimeoutAction, TriggerConfig, TriggerType,
+    UnknownNode, VersionStatus, WaitConfig, WaitMessageConfig, WaitType,
 };
 pub use text::{from_text, from_text_with_participants, to_text, to_text_with_participants};
 pub use validate::{Position, Problem, codes, position_of, validate, validate_version};

@@ -42,7 +42,18 @@ pub mod codes {
     /// A field the caller may not report on (the field guard's code, catalogued in
     /// `permission.toml`).
     pub const FIELD_DENIED: &str = "permission.field_denied";
+    /// The storage layer stopped the report's query at the site's statement timeout.
+    pub const TIMEOUT: &str = "report.timeout";
+    /// The database could not serve the query now (unreachable, a lock or a serialisation
+    /// conflict): retry. The client sees the contract's `server.unavailable`.
+    pub const UNAVAILABLE: &str = "report.unavailable";
+    /// Anything else the storage layer failed with. The client sees an internal error with no
+    /// detail.
+    pub const FAILED: &str = "report.failed";
 }
+
+/// The wait, in seconds, a client is told to leave before retrying an unavailable database.
+pub const UNAVAILABLE_RETRY_AFTER_SECS: u64 = 5;
 
 /// One report problem: its stable code, a plain-language message and, when it concerns one
 /// thing, the path it names.
@@ -52,6 +63,9 @@ pub struct ReportError {
     code: &'static str,
     message: String,
     path: Option<String>,
+    /// The stable storage code (`storage.statement_timeout`, ...) of the failure this error
+    /// hides. It is for the operator's log line, never for the client.
+    cause: Option<&'static str>,
 }
 
 impl ReportError {
@@ -61,7 +75,22 @@ impl ReportError {
             code,
             message: message.into(),
             path: None,
+            cause: None,
         }
+    }
+
+    /// This error, remembering the stable storage code of the failure behind it. The code is
+    /// logged by the host; it is not part of the client's answer.
+    #[must_use]
+    pub fn caused_by(mut self, storage_code: &'static str) -> Self {
+        self.cause = Some(storage_code);
+        self
+    }
+
+    /// The stable storage code of the failure behind this error, if it came from storage.
+    #[must_use]
+    pub fn cause(&self) -> Option<&'static str> {
+        self.cause
     }
 
     /// An error naming one path (`account.name`, `parameter \`company\``).
@@ -70,6 +99,7 @@ impl ReportError {
             code,
             message: message.into(),
             path: Some(path.into()),
+            cause: None,
         }
     }
 
@@ -109,6 +139,11 @@ impl ReportError {
                 }
                 e
             }
+            // The contract's own code, with its default message: nothing of the database leaks.
+            codes::UNAVAILABLE => ApiError::from_code(Code::ServerUnavailable).detail(
+                "retry_after",
+                serde_json::Value::from(UNAVAILABLE_RETRY_AFTER_SECS),
+            ),
             _ => ApiError::app(self.code, self.message.clone()),
         }
     }

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The management API (`[services.mgmt_api]`)
 
 The management API is the typed administrative interface the Admin Center console and `spot mgmt`

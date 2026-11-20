@@ -121,3 +121,35 @@ explanation_key = "error.report.columns_removed"
 params = []
 remedy = "The count is reported without naming the columns; ask an administrator for access."
 since = "0.1.0"
+
+# The three codes below are raised when a run reaches the database. They carry fixed texts: the
+# storage layer's own words never reach a client. A timeout and an internal failure are
+# rendered by the native API as app-coded errors; `report.unavailable` is the contract's
+# `server.unavailable` (503, Retry-After) and `api.rate_limited` (429) is the busy refusal.
+
+[[entry]]
+code = "report.timeout"
+class = "none"
+summary = "The report took longer than the site's statement timeout and was stopped."
+explanation_key = "error.report.timeout"
+params = []
+remedy = "Narrow the filters or the date range; an administrator can ask for a prepared or scheduled run."
+since = "0.1.0"
+
+[[entry]]
+code = "report.unavailable"
+class = "none"
+summary = "The database could not run the report now (unreachable, a lock timeout, a serialisation conflict); the client sees server.unavailable with Retry-After."
+explanation_key = "error.report.unavailable"
+params = []
+remedy = "Wait for Retry-After and run the report again; an operator checks the database if it persists."
+since = "0.1.0"
+
+[[entry]]
+code = "report.failed"
+class = "none"
+summary = "The report failed for a reason the client is not told; the log line with the request id carries the storage code."
+explanation_key = "error.report.failed"
+params = []
+remedy = "Report the request id to an administrator, who finds the storage code in the log (target spot::audit::report)."
+since = "0.1.0"

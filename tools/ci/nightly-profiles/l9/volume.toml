@@ -1,0 +1,14 @@
+# Data volume (WP-TST-15.T4): 10 million journal-line-equivalent parents seeded through the real
+# path, then lists, counts, the report, the lookup and posting at that volume.
+name = "volume"
+description = "10M-parent volume run, posting at 10 tx/s for 5 minutes, README tier M numbers"
+runner = "large"
+timeout_minutes = 600
+pr_gate = false
+test = "volume"
+l9_profile = "volume"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "volume", "--", "--nocapture"]
+artefacts = ["target/l9/volume.log"]
+
+[env]
+L9_VOLUME_PARENTS = "10000000"

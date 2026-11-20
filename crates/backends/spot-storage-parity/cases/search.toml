@@ -1,0 +1,248 @@
+# Search on a real projection (SEM-SCH-01..08, ADR-087 section 7). Every case here installs the
+# search hook before `prepare` (`needs_search`), so PostgreSQL runs against `spot_search_doc`; the
+# fake has no inverted index and answers Unsupported (sch-04-fake-refuses-a-search-declaration).
+# Words are chosen to be their own English stem, so a case never depends on the stemmer.
+
+[[case]]
+id = "sch-01-plain-finds-a-word-in-a-declared-field"
+rule = "SEM-SCH-01"
+title = "a word in a declared searchable field is found in plain mode"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin trip"', 'b code="t:b" note="t:oslo trip"']
+op = "query"
+query = { select = ["code"], filter = '(search plain "berlin" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-01-web-finds-a-word-in-a-declared-field"
+rule = "SEM-SCH-01"
+title = "a word in a declared searchable field is found in web mode"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin trip"', 'b code="t:b" note="t:oslo trip"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-01-phrase-finds-a-word-in-a-declared-field"
+rule = "SEM-SCH-01"
+title = "a word in a declared searchable field is found in phrase mode"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin trip"', 'b code="t:b" note="t:oslo trip"']
+op = "query"
+query = { select = ["code"], filter = '(search phrase "berlin" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-01-a-title-field-match-is-found"
+rule = "SEM-SCH-01"
+title = "a word in the other declared field (short) is found"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" short="t:cairo" note="t:oslo"', 'b code="t:b" note="t:lima"']
+op = "query"
+query = { select = ["code"], filter = '(search web "cairo" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-01-a-stop-word-matches-nothing"
+rule = "SEM-SCH-01"
+title = "a stop word matches nothing, not every row"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:the"', 'b code="t:b" note="t:lima"', 'c code="t:c" note="t:oslo"']
+op = "query"
+query = { select = ["code"], filter = '(search plain "the" short note)' }
+expect = { rows = [] }
+
+[[case]]
+id = "sch-01-a-word-that-is-absent-matches-nothing"
+rule = "SEM-SCH-01"
+title = "a word no document holds matches nothing"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"', 'b code="t:b" note="t:lima"']
+op = "query"
+query = { select = ["code"], filter = '(search web "cairo" short note)' }
+expect = { rows = [] }
+
+[[case]]
+id = "sch-01-a-phrase-respects-word-order"
+rule = "SEM-SCH-01"
+title = "a phrase matches the words in that order only"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:mango delta"', 'b code="t:b" note="t:delta mango"']
+op = "query"
+query = { select = ["code"], filter = '(search phrase "mango delta" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-06-a-query-without-the-accent-finds-the-accented-text"
+rule = "SEM-SCH-06"
+title = "berlin finds a document that says Berlín"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:Berl\u{ed}n"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-06-a-query-with-the-accent-finds-the-plain-text"
+rule = "SEM-SCH-06"
+title = "Berlín finds a document that says berlin"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search web "Berl\u{ed}n" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-06-case-does-not-matter"
+rule = "SEM-SCH-06"
+title = "BERLIN finds berlin and berlin finds BERLIN"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"', 'b code="t:b" note="t:BERLIN"']
+op = "query"
+query = { select = ["code"], filter = '(search web "BERLIN" short note)' }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "sch-07-an-inserted-document-is-found"
+rule = "SEM-SCH-07"
+title = "a committed insert is found by the next search"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-07-an-update-drops-the-old-word"
+rule = "SEM-SCH-07"
+title = "after an update the old word no longer finds the document"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"', 'update a note="t:delta"']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" short note)' }
+expect = { rows = [] }
+
+[[case]]
+id = "sch-07-an-update-adds-the-new-word"
+rule = "SEM-SCH-07"
+title = "after an update the new word finds the document"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"', 'update a note="t:delta"']
+op = "query"
+query = { select = ["code"], filter = '(search web "delta" short note)' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "sch-07-a-delete-removes-the-document-from-search"
+rule = "SEM-SCH-07"
+title = "a deleted document is not found"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:berlin"', 'b code="t:b" note="t:berlin"', 'delete a']
+op = "query"
+query = { select = ["code"], filter = '(search web "berlin" short note)' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "sch-07-a-rolled-back-insert-is-never-found"
+rule = "SEM-SCH-07"
+title = "a document inserted in a transaction that rolled back is not found"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+setup = ['a code="t:a" note="t:oslo"']
+try_write = ['c code="t:c" note="t:lima"', 'd code="t:a"']
+op = "query"
+query = { select = ["code"], filter = '(search web "lima" short note)' }
+expect = { rows = [] }
+
+[[case]]
+id = "sch-02-a-word-only-in-an-undeclared-field-is-not-found"
+rule = "SEM-SCH-02"
+title = "a word that occurs only in a protected, undeclared field never matches"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+search_protected = ["code", "blob"]
+setup = ['a code="t:mango" note="t:oslo"']
+op = "query"
+query = { select = ["code"], filter = '(search web "mango" short note)' }
+expect = { rows = [] }
+
+[[case]]
+id = "sch-02-a-protected-field-does-not-change-the-match-set"
+rule = "SEM-SCH-02"
+title = "the same search finds only the document whose declared field holds the word"
+scope = "postgres"
+catalog = "search"
+needs_search = true
+search_protected = ["code", "blob"]
+setup = ['a code="t:mango" note="t:oslo"', 'b code="t:b" note="t:mango"']
+op = "query"
+query = { select = ["code"], filter = '(search web "mango" short note)' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "sch-08-rank-orders-title-then-twice-then-once"
+rule = "SEM-SCH-08"
+title = "a title hit outranks two body hits, which outrank one"
+scope = "postgres"
+catalog = "search_rank"
+needs_search = true
+setup = ['once code="t:once" note="t:mango delta"', 'twice code="t:twice" note="t:mango mango delta"', 'title code="t:title" short="t:mango" note="t:delta"']
+op = "query"
+query = { select = ["code"], filter = '(search web "mango" short note)', order = ['(search-rank web "mango" short note) desc'] }
+expect = { rows = [["t:title"], ["t:twice"], ["t:once"]] }
+
+[[case]]
+id = "sch-08-rank-ties-break-by-the-primary-key"
+rule = "SEM-SCH-08"
+title = "documents with equal rank come back in primary key order"
+scope = "postgres"
+catalog = "search_rank"
+needs_search = true
+setup = ['a code="t:a" note="t:mango"', 'b code="t:b" note="t:mango"', 'c code="t:c" note="t:mango"']
+op = "query"
+query = { select = ["code"], filter = '(search web "mango" short note)', order = ['(search-rank web "mango" short note) desc'] }
+expect = { rows = [["t:a"], ["t:b"], ["t:c"]] }
+
+[[case]]
+id = "sch-08-rank-does-not-hide-unranked-matches-from-the-filter"
+rule = "SEM-SCH-08"
+title = "rank only orders: a document the filter excludes stays out"
+scope = "postgres"
+catalog = "search_rank"
+needs_search = true
+setup = ['a code="t:a" note="t:mango"', 'b code="t:b" note="t:lima"']
+op = "query"
+query = { select = ["code"], filter = '(search web "mango" short note)', order = ['(search-rank web "mango" short note) desc'] }
+expect = { rows = [["t:a"]] }
+

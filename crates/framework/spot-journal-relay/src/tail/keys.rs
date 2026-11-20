@@ -6,8 +6,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use spot_secrets::{KeyProvider, KeyRef, SecretBox, SecretError};
+use sha2::{Digest, Sha256};
+use spot_secrets::{EnvKey, KeyProvider, KeyRef, SecretBox, SecretError};
 
 /// The HKDF purpose of the MAC key (ADR-061 A.2.2).
 pub const MAC_PURPOSE: &[u8] = b"tail-mac";
@@ -15,7 +15,28 @@ const MAC_KEY_LEN: usize = 32;
 /// How many key versions a reader tries, newest first, before it gives up.
 const MAX_VERSIONS_TRIED: u32 = 64;
 
+/// The domain of the public test keys of [`TailKeys::for_tests`].
+const TEST_KEY_DOMAIN: &[u8] = b"spot.journal.tail.test-keys.v1\0";
+
 type HmacSha256 = Hmac<Sha256>;
+
+/// Standard base64 with padding (the form `EnvKey::from_base64` reads), for the test keys only.
+fn base64_std(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = chunk.get(1).copied().map_or(0, u32::from);
+        let b2 = chunk.get(2).copied().map_or(0, u32::from);
+        let word = (b0 << 16) | (b1 << 8) | b2;
+        let pick = |shift: u32| char::from(ALPHABET[((word >> shift) & 0x3f) as usize]);
+        out.push(pick(18));
+        out.push(pick(12));
+        out.push(if chunk.len() > 1 { pick(6) } else { '=' });
+        out.push(if chunk.len() > 2 { pick(0) } else { '=' });
+    }
+    out
+}
 
 /// The tenant's journal key, shared by the relay and every reader of its tail chunks.
 #[derive(Clone)]
@@ -34,6 +55,27 @@ impl TailKeys {
     #[must_use]
     pub fn new(provider: Arc<dyn KeyProvider>) -> Self {
         Self { provider }
+    }
+
+    /// Fixed, **public** keys for the tests of this crate and of its callers (relay, commit,
+    /// protect, e2e): the tenant journal key is a KEK derived from the tenant id and a constant
+    /// string, so the same tenant always gets the same keys, in every process, and two tenants
+    /// never share one. They protect nothing: the derivation is in the source. Production code
+    /// builds [`TailKeys::new`] over the tenant's real journal key provider, and
+    /// [`crate::RelayConfig::new`] has no default keys (a test pins that).
+    ///
+    /// # Panics
+    /// Never in practice: the derived key is always 32 bytes, which the provider accepts.
+    #[doc(hidden)]
+    #[must_use]
+    #[allow(clippy::expect_used)]
+    pub fn for_tests(tenant: &str) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(TEST_KEY_DOMAIN);
+        hasher.update(tenant.as_bytes());
+        let kek: [u8; 32] = hasher.finalize().into();
+        let provider = EnvKey::from_base64(&base64_std(&kek)).expect("a 32 byte test key");
+        Self::new(Arc::new(provider))
     }
 
     /// The seal/open box over the provider (data keys wrapped by the tenant journal key).

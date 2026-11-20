@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "abstract_run",
+  "args": null,
+  "expect": "shape:square"
+}

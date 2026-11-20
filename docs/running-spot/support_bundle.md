@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # `spot support`: diagnostic bundles, crash/telemetry consent, offline help
 
 WP-PRD-13.T3 wires the already-shipped `spot-unattended-support` and `spot-redact` crates

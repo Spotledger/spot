@@ -45,6 +45,14 @@
 //! passes, the engine rolls back, the agent resumes commands and the result is reported as
 //! [`CODE_ROLLED_BACK`].
 //!
+//! # The schedule
+//!
+//! [`schedule`] runs [`UpdateAction::check`] on an interval (`update_check_hours`, default 6,
+//! with jitter) from the channel's `serve`, logging and auditing each result; a failed,
+//! refused or panicking check never stops the agent. [`host::HostUpdate`] is the production
+//! action. After an applied update the loop waits for a safe point (no accepted but
+//! unreported command) and asks the service manager to restart into the new version.
+//!
 //! # Crash safety
 //!
 //! The engine journals every step before and after it runs. At start-up the agent calls
@@ -54,14 +62,19 @@
 //! `unsafe`, `unwrap` or `expect`, or puts a key, token or payload in an error.
 
 pub mod error;
+pub mod host;
+pub mod probe;
 pub mod runner;
+pub mod schedule;
 pub mod service;
 pub mod source;
 pub mod trust;
 pub mod wire;
 
 pub use error::UpdateError;
+pub use host::{HostParts, HostUpdate};
 pub use runner::{SelfUpdater, UpdateConfig, UpdateReport, UpdateStatus};
+pub use schedule::{UpdateAction, UpdateLoop, UpdateLoopEnd, run_update_loop};
 pub use service::{
     AgentService, Probe, ProbeState, ProcessProbe, Quiesce, QuiesceFlag, Restarter, SystemRestarter,
 };

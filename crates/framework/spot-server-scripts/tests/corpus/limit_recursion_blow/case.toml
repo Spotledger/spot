@@ -1,0 +1,7 @@
+kind = "api"
+negative = true
+pattern = "unbounded recursion overflows the stack, not the host"
+[input.args]
+[expect]
+ok = false
+error_code = "serverscript.limit_exceeded"

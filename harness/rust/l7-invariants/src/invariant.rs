@@ -115,18 +115,37 @@ fn check_options(label: &str, isolation: Isolation) -> StorageResult<TxOptions> 
 impl<B: StorageBackend> StoreAccess for BackendAccess<B> {
     fn query<'a>(&'a self, query: &'a Query) -> BoxFuture<'a, StorageResult<Rows>> {
         Box::pin(async move {
+            // The snapshot is a read-only transaction that sits idle while the checks that read
+            // the outbox or the oracle run, and the server ends a transaction that is idle for
+            // longer than its idle timeout (the default statement timeout plus a margin). On a
+            // million-operation run that gap is minutes: the first query after it found a dead
+            // connection and the poisoned snapshot failed every later check with
+            // `storage.unavailable`. The run is over when the checks run, so the store does not
+            // change: a snapshot lost to a dropped connection is taken again, once per query.
             let mut guard = self.snapshot.lock().await;
-            if guard.is_none() {
-                let mut options = check_options("l7_check", Isolation::RepeatableRead)?;
-                options.access = Access::ReadOnly;
-                *guard = Some(self.backend.begin(self.catalog.clone(), options).await?);
-            }
-            match guard.as_mut() {
-                Some(tx) => spot_storage_contract::QueryExecutor::query(tx, query).await,
-                None => Err(StorageError::new(
-                    spot_storage_contract::ErrorKind::Internal,
-                    "no snapshot",
-                )),
+            let mut reopened = false;
+            loop {
+                if guard.is_none() {
+                    let mut options = check_options("l7_check", Isolation::RepeatableRead)?;
+                    options.access = Access::ReadOnly;
+                    *guard = Some(self.backend.begin(self.catalog.clone(), options).await?);
+                }
+                let result = match guard.as_mut() {
+                    Some(tx) => spot_storage_contract::QueryExecutor::query(tx, query).await,
+                    None => Err(StorageError::new(
+                        spot_storage_contract::ErrorKind::Internal,
+                        "no snapshot",
+                    )),
+                };
+                match result {
+                    Err(e)
+                        if e.kind == spot_storage_contract::ErrorKind::Unavailable && !reopened =>
+                    {
+                        reopened = true;
+                        *guard = None;
+                    }
+                    other => return other,
+                }
             }
         })
     }

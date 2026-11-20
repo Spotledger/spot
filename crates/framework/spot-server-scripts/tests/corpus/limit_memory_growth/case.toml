@@ -1,0 +1,8 @@
+kind = "api"
+negative = true
+pattern = "a script that grows memory without bound hits the memory or time limit"
+timeout_ms = 1000
+[input.args]
+[expect]
+ok = false
+error_code = "serverscript.limit_exceeded"

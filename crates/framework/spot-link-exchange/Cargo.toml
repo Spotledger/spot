@@ -43,6 +43,9 @@ spot-iam-access = { path = "../spot-iam-access" }
 spot-data-policy = { path = "../spot-data-policy" }
 # `AuditRecord`, for the failing audit double.
 spot-audit-chain = { path = "../spot-audit-chain" }
+# Property tests of the envelope, the message wire and the delivery schedules (WP-CTL-10.T11); the
+# version the sibling crates use.
+proptest = "1"
 
 [lints]
 workspace = true

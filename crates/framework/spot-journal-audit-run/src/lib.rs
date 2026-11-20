@@ -17,6 +17,11 @@
 //!   counts per entity. It never carries record content.
 //! * **The run writes nothing but the snapshot marker** on the untrusted-snapshot path; the
 //!   verified position of a clean run is returned for the caller to record.
+//! * **The classifier is the caller's**: [`AuditOptions::classifier`] and the unregistered-topic
+//!   policy are the rebuild's own options. The default is the events registry with the strict
+//!   policy, so a journal that holds an unknown topic fails the rebuild stage with
+//!   [`REBUILD_UNKNOWN_TOPIC`] instead of being audited by guess; a report says which classifier
+//!   decided and lists the topics it did not know.
 //! * A rebuild that fails is [`AuditRun::Failed`] with the failing crate's code, not an error:
 //!   the schedule wants a result row either way.
 //!
@@ -30,16 +35,22 @@
 //! of an older shape that knew only `seq` must read `generation` too.
 #![forbid(unsafe_code)]
 
+mod classify;
 mod error;
 pub mod memory;
 mod run;
 mod sides;
+mod topics;
 
 #[cfg(test)]
 mod tests;
 
+pub use classify::{ClassifierError, DomainTopicsClassifier};
 pub use error::AuditRunError;
 pub use run::{
-    AuditOptions, AuditReport, AuditRun, FailureStage, RunFailure, SnapshotMarking, run_audit,
+    AuditOptions, AuditReport, AuditRun, ClassifierKind, FailureStage, RunFailure, SnapshotMarking,
+    run_audit,
 };
 pub use sides::{Clock, LiveSide, ScratchSide, Summaries};
+pub use spot_journal_rebuild::{EventClass, EventClassifier, RegistryClassifier};
+pub use topics::{MAX_REPORTED_TOPICS, REBUILD_UNKNOWN_TOPIC, UnknownTopics, is_valid_topic};

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Tenant links (`[services.links]`)
 
 Links let two tenants (or a tenant and an external peer) exchange agreed topics and fields. The

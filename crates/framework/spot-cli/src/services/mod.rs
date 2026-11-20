@@ -1360,7 +1360,7 @@ mod registry_tests {
 
     /// The legacy modules and the ORDER each declares today. A module is never renumbered: the
     /// start order of every site depends on it.
-    const LEGACY_ORDER: [(&str, u32); 10] = [
+    const LEGACY_ORDER: [(&str, u32); 11] = [
         ("metadata", 300),
         ("customise", 400),
         ("effect_hold", 550),
@@ -1372,6 +1372,9 @@ mod registry_tests {
         ("files", 900),
         ("print", 900),
         ("telemetry", 900),
+        // The shared egress guard (WP-SEC-04) is provided before every module that takes it, and
+        // those register at 1000 or later: it needs the slot below them.
+        ("egress", 950),
     ];
 
     #[test]

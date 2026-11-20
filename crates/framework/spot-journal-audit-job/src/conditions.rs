@@ -6,7 +6,7 @@ use spot_conditions::{
 };
 
 use crate::error::AuditJobError;
-use crate::run::{FailureInfo, TenantOutcome, TenantResult};
+use crate::run::{FailureInfo, REASON_UNKNOWN_TOPICS, TenantOutcome, TenantResult};
 
 pub use spot_journal_audit::JOURNAL_AUDIT_MISMATCH;
 
@@ -46,6 +46,8 @@ pub fn register_conditions(registry: &mut Registry) -> Result<(), ConditionsErro
         )
         .with_param("stage")
         .with_param("code")
+        .with_param("reason")
+        .with_param("topic_count")
         .with_action("re_verify"),
     )
 }
@@ -108,10 +110,25 @@ pub fn apply<S: AuditSink>(
                 .observe_cleared(JOURNAL_AUDIT_FAILED, subject, now)
                 .map_err(|e| failed(&e))?;
         }
-        TenantOutcome::Failed(FailureInfo { stage, code }) => {
+        TenantOutcome::Failed(FailureInfo {
+            stage,
+            code,
+            reason,
+        }) => {
+            // `reason` is `unknown_topics` when the rebuild stopped at a topic the classifier did
+            // not know: the data was not compared, so the remedy names "register the topics or
+            // inject the classifier". The strict policy stops at the first unknown topic, so the
+            // count is what the row lists (at least one).
+            let topic_count = if *reason == REASON_UNKNOWN_TOPICS {
+                result.unknown_topics.total().max(1)
+            } else {
+                0
+            };
             let params = ConditionParams::new()
                 .with("stage", *stage)
-                .with("code", *code);
+                .with("code", *code)
+                .with("reason", *reason)
+                .with("topic_count", topic_count.to_string());
             engine
                 .raise(JOURNAL_AUDIT_FAILED, subject, params, now)
                 .map_err(|e| failed(&e))?;

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # sync_hub_grants
 
 The hub half of the offline edge: it answers an edge's request for a range of document numbers

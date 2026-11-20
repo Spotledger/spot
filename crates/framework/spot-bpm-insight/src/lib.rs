@@ -93,7 +93,9 @@ pub use report::{
     CYCLE_TIME_BY_STEP, NODE_RUN_DOCTYPE, RUN_DOCTYPE, STUCK_QUEUE, THROUGHPUT_BY_WEEK,
     report_definitions,
 };
-pub use state::{AccumulatorState, EndedState, OpenState, STATE_VERSION, StepState};
+pub use state::{
+    AccumulatorState, EndedState, OLDEST_STATE_VERSION, OpenState, STATE_VERSION, StepState,
+};
 pub use stats::{Rate, StepStats};
 pub use stuck::{StuckCase, StuckPolicy, StuckReason, stuck_cases};
 

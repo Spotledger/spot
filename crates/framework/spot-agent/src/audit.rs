@@ -232,6 +232,7 @@ pub fn verify_file(path: &Path, site: &str) -> Result<u64, AgentError> {
         .map_err(|_| AgentError::AuditFailed("cannot open the audit log".to_owned()))?;
     let mut prev: Option<(u64, Hash)> = None;
     let mut count = 0u64;
+    let mut last_line = 0u64;
     for (index, line) in std::io::BufReader::new(file).lines().enumerate() {
         let n = u64::try_from(index).unwrap_or(u64::MAX).saturating_add(1);
         let line = line.map_err(|_| fail(n))?;
@@ -252,8 +253,24 @@ pub fn verify_file(path: &Path, site: &str) -> Result<u64, AgentError> {
         }
         prev = Some((entry.seq, entry.hash));
         count += 1;
+        last_line = n;
+    }
+    // Every entry is written with its newline: a file that ends without one lost its tail
+    // (a cut inside the last entry that still parses is caught here, a cut inside its text
+    // by the parse above).
+    if last_line > 0 && !ends_with_newline(path) {
+        return Err(fail(last_line));
     }
     Ok(count)
+}
+
+fn ends_with_newline(path: &Path) -> bool {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut byte = [0u8; 1];
+    file.seek(SeekFrom::End(-1)).is_ok() && file.read_exact(&mut byte).is_ok() && byte[0] == b'\n'
 }
 
 /// A local-event record (enrolment, start, stop): the same chain, no command.

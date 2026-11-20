@@ -1,0 +1,9 @@
+kind = "doc_event"
+event = "validate"
+pattern = "typed throw naming two fields"
+[input.fields]
+qty = "0"
+rate = "-1"
+[expect]
+ok = false
+error_fields = ["qty", "rate"]

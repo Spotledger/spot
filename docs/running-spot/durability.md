@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The durability gate (`[services.durability]`)
 
 Zero loss is a statement about failure domains: a write is not acknowledged until its event exists in a second failure domain (ADR-061 section 4). The gate holds the response of every **mutating** request (`POST`, `PUT`, `PATCH`, `DELETE`) of a site whose journal is on until the journal has made the write durable. Reads and health routes are never gated: a halted tenant can still be read and exported.

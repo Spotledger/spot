@@ -2015,6 +2015,16 @@ async fn dispatch(
             open,
             guest_functions,
         } => {
+            // The maintenance gate (ADR-22) comes first: while it is closed no request reaches
+            // sign-in, an open path, the realtime upgrade or the router (probes are exempt).
+            if let Some(refused) = services::maintenance_gate::refuse(
+                context.site.as_str(),
+                request.method(),
+                request.uri().path(),
+                request_id.as_str(),
+            ) {
+                return refused;
+            }
             // A socket authenticates with its first message, so the upgrade itself carries no
             // bearer. Nothing else passes this way, and the route refuses anything that is
             // not a `spot.v1` upgrade.

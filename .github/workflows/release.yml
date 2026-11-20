@@ -169,6 +169,26 @@ jobs:
           # The container image is not built or published in 0.x (design note D3); only the
           # Containerfile is checked.
           python3 tools/packaging/check.py containerfile
+      # RELEASE-NOTES.md is written here, before SHA256SUMS, so the checksum file covers it and
+      # tools/release/verify_download.py finds no extra, unlisted file (WP-OSS-08.T8). The commit
+      # and tag reach the shell only through env:; the notes hold no hash table (the hashes do not
+      # exist yet; the publish job adds the table to the Release body).
+      - name: write RELEASE-NOTES.md
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          mkdir -p dist
+          {
+            echo "Status: pre-release, not for production."
+            echo
+            echo "SOURCE-COMMIT: $SHA"
+            echo
+            echo "Tag: $TAG"
+            echo
+            echo "Public release documentation at this commit: https://github.com/$GITHUB_REPOSITORY/blob/$SHA/docs/releasing.md"
+          } > dist/RELEASE-NOTES.md
       - name: SBOM and checksums
         shell: bash
         env:
@@ -221,12 +241,17 @@ jobs:
           TAG: ${{ inputs.tag }}
           SHA: ${{ needs.gate.outputs.sha }}
         run: |
+          # The release body is built from the RELEASE-NOTES.md asset (already covered by
+          # SHA256SUMS) plus the SHA-256 table; the asset itself is published unchanged.
+          test -s dist/RELEASE-NOTES.md
           {
             echo "Status: pre-release, not for production."
             echo
             echo "Source commit: \`$SHA\`"
             echo
             echo "This is a development version: nothing is signed, artefacts are only checksummed."
+            echo
+            grep -v -e '^SOURCE-COMMIT' -e '^Status:' dist/RELEASE-NOTES.md
             echo
             echo "| File | SHA-256 |"
             echo "| --- | --- |"

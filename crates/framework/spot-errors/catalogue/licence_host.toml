@@ -1,0 +1,120 @@
+# licence_host codes: the tenant-host licence client (WP-CTL-04.T3), services/licence.rs and
+# `spot licence`. The licence's own refusals keep their `licence.*` codes (spot-license). No message
+# carries licence content, a signature or a key: only fixed sentences and file paths.
+
+[[entry]]
+code = "licence_host.unlicensed"
+class = "PermissionDenied"
+summary = "No licence is installed on this site and the site requires one, so only renewal is allowed."
+explanation_key = "error.licence_host.unlicensed"
+params = []
+remedy = "Install a licence with `spot licence install --site <site> <file>` or renew from the control plane with `spot licence renew`."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.tenant_mismatch"
+class = "PermissionDenied"
+summary = "The licence names a different tenant than this site."
+explanation_key = "error.licence_host.tenant_mismatch"
+params = []
+remedy = "Install the licence issued for this tenant; ask the issuer for one if you hold only another tenant's file."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.revoked"
+class = "PermissionDenied"
+summary = "The control plane reports this licence revoked."
+explanation_key = "error.licence_host.revoked"
+params = []
+remedy = "Contact the issuer; a revoked licence is never installed."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.file_unsafe"
+class = "Validation"
+summary = "A licence, key or state file is unreadable, malformed, too large, or writable by group or others."
+explanation_key = "error.licence_host.file_unsafe"
+params = []
+remedy = "Restore the file from its source and set its mode so only the owner can write it (for example 0644 or 0600)."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.read_failed"
+class = "Internal"
+summary = "A licence-client file could not be read."
+explanation_key = "error.licence_host.read_failed"
+params = []
+remedy = "Check the file exists, is readable by the site's user, and the disk is healthy, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.write_failed"
+class = "Internal"
+summary = "A licence-client file could not be written."
+explanation_key = "error.licence_host.write_failed"
+params = []
+remedy = "Check the directory is writable by the site's user and the disk has space; the old file is untouched."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.keys_invalid"
+class = "Validation"
+summary = "The trusted issuer keys file is missing or malformed."
+explanation_key = "error.licence_host.keys_invalid"
+params = []
+remedy = "Provide one line per key: `<key id> <64 hex digits> <valid_from> <valid_to or ->`."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.invalid_setting"
+class = "Validation"
+summary = "A [services.licence] setting is missing or out of range."
+explanation_key = "error.licence_host.invalid_setting"
+params = []
+remedy = "Correct the setting the message names: control_plane is an https://host[:port] URL and needs host_cert, host_key and ca_file; required = true needs trusted_keys_file."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.egress_not_allowed"
+class = "Validation"
+summary = "The control plane is not on this site's egress allow-list, so the licence cannot be renewed online."
+explanation_key = "error.licence_host.egress_not_allowed"
+params = []
+remedy = "Add the host:port the message names to the site's egress allow-list for the licence fetch, then restart."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.no_ports"
+class = "Internal"
+summary = "services.licence.control_plane is set but the host provided no licence ports."
+explanation_key = "error.licence_host.no_ports"
+params = []
+remedy = "Run a host build that provides the licence ports, or clear control_plane to run offline."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.fetch_unreachable"
+class = "Unavailable"
+summary = "The control plane could not be reached for a licence renewal."
+explanation_key = "error.licence_host.fetch_unreachable"
+params = []
+remedy = "Nothing to do: the site keeps running and tries again; offline for the grace period is normal. Check the network if it persists."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.fetch_none"
+class = "NotFound"
+summary = "The control plane has no licence for this tenant (none issued, or revoked)."
+explanation_key = "error.licence_host.fetch_none"
+params = []
+remedy = "Ask the issuer for a licence for this tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "licence_host.fetch_malformed"
+class = "Unavailable"
+summary = "The control plane's licence answer was not the documented shape."
+explanation_key = "error.licence_host.fetch_malformed"
+params = []
+remedy = "Report to the operator of the control plane; the installed licence is unchanged."
+since = "0.1.0"

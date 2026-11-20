@@ -11,11 +11,17 @@ use time::OffsetDateTime;
 
 use super::AUDIT_TARGET;
 
+/// Counter: task notices sent.
 const NOTICES_SENT_TOTAL: &str = "spot_bpm_task_notices_sent_total";
+/// Counter: task notices that failed to send.
 const NOTICES_FAILED_TOTAL: &str = "spot_bpm_task_notices_failed_total";
+/// Counter: task notices dropped.
 const NOTICES_DROPPED_TOTAL: &str = "spot_bpm_task_notices_dropped_total";
+/// Counter: tasks approved automatically.
 const AUTO_APPROVED_TOTAL: &str = "spot_bpm_task_auto_approved_total";
+/// Counter: task SLA ticks run.
 const SLA_TICKS_TOTAL: &str = "spot_bpm_task_sla_ticks_total";
+/// Counter: task SLA ticks that failed.
 const SLA_TICK_FAILURES_TOTAL: &str = "spot_bpm_task_sla_tick_failures_total";
 
 /// Who a request's credential names.

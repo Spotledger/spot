@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The `cluster-redis` profile: running Spotledger against Redis or Valkey
 
 This is the operator guide for the optional Redis/Valkey plugin. The default product does not
@@ -44,6 +46,8 @@ prefix = "spot:prod"
 | `require_restricted_acl` | Refuse to start when the user may run commands the plugin does not need. Default `false`. |
 | `max_clock_skew_ms` | The most this node's clock may differ from the server's. Default 2000. |
 | `probe_interval_ms` | How often the supervisor probes the server. Default 2000. |
+| `short_outage_failures` | How many connection or timeout failures inside the window mark the site degraded (1 to 100). Default 2. |
+| `short_outage_window_ms` | The window those failures are counted in (100 to 600000). Default 10000. |
 
 ## The ACL the plugin needs
 
@@ -98,6 +102,31 @@ On `/metrics` (when the metrics service is on):
 | `spot_cluster_redis_cache_resets_total` | counter | cache namespaces reset after an outage |
 
 No label carries a site, a key, a lease name or a credential.
+
+## An outage shorter than a probe
+
+The supervisor's probe sees an outage only if it happens to be down when the probe runs. A cut
+shorter than `probe_interval_ms` would pass unseen, so the plugin also counts the **failed
+operations** of the coordinator: every lease call (`acquire`, `renew`, `check_fence`) that fails on
+a connection or a timeout is recorded with the site clock. A refusal the server answered (a held
+lease, a stale token) is a business outcome and is never counted.
+
+When `short_outage_failures` of them happen inside `short_outage_window_ms` (default 2 in 10 s):
+
+- readiness shows the site degraded, as it does for a failed probe;
+- lease holders treat their lease as lost: `acquire`, `renew` and `check_fence` answer
+  `coordinator.unavailable` without asking the server, so a job stops and does not run on a lease
+  it may have lost;
+- the cache namespace is reset once (entries cached around the outage may be stale).
+
+The mark clears when the window has passed with no failure **and** a probe answers; the namespace
+is reset again at that moment, as after a long outage. A single failed operation does not mark
+anything.
+
+The Redis cache swallows connection errors (a lost `delete` is just `false`). When a `delete` or a
+`delete_prefix` removes nothing, the cache gate asks the server (at most every 250 ms): if it does
+not answer, that counts as one failure and the namespace owes a reset, because the invalidation was
+lost.
 
 ## Running the tests against a server
 

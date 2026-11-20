@@ -98,6 +98,28 @@ The tables are created if absent when the site starts. An override also rides th
 `sys_bpm_governance` event in the write's transaction; a refusal's row is written on its own
 connection because the write's transaction is rolling back.
 
+## A request stays open until its undo has finished
+
+Closing a request kills every grant issued for it. An undo or compensation of a governed record
+needs a grant, so the request must not be closed while the undo is still running or could still be
+retried. `GrantHost` therefore keeps a durable row per undo (`spot_bpm_gov_reversal`, keyed by the
+request and the undo's key):
+
+- `begin_reversal(request, key)` marks the undo `pending`. A retry with the same key (after a crash)
+  gets the stored state back and starts nothing twice.
+- `close_request(request)` while any undo is `pending` does not close: it records the wish
+  (`spot_bpm_gov_close_wanted`) and the request stays open and usable.
+- `finish_reversal(request, key, Done)` records the end; when no undo is pending and a close was
+  wanted, the request is closed now (not before).
+- `finish_reversal(request, key, Failed { code })` is audited (`undo_failed` with the catalogue code,
+  in the governance audit table) and closes the request; nothing is closed silently.
+- A node that stops between recording the finish and the close finishes the close on the next
+  refresh (`close_ready`).
+
+No new request state exists: "open" is the ledger's existing open row; "failed" is the audit record
+plus the closed row. The undo host (`process_effects`) calls `begin_reversal` before its first
+attempt and `finish_reversal` when the undo reports done or failed.
+
 ## What an operator sees
 
 - `process_governance` in readiness: degraded when the tables are not usable;

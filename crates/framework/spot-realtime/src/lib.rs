@@ -73,6 +73,7 @@ mod auth;
 mod bus;
 mod error;
 mod event;
+pub mod metrics;
 mod pending;
 mod room;
 #[cfg(feature = "ws")]

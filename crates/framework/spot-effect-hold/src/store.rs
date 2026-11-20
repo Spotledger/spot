@@ -17,7 +17,8 @@ use futures::future::BoxFuture;
 use spot_core::SiteId;
 
 use crate::effect::{
-    EffectId, EffectRecord, EffectState, NewEffect, Sequence, Transition, validate_transition,
+    EffectId, EffectRecord, EffectState, NewEffect, PayloadRef, Sequence, Transition,
+    validate_transition,
 };
 use crate::error::{Error, Result};
 use crate::hold::{HoldState, MigrationId};
@@ -85,6 +86,74 @@ pub trait LedgerStore: Send + Sync {
         note: Option<String>,
     ) -> LedgerFuture<'a, Transition>;
 
+    /// As [`LedgerStore::transition_effect`], also remembering `at` (unix microseconds) as the time
+    /// the effect last changed state, which the retention purge ages released and discarded effects
+    /// by. The default ignores `at` (a ledger that keeps no change time then ages by `created_at`);
+    /// both shipped ledgers override it. `at` is an argument: the ledger reads no clock.
+    fn transition_effect_at<'a>(
+        &'a self,
+        id: EffectId,
+        expected: EffectState,
+        next: EffectState,
+        note: Option<String>,
+        at: i64,
+    ) -> LedgerFuture<'a, Transition> {
+        let _ = at;
+        self.transition_effect(id, expected, next, note)
+    }
+
+    /// Replaces the payload reference of at most `limit` effects of `site` with the empty marker
+    /// ([`PayloadRef::Absent`]) and keeps the row: key, state, timestamps, class and the audit
+    /// counts stay, so deduplication on `(site, key)` still works and the checkpoint arithmetic is
+    /// unchanged. Only effects in a **terminal** state (`dispatched` or `discarded`) among `states`
+    /// are touched, whatever else is asked: a `held`, `releasing` or `needs_confirmation` effect is
+    /// never purged. An effect qualifies when its last change time (its `created_at` when the ledger
+    /// kept none) is strictly before `older_than`. Idempotent: a second call purges nothing new.
+    /// **Irreversible.** Returns how many references were replaced.
+    ///
+    /// The default refuses (`effect_hold.ledger_unavailable`): a ledger that cannot purge says so.
+    fn purge_payloads<'a>(
+        &'a self,
+        site: &'a SiteId,
+        states: &'a [EffectState],
+        older_than: i64,
+        limit: usize,
+    ) -> LedgerFuture<'a, u64> {
+        let _ = (site, states, older_than, limit);
+        Box::pin(async {
+            Err(Error::LedgerUnavailable {
+                reason: "this ledger does not purge payload references".to_owned(),
+            })
+        })
+    }
+
+    /// The payload handles of `site` whose references were purged and whose bytes are still to be
+    /// deleted, **minus** any handle some effect still references (a payload shared by two holds is
+    /// kept until the last reference goes), at most `limit`, in a stable order.
+    ///
+    /// [`LedgerStore::purge_payloads`] queues each handle it clears in the same transaction as the
+    /// clearing, so a crash cannot lose the intent to delete. The default has no queue and returns
+    /// nothing.
+    fn pending_payload_deletes<'a>(
+        &'a self,
+        site: &'a SiteId,
+        limit: usize,
+    ) -> LedgerFuture<'a, Vec<String>> {
+        let _ = (site, limit);
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    /// Removes `handle` from the delete queue of `site` once its bytes are gone. Removing an entry
+    /// that is not queued is success. The default has no queue.
+    fn complete_payload_delete<'a>(
+        &'a self,
+        site: &'a SiteId,
+        handle: &'a str,
+    ) -> LedgerFuture<'a, ()> {
+        let _ = (site, handle);
+        Box::pin(async { Ok(()) })
+    }
+
     /// The site's hold state; `Open` when it has never been held.
     fn get_hold<'a>(&'a self, site: &'a SiteId) -> LedgerFuture<'a, HoldState>;
 
@@ -118,6 +187,10 @@ struct LedgerData {
     next_sequence: HashMap<String, u64>,
     holds: HashMap<String, HoldState>,
     cursors: HashMap<(String, String), ReleaseCursor>,
+    /// When each effect last changed state (see [`LedgerStore::transition_effect_at`]).
+    changed: HashMap<u64, i64>,
+    /// `(site, handle)` of purged references whose bytes are still to be deleted.
+    pending_deletes: std::collections::BTreeSet<(String, String)>,
 }
 
 impl LedgerData {
@@ -167,6 +240,104 @@ impl std::fmt::Debug for InMemoryLedger {
 }
 
 impl LedgerStore for InMemoryLedger {
+    fn transition_effect_at<'a>(
+        &'a self,
+        id: EffectId,
+        expected: EffectState,
+        next: EffectState,
+        note: Option<String>,
+        at: i64,
+    ) -> LedgerFuture<'a, Transition> {
+        Box::pin(async move {
+            let outcome = self.transition_effect(id, expected, next, note).await?;
+            if matches!(outcome, Transition::Applied) {
+                self.lock()?.changed.insert(id.0, at);
+            }
+            Ok(outcome)
+        })
+    }
+
+    fn purge_payloads<'a>(
+        &'a self,
+        site: &'a SiteId,
+        states: &'a [EffectState],
+        older_than: i64,
+        limit: usize,
+    ) -> LedgerFuture<'a, u64> {
+        Box::pin(async move {
+            let mut data = self.lock()?;
+            let changed = data.changed.clone();
+            let mut purged = 0_u64;
+            let mut queued: Vec<(String, String)> = Vec::new();
+            for record in &mut data.effects {
+                if usize::try_from(purged).unwrap_or(usize::MAX) >= limit {
+                    break;
+                }
+                let terminal = matches!(
+                    record.state,
+                    EffectState::Dispatched | EffectState::Discarded
+                );
+                if record.site != *site
+                    || !terminal
+                    || !states.contains(&record.state)
+                    || record.payload_ref == PayloadRef::Absent
+                {
+                    continue;
+                }
+                let at = changed
+                    .get(&record.id.0)
+                    .copied()
+                    .unwrap_or(record.created_at);
+                if at < older_than {
+                    // Clearing and queuing happen under one lock: the same atomic step as the
+                    // PostgreSQL ledger's single statement.
+                    if let PayloadRef::Stored { handle, .. } = &record.payload_ref {
+                        queued.push((record.site.as_str().to_owned(), handle.clone()));
+                    }
+                    record.payload_ref = PayloadRef::Absent;
+                    purged += 1;
+                }
+            }
+            data.pending_deletes.extend(queued);
+            Ok(purged)
+        })
+    }
+
+    fn pending_payload_deletes<'a>(
+        &'a self,
+        site: &'a SiteId,
+        limit: usize,
+    ) -> LedgerFuture<'a, Vec<String>> {
+        Box::pin(async move {
+            let data = self.lock()?;
+            let in_use = |handle: &str| {
+                data.effects.iter().any(|record| {
+                    matches!(&record.payload_ref, PayloadRef::Stored { handle: h, .. } if h == handle)
+                })
+            };
+            Ok(data
+                .pending_deletes
+                .iter()
+                .filter(|(queued_site, handle)| queued_site == site.as_str() && !in_use(handle))
+                .map(|(_, handle)| handle.clone())
+                .take(limit)
+                .collect())
+        })
+    }
+
+    fn complete_payload_delete<'a>(
+        &'a self,
+        site: &'a SiteId,
+        handle: &'a str,
+    ) -> LedgerFuture<'a, ()> {
+        Box::pin(async move {
+            self.lock()?
+                .pending_deletes
+                .remove(&(site.as_str().to_owned(), handle.to_owned()));
+            Ok(())
+        })
+    }
+
     fn append_effect<'a>(&'a self, effect: NewEffect) -> LedgerFuture<'a, EffectId> {
         Box::pin(async move {
             let mut data = self.lock()?;

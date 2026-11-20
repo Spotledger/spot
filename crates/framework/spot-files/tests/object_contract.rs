@@ -21,6 +21,41 @@ where
     }
 }
 
+/// The policy-checked HTTP path for an emulator endpoint (WP-SEC-09.T12): tenant `files` may
+/// reach exactly that scheme, host and port, and that host may sit on loopback. Production hosts
+/// build the same value from the site's shared guard instead.
+#[cfg(any(feature = "s3", feature = "azure"))]
+fn egress_for(endpoint: &url::Url) -> spot_files::EgressHttp {
+    use spot_egress::{
+        EgressConnector, EgressPolicy, Guard, HttpSender, InMemorySink, Purpose, SystemResolver,
+    };
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let host = endpoint
+        .host_str()
+        .unwrap_or_else(|| panic!("the emulator endpoint has no host"));
+    let port = endpoint
+        .port_or_known_default()
+        .unwrap_or_else(|| panic!("the emulator endpoint has no port"));
+    let policy = expect_ok(
+        EgressPolicy::from_toml(&format!(
+            "[tenants.files]\n[[tenants.files.allow]]\nscheme = \"{}\"\nhost = \"{host}\"\nports = [{port}]\nallow_private = [\"127.0.0.1\", \"::1\"]\n",
+            endpoint.scheme()
+        )),
+        "building the emulator egress policy",
+    );
+    let guard = Arc::new(Guard::new(
+        policy,
+        Arc::new(SystemResolver),
+        Arc::new(InMemorySink::new()),
+        Arc::new(spot_core::SystemClock::new()),
+    ));
+    let connector = EgressConnector::new(guard, "files", Purpose::Connector);
+    let sender = HttpSender::new(connector.clone(), Duration::from_secs(120));
+    spot_files::EgressHttp::new(connector, Arc::new(sender))
+}
+
 /// The MinIO-backed store, built from the runner's `SPOT_TEST_S3_*` variables. A
 /// missing variable fails naming the script — these tests never skip silently.
 #[cfg(feature = "s3")]
@@ -47,11 +82,10 @@ fn s3_store_from_env() -> spot_files::ObjectFileStore {
             "SPOT_TEST_S3_SECRET is missing — run through crates/framework/spot-files/tests/with-object-stores.sh"
         )
     });
+    let endpoint = expect_ok(url::Url::parse(&endpoint), "parsing SPOT_TEST_S3_ENDPOINT");
+    let http = egress_for(&endpoint);
     let config = S3Config {
-        endpoint: Some(expect_ok(
-            url::Url::parse(&endpoint),
-            "parsing SPOT_TEST_S3_ENDPOINT",
-        )),
+        endpoint: Some(endpoint),
         // Emulators accept any region; an explicitly set one wins.
         region: Some(
             std::env::var("SPOT_TEST_S3_REGION").unwrap_or_else(|_| "us-east-1".to_owned()),
@@ -62,7 +96,10 @@ fn s3_store_from_env() -> spot_files::ObjectFileStore {
         allow_http: true,
         path_style: true,
     };
-    expect_ok(ObjectFileStore::new_s3(config), "building the s3 store")
+    expect_ok(
+        ObjectFileStore::new_s3(config, http),
+        "building the s3 store",
+    )
 }
 
 /// The full contract suite against MinIO, the S3-compatible emulator.
@@ -110,18 +147,20 @@ fn azure_store_from_env() -> spot_files::ObjectFileStore {
             "SPOT_TEST_AZURE_CONTAINER is missing — run through crates/framework/spot-files/tests/with-object-stores.sh"
         )
     });
+    let endpoint = expect_ok(
+        url::Url::parse(&endpoint),
+        "parsing SPOT_TEST_AZURE_ENDPOINT",
+    );
+    let http = egress_for(&endpoint);
     let config = AzureConfig {
-        endpoint: Some(expect_ok(
-            url::Url::parse(&endpoint),
-            "parsing SPOT_TEST_AZURE_ENDPOINT",
-        )),
+        endpoint: Some(endpoint),
         account,
         container,
         credentials: AzureCredential::AccessKey(key),
         allow_http: true,
     };
     expect_ok(
-        ObjectFileStore::new_azure(config),
+        ObjectFileStore::new_azure(config, http),
         "building the azure store",
     )
 }

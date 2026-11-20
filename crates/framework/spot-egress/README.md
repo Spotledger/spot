@@ -135,6 +135,52 @@ whole policy again; a `307`/`308` is returned to the caller as it is unless the 
 `follow_body_redirects`, and even then the body goes to the new target only after it is
 re-authorized.
 
+## Operator peers and mutual TLS
+
+`HttpSender::new` trusts the public web roots, presents no client certificate and accepts TLS 1.2
+or later. A peer the operator runs (a control plane, a customer's KMS, an internal webhook target)
+usually sits behind a private CA and may require a client certificate. Reach it under the same
+policy with `HttpSender::with_tls`; the options are validated once, when they are built, and the
+rustls configurations are built at the same time and never rebuilt or altered by a request.
+
+```rust,ignore
+use spot_egress::{CertPem, ClientIdentity, EgressConnector, HttpSender, TlsOptions, TlsVersion, TrustMode};
+
+let options = TlsOptions::new(
+    // Only this CA is trusted: no public root, so a server signed by any other CA is refused.
+    TrustMode::OnlyPem(vec![CertPem::new(ca_pem)]),
+    // The certificate this host presents, offered to this origin only.
+    Some(ClientIdentity::from_pem(chain_pem, key_pem).bound_to("control.internal", 8443)),
+    TlsVersion::Tls13,
+    // The peer is dialled at the URL host's pinned address but its certificate names this host.
+    Some("control.example.internal".to_owned()),
+)?;
+let sender = HttpSender::with_tls(connector, std::time::Duration::from_secs(30), options)
+    .with_denial_context(Purpose::Connector, None);
+```
+
+Rules:
+
+- **`OnlyPem` is the default recommendation for a peer the operator runs.** `PublicPlusPem` is for
+  a destination that may be public and may be private-CA; `PublicRoots` (the default) for the rest.
+- **The policy is unchanged.** Address vetting, DNS pinning and redirect re-validation happen
+  before TLS; TLS options never allow a destination the policy refuses.
+- **The client identity and the server-name override belong to one origin.** It is the origin
+  given to `ClientIdentity::bound_to`, or, when none was given, the origin of the first HTTPS
+  request the sender makes (use one sender per peer and bind explicitly). A redirect to any other
+  origin is made without the client certificate and verified against its own host name; the trust
+  anchors stay the sender's.
+- **Validation at build.** An unparsable PEM, an empty anchor list or chain, a key that does not
+  match the chain and an override that is not one exact DNS name (a wildcard, an IP address, an
+  empty string) fail with `egress.invalid_tls_options`. The error text is a fixed reason and never
+  echoes PEM content.
+- **Secrets.** The client key's PEM bytes sit in a zeroising buffer, are wiped when the options
+  drop, and no `Debug` output or error shows PEM or key bytes.
+- **Refusals.** After `with_denial_context(purpose, actor)`, a failed TLS handshake writes a
+  denial record whose rule is `tls_refused`, plus `server_name_override=<name>` when one was
+  applied. Under TLS 1.3 a server that rejects a missing client certificate does so after the
+  client's handshake completes, so that refusal surfaces as a failed request, not as a record.
+
 ## Configuration
 
 Policies are TOML files with per-tenant allow-lists and deny-lists:

@@ -115,7 +115,7 @@ class DiskFreezeTests(unittest.TestCase):
 
 class GuardTests(unittest.TestCase):
     def test_safe_token_accepts_reasonable_names(self) -> None:
-        self.assertEqual(safe_token("spot-win_1.2/x", "vm"), "spot-win_1.2/x")
+        self.assertEqual(safe_token("windows-vm_1.2/x", "vm"), "windows-vm_1.2/x")
 
     def test_perform_cut_refuses_non_disposable(self) -> None:
         with self.assertRaises(CutError):

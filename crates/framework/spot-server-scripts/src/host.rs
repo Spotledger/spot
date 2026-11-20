@@ -1,5 +1,5 @@
 //! The host surface: the closed, schema-checked set of functions a script may call, and the
-//! bridge that carries them to the step's [`HookContext`].
+//! bridge that carries them to the step's document access ([`ScriptDocumentAccess`]).
 //!
 //! Every function takes one object argument (the engine's surface is one-argument). Nothing else
 //! is reachable: there is no `fetch`, no `require`, no filesystem, no environment and no `eval`
@@ -14,11 +14,12 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value as Json, json};
 use spot_app_api::prelude::{Expr, Name, Query, QueryPath, RecordId, Selection, Value};
-use spot_app_api::{AppError, AppResult, BoxFuture, ErrorClass, HookContext, Invocation};
+use spot_app_api::{AppError, AppResult, BoxFuture, ErrorClass, Invocation};
 use spot_money::currency::{Currency, CurrencyTable};
 use spot_money::rounding::{Mode, RoundingRule};
 use spot_ts::{FieldProblem, HostBridge, HostError, HostFn, HostSurface, Shape};
 
+use crate::access::ScriptDocumentAccess;
 use crate::log::LogLevel;
 use crate::view::{document_from_json, document_json, patch_from_json, value_json};
 
@@ -332,8 +333,7 @@ fn field_problem(value: &Json) -> Option<FieldProblem> {
 
 /// Services one forwarded host call on the caller's task.
 pub(crate) async fn service(
-    host: &mut dyn HookContext,
-    method_caller: Option<&dyn MethodCaller>,
+    host: &mut dyn ScriptDocumentAccess,
     name: &str,
     args: Json,
 ) -> Result<Json, HostError> {
@@ -342,7 +342,7 @@ pub(crate) async fn service(
         "query" => service_query(host, &args).await,
         "insert" => service_insert(host, &args).await,
         "update" => service_update(host, &args).await,
-        "call" => service_call(host, method_caller, &args).await,
+        "call" => service_call(host, &args).await,
         other => Err(HostError::new(
             "internal",
             &format!("`{other}` is not a host function"),
@@ -350,15 +350,18 @@ pub(crate) async fn service(
     }
 }
 
-async fn service_get(host: &mut dyn HookContext, args: &Json) -> Result<Json, HostError> {
+async fn service_get(host: &mut dyn ScriptDocumentAccess, args: &Json) -> Result<Json, HostError> {
     let doctype = text(args, "doctype")?;
     let id = record_id(args, "id")?;
     let project = string_list(args.get("fields"));
-    let doc = host.load(doctype, id).await.map_err(host_error)?;
+    let doc = host.get(doctype, id).await.map_err(host_error)?;
     Ok(document_json(&doc, project.as_deref()))
 }
 
-async fn service_query(host: &mut dyn HookContext, args: &Json) -> Result<Json, HostError> {
+async fn service_query(
+    host: &mut dyn ScriptDocumentAccess,
+    args: &Json,
+) -> Result<Json, HostError> {
     let query = build_query(args)?;
     let rows = host.query(&query).await.map_err(host_error)?;
     let mut out = Vec::with_capacity(rows.rows.len());
@@ -374,16 +377,22 @@ async fn service_query(host: &mut dyn HookContext, args: &Json) -> Result<Json, 
     Ok(Json::Array(out))
 }
 
-async fn service_insert(host: &mut dyn HookContext, args: &Json) -> Result<Json, HostError> {
+async fn service_insert(
+    host: &mut dyn ScriptDocumentAccess,
+    args: &Json,
+) -> Result<Json, HostError> {
     let doctype = text(args, "doctype")?;
     let values = args.get("values").cloned().unwrap_or_else(|| json!({}));
     let def = host.meta(doctype).await.map_err(host_error)?;
     let doc = document_from_json(&def, &values, RecordId::new_v7()).map_err(host_error)?;
-    let saved = host.create(doc).await.map_err(host_error)?;
+    let saved = host.insert(doc).await.map_err(host_error)?;
     Ok(document_json(&saved, None))
 }
 
-async fn service_update(host: &mut dyn HookContext, args: &Json) -> Result<Json, HostError> {
+async fn service_update(
+    host: &mut dyn ScriptDocumentAccess,
+    args: &Json,
+) -> Result<Json, HostError> {
     let doctype = text(args, "doctype")?;
     let id = record_id(args, "id")?;
     let values = args.get("values").cloned().unwrap_or_else(|| json!({}));
@@ -392,7 +401,7 @@ async fn service_update(host: &mut dyn HookContext, args: &Json) -> Result<Json,
     let expected = match args.get("expected").and_then(Json::as_u64) {
         Some(version) => spot_app_api::prelude::Version(version),
         None => {
-            let loaded = host.load(doctype, id).await.map_err(host_error)?;
+            let loaded = host.get(doctype, id).await.map_err(host_error)?;
             loaded
                 .version()
                 .ok_or_else(|| HostError::new("not_found", "the document has no version"))?
@@ -405,24 +414,18 @@ async fn service_update(host: &mut dyn HookContext, args: &Json) -> Result<Json,
     Ok(document_json(&saved, None))
 }
 
-async fn service_call(
-    host: &mut dyn HookContext,
-    method_caller: Option<&dyn MethodCaller>,
-    args: &Json,
-) -> Result<Json, HostError> {
+async fn service_call(host: &mut dyn ScriptDocumentAccess, args: &Json) -> Result<Json, HostError> {
     let doctype = text(args, "doctype")?;
     let id = record_id(args, "id")?;
     let method = text(args, "method")?;
     let call_args = args.get("args").cloned().unwrap_or_else(|| json!({}));
-    let Some(caller) = method_caller else {
+    if !host.can_call() {
         return Err(HostError::new(
             "unsupported",
             "this host offers no whitelisted-method dispatch to lifecycle steps",
         ));
-    };
-    let invocation = host.invocation().clone();
-    caller
-        .call(&invocation, doctype, id, method, call_args)
+    }
+    host.call(doctype, id, method, call_args)
         .await
         .map_err(host_error)
 }

@@ -18,6 +18,19 @@
 //!    oldest, up to `max_batch`, form one batch and one object-store round trip. A durable chunk
 //!    is fed to the gate, which releases every ticket it covers in sequence order.
 //!
+//! # The size of a batch
+//!
+//! A batch is also capped by the tail chunk the relay writes ([`BatchLimits`], the relay's own
+//! `tail::BATCH_LINE_BUDGET` and `tail::MAX_CHUNK_BYTES`): the driver stops adding requests to a
+//! batch when their lines would pass the line budget or the encoded chunk the relay's size bound
+//! (`tail::encoded_len_upper_bound_for`) would pass the chunk limit, and ships what it has at
+//! once, the rest in the next batch. Order and sequence numbers are untouched: the batches are
+//! consecutive runs of the queue, and a commit is one entry, so a commit is acknowledged when the
+//! chunk that holds it is durable, never earlier, however many chunks its neighbours needed. A
+//! request whose entry alone would make a chunk over the limit is refused by
+//! [`CommitDriver::submit`] with `journal_commit.entry_too_large` before it is queued, so nothing
+//! is shipped for it and its sequence number is not consumed.
+//!
 //! # When the store is down
 //!
 //! A failed shipment becomes `ChunkFailed` for the gate and the batch stays queued. With
@@ -87,6 +100,6 @@ mod tests;
 pub use driver::{CommitDriver, DriverStatus};
 pub use error::CommitError;
 pub use runtime::Runtime;
-pub use seam::{ChunkRelay, ShipEntry, ShipError, Shipped};
+pub use seam::{BatchLimits, ChunkRelay, ShipEntry, ShipError, Shipped};
 pub use settings::CommitSettings;
 pub use ticket::{CommitAnswer, CommitRequest, CommitTicket, Observer};

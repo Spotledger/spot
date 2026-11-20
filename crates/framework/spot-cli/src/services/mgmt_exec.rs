@@ -1183,6 +1183,58 @@ impl ExecAudit for OutboxAudit {
     }
 }
 
+/// The three ports an executor set is built from: who may act, the site's state, the audit.
+type ExecPorts = (Arc<dyn Permissions>, Arc<dyn SiteState>, Arc<dyn ExecAudit>);
+
+/// The ports the executors use, which of them were defaulted, and why they could not be.
+///
+/// A port a service provided wins; a missing one is built from what the site already has
+/// (WP-RTB-01.T13): the permission check from the site's principal source, the site state as
+/// "this process is the site, so it serves", the audit from the site's outbox. A site where a
+/// default cannot be built (no site environment) refuses to start with `mgmt_exec.unavailable`,
+/// because registering executors that cannot decide or record anything would be worse than none.
+fn ports_or_defaults(ctx: &SiteCtx<'_>) -> crate::Result<ExecPorts> {
+    let permissions = match ctx.port::<dyn Permissions>() {
+        Some(port) => port,
+        None => default_permissions(ctx)?,
+    };
+    let state = ctx
+        .port::<dyn SiteState>()
+        .unwrap_or_else(|| Arc::new(AlwaysRunning));
+    let audit = match ctx.port::<dyn ExecAudit>() {
+        Some(port) => port,
+        None => default_audit(ctx)?,
+    };
+    Ok((permissions, state, audit))
+}
+
+fn default_permissions(ctx: &SiteCtx<'_>) -> crate::Result<Arc<dyn Permissions>> {
+    let env = ctx.env().map_err(|_| unavailable("permission"))?;
+    tracing::debug!(
+        "mgmt_exec: no permission port provided; the administrator-only default is used"
+    );
+    Ok(Arc::new(AdministratorOnly {
+        live: Arc::clone(env.live),
+    }))
+}
+
+fn default_audit(ctx: &SiteCtx<'_>) -> crate::Result<Arc<dyn ExecAudit>> {
+    let env = ctx.env().map_err(|_| unavailable("audit"))?;
+    tracing::debug!("mgmt_exec: no audit port provided; the site outbox default is used");
+    Ok(Arc::new(OutboxAudit {
+        backend: env.backend.clone(),
+        catalog: Arc::clone(&env.permission.catalog),
+    }))
+}
+
+/// The start-up refusal: names the port, never a value.
+fn unavailable(port: &str) -> crate::Error {
+    crate::Error(format!(
+        "mgmt_exec.unavailable: no {port} port is provided and the site cannot supply a default; \
+         the journal and sync operations would answer without it"
+    ))
+}
+
 /// Registers the executors when the services' implementations exist as ports.
 pub fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
     let settings: Settings = ctx.settings_or_default("mgmt_exec")?;
@@ -1197,16 +1249,7 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
     let registry = ctx
         .port::<ExecRegistry>()
         .unwrap_or_else(|| Arc::new(ExecRegistry::new()));
-    let (Some(permissions), Some(state), Some(audit)) = (
-        ctx.port::<dyn Permissions>(),
-        ctx.port::<dyn SiteState>(),
-        ctx.port::<dyn ExecAudit>(),
-    ) else {
-        tracing::warn!(
-            "mgmt_exec: the permission, site-state or audit port is missing; no executors"
-        );
-        return Ok(());
-    };
+    let (permissions, state, audit) = ports_or_defaults(ctx)?;
     let shared = Shared::new(permissions, state, audit, Arc::clone(ctx.clock()), settings);
     registry.register(
         ctx.label(),

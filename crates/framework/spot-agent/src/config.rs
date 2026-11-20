@@ -39,6 +39,23 @@ fn default_log_level() -> LogLevel {
     LogLevel::Info
 }
 
+/// The default pause between self-update checks, in hours.
+pub const DEFAULT_UPDATE_CHECK_HOURS: u64 = 6;
+
+fn default_update_check_hours() -> u64 {
+    DEFAULT_UPDATE_CHECK_HOURS
+}
+
+/// The default install root (`versions/`, `current`, `update-trust.json`).
+#[must_use]
+pub fn default_install_root() -> &'static str {
+    if cfg!(windows) {
+        "C:\\Program Files\\Spotledger\\Agent"
+    } else {
+        "/opt/spot-agent"
+    }
+}
+
 /// The agent configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -57,6 +74,14 @@ pub struct AgentConfig {
     /// The operation namespaces this agent may execute; empty by default.
     #[serde(default)]
     pub allowed_modules: Vec<String>,
+    /// Hours between self-update checks (1 to 168); `0` turns the scheduled check off. The
+    /// signature checks of an update are never optional. Each pause gets a random extra of
+    /// up to 20 per cent so a fleet does not call the gateway at the same minute.
+    #[serde(default = "default_update_check_hours")]
+    pub update_check_hours: u64,
+    /// The install root the updater manages; [`default_install_root`] when absent.
+    #[serde(default)]
+    pub install_root: Option<String>,
 }
 
 impl AgentConfig {
@@ -69,7 +94,17 @@ impl AgentConfig {
             poll_seconds: default_poll_seconds(),
             log_level: default_log_level(),
             allowed_modules: Vec::new(),
+            update_check_hours: default_update_check_hours(),
+            install_root: None,
         }
+    }
+
+    /// The install root in effect.
+    #[must_use]
+    pub fn install_root(&self) -> &str {
+        self.install_root
+            .as_deref()
+            .unwrap_or(default_install_root())
     }
 
     /// Parses and validates the TOML text.
@@ -108,6 +143,14 @@ impl AgentConfig {
         }
         if !(1..=3600).contains(&self.poll_seconds) {
             return Err(bad("poll_seconds"));
+        }
+        if self.update_check_hours > 168 {
+            return Err(bad("update_check_hours"));
+        }
+        if let Some(root) = &self.install_root
+            && (root.is_empty() || root.len() > 260 || root.contains('\0'))
+        {
+            return Err(bad("install_root"));
         }
         for module in &self.allowed_modules {
             if !is_namespace(module) {

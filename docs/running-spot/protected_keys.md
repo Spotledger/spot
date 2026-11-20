@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # protected_keys
 
 Hosts the key hierarchy on the hub: tenant root key, key release to nodes under lease, revocation

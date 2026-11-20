@@ -261,6 +261,11 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let sessions: Arc<dyn spot_sessions::SessionStore> = Arc::new(storage.stores.session_store());
     saml.prepare().await?;
     policy.prepare().await?;
+    // The administration API reads and writes the OpenID Connect provider table: it must exist
+    // whether or not the sign-in host (`[services.sso]`, which prepares it too) is enabled.
+    oidc.prepare().await.map_err(|_| {
+        Error("sso_providers_host.stores_unavailable: the provider table could not be prepared".into())
+    })?;
     let identity = Arc::new(port::SsoIdentityService::new(port::Parts {
         site: site.clone(),
         live: Arc::clone(&live),

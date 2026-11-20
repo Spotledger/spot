@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Seeded system rows: what `spot migrate --apply` adds
 
 A site created before a role was added to `apps/platform/bootstrap.toml` gains that role the next

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The MCP endpoint
 
 `spot serve` answers the Model Context Protocol on `POST /mcp` of every site's host, so an agent (a

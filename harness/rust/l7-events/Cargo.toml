@@ -1,0 +1,25 @@
+[package]
+name = "spot-l7-events"
+version = "0.1.0"
+description = "L7 emitted-event conformance (WP-TST-07.T4): every outbox event the engine produces under the L7 parallel load is a registered topic, a valid envelope and payload, valid against its payload schema, of the declared class, with no secret value, on the fake and on PostgreSQL"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+spot-l7-invariants = { path = "../l7-invariants" }
+spot-l7-engine = { path = "../l7-engine" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

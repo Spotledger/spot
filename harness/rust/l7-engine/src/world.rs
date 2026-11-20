@@ -127,12 +127,43 @@ pub fn meta() -> Arc<EffectiveMeta> {
         .effective()
 }
 
+/// What the platform app's grants give every signed-in role over the two fixtures: read. A link
+/// is only valid to a record the writer may read (WP-DOC-06.T2), so without it no principal but
+/// the system could set `owner` or `person`.
+const PLATFORM_FIXTURE_GRANTS: &str = r#"
+[[entries]]
+doctype = "user"
+role = "Project Manager"
+rights = ["read", "select"]
+
+[[entries]]
+doctype = "user"
+role = "Team Member"
+rights = ["read", "select"]
+
+[[entries]]
+doctype = "user"
+role = "Viewer"
+rights = ["read", "select"]
+
+[[entries]]
+doctype = "file"
+role = "Project Manager"
+rights = ["read", "select"]
+
+[[entries]]
+doctype = "file"
+role = "Team Member"
+rights = ["read", "select"]
+"#;
+
 /// The sample app's permission model, loaded from the app's own embedded texts.
 pub fn permission_model() -> Model {
     load(&ModelTexts {
-        grants: spot_sample_app::permissions::PERMISSION_TEXTS
-            .grants
-            .to_owned(),
+        grants: format!(
+            "{}\n{PLATFORM_FIXTURE_GRANTS}",
+            spot_sample_app::permissions::PERMISSION_TEXTS.grants
+        ),
         field_grants: spot_sample_app::permissions::PERMISSION_TEXTS
             .field_grants
             .to_owned(),

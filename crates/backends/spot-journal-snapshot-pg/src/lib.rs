@@ -12,18 +12,23 @@
 //! - [`retention::plan`]: the last 7 daily and 4 weekly, the newest of each generation and never
 //!   the only verified one (a pure plan).
 //!
+//! - [`prune::apply`]: carries the plan out through a [`SnapshotPruner`], never beyond the plan,
+//!   never the newest verified snapshot or one a reader holds, with a dry run.
+//!
 //! The schedule, the after-migration trigger, the conditions and the audit records are the host
 //! service's (`spot-cli` `services/journal_snapshots.rs`).
 #![forbid(unsafe_code)]
 
 mod error;
 mod keyring;
+pub mod prune;
 mod read;
 pub mod retention;
 mod take;
 
 pub use error::SnapshotPgError;
 pub use keyring::SnapshotKeyring;
+pub use prune::{PruneError, PruneOutcome, SnapshotPruner, StorePruner, apply as apply_retention};
 pub use read::{DEFAULT_PAGE_SIZE, Head, ImageReader, scalar};
 pub use retention::{Retention, RetentionPlan, SnapshotId};
 pub use take::{JournalReach, TakeSettings, take_snapshot};

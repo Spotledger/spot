@@ -66,6 +66,8 @@ pub struct Runtime {
     pub key_store: Arc<dyn KeyStore>,
     /// The trusted administrator keys.
     pub trust: TrustStore,
+    /// The decision policy for this host, from `trust.toml` (set at enrolment).
+    pub policy: spot_agent_core::Policy,
     /// The local audit log.
     pub audit: Arc<LocalAuditLog>,
     /// The registered handlers.
@@ -100,7 +102,9 @@ pub fn load_runtime(
         }
         _ => AgentError::ConfigInvalid("the enrolment record is malformed".to_owned()),
     })?;
-    let trust = TrustFile::load(&state.trust_path())?.to_store()?;
+    let trust_file = TrustFile::load(&state.trust_path())?;
+    let trust = trust_file.to_store()?;
+    let policy = trust_file.to_policy();
     let audit = Arc::new(LocalAuditLog::open(
         state.audit_path(),
         identity.agent_id.clone(),
@@ -112,6 +116,7 @@ pub fn load_runtime(
         identity,
         key_store,
         trust,
+        policy,
         audit,
         handlers,
         logger,

@@ -217,6 +217,7 @@ impl RuleSet {
             };
             resolved.push(RRule {
                 head,
+                head_span: rule.head.span,
                 positives,
                 negatives,
                 guards,
@@ -244,8 +245,10 @@ impl RuleSet {
                     RHeadArg::Const(_) => continue,
                 };
                 if !bound.contains(var) {
-                    problems.push(Problem::plain(
+                    problems.push(Problem::new(
                         UNSAFE,
+                        rule.head_span.line,
+                        rule.head_span.column,
                         format!("variable `{var}` in {what} is not bound by a positive body atom"),
                     ));
                 }
@@ -721,6 +724,8 @@ pub(crate) struct RHead {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RRule {
     pub(crate) head: RHead,
+    /// Where the head was written.
+    pub(crate) head_span: crate::ast::Span,
     pub(crate) positives: Vec<RAtom>,
     pub(crate) negatives: Vec<RAtom>,
     pub(crate) guards: Vec<RGuard>,

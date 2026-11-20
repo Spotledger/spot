@@ -1,0 +1,9 @@
+kind = "doc_event"
+event = "validate"
+negative = true
+pattern = "an import statement cannot be compiled (no module loader)"
+[input.fields]
+title = "x"
+[expect]
+ok = false
+error_code_prefix = ""

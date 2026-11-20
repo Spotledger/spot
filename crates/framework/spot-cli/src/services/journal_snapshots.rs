@@ -14,10 +14,15 @@
 //!
 //! A snapshot is listed unverified. [`SnapshotHandle::mark_verified`] is what the audit run calls
 //! when a scratch rebuild from the snapshot is clean; a rebuild trusts only verified snapshots (the
-//! planner decides, this module does not weaken it). Retention is **planned**
+//! planner decides, this module does not weaken it). Retention is planned
 //! ([`spot_journal_snapshot_pg::retention::plan`]: the last 7 daily and 4 weekly, the newest of each
-//! generation, never the only verified one) and the plan is audited; the journal store refuses
-//! deletes under `snapshots/`, so nothing is removed here (see the task report).
+//! generation, never the only verified one) and then **applied** after each snapshot
+//! ([`spot_journal_snapshot_pg::apply_retention`]): only what the plan names, never the newest
+//! verified snapshot, never one a reader holds ([`SnapshotHandle::hold`]), and nothing in a dry run
+//! (`prune_dry_run`). The journal store refuses deletes under `snapshots/` today, so the first
+//! refusal is counted and shown in readiness (`prune refused by the store`) and nothing is
+//! removed: the store's rule is not worked around here (see the task report). Names and counts
+//! are logged; the audit record of a deletion needs a registered action (see the task report).
 //!
 //! # Failure
 //!
@@ -30,7 +35,8 @@
 //!
 //! `[services.journal_snapshots]`, on whenever `[services.journal]` is: `at`, `utc_offset_minutes`
 //! (the site time zone as a fixed offset: no zone database is read), `keep_daily`, `keep_weekly`,
-//! `page_size`, `poll_seconds`, `reach_timeout_seconds`, `statement_timeout_seconds`, `enabled`.
+//! `page_size`, `poll_seconds`, `reach_timeout_seconds`, `statement_timeout_seconds`, `enabled`,
+//! `prune` (apply the retention plan, default true) and `prune_dry_run` (report, delete nothing).
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -41,10 +47,11 @@ use serde::Deserialize;
 use spot_conditions::{ConditionDef, ConditionParams, Millis, Severity};
 use spot_core::Clock;
 use spot_journal_manifest::{SignedManifest, verify};
-use spot_journal_snapshot::{IdentityTransform, list_snapshots, mark_verified};
-use spot_journal_snapshot_pg::retention::{Retention, plan};
+use spot_journal_snapshot::{IdentityTransform, SnapshotInfo, list_snapshots, mark_verified};
+use spot_journal_snapshot_pg::retention::{Retention, RetentionPlan, SnapshotId, plan};
 use spot_journal_snapshot_pg::{
-    JournalReach, SnapshotKeyring, SnapshotPgError, TakeSettings, take_snapshot,
+    JournalReach, SnapshotKeyring, SnapshotPgError, StorePruner, TakeSettings, apply_retention,
+    take_snapshot,
 };
 use spot_secrets::KeyProvider;
 use spot_storage_contract::{
@@ -91,6 +98,10 @@ pub struct Settings {
     pub reach_timeout_seconds: u64,
     /// The read's statement timeout, in seconds (default 600).
     pub statement_timeout_seconds: u64,
+    /// Apply the retention plan after each snapshot (default true).
+    pub prune: bool,
+    /// Report what pruning would remove and delete nothing (default false).
+    pub prune_dry_run: bool,
 }
 
 impl Default for Settings {
@@ -105,6 +116,8 @@ impl Default for Settings {
             poll_seconds: 30,
             reach_timeout_seconds: 300,
             statement_timeout_seconds: 600,
+            prune: true,
+            prune_dry_run: false,
         }
     }
 }
@@ -190,6 +203,9 @@ struct Status {
     failures: u32,
     next: String,
     planned_prune: usize,
+    pruned: u64,
+    prune_failed: u64,
+    prune_refused: bool,
 }
 
 /// What other modules read: readiness and `mark_verified`.
@@ -199,9 +215,52 @@ pub struct SnapshotHandle {
     target: PathBuf,
     keyring: Arc<SnapshotKeyring>,
     clock: Arc<dyn Clock>,
+    in_use: Mutex<Vec<SnapshotId>>,
+}
+
+/// A snapshot a reader (a rebuild, an audit run) is reading: retention never removes it while the
+/// hold lives.
+pub struct SnapshotHold {
+    handle: Arc<SnapshotHandle>,
+    id: SnapshotId,
+}
+
+impl Drop for SnapshotHold {
+    fn drop(&mut self) {
+        let mut held = self
+            .handle
+            .in_use
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(at) = held.iter().position(|id| *id == self.id) {
+            held.remove(at);
+        }
+    }
 }
 
 impl SnapshotHandle {
+    /// Marks the snapshot at `(generation, position)` as being read until the hold is dropped.
+    #[must_use]
+    pub fn hold(self: &Arc<Self>, generation: u64, position: u64) -> SnapshotHold {
+        self.in_use
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((generation, position));
+        SnapshotHold {
+            handle: Arc::clone(self),
+            id: (generation, position),
+        }
+    }
+
+    /// How many snapshots retention removed since start.
+    #[must_use]
+    pub fn pruned(&self) -> u64 {
+        self.status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pruned
+    }
+
     fn store(&self) -> std::result::Result<TenantScoped<FolderStore>, SnapshotPgError> {
         let folder = FolderStore::new(&self.target)
             .map_err(|_| SnapshotPgError::Write("journal_store.io"))?;
@@ -227,7 +286,14 @@ impl SnapshotHandle {
         } else {
             String::new()
         };
-        format!("snapshots: {last}, next {}{failing}", status.next)
+        let pruning = if status.prune_refused {
+            ", prune refused by the store".to_owned()
+        } else if status.pruned > 0 {
+            format!(", pruned {}", status.pruned)
+        } else {
+            String::new()
+        };
+        format!("snapshots: {last}, next {}{failing}{pruning}", status.next)
     }
 
     /// Records that the rebuild test verified the snapshot at `(generation, position)`: writes the
@@ -452,8 +518,64 @@ impl SnapshotService {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .planned_prune = planned.prune.len();
+            if p.settings.prune {
+                self.prune(&planned, &listed).await;
+            }
         }
         Ok(true)
+    }
+
+    /// Carries the retention plan out and records what happened (names and counts only).
+    async fn prune(&self, planned: &RetentionPlan, listed: &[SnapshotInfo]) {
+        let p = &self.parts;
+        if planned.prune.is_empty() {
+            return;
+        }
+        let Ok(folder) = p.handle.store() else {
+            return;
+        };
+        let pruner = StorePruner::new(folder, p.site.clone());
+        let held = p
+            .handle
+            .in_use
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let outcome =
+            apply_retention(planned, listed, &held, &pruner, p.settings.prune_dry_run).await;
+        {
+            let mut status = p
+                .handle
+                .status
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            status.pruned = status
+                .pruned
+                .saturating_add(u64::try_from(outcome.deleted.len()).unwrap_or(u64::MAX));
+            status.prune_failed = status
+                .prune_failed
+                .saturating_add(u64::try_from(outcome.failed.len()).unwrap_or(u64::MAX));
+            status.prune_refused = outcome.store_refused;
+        }
+        let names = |ids: &[SnapshotId]| {
+            ids.iter()
+                .map(|(g, s)| format!("g{g}:s{s}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        tracing::info!(
+            site = %p.site,
+            dry_run = outcome.dry_run,
+            planned = outcome.planned,
+            deleted = outcome.deleted.len(),
+            would_delete = %names(&outcome.would_delete),
+            deleted_ids = %names(&outcome.deleted),
+            kept_in_use = outcome.kept_in_use.len(),
+            kept_latest_verified = outcome.kept_latest_verified.len(),
+            failed = outcome.failed.len(),
+            store_refused = outcome.store_refused,
+            "journal snapshots: retention applied"
+        );
     }
 
     async fn tick(&self, swapped: bool) {
@@ -651,6 +773,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         target: resolved.target.clone(),
         keyring: Arc::clone(&keyring),
         clock: Arc::clone(&clock),
+        in_use: Mutex::new(Vec::new()),
     });
     let verifying = {
         let mut keys = spot_journal_manifest::VerifyingKeys::new();

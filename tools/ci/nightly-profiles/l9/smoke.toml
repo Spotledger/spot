@@ -1,0 +1,13 @@
+# The PR-gate L9 profile (WP-TST-15.T8): the only L9 run that gates a pull request. The tier,
+# volume, soak, cluster and fault profiles are nightly only.
+name = "smoke"
+description = "5 sessions for 20 s against a real spot serve (WP-TST-15.T1)"
+runner = "self-hosted"
+timeout_minutes = 20
+pr_gate = true
+test = "smoke"
+l9_profile = "smoke"
+command = ["cargo", "test", "-p", "l9-scale", "--test", "smoke", "--", "--nocapture"]
+artefacts = []
+
+[env]

@@ -115,6 +115,7 @@ pub mod mask;
 pub mod plan;
 pub mod ports;
 pub mod scan;
+pub mod tables;
 pub mod workflow;
 
 pub use classify::{ClassificationSource, FieldClass, MetadataClasses};

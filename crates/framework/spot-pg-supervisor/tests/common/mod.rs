@@ -94,9 +94,30 @@ pub struct TestEnv {
     pub port: u16,
 }
 
+/// A test run started detached from a terminal (`nohup`, a service, a runner's background job)
+/// has SIGINT ignored and every child inherits that. The fake postgres restores the default only
+/// once it runs, so a stop asked right after `start` could reach it while the signal was still
+/// ignored (a 3 s grace, then a kill instead of a graceful stop). Reset the disposition once for
+/// this process, so the fakes start with the default.
+#[cfg(unix)]
+fn default_sigint() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // Sanctioned test-only block, as in the fake's own signal handling.
+        #[allow(unsafe_code)]
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn default_sigint() {}
+
 impl TestEnv {
     /// Stages dirs and the fake bundle; picks a free port for this test.
     pub fn new() -> TestEnv {
+        default_sigint();
         let tmp = must(TempDir::new());
         let bin_dir = tmp.path().join("bin");
         let data_dir = tmp.path().join("data");

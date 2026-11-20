@@ -4,12 +4,18 @@
 //! database handle here: a verb cannot run SQL outside its stores. Time is read through the
 //! injected [`Clock`]; this crate never reads the wall clock.
 
-use std::sync::Arc;
+use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use spot_core::SiteId;
 use spot_migration_apply::{AdmissionGate, Faults, SideEffectHold};
 use spot_migration_approval::{ApprovalError, ApprovalService, ApprovalStore, AuditSink};
-use spot_migration_audit::{Permit, RunAccess, RunHandle, RunStore, permit};
+use spot_migration_audit::{
+    ArtifactKind, ArtifactRef, FinishEvent, Outcome, Permit, PlanRef,
+    PlanSummary as RunPlanSummary, RunAccess, RunHandle, RunId, RunRecorder, RunSpec, RunStore,
+    permit,
+};
 use spot_permissions::Principal;
 use spot_snapshot::SnapshotProvider;
 
@@ -321,13 +327,42 @@ pub struct LifecycleContext {
     site: SiteId,
     actor: Actor,
     ports: LifecyclePorts,
+    /// The run recorder (WP-MIG-11.T3); `None` while the host has not wired one.
+    recorder: Option<Arc<dyn RunRecorder>>,
+    /// Finish records that could not be written for an operation that must not be undone.
+    pending: Mutex<Vec<(RunHandle, FinishEvent)>>,
 }
 
 impl LifecycleContext {
     /// A context for `site` acting as `actor`.
     #[must_use]
     pub fn new(site: SiteId, actor: Actor, ports: LifecyclePorts) -> Self {
-        Self { site, actor, ports }
+        Self {
+            site,
+            actor,
+            ports,
+            recorder: None,
+            pending: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Wires the run recorder: from then on every verb runs under a run record (see
+    /// [`LifecycleContext::audited`]). A host passes the recorder over the same audit store its
+    /// `RunStore` reads, so there is one audit store, not two.
+    ///
+    /// Without a recorder the verbs run unrecorded, as before WP-MIG-11.T3; a production host must
+    /// wire one (open question of the task: `LifecyclePorts` could not gain a required field
+    /// without breaking every constructor outside this task's owned files).
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Arc<dyn RunRecorder>) -> Self {
+        self.recorder = Some(recorder);
+        self
+    }
+
+    /// The run recorder, when one is wired.
+    #[must_use]
+    pub fn recorder(&self) -> Option<&Arc<dyn RunRecorder>> {
+        self.recorder.as_ref()
     }
 
     /// The site.
@@ -432,6 +467,274 @@ impl LifecycleContext {
             self.now(),
         )
         .map_err(|_| LifecycleError::NotPermitted)
+    }
+}
+
+/// The warning code of a rescue whose finish record is waiting for the audit store (see
+/// [`LifecycleContext::pending_finishes`]).
+pub const FINISH_PENDING: &str = "migration_audit.finish_pending";
+
+/// What a verb tells [`LifecycleContext::audited`] about itself.
+pub struct AuditSpec {
+    /// The verb's name (letters, digits and `-`): part of the run id.
+    pub verb: &'static str,
+    /// The plan digest the run belongs to (64 lowercase hex characters when known).
+    pub plan_digest: String,
+    /// The plan as a run record keeps it.
+    pub plan: PlanRef,
+    /// The terminal outcome a successful verb finishes with.
+    pub on_success: Outcome,
+    /// Whether a finish record that cannot be written is kept for a retry instead of failing the
+    /// verb (a rescue that is already restoring must never be left half done).
+    pub keep_finish_on_failure: bool,
+}
+
+impl AuditSpec {
+    /// A spec that finishes with [`Outcome::Verified`] on success and fails the verb when the
+    /// finish cannot be written.
+    #[must_use]
+    pub fn new(verb: &'static str, plan_digest: impl Into<String>, plan: PlanRef) -> Self {
+        Self {
+            verb,
+            plan_digest: plan_digest.into(),
+            plan,
+            on_success: Outcome::Verified,
+            keep_finish_on_failure: false,
+        }
+    }
+}
+
+/// An error type a verb can be audited under: it can carry a [`LifecycleError`] made by the audit
+/// itself and shows the one it holds.
+pub trait AuditedError: From<LifecycleError> {
+    /// The lifecycle error behind this one.
+    fn lifecycle(&self) -> &LifecycleError;
+}
+
+impl AuditedError for LifecycleError {
+    fn lifecycle(&self) -> &LifecycleError {
+        self
+    }
+}
+
+/// The plan reference of a record that carries no plan: a refusal records no plan content.
+#[must_use]
+pub fn no_plan() -> PlanRef {
+    PlanRef {
+        artifact: ArtifactRef::of(ArtifactKind::Plan, "none", b""),
+        summary: RunPlanSummary {
+            risk: "none".to_owned(),
+            changes: 0,
+            schema: 0,
+            metadata: 0,
+            patches: 0,
+            behaviour: 0,
+        },
+    }
+}
+
+/// The digest recorded when no plan is known: 64 zeros.
+#[must_use]
+pub fn no_digest() -> String {
+    "0".repeat(64)
+}
+
+/// Runs a future to completion on the calling thread (a sync verb reaching the async recorder).
+/// Only for the threads [`off_runtime`] makes: it parks, so it must not run on a runtime thread.
+fn block_on<F: Future>(future: F) -> F::Output {
+    use std::task::{Context, Poll, Wake, Waker};
+    struct Parker(std::thread::Thread);
+    impl Wake for Parker {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = Waker::from(Arc::new(Parker(std::thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        match future.as_mut().poll(&mut cx) {
+            Poll::Ready(value) => return value,
+            Poll::Pending => std::thread::park(),
+        }
+    }
+}
+
+impl LifecycleContext {
+    fn run_id(&self, verb: &str, digest: &str) -> Result<RunId, LifecycleError> {
+        // Contexts of one process share the audit store: a per-context counter would give two
+        // contexts the same id for the same verb at the same instant. The process-wide count
+        // keeps every id of a process distinct; the instant keeps processes apart.
+        static PROCESS_RUNS: AtomicU64 = AtomicU64::new(0);
+        let n = PROCESS_RUNS.fetch_add(1, Ordering::SeqCst);
+        let short: String = digest.chars().take(8).collect();
+        RunId::new(format!("{verb}-{short}-{}-{n}", self.now())).map_err(|_| LifecycleError::Store)
+    }
+
+    /// Finish records that could not be written and are waiting for a retry (a rescue).
+    #[must_use]
+    pub fn pending_finishes(&self) -> usize {
+        self.pending.lock().map_or(0, |p| p.len())
+    }
+
+    /// The warning a host shows while finish records wait: [`FINISH_PENDING`], or `None`.
+    #[must_use]
+    pub fn pending_warning(&self) -> Option<&'static str> {
+        (self.pending_finishes() > 0).then_some(FINISH_PENDING)
+    }
+
+    /// Tries once more to write the finish records kept by a failed audit store; returns how many
+    /// were written. A host calls it from its own timer.
+    pub async fn retry_pending_finishes(&self) -> usize {
+        let Some(recorder) = self.recorder.clone() else {
+            return 0;
+        };
+        let waiting: Vec<_> = match self.pending.lock() {
+            Ok(mut pending) => std::mem::take(&mut *pending),
+            Err(_) => return 0,
+        };
+        let mut written = 0;
+        for (handle, event) in waiting {
+            if recorder.finish(&handle, event.clone()).await.is_ok() {
+                written += 1;
+            } else if let Ok(mut pending) = self.pending.lock() {
+                pending.push((handle, event));
+            }
+        }
+        written
+    }
+
+    /// Runs `work` under a run record (WP-MIG-11.T3).
+    ///
+    /// The permit is checked **first**. A caller without the right gets a refusal that is itself
+    /// recorded (a refused run with the reason code, the actor and no plan content) and `work` never
+    /// runs. Otherwise the run begins before `work`, `work` receives the run's handle (to add
+    /// approval, rehearsal or apply events), and the run finishes with `spec.on_success` on success
+    /// or `refused` / `failed` with the error's reason code. Start and finish are separate records,
+    /// so a crash between them leaves a run the store folds as open.
+    ///
+    /// Fail closed: a run that cannot be begun does not start `work`. A finish that cannot be written
+    /// fails the verb, except for a spec with `keep_finish_on_failure` (the rescue): its own result
+    /// is returned and the finish waits in memory for [`Self::retry_pending_finishes`].
+    ///
+    /// With no recorder wired `work` simply runs (see [`Self::with_recorder`]).
+    ///
+    /// # Errors
+    /// The work's own error unchanged; `migration.store_failed` when the run cannot be begun, or
+    /// finished (unless kept).
+    pub async fn audited<T, E, F, Fut>(&self, spec: AuditSpec, work: F) -> Result<T, E>
+    where
+        E: AuditedError,
+        F: FnOnce(Option<RunHandle>) -> Fut,
+        Fut: Future<Output = Result<T, E>>,
+    {
+        let Some(recorder) = self.recorder.clone() else {
+            return work(None).await;
+        };
+        let permitted = self.require_permission();
+        let (digest, plan) = if permitted.is_ok() {
+            (spec.plan_digest.clone(), spec.plan.clone())
+        } else {
+            (no_digest(), no_plan())
+        };
+        let id = self.run_id(spec.verb, &digest)?;
+        let handle = recorder
+            .begin(RunSpec {
+                id,
+                plan_digest: digest,
+                plan,
+                actor: self.actor.user_id(),
+                at: self.now(),
+            })
+            .await
+            .map_err(|_| E::from(LifecycleError::Store))?;
+        let result = match permitted {
+            Err(error) => Err(E::from(error)),
+            Ok(()) => match self.permit(&handle) {
+                Err(error) => Err(E::from(error)),
+                Ok(_) => work(Some(handle.clone())).await,
+            },
+        };
+        let (outcome, reason) = match &result {
+            Ok(_) => (spec.on_success, None),
+            Err(error) => (
+                crate::audit::outcome_of(error.lifecycle()),
+                Some(error.lifecycle().code().to_owned()),
+            ),
+        };
+        let event = FinishEvent {
+            outcome,
+            at: self.now(),
+            reason,
+        };
+        if recorder.finish(&handle, event.clone()).await.is_err() {
+            if spec.keep_finish_on_failure {
+                if let Ok(mut pending) = self.pending.lock() {
+                    pending.push((handle, event));
+                }
+                return result;
+            }
+            return match result {
+                Ok(_) => Err(E::from(LifecycleError::Store)),
+                Err(error) => Err(error),
+            };
+        }
+        result
+    }
+
+    /// [`Self::audited`] for a synchronous verb: the recorder is awaited on the calling thread,
+    /// which must be one [`off_runtime`] made (a sync verb already must not run on a runtime thread).
+    ///
+    /// # Errors
+    /// As [`Self::audited`].
+    pub fn audited_sync<T, E>(
+        &self,
+        spec: AuditSpec,
+        work: impl FnOnce(Option<RunHandle>) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: AuditedError,
+    {
+        block_on(self.audited(spec, |handle| async move { work(handle) }))
+    }
+
+    /// Records one approval event on a begun run, from a synchronous verb.
+    ///
+    /// # Errors
+    /// `migration.store_failed` when the event cannot be written (the verb then fails: evidence is
+    /// part of the operation).
+    pub(crate) fn record_approval_sync(
+        &self,
+        handle: &RunHandle,
+        event: spot_migration_audit::ApprovalEvent,
+    ) -> Result<(), LifecycleError> {
+        match &self.recorder {
+            Some(recorder) => {
+                block_on(recorder.record_approval(handle, event)).map_err(|_| LifecycleError::Store)
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// The digest and plan reference of the stored plan `hash` for a run record; a plan that cannot
+    /// be loaded gives [`no_digest`] and [`no_plan`] (the verb itself then fails with its own code).
+    #[must_use]
+    pub fn plan_audit(&self, hash: &str) -> (String, PlanRef) {
+        let Ok((plan_hash, stored)) = crate::plan::load(self, hash) else {
+            return (no_digest(), no_plan());
+        };
+        let digest = plan_hash.as_str().to_owned();
+        match crate::plan::parse_stored(&stored) {
+            Ok(plan) => {
+                let reference = crate::audit::plan_ref(
+                    &plan,
+                    &stored.json,
+                    &format!("plans/{}", plan_hash.as_str()),
+                );
+                (digest, reference)
+            }
+            Err(_) => (digest, no_plan()),
+        }
     }
 }
 

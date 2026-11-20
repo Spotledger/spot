@@ -424,7 +424,7 @@ impl Link {
             }
             if parties.contains(&&consent.party) || actors.contains(&&consent.actor) {
                 return Err(Error::ConsentDuplicate {
-                    actor: consent.actor.clone(),
+                    actor: crate::error::actor_ref(&consent.actor),
                 });
             }
             parties.push(&consent.party);

@@ -1,0 +1,7 @@
+kind = "api"
+negative = true
+pattern = "assigning to the frozen ctx fails inside the script"
+[input.args]
+[expect]
+ok = false
+error_code = "script.thrown"

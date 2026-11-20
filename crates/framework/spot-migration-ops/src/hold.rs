@@ -26,7 +26,7 @@ use spot_migration_apply::BoxFuture;
 use spot_permissions::Principal;
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
-use crate::context::LifecycleContext;
+use crate::context::{AuditSpec, LifecycleContext, no_digest, no_plan};
 use crate::error::LifecycleError;
 
 /// The migration id of a hold taken by an operator, not by a migration.
@@ -94,6 +94,17 @@ pub async fn hold(
     scope: &str,
     reason: &str,
 ) -> Result<HoldOutcome, LifecycleError> {
+    ctx.audited(AuditSpec::new("hold", no_digest(), no_plan()), |_| {
+        hold_body(ctx, scope, reason)
+    })
+    .await
+}
+
+async fn hold_body(
+    ctx: &LifecycleContext,
+    scope: &str,
+    reason: &str,
+) -> Result<HoldOutcome, LifecycleError> {
     ctx.require_permission()?;
     let scope = valid_scope(scope)?;
     let at = ctx.now();
@@ -114,6 +125,17 @@ pub async fn hold(
 /// discard); `migration.not_implemented` for `selective`; `migration.hold_active` when the
 /// release failed and the site stays held.
 pub async fn release(
+    ctx: &LifecycleContext,
+    scope: &str,
+    mode: ReleaseMode,
+) -> Result<HoldOutcome, LifecycleError> {
+    ctx.audited(AuditSpec::new("release", no_digest(), no_plan()), |_| {
+        release_body(ctx, scope, mode)
+    })
+    .await
+}
+
+async fn release_body(
     ctx: &LifecycleContext,
     scope: &str,
     mode: ReleaseMode,

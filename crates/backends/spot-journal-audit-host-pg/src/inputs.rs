@@ -131,6 +131,8 @@ impl SiteAuditInputs {
             manifest_keys: data.manifest_keys,
             snapshot_keys: data.snapshot_keys,
             registry: data.registry,
+            classifier: None,
+            strict_topics: true,
         })
     }
 }

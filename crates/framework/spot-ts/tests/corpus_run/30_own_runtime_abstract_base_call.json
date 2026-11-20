@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "abstract_base_call",
+  "args": null,
+  "expect": "TypeError"
+}

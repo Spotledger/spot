@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Lineage service (`[services.lineage]`)
 
 Serves `POST /api/v1/lineage` (`chain`, `trace_forward`, `trace_back`, `bom`, `where_used`) over the

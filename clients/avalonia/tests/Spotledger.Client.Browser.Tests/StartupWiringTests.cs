@@ -186,7 +186,7 @@ public sealed class StartupWiringTests : IDisposable
     // ---- WP-UI-09.T8: the test sign-in hook. The refusals come first: this is a way into authentication. ----
 
     private const string TestUser = "test-user";
-    private const string TestSecret = "not-a-real-secret-0xC0FFEE";
+    private const string TestSecret = "example-secret-example-secret";
 
     private BrowserHostState ComposeWithOpener(out RecordingOpener opener, bool flag)
     {

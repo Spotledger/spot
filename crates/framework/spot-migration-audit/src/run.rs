@@ -477,6 +477,20 @@ pub struct RunEvidence {
 }
 
 impl RunEvidence {
+    /// The stable reason code of the finish record, when it carries one (a record written before
+    /// the field existed, a success and an open run have none).
+    #[must_use]
+    pub fn reason(&self) -> Option<String> {
+        self.entries.iter().rev().find_map(|entry| {
+            (entry.record.kind == crate::events::kinds::RUN_FINISHED)
+                .then(|| match entry.record.payload.get("reason") {
+                    Some(spot_audit_chain::PayloadValue::Text(value)) => Some(value.clone()),
+                    _ => None,
+                })
+                .flatten()
+        })
+    }
+
     /// The first chain entry's `seq`, when there is one.
     #[must_use]
     pub fn first_seq(&self) -> Option<u64> {

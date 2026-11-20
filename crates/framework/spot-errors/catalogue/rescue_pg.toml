@@ -1,0 +1,32 @@
+# rescue_pg codes: the `rescue_pg.*` vocabulary of spot-rescue-pg (WP-MIG-10.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The PostgreSQL rescue journal raises its own typed errors (`spot_rescue_pg::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means. No message carries a
+# record's content, a statement or a connection string.
+
+[[entry]]
+code = "rescue_pg.control_unavailable"
+class = "none"
+summary = "The rescue control schema could not be read or written during {operation}: {message}."
+explanation_key = "error.rescue_pg.control_unavailable"
+params = ["message", "operation"]
+remedy = "Check that the database is reachable and the rescue control schema exists (the first rescue creates it); the site stays closed while a rescue is unfinished."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue_pg.journal_sequence"
+class = "none"
+summary = "Rescue journal sequence {seq} is not the next one ({expected}) for site {site}."
+explanation_key = "error.rescue_pg.journal_sequence"
+params = ["expected", "seq", "site"]
+remedy = "Read the journal and continue from its head; a retry of the same record is accepted, a different record at an old sequence never is."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue_pg.journal_record"
+class = "none"
+summary = "Rescue journal record {seq} cannot be stored or does not parse back: {message}."
+explanation_key = "error.rescue_pg.journal_record"
+params = ["message", "seq"]
+remedy = "The journal row was written by something else or damaged; do not edit it by hand, report it to support."
+since = "0.1.0"

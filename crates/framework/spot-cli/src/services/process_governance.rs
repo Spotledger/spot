@@ -90,7 +90,10 @@ pub use drafts::{
     DraftError, DraftRecord, DraftState, DraftStore, LedgerParticipants, MAX_DRAFT_BYTES,
     PgDraftWriter, RunParticipants, class_of, form_service,
 };
-pub use grants::{DerivedSecrets, GrantHost, IssueError, KeyedAuthority, LedgerRequests, micros};
+pub use grants::{
+    DerivedSecrets, GrantHost, IssueError, KeyedAuthority, LedgerRequests, ReversalOutcome,
+    ReversalState, micros,
+};
 pub use ledger::{Attempt, AuditRow, ConsumeError, Ledger, LedgerError, SCHEMA, Slot};
 pub use participant::{GovernanceParticipant, NAME as PARTICIPANT_NAME, Parts, PrincipalLookup};
 pub use policy::{SitePolicy, SiteScopes, entry_processes};

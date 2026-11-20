@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The field guard on a running server
 
 `spot serve` and `spot console` put the field guard in front of every channel that can carry a

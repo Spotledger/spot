@@ -1,0 +1,9 @@
+# Help for the migration_audit error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "migration_audit.finish_pending"
+what_happened = "A migration run finished but its finish record could not be written to the audit chain yet."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Nothing was lost: the operation's own result stands and the record is kept in memory. Restore the audit store; the host retries the write (retry_pending_finishes).", "If it keeps happening, tell your administrator and quote the code migration_audit.finish_pending."]
+audience = "admin"

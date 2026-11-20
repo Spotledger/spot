@@ -36,6 +36,13 @@
 //! egress crate's address and port classification (private, loopback, link-local and metadata
 //! addresses are refused; dangerous ports need an allow entry) without a per-host allow-list.
 //! Mail reaches only the site's configured SMTP host and port.
+//!
+//! When the site hosts `services::egress` (ORDER 950, smaller than this module's), its shared
+//! guard replaces both private guards: the site's policy file decides what the HTTP, webhook and
+//! mail calls may reach (the tenant's section must list them; a tenant with none is refused), a
+//! refusal is the catalogued `bpm_integration.egress_denied` with the guard's `egress.*` code,
+//! and the denial is recorded in the site's denial log. Without that port the wiring's own policy
+//! applies, as above.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -46,13 +53,11 @@ use http::HeaderMap;
 use serde::Deserialize;
 use serde_json::Value as Json;
 use spot_bpm_engine::{IdempotencyKey, NodeCtx, NodeHandler, NodeKind, NodeOutcome};
-use tokio::runtime::{Handle, RuntimeFlavor};
-use tokio::sync::OnceCell;
 use spot_bpm_integration::{
-    CredentialRef, HttpNodeHandler, IntegrationCtx, IntegrationError, IntegrationKind,
-    IntegrationRegistry, InMemoryVault, MailNodeHandler, MailPort, RetryClass, RetryPolicy,
-    SealedEntry, SealedResolver, SecretRegistry, SecretResolver, SpotEgressPort, WebhookNodeHandler,
-    WebhookPort,
+    CredentialRef, HttpNodeHandler, InMemoryVault, IntegrationCtx, IntegrationError,
+    IntegrationKind, IntegrationRegistry, MailNodeHandler, MailPort, RetryClass, RetryPolicy,
+    SealedEntry, SealedResolver, SecretRegistry, SecretResolver, SpotEgressPort,
+    WebhookNodeHandler, WebhookPort,
 };
 use spot_core::SiteId;
 use spot_egress::{
@@ -62,6 +67,8 @@ use spot_egress::{
 use spot_jobs::worker::HandlerResult;
 use spot_mail::{Credentials as SmtpCredentials, Mailbox, OutgoingMessage, Secret as SmtpSecret};
 use spot_mail_queue::TransportFactory as _;
+use tokio::runtime::{Handle, RuntimeFlavor};
+use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::services::ports::{JobSpec, JobSubmit, MAX_KEY_BYTES};
@@ -265,8 +272,7 @@ impl WebhookPort for RawWebhookPort {
             .authorize(&request)
             .await
             .map_err(spot_bpm_integration::ports::from_egress)?;
-        let http_request =
-            HttpRequest::new(EgressMethod::Post, parsed, headers, Some(body.into()));
+        let http_request = HttpRequest::new(EgressMethod::Post, parsed, headers, Some(body.into()));
         let response = self
             .sender
             .send_request(&http_request, &authorized, self.max_response_bytes)
@@ -552,11 +558,12 @@ impl MailPort for QueueMailPort {
         message: &OutgoingMessage,
     ) -> std::result::Result<spot_mail::SendReceipt, IntegrationError> {
         // Fails closed: with no engine key in scope there is nothing stable to dedupe on.
-        let engine_key = MAIL_KEY
-            .try_with(Clone::clone)
-            .map_err(|_| IntegrationError::MailPermanent {
-                detail: "no engine idempotency key is in scope for this send".to_owned(),
-            })?;
+        let engine_key =
+            MAIL_KEY
+                .try_with(Clone::clone)
+                .map_err(|_| IntegrationError::MailPermanent {
+                    detail: "no engine idempotency key is in scope for this send".to_owned(),
+                })?;
         let key = format!("{MAIL_KEY_PREFIX}{engine_key}");
         if key.len() > MAX_KEY_BYTES {
             return Err(IntegrationError::MailPermanent {
@@ -652,7 +659,10 @@ fn cap_config(config: &mut Json, caps: Caps) {
         Some(_) => {}
         None => {
             if default_attempts > cap {
-                object.insert("retry".to_owned(), serde_json::json!({ "max_attempts": cap }));
+                object.insert(
+                    "retry".to_owned(),
+                    serde_json::json!({ "max_attempts": cap }),
+                );
             }
         }
     }
@@ -720,7 +730,11 @@ impl NodeHandler for EngineIntegrationHandler {
                 format!("node `{node}`: no `{connector}` integration handler is hosted"),
             );
         };
-        let endpoint = ctx.config.get("endpoint").and_then(Json::as_str).unwrap_or("");
+        let endpoint = ctx
+            .config
+            .get("endpoint")
+            .and_then(Json::as_str)
+            .unwrap_or("");
         let mut config = match parse_endpoint(&node, endpoint) {
             Ok(config) => config,
             Err(e) => return NodeOutcome::fail(e.code(), e.to_string()),
@@ -844,12 +858,20 @@ pub async fn register_with(
 
     let resolver = build_resolver(&settings, secrets_host);
 
-    let guard = Arc::new(Guard::new(
-        wiring.policy,
-        Arc::clone(&wiring.resolver),
-        Arc::new(InMemorySink::new()),
-        Arc::clone(&clock),
-    ));
+    // The site's shared egress guard (`services::egress`, ORDER 950) decides every destination
+    // when it is provided: its tenant section lists what the site's nodes may reach, and its
+    // sinks record the denials. Without it (a test, a host without the module) the wiring's
+    // own policy and resolver build a private guard, as before.
+    let shared = ctx.port::<Guard>();
+    let guard = match &shared {
+        Some(shared) => Arc::clone(shared),
+        None => Arc::new(Guard::new(
+            wiring.policy,
+            Arc::clone(&wiring.resolver),
+            Arc::new(InMemorySink::new()),
+            Arc::clone(&clock),
+        )),
+    };
 
     let http_sender: Arc<dyn Sender> = Arc::new(spot_egress::HttpSender::new(
         EgressConnector::new(Arc::clone(&guard), tenant.clone(), Purpose::Connector),
@@ -874,19 +896,22 @@ pub async fn register_with(
         max_response_bytes: settings.max_response_bytes,
     });
 
-    let mail_guard = Arc::new(Guard::new(
-        match &mail_settings.smtp {
-            Some(smtp) => mail_egress_policy(&tenant, &smtp.host, smtp.port),
-            None => EgressPolicy {
-                default: "deny_non_public".to_owned(),
-                dangerous_ports: DANGEROUS_PORTS.to_vec(),
-                tenants: HashMap::new(),
+    let mail_guard = match &shared {
+        Some(shared) => Arc::clone(shared),
+        None => Arc::new(Guard::new(
+            match &mail_settings.smtp {
+                Some(smtp) => mail_egress_policy(&tenant, &smtp.host, smtp.port),
+                None => EgressPolicy {
+                    default: "deny_non_public".to_owned(),
+                    dangerous_ports: DANGEROUS_PORTS.to_vec(),
+                    tenants: HashMap::new(),
+                },
             },
-        },
-        wiring.resolver,
-        Arc::new(InMemorySink::new()),
-        Arc::clone(&clock),
-    ));
+            wiring.resolver,
+            Arc::new(InMemorySink::new()),
+            Arc::clone(&clock),
+        )),
+    };
     let mail_transport = build_mail_transport(mail_settings, mail_guard, &tenant);
 
     let mut handlers = IntegrationRegistry::new();
@@ -992,5 +1017,4 @@ mod tests {
         assert_eq!(select_kind("wasm:as2"), None);
         assert_eq!(select_kind(""), None);
     }
-
 }

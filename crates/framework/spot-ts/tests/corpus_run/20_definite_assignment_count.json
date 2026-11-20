@@ -1,0 +1,6 @@
+{
+  "case": "definite_assignment",
+  "entry": "count",
+  "args": false,
+  "expect": 0
+}

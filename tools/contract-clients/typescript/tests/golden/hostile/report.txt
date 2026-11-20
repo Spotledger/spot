@@ -1,0 +1,5 @@
+contract client generator (typescript) report
+count generated_methods: 1
+count operations: 1
+count schemas: 1
+summary: 0 approximate, 0 dropped, 0 unrepresentable, 0 findings

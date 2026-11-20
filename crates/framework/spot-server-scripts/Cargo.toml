@@ -18,6 +18,14 @@ spot-ts = { path = "../spot-ts" }
 spot-ts-transpile = { path = "../spot-ts-transpile" }
 # Exact money and quantities: `format_money` and `round` never touch a float (ADR-12).
 spot-money = { path = "../spot-money" }
+# The whitelisted-function registry's handler trait, declarations and argument-schema check
+# (API scripts, WP-EXT-06.T6).
+spot-functions = { path = "../spot-functions" }
+# `Cron` and `Queue`: the schedule model of a scheduled script.
+spot-manifest = { path = "../spot-manifest" }
+# `Schedule`, `TimeZone`, `MissedRunPolicy` and `RunSlot`: when and for which slot a scheduled
+# script runs.
+spot-scheduler = { path = "../spot-scheduler" }
 # The JSON the bridge carries; the contract does not re-export serde_json.
 serde_json = "1"
 # The dates a document view carries.
@@ -36,6 +44,10 @@ spot-meta = { path = "../spot-meta" }
 spot-core = { path = "../spot-core" }
 spot-seams = { path = "../spot-seams" }
 spot-permissions = { path = "../spot-permissions" }
+# The corpus cases are TOML (tests/corpus/*/case.toml); already in the lock through spot-meta.
+toml = "0.8"
+# A slot's `scheduled_for` is a jiff timestamp (already in the lock through spot-scheduler).
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [lints]

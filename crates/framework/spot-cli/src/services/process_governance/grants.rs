@@ -30,7 +30,7 @@ use spot_core::Clock;
 use spot_secrets::{KeyProvider, SecretBytes};
 use time::Duration;
 
-use super::ledger::{Attempt, Ledger, LedgerError, Slot};
+use super::ledger::{Attempt, AuditRow, Ledger, LedgerError, Slot};
 
 /// The label prefix of a derived grant key. A label is not a secret and is not a dotted code.
 const LABEL_PREFIX: &str = "spot-request-grant/";
@@ -317,6 +317,39 @@ impl IssueError {
     }
 }
 
+/// Where an undo or compensation of a request stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReversalState {
+    /// Started and not finished: the request stays open.
+    Pending,
+    /// Finished.
+    Done,
+    /// Finished with a failure.
+    Failed,
+}
+
+impl ReversalState {
+    fn parse(text: &str) -> Self {
+        match text {
+            "done" => Self::Done,
+            "failed" => Self::Failed,
+            _ => Self::Pending,
+        }
+    }
+}
+
+/// How an undo or compensation ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReversalOutcome {
+    /// The effect was reversed.
+    Done,
+    /// It was not; `code` is the catalogue code of the reason.
+    Failed {
+        /// The catalogue code.
+        code: String,
+    },
+}
+
 /// The issuing side: what an engine step calls to be handed the grant its document writes run
 /// under, and to close a request whose grants must die.
 ///
@@ -415,14 +448,104 @@ impl GrantHost {
     /// Closes `request`: every grant issued for it stops working, at once on this node and on
     /// the next refresh on another.
     ///
+    /// While an undo of the request is **pending** the request is not closed: the close is
+    /// remembered (durably) and carried out when the last undo reports `done` or `failed`, so a
+    /// request is never shown closed while its effect is still being reversed and the undo can
+    /// still be handed a grant.
+    ///
     /// # Errors
     /// The ledger could not be written.
     pub async fn close_request(&self, request: &str) -> Result<(), LedgerError> {
+        if self.ledger.pending_reversals(request).await? > 0 {
+            return self
+                .ledger
+                .want_close(request, micros(self.clock.now_utc()))
+                .await;
+        }
+        self.close_now(request).await
+    }
+
+    async fn close_now(&self, request: &str) -> Result<(), LedgerError> {
         self.ledger
             .close_request(request, micros(self.clock.now_utc()))
             .await?;
         self.requests.close(request);
+        self.ledger.clear_wanted(request).await
+    }
+
+    /// Notes that the undo or compensation `key` of `request` has started. Idempotent by key: a
+    /// retry after a crash gets the stored state back (`pending`, `done` or `failed`) and starts
+    /// nothing twice. The request stays open until [`GrantHost::finish_reversal`].
+    ///
+    /// # Errors
+    /// The ledger could not be written.
+    pub async fn begin_reversal(
+        &self,
+        request: &str,
+        key: &str,
+    ) -> Result<ReversalState, LedgerError> {
+        let state = self
+            .ledger
+            .begin_reversal(request, key, micros(self.clock.now_utc()))
+            .await?;
+        Ok(ReversalState::parse(&state))
+    }
+
+    /// Records how the undo `key` of `request` ended. On `Failed` the failure is audited with its
+    /// catalogue code and the request is closed (its grants die); on `Done` a close that was
+    /// waiting is carried out once no other undo is pending. Repeating it changes nothing.
+    ///
+    /// # Errors
+    /// The ledger could not be written.
+    pub async fn finish_reversal(
+        &self,
+        request: &str,
+        key: &str,
+        outcome: ReversalOutcome,
+    ) -> Result<(), LedgerError> {
+        let now = micros(self.clock.now_utc());
+        let (state, code) = match &outcome {
+            ReversalOutcome::Done => ("done", String::new()),
+            ReversalOutcome::Failed { code } => ("failed", code.clone()),
+        };
+        let changed = self
+            .ledger
+            .finish_reversal(request, key, state, &code, now)
+            .await?;
+        if changed && state == "failed" {
+            self.ledger
+                .record_audit(&AuditRow {
+                    at_us: now,
+                    kind: "undo_failed".to_owned(),
+                    rule: code,
+                    actor: "system".to_owned(),
+                    doctype: String::new(),
+                    document_id: request.to_owned(),
+                    company: String::new(),
+                    detail: String::new(),
+                })
+                .await?;
+            return self.close_now(request).await;
+        }
+        if self.ledger.pending_reversals(request).await? == 0
+            && self.ledger.close_wanted(request).await?
+        {
+            return self.close_now(request).await;
+        }
         Ok(())
+    }
+
+    /// Carries out the closes that were waiting for undos that have since finished (the finish
+    /// was recorded and the node stopped before the close). Returns how many were closed.
+    ///
+    /// # Errors
+    /// The ledger could not be read or written.
+    pub async fn close_ready(&self) -> Result<usize, LedgerError> {
+        let ready = self.ledger.ready_to_close().await?;
+        for request in &ready {
+            self.close_now(request).await?;
+        }
+        Ok(ready.len())
     }
 
     /// Reloads the cache from the ledger and removes what is long dead. Returns how many steps
@@ -431,6 +554,7 @@ impl GrantHost {
     /// # Errors
     /// The ledger could not be read.
     pub async fn refresh(&self) -> Result<usize, LedgerError> {
+        let _ = self.close_ready().await;
         let now = self.clock.now_utc();
         let slots = self.ledger.open_slots(micros(now)).await?;
         let open = slots.len();

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Event history from the journal (`[services.event_history]`)
 
 A consumer of the event stream whose checkpoint is older than the outbox retention would get `410 eventstream.resync_required`. When the tenant has a journal the history is still there, and the stream can catch the consumer up from it and then continue on the live outbox (ADR-061 sections 5 to 7, contract 0.16.0).

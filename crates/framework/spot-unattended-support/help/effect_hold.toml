@@ -1,0 +1,9 @@
+# Help for the effect_hold error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "effect_hold.retention_invalid"
+what_happened = "A retention period of the side-effect hold is zero days or more than 3650 days."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use a whole number of days from 1 to 3650; the defaults are 7 days after release and 30 after discard.", "If it keeps happening, tell your administrator and quote the code effect_hold.retention_invalid."]
+audience = "user"

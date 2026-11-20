@@ -10,9 +10,12 @@ rust-version.workspace = true
 [features]
 default = []
 # The S3 / S3-compatible provider (MinIO, Cloudflare R2, Wasabi), on object_store/aws.
-s3 = ["dep:object_store", "object_store/aws", "dep:url"]
+s3 = ["dep:object_store", "object_store/aws", "dep:url", "egress-path"]
 # The Azure Blob Storage provider, on object_store/azure.
-azure = ["dep:object_store", "object_store/azure", "dep:url"]
+azure = ["dep:object_store", "object_store/azure", "dep:url", "egress-path"]
+# The policy-checked HTTP path both providers use (WP-SEC-09.T12): spot-egress plus the HTTP types
+# the object_store connector speaks. Internal; enabled by `s3` and `azure`.
+egress-path = ["dep:spot-egress", "dep:http", "dep:http-body-util", "dep:async-trait"]
 
 [dependencies]
 # SiteId scopes every file operation to one tenant (ADR-34).
@@ -33,6 +36,12 @@ tracing = "0.1"
 url = { version = "2", optional = true }
 # One client behind both cloud providers (WP-PLT-10.T2), enabled per feature.
 object_store = { version = "0.14.2", default-features = false, optional = true }
+# The outbound policy every object-store request passes (WP-SEC-09.T12), and the HTTP types of the
+# object_store connector seam; all already in the workspace.
+spot-egress = { path = "../spot-egress", optional = true }
+http = { version = "1", optional = true }
+http-body-util = { version = "0.1", optional = true }
+async-trait = { version = "0.1", optional = true }
 
 [dev-dependencies]
 # Scratch roots for LocalFileStore tests.

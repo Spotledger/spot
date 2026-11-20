@@ -48,7 +48,7 @@ pub(crate) fn parse(
     line: &str,
     position: Position,
     source: &str,
-    resolve: &dyn Fn(&str) -> (EventClass, bool),
+    resolve: &(dyn Fn(&str) -> (EventClass, bool) + Sync),
 ) -> Result<Entry, RebuildError> {
     let invalid = |reason: &'static str| RebuildError::EntryInvalid {
         generation: position.generation,

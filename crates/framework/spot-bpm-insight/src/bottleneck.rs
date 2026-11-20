@@ -174,6 +174,8 @@ mod tests {
             p90: Some(Millis::from_seconds(total_seconds)),
             p99: Some(Millis::from_seconds(total_seconds)),
             max: Some(Millis::from_seconds(total_seconds)),
+            max_wait: None,
+            max_work: None,
             queue_entered: 4,
             queue_left: 0,
             queue_growth: growth,

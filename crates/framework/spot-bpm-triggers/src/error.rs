@@ -37,6 +37,12 @@ pub enum TriggerErrorCode {
     ConditionEvaluationFailed,
     /// A document event's facts are incomplete, so the start is denied.
     FactsIncomplete,
+    /// A manual or API trigger's input schema is not JSON, not an object or not enforceable.
+    InputSchemaInvalid,
+    /// A document-event trigger's condition does not parse.
+    ConditionInvalid,
+    /// A version has more than one unusable trigger.
+    TriggersInvalid,
 }
 
 impl TriggerErrorCode {
@@ -56,6 +62,9 @@ impl TriggerErrorCode {
             Self::InputInvalid => "bpm_triggers.input_invalid",
             Self::ConditionEvaluationFailed => "bpm_triggers.condition_evaluation_failed",
             Self::FactsIncomplete => "bpm_triggers.facts_incomplete",
+            Self::InputSchemaInvalid => "bpm_triggers.input_schema_invalid",
+            Self::ConditionInvalid => "bpm_triggers.condition_invalid",
+            Self::TriggersInvalid => "bpm_triggers.triggers_invalid",
         }
     }
 }
@@ -161,6 +170,51 @@ pub enum Error {
         /// What is missing.
         reason: String,
     },
+    /// A manual or API trigger's input schema cannot be used. The detail names a JSON pointer
+    /// and a fault kind, never the schema text.
+    #[error("the input schema of trigger node `{node}` is unusable: {detail}")]
+    InputSchemaInvalid {
+        /// The trigger node.
+        node: String,
+        /// The fault kind (and JSON pointers), never the schema text.
+        detail: String,
+    },
+    /// A document-event trigger's condition does not parse. The detail names the parse error's
+    /// code and offset, never the expression text.
+    #[error("the condition of trigger node `{node}` does not parse: {detail}")]
+    ConditionInvalid {
+        /// The trigger node.
+        node: String,
+        /// The parse error's code and offset.
+        detail: String,
+    },
+    /// More than one trigger of a published version is unusable; every one is listed so a
+    /// publisher fixes them in one round.
+    #[error("process `{process}` has unusable triggers: {}", faults_text(.faults))]
+    TriggersInvalid {
+        /// The process whose version was refused.
+        process: String,
+        /// Every unusable trigger, in node order.
+        faults: Vec<TriggerFault>,
+    },
+}
+
+/// One unusable trigger in an [`Error::TriggersInvalid`]: the node and the fault's code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerFault {
+    /// The trigger node.
+    pub node: String,
+    /// The code the node's own error carries.
+    pub code: TriggerErrorCode,
+}
+
+/// `node: code` pairs, joined; the text an [`Error::TriggersInvalid`] shows.
+fn faults_text(faults: &[TriggerFault]) -> String {
+    faults
+        .iter()
+        .map(|f| format!("{}: {}", f.node, f.code.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl Error {
@@ -182,6 +236,9 @@ impl Error {
             Self::InputInvalid { .. } => TriggerErrorCode::InputInvalid,
             Self::ConditionEvaluationFailed { .. } => TriggerErrorCode::ConditionEvaluationFailed,
             Self::FactsIncomplete { .. } => TriggerErrorCode::FactsIncomplete,
+            Self::InputSchemaInvalid { .. } => TriggerErrorCode::InputSchemaInvalid,
+            Self::ConditionInvalid { .. } => TriggerErrorCode::ConditionInvalid,
+            Self::TriggersInvalid { .. } => TriggerErrorCode::TriggersInvalid,
         }
     }
 
@@ -260,6 +317,21 @@ mod tests {
                 doctype: "d".to_owned(),
                 reason: "r".to_owned(),
             },
+            Error::InputSchemaInvalid {
+                node: "n".to_owned(),
+                detail: "d".to_owned(),
+            },
+            Error::ConditionInvalid {
+                node: "n".to_owned(),
+                detail: "d".to_owned(),
+            },
+            Error::TriggersInvalid {
+                process: "p".to_owned(),
+                faults: vec![TriggerFault {
+                    node: "n".to_owned(),
+                    code: TriggerErrorCode::InvalidCron,
+                }],
+            },
         ]
     }
 
@@ -284,7 +356,7 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            12,
+            15,
             "a variant is missing from the catalogue test"
         );
     }

@@ -21,6 +21,18 @@ fn engine_error(error: TemplateError) -> Error {
     )
 }
 
+/// A filter given a value the context never defined fails as the missing variable it is (strict
+/// undefined), not as a malformed amount or date: the author needs the variable's name.
+fn defined(value: &Value) -> Result<(), Error> {
+    if value.is_undefined() {
+        return Err(Error::new(
+            ErrorKind::UndefinedError,
+            "the value given to the filter is not defined",
+        ));
+    }
+    Ok(())
+}
+
 /// Reads the optional `locale` keyword argument.
 fn read_locale(kwargs: &Kwargs) -> Result<&'static LocaleInfo, Error> {
     let requested: Option<String> = kwargs.get("locale")?;
@@ -38,6 +50,7 @@ pub(crate) fn register(env: &mut Environment<'static>) {
 }
 
 fn money_filter(value: Value, currency_code: String, kwargs: Kwargs) -> Result<Value, Error> {
+    defined(&value)?;
     let locale_info = read_locale(&kwargs)?;
     kwargs.assert_all_used()?;
     let currency_info = format::currency(&currency_code).map_err(engine_error)?;
@@ -46,6 +59,7 @@ fn money_filter(value: Value, currency_code: String, kwargs: Kwargs) -> Result<V
 }
 
 fn number_filter(value: Value, decimals: i64, kwargs: Kwargs) -> Result<Value, Error> {
+    defined(&value)?;
     let locale_info = read_locale(&kwargs)?;
     kwargs.assert_all_used()?;
     let decimals = match u32::try_from(decimals) {
@@ -61,6 +75,7 @@ fn number_filter(value: Value, decimals: i64, kwargs: Kwargs) -> Result<Value, E
 }
 
 fn words_filter(value: Value, currency_code: String, kwargs: Kwargs) -> Result<Value, Error> {
+    defined(&value)?;
     let language: Option<String> = kwargs.get("lang")?;
     let system_name: Option<String> = kwargs.get("system")?;
     kwargs.assert_all_used()?;
@@ -83,6 +98,7 @@ fn words_filter(value: Value, currency_code: String, kwargs: Kwargs) -> Result<V
 }
 
 fn date_filter(value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    defined(&value)?;
     let format_name: Option<String> = kwargs.get("format")?;
     read_locale(&kwargs)?;
     kwargs.assert_all_used()?;
@@ -92,6 +108,7 @@ fn date_filter(value: Value, kwargs: Kwargs) -> Result<Value, Error> {
 }
 
 fn datetime_filter(value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    defined(&value)?;
     let format_name: Option<String> = kwargs.get("format")?;
     let tz: Option<String> = kwargs.get("tz")?;
     read_locale(&kwargs)?;

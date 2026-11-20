@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// What a site's scripts are doing right now.
 #[derive(Clone)]
 pub enum SlotState {
@@ -99,6 +98,7 @@ pub(super) struct Cached {
     loaded: Instant,
     generation: u64,
     controller: Arc<ScriptController>,
+    flags: Vec<spot_server_scripts::elevation::ScriptElevation>,
 }
 
 /// Everything the hubs of a site share once the module is ready.
@@ -112,6 +112,10 @@ pub struct Runtime {
     pub(super) log: Arc<ScriptLog>,
     pub(super) generation: Arc<AtomicU64>,
     pub(super) cache: Mutex<HashMap<String, Cached>>,
+    /// How an elevated script acts as the platform and is audited; `None` elevates nothing.
+    pub(super) elevation: Option<spot_server_scripts::elevation::ElevationWiring>,
+    /// Who holds a named permission (the save gate asks it); `None` answers no.
+    pub(super) permissions: Option<Arc<dyn PermissionCheck>>,
 }
 
 impl Runtime {
@@ -136,6 +140,34 @@ impl Runtime {
             log,
             generation: Arc::new(AtomicU64::new(0)),
             cache: Mutex::new(HashMap::new()),
+            elevation: None,
+            permissions: None,
+        }
+    }
+
+    /// The same runtime able to run the scripts a record flags as elevated, audited through
+    /// `wiring` (WP-EXT-06.T10). Without it a flagged script runs as its triggering user.
+    #[must_use]
+    pub fn with_elevation(
+        mut self,
+        wiring: spot_server_scripts::elevation::ElevationWiring,
+    ) -> Runtime {
+        self.elevation = Some(wiring);
+        self
+    }
+
+    /// The same runtime with the permission check the save gate of the script DocTypes asks.
+    #[must_use]
+    pub fn with_permissions(mut self, permissions: Arc<dyn PermissionCheck>) -> Runtime {
+        self.permissions = Some(permissions);
+        self
+    }
+
+    /// Whether `inv`'s actor holds the named permission. `false` when no check is attached.
+    pub async fn holds(&self, inv: &Invocation, permission: &str) -> bool {
+        match &self.permissions {
+            Some(check) => check.holds(inv, permission).await,
+            None => false,
         }
     }
 
@@ -186,14 +218,22 @@ impl Runtime {
             return Ok(Arc::clone(&cached.controller));
         }
         let scripts = self.store.enabled_for(doctype).await?;
+        // Only a runtime wired for elevation reads the flags; every other one elevates nothing.
+        let flags = if self.elevation.is_some() {
+            self.store.elevations_for(doctype).await?
+        } else {
+            Vec::new()
+        };
         let previous = self
             .cache()
             .get(doctype)
-            .map(|cached| Arc::clone(&cached.controller));
+            .map(|cached| (Arc::clone(&cached.controller), cached.flags.clone()));
         let controller = match previous {
-            Some(previous) if previous.scripts() == scripts => previous,
-            _ => Arc::new(
-                ScriptController::new(
+            Some((previous, old_flags)) if previous.scripts() == scripts && old_flags == flags => {
+                previous
+            }
+            _ => {
+                let built = ScriptController::new(
                     doctype,
                     scripts,
                     self.engine.clone(),
@@ -202,8 +242,12 @@ impl Runtime {
                 .with_view(Arc::clone(&self.view))
                 .with_limits(self.limits)
                 .with_log(Arc::clone(&self.log))
-                .with_method_caller(Arc::clone(&self.caller)),
-            ),
+                .with_method_caller(Arc::clone(&self.caller));
+                Arc::new(match &self.elevation {
+                    Some(wiring) => built.with_elevation(wiring.clone(), flags.clone()),
+                    None => built,
+                })
+            }
         };
         self.cache().insert(
             doctype.to_owned(),
@@ -211,9 +255,9 @@ impl Runtime {
                 loaded: Instant::now(),
                 generation,
                 controller: Arc::clone(&controller),
+                flags,
             },
         );
         Ok(controller)
     }
 }
-

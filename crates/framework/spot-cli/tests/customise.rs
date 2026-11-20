@@ -132,6 +132,7 @@ async fn request_with(
     }
 }
 
+#[track_caller]
 fn expect(reply: &Reply, status: u16) {
     assert_eq!(reply.status, status, "{}", reply.raw);
 }
@@ -624,9 +625,13 @@ async fn a_second_process_serves_the_new_doctype_within_a_poll() {
     common_cluster(&env);
     let secret = secret_of(&env.ok(&["new-site", &env.site]));
     let a = start(&env).await;
-    let b = start(&env).await;
     let host = env.site.clone();
     let admin_a = administrator(a.addr, &host, &secret).await;
+    // The second node starts after the first sign-in changed the password: a node holds the
+    // one-time secrets of `site.toml` in memory from its start, so one started earlier would
+    // still accept the consumed secret and refuse the new password (and the fallback of signing
+    // in with the secret would change the password again and end node A's session).
+    let b = start(&env).await;
 
     let created = method(
         a.addr,

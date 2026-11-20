@@ -48,8 +48,8 @@ use spot_api_services::resources::function::function_error;
 use spot_app_api::AppError;
 use spot_app_api::error::ErrorClass;
 use spot_functions::{
-    Caller, Conflict, Context, FunctionHandler, FunctionInfo, FunctionKey, FunctionRegistry,
-    FunctionRegistryBuilder, HandlerFuture, HttpVerb, RateLimit,
+    Caller, Conflict, Context, FunctionDecl, FunctionHandler, FunctionInfo, FunctionKey,
+    FunctionRegistry, FunctionRegistryBuilder, HandlerFuture, HttpVerb, RateLimit,
 };
 use spot_http::api::registry::Code;
 use spot_http::api::service::{ApiError, BoxFuture, Message, RequestCtx};
@@ -257,6 +257,16 @@ fn build_registry(
     Ok(Built { registry, schemas })
 }
 
+/// Every function address the manifests declared, from a freshly built registry.
+fn manifest_keys(built: &Built) -> BTreeSet<FunctionKey> {
+    built
+        .registry
+        .list()
+        .into_iter()
+        .map(|info| info.key)
+        .collect()
+}
+
 fn list_conflicts(conflicts: &[Conflict]) -> String {
     conflicts
         .iter()
@@ -265,12 +275,154 @@ fn list_conflicts(conflicts: &[Conflict]) -> String {
         .join("; ")
 }
 
+// ---- declaration sources: functions that do not come from an app manifest ----
+
+/// A provider of function declarations that change while the site runs (the `scripting` app's
+/// API scripts). Cheap and synchronous: the source keeps the answer it last computed.
+pub trait FunctionDeclSource: Send + Sync {
+    /// The declarations in force now, each with the handler that runs it.
+    fn declarations(&self) -> Vec<(FunctionDecl, Arc<dyn FunctionHandler>)>;
+}
+
+/// What the sources contributed, built into a registry of its own so that a change to a source
+/// never needs the manifests read again.
+struct Overlay {
+    /// `None` while no source declares anything.
+    registry: Option<FunctionRegistry>,
+    schemas: BTreeMap<FunctionKey, Json>,
+    keys: BTreeSet<FunctionKey>,
+}
+
+impl Overlay {
+    /// An overlay serving nothing.
+    fn empty() -> Overlay {
+        Overlay {
+            registry: None,
+            schemas: BTreeMap::new(),
+            keys: BTreeSet::new(),
+        }
+    }
+}
+
+/// The sources of one site, provided by this module as a port (`ctx.port::<FunctionSources>()`)
+/// on the assembling build. A source is registered under an id (registering the id again
+/// replaces it). The functions of every source are served beside the manifest's, from an
+/// overlay registry that [`FunctionSources::rebuild`] replaces atomically.
+pub struct FunctionSources {
+    clock: Arc<dyn spot_core::Clock>,
+    sources: Mutex<BTreeMap<String, Arc<dyn FunctionDeclSource>>>,
+    manifest_keys: RwLock<BTreeSet<FunctionKey>>,
+    overlay: RwLock<Arc<Overlay>>,
+}
+
+impl FunctionSources {
+    /// An empty set that reads time from `clock`.
+    #[must_use]
+    pub fn new(clock: Arc<dyn spot_core::Clock>) -> FunctionSources {
+        let overlay = Arc::new(Overlay::empty());
+        FunctionSources {
+            clock,
+            sources: Mutex::new(BTreeMap::new()),
+            manifest_keys: RwLock::new(BTreeSet::new()),
+            overlay: RwLock::new(overlay),
+        }
+    }
+
+    /// Registers (or replaces) the source `id` and rebuilds the overlay.
+    ///
+    /// # Errors
+    ///
+    /// The conflicts the rebuild found (see [`FunctionSources::rebuild`]); the previous overlay
+    /// keeps serving.
+    pub fn set(
+        &self,
+        id: &str,
+        source: Arc<dyn FunctionDeclSource>,
+    ) -> std::result::Result<(), String> {
+        self.sources
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id.to_owned(), source);
+        self.rebuild()
+    }
+
+    /// Builds the overlay again from every source's current declarations.
+    ///
+    /// # Errors
+    ///
+    /// Two sources declaring one function, or a source declaring a function a manifest declares
+    /// (a script may not shadow an app's function; the override table is for that): every
+    /// conflict, naming both sides. The previous overlay keeps serving.
+    pub fn rebuild(&self) -> std::result::Result<(), String> {
+        let sources: Vec<Arc<dyn FunctionDeclSource>> = self
+            .sources
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect();
+        let manifest = self
+            .manifest_keys
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        let mut builder = FunctionRegistryBuilder::new();
+        builder.clock(Arc::clone(&self.clock));
+        let mut schemas = BTreeMap::new();
+        let mut keys = BTreeSet::new();
+        let mut errors = Vec::new();
+        for (decl, handler) in sources.iter().flat_map(|s| s.declarations()) {
+            if manifest.contains(&decl.key) {
+                errors.push(format!(
+                    "`{}` is declared by an app manifest and by a script source",
+                    decl.key
+                ));
+                continue;
+            }
+            if let Some(schema) = &decl.arguments {
+                schemas.insert(decl.key.clone(), schema.clone());
+            }
+            keys.insert(decl.key.clone());
+            let app = decl.key.app().to_owned();
+            builder.register_decl(&app, decl, handler);
+        }
+        let registry = builder
+            .build()
+            .map_err(|conflicts| list_conflicts(&conflicts));
+        match (registry, errors.is_empty()) {
+            (Ok(registry), true) => {
+                *self.overlay.write().unwrap_or_else(|p| p.into_inner()) = Arc::new(Overlay {
+                    registry: (!keys.is_empty()).then_some(registry),
+                    schemas,
+                    keys,
+                });
+                Ok(())
+            }
+            (Ok(_), false) => Err(errors.join("; ")),
+            (Err(conflicts), true) => Err(conflicts),
+            (Err(conflicts), false) => Err(format!("{}; {conflicts}", errors.join("; "))),
+        }
+    }
+
+    fn overlay(&self) -> Arc<Overlay> {
+        Arc::clone(&self.overlay.read().unwrap_or_else(|p| p.into_inner()))
+    }
+
+    fn set_manifest_keys(&self, keys: BTreeSet<FunctionKey>) {
+        *self
+            .manifest_keys
+            .write()
+            .unwrap_or_else(|p| p.into_inner()) = keys;
+    }
+}
+
 /// The function service of one site: the current registry and what it needs to serve a call.
 pub struct FunctionService {
     site: String,
     live: Arc<SiteLive>,
     settings: Settings,
     built: RwLock<Arc<Built>>,
+    sources: Arc<FunctionSources>,
 }
 
 impl FunctionService {
@@ -285,15 +437,24 @@ impl FunctionService {
     /// Every function of the site: declaring app, verbs, guest flag, limit, schema and override.
     /// The listing the admin app's `list` serves.
     pub fn list(&self) -> Vec<FunctionInfo> {
-        self.current().registry.list()
+        let mut all = self.current().registry.list();
+        if let Some(registry) = &self.sources.overlay().registry {
+            all.extend(registry.list());
+        }
+        all
     }
 
     /// Drops the rate-limit buckets idle for longer than `services.function.idle_after_seconds`;
     /// returns how many.
     pub fn evict_idle(&self) -> usize {
-        self.current()
+        let idle = Duration::from_secs(self.settings.idle_after_seconds);
+        let scripts = self
+            .sources
+            .overlay()
             .registry
-            .evict_idle_buckets(Duration::from_secs(self.settings.idle_after_seconds))
+            .as_ref()
+            .map_or(0, |registry| registry.evict_idle_buckets(idle));
+        self.current().registry.evict_idle_buckets(idle) + scripts
     }
 
     async fn caller(&self, ctx: &RequestCtx) -> std::result::Result<Caller, ApiError> {
@@ -319,14 +480,28 @@ impl FunctionService {
             return Err(ApiError::from_code(Code::PermissionDenied));
         }
         let caller = self.caller(ctx).await?;
-        let built = self.current();
-        if built.registry.bucket_count() > self.settings.bucket_cap {
-            built
-                .registry
-                .evict_idle_buckets(Duration::from_secs(self.settings.idle_after_seconds));
+        let main = self.current();
+        let overlay = self.sources.overlay();
+        // A function a script source declares is served from the overlay; every other call goes
+        // to the manifest registry exactly as before.
+        let from_overlay = overlay
+            .keys
+            .contains(&key)
+            .then_some(overlay.registry.as_ref())
+            .flatten();
+        let (registry, schemas) = match from_overlay {
+            Some(registry) => (registry, &overlay.schemas),
+            None => (&main.registry, &main.schemas),
+        };
+        if registry.bucket_count() > self.settings.bucket_cap {
+            registry.evict_idle_buckets(Duration::from_secs(self.settings.idle_after_seconds));
         }
-        let verb = if via_get { HttpVerb::Get } else { HttpVerb::Post };
-        let args = match (via_get, built.schemas.get(&key)) {
+        let verb = if via_get {
+            HttpVerb::Get
+        } else {
+            HttpVerb::Post
+        };
+        let args = match (via_get, schemas.get(&key)) {
             (true, Some(schema)) => decode_query(schema, args),
             _ => args,
         };
@@ -336,7 +511,7 @@ impl FunctionService {
             tenant: self.site.clone(),
             command_id: ctx.idempotency_key.clone(),
         };
-        let outcome = built.registry.dispatch(&context, &key, args).await;
+        let outcome = registry.dispatch(&context, &key, args).await;
         audit(&key, &caller, verb, &outcome);
         match outcome {
             Ok(value) => Ok((value, Vec::new())),
@@ -453,11 +628,16 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let fresh = build_registry(ctx, &settings, &handlers)?;
     let service = if ctx.assembling() {
         let live = Arc::clone(ctx.env()?.live);
+        let sources = Arc::new(FunctionSources::new(Arc::clone(ctx.clock())));
+        sources.set_manifest_keys(manifest_keys(&fresh));
+        // Modules that start later add their declaration sources through this port.
+        ctx.provide::<FunctionSources>(Arc::clone(&sources))?;
         let service = Arc::new(FunctionService {
             site: site.clone(),
             live,
             settings,
             built: RwLock::new(Arc::new(fresh)),
+            sources,
         });
         built().insert(site, Arc::clone(&service));
         ctx.add(Idle::new("function", Level::Required, || {
@@ -468,7 +648,13 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         let Some(service) = built().get(&site).cloned() else {
             return Ok(());
         };
+        service.sources.set_manifest_keys(manifest_keys(&fresh));
         service.swap(fresh);
+        // A script may not shadow an app's function: re-check against the new manifests. The
+        // overlay that was serving keeps serving when the check fails.
+        if let Err(conflicts) = service.sources.rebuild() {
+            tracing::warn!(site = %service.site, %conflicts, "script functions were not reloaded");
+        }
         service
     };
     let evictor = Arc::clone(&service);

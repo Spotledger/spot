@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The capture invariant (`[services.capture_invariant]`)
 
 The journal is only recoverable if every committed write left a `doc_state` event. The document engine writes that event, and storage's own **change feed** is an independent witness that it did. The capture invariant compares the two continuously. A write that bypassed the engine (a direct SQL update, a loader that skipped it) leaves a feed entry with no event, and the service raises the red condition `CAPTURE_MISMATCH` within a few minutes, not months later when a rebuild comes up short (ADR-061, section 8).

@@ -37,7 +37,7 @@ pub mod report;
 pub mod signing;
 pub mod wasm_component;
 
-pub use crate::check::{CheckReport, ControllerKind, ControllerRef, check_app};
+pub use crate::check::{CheckReport, ControllerKind, ControllerRef, check_app, check_app_with};
 pub use crate::error::{PackError, PackProblem, VerifyRefusal};
 pub use crate::pack::{PackOptions, PackedBundle, pack_app};
 pub use crate::signing::{

@@ -35,6 +35,18 @@ pub const MAX_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
 /// relay refuses an oversize batch.
 pub const BATCH_LINE_BUDGET: u64 = 32 * 1024 * 1024;
 
+/// The most a sealed entry adds to its line, in bytes, for a key provider that wraps a 32-byte
+/// data key into at most 512 bytes under a key id of at most 64 bytes (the local, environment and
+/// in-memory providers wrap into 72 bytes; a KMS wrap is a few hundred). It is the entry head
+/// (20) plus the sealed form's framing (4 + 1 + 64 + 4 + 2), the wrapped key (512), the nonce
+/// (24) and the tag (16). [`encoded_len_upper_bound`] uses it; [`encode_v2`] still measures the
+/// real object, so a provider outside this assumption is refused by the relay, never written
+/// oversize.
+pub const ENTRY_OVERHEAD_BOUND: u64 = 20 + (4 + 1 + 64 + 4 + 2) + 512 + 24 + 16;
+/// The bytes of a version 2 chunk outside its entries: the magic (8), the count (4) and the MAC
+/// (32).
+pub const CHUNK_FRAMING_BYTES: u64 = 8 + 4 + 32;
+
 /// One entry of a chunk: its position and its envelope line.
 pub type Entry = (Position, Vec<u8>);
 
@@ -76,6 +88,37 @@ pub async fn encode_v2(
     entries: &[Entry],
 ) -> Result<Vec<u8>, EncodeError> {
     v2::encode(keys, object_key, batch_id, entries).await
+}
+
+/// A size no real version 2 chunk of `entries` exceeds (see [`ENTRY_OVERHEAD_BOUND`] for the key
+/// provider assumption). A batcher stops adding entries while this is at most
+/// [`MAX_CHUNK_BYTES`]. It never encrypts and never reads a line.
+#[must_use]
+pub fn encoded_len_upper_bound(entries: &[Entry]) -> u64 {
+    encoded_len_upper_bound_of(entries.iter().map(|(_, line)| line.len()))
+}
+
+/// [`encoded_len_upper_bound`] from the byte lengths of the lines alone.
+#[must_use]
+pub fn encoded_len_upper_bound_of(line_lens: impl IntoIterator<Item = usize>) -> u64 {
+    let (count, bytes) = line_lens
+        .into_iter()
+        .fold((0_u64, 0_u64), |(count, bytes), len| {
+            (
+                count.saturating_add(1),
+                bytes.saturating_add(u64::try_from(len).unwrap_or(u64::MAX)),
+            )
+        });
+    encoded_len_upper_bound_for(count, bytes)
+}
+
+/// [`encoded_len_upper_bound`] for `count` entries whose lines add up to `line_bytes`: what a
+/// batcher asks each time it considers one more entry.
+#[must_use]
+pub fn encoded_len_upper_bound_for(count: u64, line_bytes: u64) -> u64 {
+    CHUNK_FRAMING_BYTES
+        .saturating_add(count.saturating_mul(ENTRY_OVERHEAD_BOUND))
+        .saturating_add(line_bytes)
 }
 
 /// Reads one chunk of the generation `generation` of `tenant`, whichever version it is.

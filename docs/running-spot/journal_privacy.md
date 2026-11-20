@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Personal-field protection and erasure (`[services.journal_privacy]`)
 
 A field flagged personal is encrypted in the journal under a **per-subject key**. Erasing a subject destroys the key: replays, snapshots and rebuilds then yield the documented placeholder for those fields, and everything else is untouched (ADR-061 sections 3 and 6). The platform ships the mechanism and no legal defaults: what may be erased is policy data on the field.

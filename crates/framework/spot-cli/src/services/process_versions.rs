@@ -39,17 +39,17 @@ use spot_bpm_definitions::{
     check_name,
 };
 use spot_bpm_defs_pg::PgDefinitionStore;
-use spot_bpm_pg::{MigrationMove, MigrationOutcome, PgCaseStore};
 use spot_bpm_documents::{ProcessAuthor, PublishGuard};
 use spot_bpm_effect_checks::{ChecksError, PolicyMeta, PublishGate};
 use spot_bpm_engine::{
     AttemptState, CaseId, CaseRecord, CaseStore, NodeKind as EngineKind, ProcessDefinition,
 };
 use spot_bpm_model::{NodeId, NodeKind, ProcessVersion, VersionStatus, from_text};
+use spot_bpm_pg::{MigrationMove, MigrationOutcome, PgCaseStore};
 use spot_bpm_triggers::TriggerIndex;
 use spot_bpm_versioning::{
-    MIGRATION_AUDIT_TOPIC, MigrationAudit, MigrationMapping, MigrationPlan, VariableAction,
-    plan_migration, PublishCheck, VersioningError, validate_guarded,
+    MIGRATION_AUDIT_TOPIC, MigrationAudit, MigrationMapping, MigrationPlan, PublishCheck,
+    VariableAction, VersioningError, plan_migration, validate_guarded,
 };
 use spot_core::{Clock, SiteId};
 use spot_dag_exec::NodeStatus;
@@ -72,7 +72,7 @@ use tokio::sync::{Notify, watch};
 use crate::audit::PathClass;
 use crate::live::SiteLive;
 use crate::services::process::ProcessHost;
-use crate::services::process_triggers::{Fut, Settings as TriggerSettings, TriggerHost};
+use crate::services::process_triggers::{Fut, Settings as TriggerSettings, TriggerReload};
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
@@ -180,20 +180,7 @@ const SCHEMA: &str = "\
 CREATE TABLE IF NOT EXISTS spot_bpm_version_audit (\
   id bigserial PRIMARY KEY, tenant text NOT NULL, at timestamptz NOT NULL, actor text NOT NULL, \
   operation text NOT NULL, process text NOT NULL, version integer, outcome text NOT NULL, \
-  content_hash text, size integer);\
-CREATE TABLE IF NOT EXISTS spot_bpm_migration (\
-  tenant text NOT NULL, id text NOT NULL, process text NOT NULL, from_version integer NOT NULL, \
-  to_version integer NOT NULL, mapping jsonb NOT NULL, state text NOT NULL, \
-  cursor text NOT NULL DEFAULT '', moved bigint NOT NULL DEFAULT 0, \
-  skipped bigint NOT NULL DEFAULT 0, failed bigint NOT NULL DEFAULT 0, started_by text NOT NULL, \
-  idem_key text, started_at timestamptz NOT NULL, ended_at timestamptz, lease_holder text, \
-  lease_until timestamptz, PRIMARY KEY (tenant, id));\
-CREATE UNIQUE INDEX IF NOT EXISTS spot_bpm_migration_idem_idx \
-  ON spot_bpm_migration (tenant, idem_key) WHERE idem_key IS NOT NULL;\
-CREATE TABLE IF NOT EXISTS spot_bpm_migration_audit (\
-  tenant text NOT NULL, migration_id text NOT NULL, case_id text NOT NULL, \
-  plan_digest text NOT NULL, payload text NOT NULL, at timestamptz NOT NULL, \
-  PRIMARY KEY (tenant, case_id, plan_digest));";
+  content_hash text, size integer);";
 
 // ---------------------------------------------------------------------------------------------
 // The host
@@ -212,8 +199,9 @@ pub struct Parts {
     pub access: Arc<dyn Access>,
     /// The service-principal publish guard, when the documents module is on.
     pub guard: Option<Arc<PublishGuard>>,
-    /// The trigger intake, when it provides itself as a port.
-    pub triggers: Option<Arc<TriggerHost>>,
+    /// The trigger intake's reload port, when the intake runs on this site. `None` is not an
+    /// error: a publish succeeds and the intake's own 15 s pass picks the change up.
+    pub triggers: Option<Arc<dyn TriggerReload>>,
     /// The trigger intake's settings (webhook secrets are checked against them).
     pub trigger_settings: TriggerSettings,
     /// The site clock.
@@ -231,6 +219,17 @@ pub struct VersionHost {
 }
 
 type R<T> = VersionResult<T>;
+
+/// How far a reload got.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reload {
+    /// Both the registry and the triggers are current.
+    Done,
+    /// The process registry did not reload (the triggers were not asked).
+    Registry,
+    /// The registry reloaded; the trigger set in force is the one from before.
+    Triggers,
+}
 
 #[rustfmt::skip]
 fn code_of(error: &VersionPortError) -> &'static str {
@@ -364,7 +363,11 @@ impl VersionHost {
     pub async fn prepare(&self) -> Result<()> {
         let client = self.p.pool.get().await.map_err(|e| Error(e.to_string()))?;
         let made = client.batch_execute(SCHEMA).await;
-        made.map_err(|e| Error(format!("the process version tables could not be prepared: {e}")))
+        drop(client);
+        made.map_err(|e| Error(format!("the process version tables could not be prepared: {e}")))?;
+        // The migration tables belong to `spot-bpm-pg` (WP-BPM-09.T8), which owns their DDL.
+        let tables = spot_bpm_pg::prepare_migration_tables(&self.p.pool).await;
+        tables.map_err(|e| Error(format!("the process version tables could not be prepared: {e}")))
     }
 
     fn now(&self) -> OffsetDateTime { self.p.clock.now_utc() }
@@ -428,18 +431,38 @@ impl VersionHost {
     /// Rebuilds the registry and the trigger index. A failure leaves the `dirty` flag, so the worker
     /// retries; the stored state is the truth either way.
     pub async fn reload(&self) -> bool {
+        self.reload_steps().await == Reload::Done
+    }
+
+    /// [`VersionHost::reload`], saying which step failed (the first one that did).
+    async fn reload_steps(&self) -> Reload {
         self.dirty.store(true, Ordering::SeqCst);
         match self.p.process.reload_definitions().await {
             Ok(report) if !report.is_clean() => tracing::warn!(target: AUDIT, n = report.failures.len(), "versions do not load"),
             Ok(_) => {}
-            Err(error) => { tracing::warn!(target: AUDIT, %error, "reloading the process registry failed"); return false; }
+            Err(error) => { tracing::warn!(target: AUDIT, %error, "reloading the process registry failed"); return Reload::Registry; }
         }
-        if let Some(triggers) = &self.p.triggers && let Err(error) = triggers.reload().await {
+        // The intake reloads from the stored versions now, so a published trigger is live (and a
+        // retired process's is gone) as this call returns. A failure keeps the trigger set in force.
+        if let Some(triggers) = &self.p.triggers && let Err(error) = triggers.reload_now().await {
             tracing::warn!(target: AUDIT, %error, "reloading the trigger index failed");
-            return false;
+            return Reload::Triggers;
         }
         self.dirty.store(false, Ordering::SeqCst);
-        true
+        Reload::Done
+    }
+
+    /// The reload that follows a stored publish or retire. The version is stored and live either
+    /// way; a step that failed is audited by its code and left to the worker's retry and, for the
+    /// triggers, to the intake's own 15 s pass.
+    async fn reload_after_store(&self, who: &str, op: &str, process: &str, version: u32) {
+        let outcome = match self.reload_steps().await {
+            Reload::Done => return,
+            Reload::Registry => "registry_reload_failed",
+            Reload::Triggers => "trigger_reload_failed",
+        };
+        tracing::warn!(target: AUDIT, op, outcome, "the change is stored; the reload retries");
+        self.audit(who, op, process, Some(version), outcome, (None, None)).await;
     }
 
     // ---- versions
@@ -548,7 +571,7 @@ impl VersionHost {
         let stored = match stored { Ok(s) => s, Err(e) => return self.deny(&caller, op, process, None, def_err(e)).await };
         let extra = (Some(stored.content_hash.as_str()), Some(request.note.len()));
         self.audit(&caller.user, op, process, Some(stored.version), "ok", extra).await;
-        if !self.reload().await { tracing::warn!(target: AUDIT, "the version is stored; the reload retries"); }
+        self.reload_after_store(&caller.user, op, process, stored.version).await;
         Ok(Published { hash: stored.content_hash.clone(), version: summary(&stored, 0) })
     }
 
@@ -569,7 +592,7 @@ impl VersionHost {
             let _ = engine.processes().publish(definition);
         }
         self.audit(&caller.user, op, process, Some(version), "ok", (Some(retired.content_hash.as_str()), None)).await;
-        if !self.reload().await { tracing::warn!(target: AUDIT, "the retire is stored; the reload retries"); }
+        self.reload_after_store(&caller.user, op, process, version).await;
         let pins = self.pin_counts(process).await?;
         Ok(summary(&retired, pins.get(&version).copied().unwrap_or(0)))
     }
@@ -897,7 +920,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             site, pool, definitions, process,
             access: Arc::new(LiveAccess { live: Arc::clone(env.live), principals }),
             guard: ctx.port::<PublishGuard>(),
-            triggers: ctx.port::<TriggerHost>(),
+            triggers: ctx.port::<dyn TriggerReload>(),
             trigger_settings: ctx.settings_or_default("process_triggers")?,
             clock: Arc::clone(ctx.clock()),
             settings,

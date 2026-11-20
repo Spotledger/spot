@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Rescue: `spot migrate-rescue`
 
 Use it when an apply failed (`spot migrate-apply` printed the next action) or verification found a
@@ -34,3 +36,31 @@ spot migrate-rescue HASH --site S --mode restore --confirm TOKEN --approved-by S
   and says to use `restore`.
 
 Exit codes: 0 done or previewed, 1 usage, 2 refused (nothing changed), 3 failed.
+
+## Resuming a rescue
+
+A rescue writes a durable journal (PostgreSQL schema `spot_rescue_control`, table `spot_rescue_journal`, one row
+per record, per site) before each step. If the process dies, the journal says exactly how far it got.
+
+**Seeing an unfinished rescue.** The maintenance gate stays closed and the effect hold stays active,
+and the journal's last records show a started run with neither `gate_opened` nor `halted`. The
+verb reads the same journal: a second `spot migrate rescue` for the same plan **resumes** it and
+reports `resumed: true` and the attempt number.
+
+**What a resume repeats, and what it never repeats.** It never restores the snapshot again once the
+journal says the restore completed, and it never presents an item that already has an outcome to the
+old version again. It runs the items that have no outcome, runs the invariant check, and only then
+opens the gate. A resume that finds a different snapshot than the unfinished run restored is
+**refused** (`migration.rescue_refused`) before anything runs: two rescues never interleave on one site.
+
+**While it is unfinished.** The closed gate means users are not admitted and writes are refused;
+that is intended. Do not open the gate by hand: finish the rescue (repeat the same command with the
+same confirm token, or re-run `spot migrate rescue --preview` to get a fresh one if the loss window
+changed).
+
+**The post-migration database is never deleted.** A restore keeps the database that was live when the
+rescue began, renamed aside, so nothing is lost if the rescue is abandoned. Removing it is a separate,
+explicit operator action.
+
+The control schema is created by the first rescue of a site (the verb calls `prepare`, which is
+idempotent and safe from several nodes at once); a creation-time call in `new-site` would be cleaner.

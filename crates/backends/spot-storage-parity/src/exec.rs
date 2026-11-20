@@ -9,9 +9,9 @@ use spot_storage_contract::{
 };
 
 use crate::cases::{Case, Op};
-use crate::catalog::{LINE_FIELDS, item_fields};
+use crate::catalog::{LINE_FIELDS, PARTY_FIELDS, item_fields};
 use crate::driver::Driver;
-use crate::dsl::{build_query, words};
+use crate::dsl::{build_query, build_traversal, node_line, words};
 use crate::values::{Ids, canon, parse_value};
 
 /// What a backend did for a case.
@@ -61,6 +61,8 @@ pub fn error_kind(e: &StorageError) -> String {
 }
 
 struct DocState {
+    /// The entity of the document (`item`; `party` with `@entity=party`).
+    entity: String,
     id: RecordId,
     fields: Fields,
     children: Vec<ChildRow>,
@@ -140,9 +142,12 @@ impl<D: Driver> Session<'_, D> {
             .get(doc)
             .ok_or_else(|| format!("unknown document `{doc}`"))?;
         let mut children = BTreeMap::new();
-        children.insert(name("lines")?, st.children.clone());
+        // `party` (the second entity of the graph catalogue) has no child table.
+        if st.entity != "party" {
+            children.insert(name("lines")?, st.children.clone());
+        }
         Ok(DocumentData {
-            entity: name("item")?,
+            entity: name(&st.entity)?,
             id: st.id,
             fields: st.fields.clone(),
             children,
@@ -184,11 +189,14 @@ impl<D: Driver> Session<'_, D> {
             _ => ("insert", Some(first), rest),
         };
         let mut strict = false;
+        let mut entity = "item".to_owned();
         let mut expected: Option<u64> = None;
         let mut pairs = Vec::new();
         for a in args {
             if a == "@strict" {
                 strict = true;
+            } else if let Some(v) = a.strip_prefix("@entity=") {
+                entity = v.to_owned();
             } else if let Some(v) = a.strip_prefix("@expected=") {
                 expected = Some(v.parse().map_err(|_| format!("bad {a}"))?);
             } else {
@@ -204,10 +212,16 @@ impl<D: Driver> Session<'_, D> {
                 let n = target.ok_or("insert needs a document name")?.clone();
                 let id = self.ids.get(&n)?;
                 let mut fields = Fields::new();
-                self.assign(&mut fields, self.declared, &pairs, strict)?;
+                let declared: &[&str] = if entity == "party" {
+                    &PARTY_FIELDS
+                } else {
+                    self.declared
+                };
+                self.assign(&mut fields, declared, &pairs, strict)?;
                 self.docs.insert(
                     n.clone(),
                     DocState {
+                        entity,
                         id,
                         fields,
                         children: Vec::new(),
@@ -251,7 +265,9 @@ impl<D: Driver> Session<'_, D> {
                 self.flush().await?;
                 let n = target.ok_or("update needs a document name")?.clone();
                 let mut changes = Fields::new();
-                self.assign(&mut changes, self.declared, &pairs, true)?;
+                let party = self.docs.get(&n).is_some_and(|d| d.entity == "party");
+                let declared: &[&str] = if party { &PARTY_FIELDS } else { self.declared };
+                self.assign(&mut changes, declared, &pairs, true)?;
                 let st = self
                     .docs
                     .get_mut(&n)
@@ -280,8 +296,9 @@ impl<D: Driver> Session<'_, D> {
                     .or(st.version)
                     .ok_or("no version yet")?;
                 let id = st.id;
+                let entity = name(&st.entity)?;
                 self.driver
-                    .delete(&name("item")?, id, version, self.max_writes)
+                    .delete(&entity, id, version, self.max_writes)
                     .await?;
                 // The id stays: a later command may name the deleted document (its version is
                 // gone, so an `update` can only be told the expected version explicitly).
@@ -301,6 +318,46 @@ fn canon_rows(rows: &Rows, ids: &Ids) -> Vec<Vec<String>> {
         .iter()
         .map(|r| r.iter().map(|v| canon(v, ids)).collect())
         .collect()
+}
+
+/// Runs the `try_write` commands of `case`, which must fail: the write is rolled back, and what
+/// the case judges is the operation after it. `None` when the write failed as it must; a
+/// verdict of its own (a broken case) when a command is malformed or the write went through.
+async fn try_failing_write<D: Driver>(
+    case: &Case,
+    session: &mut Session<'_, D>,
+) -> Option<Observed> {
+    let mut failed = false;
+    for line in &case.try_write {
+        match session.command(line).await {
+            Ok(()) => {}
+            Err(CmdError::Broken(m)) => {
+                return Some(Observed::BrokenCase(format!("try_write `{line}`: {m}")));
+            }
+            Err(CmdError::Storage(_)) => {
+                failed = true;
+                break;
+            }
+        }
+    }
+    if !failed {
+        match session.flush().await {
+            Ok(()) => {}
+            Err(CmdError::Broken(m)) => {
+                return Some(Observed::BrokenCase(format!("try_write: {m}")));
+            }
+            Err(CmdError::Storage(_)) => failed = true,
+        }
+    }
+    // Whatever was buffered by a failed command is dropped: the write did not happen.
+    session.pending.clear();
+    if failed {
+        None
+    } else {
+        Some(Observed::BrokenCase(
+            "try_write succeeded, but it must fail so the write is rolled back".into(),
+        ))
+    }
 }
 
 /// Runs `case` on `driver`.
@@ -331,6 +388,11 @@ pub async fn execute<D: Driver>(case: &Case, driver: &D) -> Observed {
             CmdError::Broken(m) => Observed::BrokenCase(format!("setup: {m}")),
             CmdError::Storage(e) => Observed::BrokenCase(format!("setup failed: {e}")),
         };
+    }
+    if !case.try_write.is_empty()
+        && let Some(broken) = try_failing_write(case, &mut session).await
+    {
+        return broken;
     }
     match case.op {
         // `Prepare` is the runner's: it asserts what `prepare` does with the catalog and runs no
@@ -379,6 +441,51 @@ pub async fn execute<D: Driver>(case: &Case, driver: &D) -> Observed {
                                 canon(&Value::Text(c.document.entity.to_string()), session.ids),
                             ]
                         })
+                        .collect(),
+                ),
+                Err(e) => Observed::Error(error_kind(&e)),
+            }
+        }
+        Op::Traverse => {
+            let Some(spec) = &case.traversal else {
+                return Observed::BrokenCase("a traverse case needs a traversal".into());
+            };
+            // `write` lines are buffered, not committed: they are inserted in the traversal's own
+            // transaction, which must see them (SEM-GRA-01).
+            for line in &case.write {
+                if let Err(e) = session.command(line).await {
+                    return match e {
+                        CmdError::Broken(m) => Observed::BrokenCase(format!("write `{line}`: {m}")),
+                        CmdError::Storage(e) => Observed::Error(error_kind(&e)),
+                    };
+                }
+            }
+            let names = std::mem::take(&mut session.pending);
+            let docs = match names
+                .iter()
+                .map(|n| session.data(n))
+                .collect::<Result<Vec<_>, _>>()
+            {
+                Ok(d) => d,
+                Err(m) => return Observed::BrokenCase(m),
+            };
+            let traversal = match build_traversal(spec, session.ids) {
+                Ok(t) => t,
+                Err(m) => return Observed::BrokenCase(format!("traversal: {m}")),
+            };
+            let result = if docs.is_empty() {
+                session.driver.traverse(&traversal).await
+            } else {
+                session
+                    .driver
+                    .insert_then_traverse(&docs, &traversal, session.max_writes)
+                    .await
+            };
+            match result {
+                Ok(r) => Observed::Rows(
+                    r.nodes
+                        .iter()
+                        .map(|n| vec![node_line(n, session.ids)])
                         .collect(),
                 ),
                 Err(e) => Observed::Error(error_kind(&e)),

@@ -14,7 +14,9 @@ use spot_journal_rebuild::{
     ApplySink, RebuildError, RebuildKeys, RebuildOptions, RebuildOutcome, RecordingSink, execute,
 };
 use spot_journal_rebuild_plan::{JournalCatalog, SegmentRange, Target, plan};
-use spot_journal_relay::{Appended, Batch, Durability, ManifestSigner, Relay, RelayConfig};
+use spot_journal_relay::{
+    Appended, Batch, Durability, ManifestSigner, Relay, RelayConfig, TailKeys, tail,
+};
 use spot_journal_segment::SegmentReader;
 use spot_journal_snapshot::{
     ImageRecord, SnapshotInfo, SnapshotKeys, SnapshotParams, SnapshotReader, SnapshotSigner,
@@ -53,11 +55,9 @@ impl ManifestSigner for FixedSigner {
     }
 }
 
+/// The shared test tail keys: the same ones [`opened`] reads the chunks back with.
 fn tail_keys() -> spot_journal_relay::TailKeys {
-    let provider =
-        spot_secrets::EnvKey::from_base64("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
-            .expect("a 32 byte test key");
-    spot_journal_relay::TailKeys::new(std::sync::Arc::new(provider))
+    spot_journal_relay::TailKeys::for_tests(TENANT)
 }
 
 fn manifest_keys() -> VerifyingKeys {
@@ -289,6 +289,25 @@ fn contains(haystack: &[u8], needle: &str) -> bool {
         .any(|window| window == needle)
 }
 
+/// What a stored object holds once the tail chunk's own encryption is removed: a version 2 tail
+/// chunk is AEAD ciphertext on disk, so the raw bytes prove nothing about the lines in it. The
+/// lines are opened with the test tail keys and joined; every other object is returned as it is.
+async fn opened(key: &str, bytes: &[u8]) -> Vec<u8> {
+    if !key.contains("/tail/") {
+        return bytes.to_vec();
+    }
+    let keys = TailKeys::for_tests(TENANT);
+    let chunk = tail::decode(TENANT, 1, Some(&keys), key, bytes)
+        .await
+        .expect("a tail chunk the relay wrote opens with the test tail keys");
+    let mut out = Vec::new();
+    for (_, line) in chunk.entries {
+        out.extend_from_slice(&line);
+        out.push(b'\n');
+    }
+    out
+}
+
 fn every_clear_value() -> Vec<String> {
     TAGS.iter().flat_map(|tag| clear_values(tag)).collect()
 }
@@ -450,6 +469,19 @@ fn another_tenants_keys_cannot_rebuild_the_journal() {
 }
 
 #[test]
+fn a_remote_sync_relay_without_tail_keys_is_refused_at_open_with_the_typed_error() {
+    block_on(async {
+        let config = RelayConfig::new(TENANT, SOURCE, Durability::RemoteSync);
+        let store = MemoryStore::new();
+        let error = Relay::open(store, Box::new(FixedSigner), manifest_keys(), config, 1_000)
+            .await
+            .err()
+            .expect("a remote-sync relay needs its tail keys");
+        assert_eq!(error.code(), "journal_relay.config_invalid");
+    });
+}
+
+#[test]
 fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
     block_on(async {
         // p9 has no key, so the second line of the batch cannot be protected.
@@ -509,6 +541,7 @@ fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
         for entry in relay.store().list("", None, 100).await.unwrap() {
             let object = relay.store().get(&entry.key).await.unwrap().unwrap();
             chunk_bytes += object.bytes.len();
+            let plain = opened(&entry.key, &object.bytes).await;
             for value in clear_values("alice")
                 .into_iter()
                 .chain(clear_values("bruno"))
@@ -516,6 +549,11 @@ fn a_failed_protect_writes_nothing_and_the_tail_chunk_holds_no_clear_value() {
                 assert!(
                     !contains(&object.bytes, &value),
                     "a clear value is in {}",
+                    entry.key
+                );
+                assert!(
+                    !contains(&plain, &value),
+                    "a clear value is in the opened lines of {}",
                     entry.key
                 );
             }

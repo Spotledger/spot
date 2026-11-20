@@ -1,0 +1,8 @@
+{
+  "case": "index_signature",
+  "entry": "pick",
+  "args": {
+    "known": 3
+  },
+  "expect": 3
+}

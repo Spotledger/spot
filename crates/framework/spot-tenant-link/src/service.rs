@@ -12,6 +12,7 @@
 use crate::audit::{AuditSink, LinkEvent, LinkEventKind, record};
 use crate::error::{Error, Result};
 use crate::grant::{Direction, ExchangePayload, Filtered, Grant};
+use crate::grant_revocation::GrantRevocations;
 use crate::ids::{LinkId, Topic};
 use crate::model::{Link, LinkState, Party, RevokeReason};
 use crate::nonce::NonceLog;
@@ -42,13 +43,58 @@ pub struct SendRequest<'a> {
 pub struct LinkService<'a> {
     store: &'a dyn LinkStore,
     audit: &'a dyn AuditSink,
+    revocations: Option<&'a dyn GrantRevocations>,
 }
 
 impl<'a> LinkService<'a> {
     /// A service over a store and an audit trail.
     #[must_use]
     pub fn new(store: &'a dyn LinkStore, audit: &'a dyn AuditSink) -> Self {
-        Self { store, audit }
+        Self {
+            store,
+            audit,
+            revocations: None,
+        }
+    }
+
+    /// The same service honouring a list of withdrawn grants at every check: a withdrawn grant is
+    /// refused like an absent one, the link's other grants are untouched.
+    #[must_use]
+    pub fn with_revocations(mut self, revocations: &'a dyn GrantRevocations) -> Self {
+        self.revocations = Some(revocations);
+        self
+    }
+
+    /// Withdraws the grant of `topic` on `id` (the link stays active), with an audit record.
+    ///
+    /// # Errors
+    /// [`Error::StoreFailed`] when no revocation list is attached,
+    /// [`Error::TopicNotGranted`] when the link holds no grant for the topic,
+    /// [`Error::AuditFailed`] and [`Error::StoreFailed`].
+    pub fn revoke_grant(&self, id: &LinkId, topic: &Topic, actor: &str, at: u64) -> Result<()> {
+        let Some(revocations) = self.revocations else {
+            return Err(Error::StoreFailed {
+                reason: "no grant revocation list is attached",
+            });
+        };
+        let link = self.store.get(id)?;
+        if link.grant(topic).is_none() {
+            return Err(Error::TopicNotGranted {
+                link: id.to_string(),
+                topic: topic.to_string(),
+            });
+        }
+        let event = LinkEvent {
+            link: *id,
+            kind: LinkEventKind::Revoked,
+            actor: actor.to_owned(),
+            at,
+            revision: link.version,
+            detail: Some("grant"),
+        };
+        record(self.audit, &event, "record a grant revocation")?;
+        revocations.revoke(id, topic);
+        Ok(())
     }
 
     /// Stores a link finished by a handshake. The handshake already wrote its state changes to
@@ -230,9 +276,17 @@ impl<'a> LinkService<'a> {
     ) -> Result<Grant> {
         let link = self.store.get(id)?;
         // Without an oracle `allows` refuses a grant that carries a region requirement.
-        let result = match oracle {
-            Some(oracle) => link.allows_with_region(topic, direction, now, oracle),
-            None => link.allows(topic, direction, now),
+        let withdrawn = self.revocations.is_some_and(|r| r.is_revoked(id, topic));
+        let result = if withdrawn {
+            Err(Error::TopicNotGranted {
+                link: id.to_string(),
+                topic: topic.to_string(),
+            })
+        } else {
+            match oracle {
+                Some(oracle) => link.allows_with_region(topic, direction, now, oracle),
+                None => link.allows(topic, direction, now),
+            }
         };
         match result {
             Ok(grant) => {

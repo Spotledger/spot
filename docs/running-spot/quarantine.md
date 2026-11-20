@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # quarantine
 
 Administration of the quarantine queue: list, inspect, retry, release, discard; and the drift

@@ -26,17 +26,18 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
 jobs:
   rust:
-    name: rust full (${{ matrix.os }})
+    name: rust full (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        # As in ci.yml: the workspace's test binaries do not fit on one hosted runner (the first
+        # whole-workspace nightly died with 'No space left on device' and a linker bus error), so
+        # each shard builds and tests every fourth crate (by sorted name) on its own runner.
+        shard: [1, 2, 3, 4]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 330
     steps:
-      - if: runner.os == 'Windows'
-        shell: bash
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { ref: main }
       - if: runner.os == 'Linux'
@@ -46,42 +47,79 @@ jobs:
           df -h /
           sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
           df -h /
+          # Build on the runner's second disk, /mnt (about 66 GB), as ci.yml does.
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /mnt
       - name: install the toolchain pinned in rust-toolchain.toml
         shell: bash
         run: rustup toolchain install && rustup show active-toolchain
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false } # the test target is far over the 10 GB cache limit; restoring is enough
       - if: runner.os == 'Linux'
         name: start PostgreSQL 18 with its extensions
         shell: bash
         run: bash tools/ci/start-postgres.sh
-      # Formatting does not depend on the platform, and `cargo fmt --all` passes every source file
-      # of the workspace's hundreds of crates to rustfmt on one command line, which Windows
-      # refuses ("The filename or extension is too long", os error 206): check it on Linux only.
       - if: runner.os == 'Linux'
-        run: cargo fmt --all -- --check
-      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      # --no-fail-fast: one failing test must not hide every crate after it (the first red run
-      # stopped at the first crate and nothing after it was tested).
-      - run: cargo test --locked --workspace --no-fail-fast
-      - if: runner.os != 'Linux'
-        name: ignored and slow tests
-        run: cargo test --locked --workspace --no-fail-fast -- --ignored
-      - if: runner.os == 'Linux'
-        name: ignored and slow tests
+        name: install the PostgreSQL 18 client tools
         shell: bash
-        run: cargo test --locked --workspace --no-fail-fast --exclude spot-idle-connections -- --ignored
+        run: bash tools/ci/install-pg-client.sh
+      # Linux only: `cargo fmt --all` hands rustfmt every source file on one command line, which
+      # Windows refuses (os error 206), and formatting does not depend on the platform.
+      - if: matrix.shard == 1 && runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+      - if: matrix.shard == 1
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: the crates of this shard (every fourth crate by sorted name)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          names=$(cargo metadata --no-deps --format-version 1 | "$PY" -c '
+          import json, sys
+          m = json.load(sys.stdin)
+          members = set(m["workspace_members"])
+          names = sorted(p["name"] for p in m["packages"] if p["id"] in members)
+          print(" ".join(names[int(sys.argv[1]) - 1::4]))
+          ' "${{ matrix.shard }}")
+          echo "shard ${{ matrix.shard }}/4: $names"
+          echo "SHARD_CRATES=$names" >> "$GITHUB_ENV"
+      - name: tests
+        shell: bash
+        run: |
+          packages=""; for n in $SHARD_CRATES; do packages="$packages -p $n"; done
+          # shellcheck disable=SC2086
+          cargo test --locked --no-fail-fast $packages
+      - name: ignored and slow tests
+        shell: bash
+        run: |
+          # spot-idle-connections has its own step below (it needs a raised descriptor limit).
+          packages=""
+          for n in $SHARD_CRATES; do
+            if [ "$RUNNER_OS" = Linux ] && [ "$n" = spot-idle-connections ]; then continue; fi
+            packages="$packages -p $n"
+          done
+          # shellcheck disable=SC2086
+          cargo test --locked --no-fail-fast $packages -- --ignored
       # The 10,000-connection run needs 20,612 descriptors; a skipped run is a red nightly.
       - if: runner.os == 'Linux'
         name: 10,000 idle connections
         shell: bash
         timeout-minutes: 20
         run: |
+          case " $SHARD_CRATES " in *" spot-idle-connections "*) ;; *) echo "not in this shard"; exit 0;; esac
           ulimit -n 65536 || { echo "cannot raise the descriptor limit to 65536 (hard limit: $(ulimit -Hn)); see docs/process/idle-connections.md" >&2; exit 1; }
           SPOT_IDLE_REQUIRE=1 cargo test --locked -p spot-idle-connections --test idle_10k -- --ignored --nocapture
       - if: failure() && runner.os == 'Linux'
         name: explain a PostgreSQL failure
         shell: bash
         run: bash tools/ci/pg-diagnose.sh
+      - if: always() && runner.os == 'Linux'
+        name: disk report (where the space went)
+        shell: bash
+        run: |
+          df -h / /mnt || true
+          du -sh "${CARGO_TARGET_DIR:-target}" 2>/dev/null || true
       - if: always() && runner.os == 'Linux' && env.SPOT_PG_DIR != ''
         name: stop the throwaway PostgreSQL
         shell: bash

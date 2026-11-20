@@ -440,3 +440,12 @@ explanation_key = "error.tenant_link.change_failed"
 params = []
 remedy = "Check the link store and retry the operation."
 since = "0.1.0"
+
+[[entry]]
+code = "tenant_link.message_too_large"
+class = "none"
+summary = "An inbound link message is larger than the configured bound and was refused."
+explanation_key = "error.tenant_link.message_too_large"
+params = []
+remedy = "Send a smaller message or raise the link message bound."
+since = "0.1.0"

@@ -1,10 +1,10 @@
 //! [`TriggerSpec`]: one trigger node's config, and how a model [`TriggerConfig`] becomes one.
 //!
 //! The model's trigger node carries the fields a definition states (`doctype`, `event`, `cron`,
-//! `path`); a spec carries the same plus the parts the model does not yet express (a document
-//! condition, a webhook secret reference, manual roles, an API input schema). Those parts default
-//! to "none" when a spec is read from a version, and a host that needs them supplies them through
-//! [`TriggerIndex::add_spec`](crate::TriggerIndex::add_spec).
+//! `path`, `roles`, `input_schema`, `condition`, `zone`, `missed`, `catch_up_max`); a spec carries
+//! the same. The one part the model never carries is a webhook's signing-secret reference: it is
+//! site configuration, so it stays `None` when a spec is read from a version, and a host supplies
+//! it through [`TriggerIndex::add_spec`](crate::TriggerIndex::add_spec).
 
 use spot_app_api::StepName;
 use spot_bpm_model::{NodeId, TriggerConfig, TriggerType};
@@ -13,9 +13,10 @@ use spot_scheduler::{MissedRunPolicy, Schedule, ScheduleBuilder, TimeZone};
 use spot_webhooks::EventType;
 
 use crate::error::{Error, Result};
+use crate::spec_fields as fields;
 use crate::{KIND_API, KIND_DOCUMENT_EVENT, KIND_MANUAL, KIND_SCHEDULE, KIND_WEBHOOK};
 
-/// The IANA zone a schedule trigger fires in until the model can name one.
+/// The IANA zone a schedule trigger fires in when its definition names none.
 pub const DEFAULT_SCHEDULE_ZONE: &str = "UTC";
 
 /// The lifecycle event a document-event trigger listens for, plus its condition.
@@ -176,14 +177,19 @@ impl TriggerSpec {
 
     /// Builds the spec of a trigger node from the model's config.
     ///
-    /// The parts the model does not carry default to "none": a document condition, a webhook
-    /// secret reference, manual roles and an API input schema.
+    /// Reads every field the model carries: roles and input schema (manual and API), the
+    /// document condition, the schedule zone and the missed-run policy. A webhook's
+    /// `secret_ref` stays `None` by design: the signing secret is site configuration
+    /// (`[services.process_triggers.webhooks.<path>]`), never part of a definition that travels
+    /// between sites.
     ///
     /// # Errors
     ///
     /// [`Error::TriggerIncomplete`] when a required field is missing, [`Error::UnknownOperation`]
-    /// for a document-event operation the lifecycle does not have, and the schedule errors from
-    /// [`Error::InvalidCron`] / [`Error::ScheduleInvalid`].
+    /// for a document-event operation the lifecycle does not have, the schedule errors from
+    /// [`Error::InvalidCron`] / [`Error::ScheduleInvalid`] (including an unknown zone and the
+    /// `skip` policy), [`Error::InputSchemaInvalid`] and [`Error::ConditionInvalid`]. No error
+    /// echoes the schema text, the condition text or the zone.
     pub fn from_config(
         process: &str,
         app: &str,
@@ -205,18 +211,19 @@ impl TriggerSpec {
                 Ok(Self::DocumentEvent(DocumentEventSpec {
                     doctype,
                     event,
-                    condition: None,
+                    condition: fields::condition(node, config.condition.as_deref())?,
                 }))
             }
             TriggerType::Schedule => {
                 let cron_text = config.cron.as_deref().ok_or_else(|| {
                     incomplete(process, node, "a schedule trigger names no cron expression")
                 })?;
-                let schedule = build_schedule(app, node, cron_text)?;
+                let policy = fields::missed_policy(node, config)?;
+                let schedule = build_schedule(app, node, cron_text, config.zone.as_deref())?;
                 Ok(Self::Schedule(ScheduleSpec {
                     app: app.to_owned(),
                     schedule,
-                    policy: MissedRunPolicy::RunOnce,
+                    policy,
                 }))
             }
             TriggerType::Webhook => {
@@ -230,8 +237,8 @@ impl TriggerSpec {
                 }))
             }
             TriggerType::Manual => Ok(Self::Manual(ManualSpec {
-                roles: Vec::new(),
-                input_schema: None,
+                roles: config.roles.clone(),
+                input_schema: fields::input_schema(node, config.input_schema.as_deref())?,
             })),
             TriggerType::Api => {
                 let name = config
@@ -240,8 +247,8 @@ impl TriggerSpec {
                     .ok_or_else(|| incomplete(process, node, "an API trigger names no name"))?;
                 Ok(Self::Api(ApiSpec {
                     name,
-                    roles: Vec::new(),
-                    input_schema: None,
+                    roles: config.roles.clone(),
+                    input_schema: fields::input_schema(node, config.input_schema.as_deref())?,
                 }))
             }
         }
@@ -251,13 +258,19 @@ impl TriggerSpec {
 /// Builds the scheduler [`Schedule`] a schedule trigger node names.
 ///
 /// The schedule's name is the node id, its step is `<app>:<node>` (the app's step that runs),
-/// its zone is [`DEFAULT_SCHEDULE_ZONE`] and its budget is the manifest default.
+/// its zone is `zone` (or [`DEFAULT_SCHEDULE_ZONE`] when absent) and its budget is the manifest
+/// default.
 ///
 /// # Errors
 ///
 /// [`Error::InvalidCron`] when the cron text does not parse, [`Error::ScheduleInvalid`] when the
 /// step name or the schedule itself does not build.
-fn build_schedule(app: &str, node: &NodeId, cron_text: &str) -> Result<Schedule> {
+fn build_schedule(
+    app: &str,
+    node: &NodeId,
+    cron_text: &str,
+    zone_name: Option<&str>,
+) -> Result<Schedule> {
     let cron = Cron::parse(cron_text).map_err(|e| Error::InvalidCron {
         node: node.to_string(),
         detail: e.to_string(),
@@ -266,9 +279,12 @@ fn build_schedule(app: &str, node: &NodeId, cron_text: &str) -> Result<Schedule>
         node: node.to_string(),
         detail: e.to_string(),
     })?;
-    let zone = TimeZone::parse(DEFAULT_SCHEDULE_ZONE).map_err(|e| Error::ScheduleInvalid {
-        node: node.to_string(),
-        detail: e.to_string(),
+    // The detail is fixed text: the zone the definition wrote is never echoed.
+    let zone = TimeZone::parse(zone_name.unwrap_or(DEFAULT_SCHEDULE_ZONE)).map_err(|_| {
+        Error::ScheduleInvalid {
+            node: node.to_string(),
+            detail: "the time zone is not a known IANA zone".to_owned(),
+        }
     })?;
     ScheduleBuilder::new(node.as_str())
         .cron(cron)

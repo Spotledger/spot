@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Grant governance (`[services.governance]`)
 
 Provides the port `GrantGuard`: the one function every role-grant path calls. It decides with

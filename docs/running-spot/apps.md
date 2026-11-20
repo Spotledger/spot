@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Installed apps at run time (the `apps` service)
 
 The `apps` service hosts the WebAssembly components of the apps installed on a site. It is
@@ -59,7 +61,7 @@ wall_clock_ms = 2000
 
 An overrun kills only that call's instance and answers `app.limit_exceeded`. It writes an audit
 record to the `spot::audit::apps` log target (the app and the limit, never a payload) and counts
-`app_kills_total{app,limit}`. An app killed `breaker_kills` times inside the window is **disabled**
+`spot_app_kills_total{app,limit}`. An app killed `breaker_kills` times inside the window is **disabled**
 (`app.disabled`, shown in `GET /api/v1/apps` and in readiness) until the next reload.
 
 ## Network
@@ -79,4 +81,4 @@ from guest code. Hooks that run inside a transaction are refused any external ca
 
 - `GET /api/v1/apps`: each app, its version, digest, publisher, status and recent kills.
 - Readiness: `apps` lists every failed or disabled app with its code.
-- Metric: `app_kills_total{app,limit}`.
+- Metric: `spot_app_kills_total{app,limit}`.

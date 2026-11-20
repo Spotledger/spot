@@ -26,6 +26,17 @@ pub enum CommitError {
         /// The relay's own stable error code.
         cause: &'static str,
     },
+    /// The entry alone would make a tail chunk over the relay's size limit, so it is refused
+    /// before it is queued: nothing was shipped and the sequence number is not consumed.
+    #[error(
+        "the entry would make a tail chunk of up to {bytes} bytes, over the {limit} byte limit"
+    )]
+    EntryTooLarge {
+        /// The size bound of a chunk holding just this entry.
+        bytes: u64,
+        /// The chunk limit.
+        limit: u64,
+    },
     /// A setting is outside its allowed range.
     #[error("the setting {name} is invalid: it must be at least the acknowledgement deadline")]
     InvalidSetting {
@@ -42,6 +53,7 @@ impl CommitError {
             Self::SeqOutOfOrder { .. } => "journal_commit.seq_out_of_order",
             Self::UnknownSeq { .. } => "journal_commit.unknown_seq",
             Self::RelayStopped { .. } => "journal_commit.relay_stopped",
+            Self::EntryTooLarge { .. } => "journal_commit.entry_too_large",
             Self::InvalidSetting { .. } => "journal_commit.invalid_setting",
         }
     }

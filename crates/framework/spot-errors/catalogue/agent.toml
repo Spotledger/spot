@@ -449,3 +449,48 @@ explanation_key = "error.agent.update_unavailable"
 params = []
 remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
 since = "0.1.0"
+
+[[entry]]
+code = "agent.software_keys_not_allowed"
+class = "none"
+summary = "This host has no hardware-backed key store and the operator did not accept software administrator keys."
+explanation_key = "error.agent.software_keys_not_allowed"
+params = []
+remedy = "Enrol again with `--allow-software-keys` to accept software keys (recorded in the audit log), or enrol on a host with a hardware-backed store."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.enrol"
+class = "none"
+summary = "The audit operation id of an enrolment (an audit record, not an error)."
+explanation_key = "error.agent.enrol"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.rotate_key"
+class = "none"
+summary = "The audit operation id of an identity key rotation (an audit record, not an error)."
+explanation_key = "error.agent.rotate_key"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.run"
+class = "none"
+summary = "The audit operation id of an agent start or stop (an audit record, not an error)."
+explanation_key = "error.agent.run"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_check"
+class = "none"
+summary = "The audit operation id of a scheduled self-update check (an audit record, not an error)."
+explanation_key = "error.agent.update_check"
+params = []
+remedy = "None needed."
+since = "0.1.0"

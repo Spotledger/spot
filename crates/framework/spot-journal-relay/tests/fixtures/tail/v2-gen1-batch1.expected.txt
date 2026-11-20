@@ -1,0 +1,13 @@
+key: acme/tail/00000000000000000001/00000000000000000001.chunk
+version: 2
+tenant: acme
+generation: 1
+batch_id: 1
+entries: 3
+first_seq: 1
+last_seq: 3
+content_sha256: 188d6d2cc47a5bda288c789c4ab0a08ac6d26be13db2a92fa4c133583ce0ca33
+keys: TailKeys::for_tests("acme") (public test keys, never a real tenant key)
+seq 1: {"g":1,"seq":1,"data":"entry number 1"}
+seq 2: {"g":1,"seq":2,"data":"entry number 2"}
+seq 3: {"g":1,"seq":3,"data":"entry number 3"}

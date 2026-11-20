@@ -53,6 +53,8 @@
 
 #[path = "process_effects/error.rs"]
 mod error;
+#[path = "process_effects/granted.rs"]
+mod granted;
 #[path = "process_effects/hold.rs"]
 mod hold;
 #[path = "process_effects/host.rs"]
@@ -81,6 +83,7 @@ use spot_effect_hold_pg::PgLedger;
 use tokio::sync::watch;
 
 pub use error::EffError;
+pub use granted::{GrantedReversal, LiveProbe, UNCONFIRMED, VersionProbe, governed_doctypes};
 pub use hold::{HoldHost, HoldParts, NoPlans, PlanSource};
 pub use host::{
     AttentionNotice, EffectNotice, EffectsHost, Recorded, Supervisors, UndoReport, Wiring, micros,
@@ -91,6 +94,7 @@ pub use settings::{DEFAULT_SUPERVISOR_ROLES, Settings};
 
 use crate::live::SiteLive;
 use crate::services::ports::{ConsumerLease, OutboxLease};
+use crate::services::process_governance::{GrantHost, Settings as GovernanceSettings};
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
@@ -157,10 +161,13 @@ impl Supervisors for LiveSupervisors {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LogNotice;
 
+/// Counter: requests whose reversal was refused and so need a person's attention.
+const NEEDS_ATTENTION_TOTAL: &str = "spot_bpm_effects_needs_attention_total";
+
 impl EffectNotice for LogNotice {
     fn needs_attention<'a>(&'a self, notice: &'a AttentionNotice) -> BoxFuture<'a, ()> {
         Box::pin(async move {
-            metrics::counter!("spot_bpm_effects_needs_attention_total").increment(1);
+            metrics::counter!(NEEDS_ATTENTION_TOTAL).increment(1);
             tracing::warn!(
                 request = %notice.request,
                 entry = notice.entry,
@@ -403,11 +410,33 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             .unwrap_or_else(|| Arc::new(NoPlans));
         let live = Arc::clone(env.live);
         let site_id = spot_app_api::prelude::SiteId::new(&site).map_err(crate::error)?;
-        let reversal: Arc<dyn ReversalPort> = Arc::new(LiveReversal::new(
+        let live_reversal: Arc<dyn ReversalPort> = Arc::new(LiveReversal::new(
             Arc::clone(&live),
-            site_id,
+            site_id.clone(),
             runtime.clone(),
         ));
+        // With the governance module on, an undo of a governed record runs under a request grant
+        // (WP-BPM-15.T5); with it off, or for any other record, nothing changes.
+        let reversal: Arc<dyn ReversalPort> = match ctx.port::<GrantHost>() {
+            Some(grants) => {
+                let governance: GovernanceSettings =
+                    ctx.settings_or_default("process_governance")?;
+                let entries: Vec<(String, String)> = governance
+                    .governed
+                    .iter()
+                    .map(|entry| (entry.doctype.clone(), entry.mode.clone()))
+                    .collect();
+                Arc::new(GrantedReversal::new(
+                    live_reversal,
+                    grants,
+                    governed_doctypes(&entries),
+                    EffLedger::new(pool.clone(), &site),
+                    Arc::new(LiveProbe::new(Arc::clone(&live), site_id, runtime.clone())),
+                    runtime.clone(),
+                ))
+            }
+            None => live_reversal,
+        };
         let interval = Duration::from_secs(settings.tick_secs);
         let roles = settings.supervisor_roles.clone();
         let wiring = Wiring {

@@ -144,7 +144,8 @@ fn map_egress(error: &EgressError, url: &str) -> ConnectorError {
         EgressError::ResolutionFailed
         | EgressError::ResolutionMixed
         | EgressError::TooManyRedirects
-        | EgressError::InvalidConfig(_) => ConnectorError::HostFailure {
+        | EgressError::InvalidConfig(_)
+        | EgressError::InvalidTlsOptions(_) => ConnectorError::HostFailure {
             reason: "the outbound request could not be completed".into(),
         },
     }

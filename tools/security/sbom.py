@@ -27,6 +27,7 @@ import argparse
 import base64
 import datetime
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,6 +40,9 @@ TOOL_VERSION = "1.0.0"
 TOOL_TIMEOUT = 300
 LOCK_FILE = "packages.lock.json"
 _SKIPPED_TREES = ("target", ".git")
+#: Extra directory names to skip, comma separated. The private multi-checkout tooling sets it;
+#: a directory that holds a ``.git`` file (a linked worktree) is skipped without it.
+EXTRA_SKIPPED_ENV = "SPOT_SBOM_SKIP_TREES"
 
 
 class SbomError(RuntimeError):
@@ -95,8 +99,19 @@ def rust_components(metadata: dict) -> list[dict]:
 
 def find_lock_files(root: Path) -> list[Path]:
     """Every checked-in packages.lock.json, outside build and checkout dirs."""
-    return sorted(path for path in Path(root).rglob(LOCK_FILE)
-                  if not (set(path.parts) & set(_SKIPPED_TREES)))
+    root = Path(root)
+    skipped = set(_SKIPPED_TREES)
+    skipped.update(name.strip() for name in os.environ.get(EXTRA_SKIPPED_ENV, "").split(",") if name.strip())
+    found = []
+    for path in root.rglob(LOCK_FILE):
+        parents = path.relative_to(root).parts[:-1]
+        if set(parents) & skipped:
+            continue
+        # A nested linked worktree (its `.git` is a file) is another checkout, not this tree.
+        nested = any((root.joinpath(*parents[:depth]) / ".git").is_file() for depth in range(1, len(parents) + 1))
+        if not nested:
+            found.append(path)
+    return sorted(found)
 
 _SHA512_CONTENT = re.compile(r"^sha512-(?P<b64>[A-Za-z0-9+/=]+)$")
 

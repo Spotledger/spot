@@ -101,6 +101,8 @@ fn do_enrol(
             key_store: KeyStoreKind::File,
             platform: platform(),
             now: 1_000,
+            // These tests run on a host without a hardware-backed store.
+            allow_software_keys: true,
         },
         gw,
         logger,
@@ -355,7 +357,23 @@ fn cli_parsing() {
 #[tokio::test]
 async fn run_starts_idles_and_stops_on_shutdown() {
     let (_d, state) = fresh_state();
-    do_enrol(&state, &FakeGateway::new(), TOKEN, &quiet()).unwrap();
+    // A pinned CA file that is not there: the trust mode is the one under test, whatever
+    // system trust store the host running the test has.
+    enrol(
+        &EnrolInput {
+            state: &state,
+            gateway_url: "https://gateway.example.test",
+            ca: Some("no-such-ca.pem"),
+            token: TOKEN,
+            key_store: KeyStoreKind::File,
+            platform: platform(),
+            now: 1_000,
+            allow_software_keys: true,
+        },
+        &FakeGateway::new(),
+        &quiet(),
+    )
+    .unwrap();
     let capture = Capture::default();
     let logger = Logger::new(LogLevel::Info, Box::new(capture.clone()));
     let shutdown = Shutdown::new();
@@ -364,11 +382,14 @@ async fn run_starts_idles_and_stops_on_shutdown() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         trigger.trigger();
     });
-    // Since the outbound channel (WP-ADM-02.T3) `run` serves it: without a CA in the config
-    // there is no trust anchor, and it refuses (no system trust store fallback) after logging
-    // the start and recording the stop.
+    // Since the outbound channel (WP-ADM-02.T3) `run` serves it: a pinned CA file that cannot
+    // be read is refused (the system roots are not a fallback when a CA is named), after
+    // logging the start and recording the stop.
     let error = run(&state, logger, shutdown, 2_000).await.unwrap_err();
-    assert!(error.to_string().contains("`ca` is required"), "{error}");
+    assert!(
+        error.to_string().contains("cannot read the CA file"),
+        "{error}"
+    );
     let out = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
     assert!(out.contains("starting"), "{out}");
     // started + stopped were recorded after the enrolment entry; the chain verifies.

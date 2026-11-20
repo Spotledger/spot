@@ -3,6 +3,7 @@
 use std::future::Future;
 
 use spot_events_contract::envelope::Position;
+use spot_journal_relay::tail::{BATCH_LINE_BUDGET, MAX_CHUNK_BYTES};
 use spot_journal_relay::{Appended, Batch, Relay, RelayError};
 use spot_journal_store::{JournalStore, StoreError};
 
@@ -42,6 +43,32 @@ pub enum ShipError {
     },
 }
 
+/// How big one batch may be: the limits of the tail chunk the relay writes.
+///
+/// The driver never ships more than this in one call and never queues an entry that alone would
+/// make a chunk the relay must refuse. The numbers are the relay's own (`tail` constants), not
+/// copies; a test relay may return smaller ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BatchLimits {
+    /// The most line bytes (the sum over a batch's entries) the driver puts in one batch, unless
+    /// one entry alone is larger (it then ships alone).
+    pub line_budget: u64,
+    /// The most bytes the encoded chunk of one batch may reach; the driver judges it with the
+    /// relay's size bound (`tail::encoded_len_upper_bound_for`).
+    pub max_chunk_bytes: u64,
+}
+
+impl BatchLimits {
+    /// The limits of the version 2 tail chunk: [`BATCH_LINE_BUDGET`] and [`MAX_CHUNK_BYTES`].
+    #[must_use]
+    pub fn tail_chunk() -> Self {
+        Self {
+            line_budget: BATCH_LINE_BUDGET,
+            max_chunk_bytes: MAX_CHUNK_BYTES,
+        }
+    }
+}
+
 /// The relay as the driver uses it.
 ///
 /// The futures are `Send` so that [`crate::CommitDriver::run`] can be spawned on a multi-threaded
@@ -58,6 +85,11 @@ pub trait ChunkRelay: Send {
         entries: &[ShipEntry],
         now_millis: u64,
     ) -> impl Future<Output = Result<Shipped, ShipError>> + Send;
+    /// The size limits of one batch; read once when the driver is built. The default is the
+    /// version 2 tail chunk's.
+    fn batch_limits(&self) -> BatchLimits {
+        BatchLimits::tail_chunk()
+    }
     /// Reads the store and repairs what a failed call left; success means the store is
     /// reachable and [`ChunkRelay::next_seq`] is true again.
     fn resume(&mut self) -> impl Future<Output = Result<(), ShipError>> + Send;

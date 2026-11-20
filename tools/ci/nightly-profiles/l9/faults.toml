@@ -1,0 +1,16 @@
+# Load with faults (WP-TST-15.T7): tier M shaped load while PostgreSQL connections are killed,
+# PostgreSQL is restarted, a disk is filled or throttled. The faults that need a prepared runner
+# read L9_PG_CTL_DATA, L9_FAULT_FULL_DIR and L9_FAULT_IO_MAX_* from the runner's environment and
+# are skipped with a printed reason where they are absent.
+name = "faults"
+description = "tier M load with PostgreSQL kill and restart, disk full, slow disk, pool exhaustion"
+runner = "large"
+timeout_minutes = 180
+pr_gate = false
+test = "faults"
+l9_profile = "faults"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "faults", "--", "--nocapture", "--test-threads=1"]
+artefacts = ["target/l9/faults.log"]
+
+[env]
+L9_LOAD_SCALE = "1000"

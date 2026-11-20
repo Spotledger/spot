@@ -28,6 +28,8 @@ time = { version = "0.3", default-features = false, features = ["parsing", "form
 # Idempotency keys: SHA-256 over site, actor, DocType, batch label and row (already in the
 # workspace tree: spot-airgap, spot-agent-enroll, spot-pg-migrate).
 sha2 = "0.10"
+# The one cell-text form of geo points and ranges, shared with the CSV export (WP-DOC-09.T7).
+spot-spatial-text = { path = "../spot-spatial-text" }
 # Typed errors with stable `import.*` codes.
 thiserror = "2"
 
@@ -36,6 +38,11 @@ thiserror = "2"
 testing = []
 
 [dev-dependencies]
+# The round trip test exports with `spot_bulk_data::format::value_text` and imports it back.
+# A dev-dependency only: the importer never depends on the exporter.
+spot-bulk-data = { path = "../spot-bulk-data" }
+# Values and field types of the round trip test.
+spot-storage-contract = { path = "../../../contracts/storage" }
 # Property tests: CSV round-trips of arbitrary cell text.
 proptest = "1"
 # The apply tests implement the app API's `DocumentService` (to model the engine's command-id

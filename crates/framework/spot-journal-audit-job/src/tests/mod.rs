@@ -7,3 +7,4 @@ mod cadence_tests;
 mod fixture;
 mod handler_tests;
 mod run_tests;
+mod topic_tests;

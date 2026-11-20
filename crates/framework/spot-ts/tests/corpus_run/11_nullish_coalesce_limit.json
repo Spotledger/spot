@@ -1,0 +1,6 @@
+{
+  "case": "nullish_coalesce",
+  "entry": "limit",
+  "args": 7,
+  "expect": 7
+}

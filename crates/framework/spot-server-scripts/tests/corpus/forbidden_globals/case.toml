@@ -1,0 +1,13 @@
+kind = "api"
+negative = true
+pattern = "fetch, require, process, eval, Function and globalThis tricks are all closed"
+[input.args]
+[expect]
+ok = true
+[expect.result]
+fetch = "blocked"
+require = "blocked"
+process = "blocked"
+eval = "blocked"
+func = "blocked"
+global = "blocked"

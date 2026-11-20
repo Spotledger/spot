@@ -208,6 +208,110 @@ impl LedgerStore for PgLedger {
         })
     }
 
+    fn transition_effect_at<'a>(
+        &'a self,
+        id: EffectId,
+        expected: EffectState,
+        next: EffectState,
+        note: Option<String>,
+        at: i64,
+    ) -> LedgerFuture<'a, Transition> {
+        Box::pin(async move {
+            spot_effect_hold::effect::validate_transition(expected)?;
+            let client = self.conn("transition_effect").await?;
+            let id_param = convert::effect_id_param(id)?;
+            let attempt = i64::from(next == EffectState::Releasing);
+            let changed = client
+                .execute(
+                    sql::TRANSITION_EFFECT_AT,
+                    &[
+                        &id_param,
+                        &convert::state_text(expected),
+                        &convert::state_text(next),
+                        &note,
+                        &attempt,
+                        &at,
+                    ],
+                )
+                .await
+                .map_err(|e| error::pg("transition_effect", &e))?;
+            if changed == 1 {
+                return Ok(Transition::Applied);
+            }
+            let row = client
+                .query_opt(sql::SELECT_EFFECT_STATUS, &[&id_param])
+                .await
+                .map_err(|e| error::pg("transition_effect", &e))?;
+            match row {
+                Some(row) => Ok(Transition::Stale {
+                    actual: convert::state_from_text(&row.get::<_, String>("status"))?,
+                }),
+                None => Err(Error::InvalidInput {
+                    what: format!("effect id {}", id.0),
+                    reason: "is not in the ledger".to_owned(),
+                }),
+            }
+        })
+    }
+
+    fn purge_payloads<'a>(
+        &'a self,
+        site: &'a SiteId,
+        states: &'a [EffectState],
+        older_than: i64,
+        limit: usize,
+    ) -> LedgerFuture<'a, u64> {
+        Box::pin(async move {
+            let client = self.conn("purge_payloads").await?;
+            let wanted: Vec<String> = states
+                .iter()
+                .filter(|state| matches!(state, EffectState::Dispatched | EffectState::Discarded))
+                .map(|state| convert::state_text(*state).to_owned())
+                .collect();
+            let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+            let row = client
+                .query_one(
+                    sql::PURGE_PAYLOADS,
+                    &[&site.as_str(), &wanted, &older_than, &limit],
+                )
+                .await
+                .map_err(|e| error::pg("purge_payloads", &e))?;
+            let cleared: i64 = row.get(0);
+            Ok(u64::try_from(cleared).unwrap_or(0))
+        })
+    }
+
+    fn pending_payload_deletes<'a>(
+        &'a self,
+        site: &'a SiteId,
+        limit: usize,
+    ) -> LedgerFuture<'a, Vec<String>> {
+        Box::pin(async move {
+            let client = self.conn("pending_payload_deletes").await?;
+            let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+            let rows = client
+                .query(sql::PENDING_PAYLOAD_DELETES, &[&site.as_str(), &limit])
+                .await
+                .map_err(|e| error::pg("pending_payload_deletes", &e))?;
+            Ok(rows.iter().map(|row| row.get::<_, String>(0)).collect())
+        })
+    }
+
+    fn complete_payload_delete<'a>(
+        &'a self,
+        site: &'a SiteId,
+        handle: &'a str,
+    ) -> LedgerFuture<'a, ()> {
+        Box::pin(async move {
+            let client = self.conn("complete_payload_delete").await?;
+            client
+                .execute(sql::COMPLETE_PAYLOAD_DELETE, &[&site.as_str(), &handle])
+                .await
+                .map_err(|e| error::pg("complete_payload_delete", &e))?;
+            Ok(())
+        })
+    }
+
     fn get_hold<'a>(&'a self, site: &'a SiteId) -> LedgerFuture<'a, HoldState> {
         Box::pin(async move {
             let client = self.conn("get_hold").await?;

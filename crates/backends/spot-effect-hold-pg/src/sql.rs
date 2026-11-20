@@ -87,3 +87,52 @@ SET dispatched = EXCLUDED.dispatched, \
 pub(crate) const SELECT_CHECKPOINT: &str = "\
 SELECT dispatched::text, last_sequence::text, needs_confirmation::text \
 FROM spot_effect_hold_checkpoint WHERE site = $1 AND migration_id = $2";
+
+/// One effect's compare-and-set that also stamps `changed_at` (`$6`, unix microseconds): the time
+/// the retention purge ages released and discarded effects by.
+pub(crate) const TRANSITION_EFFECT_AT: &str = "\
+UPDATE spot_effect_hold_effect \
+SET status = $3, note = $4, attempts = attempts + $5, changed_at = $6 \
+WHERE id = $1 AND status = $2";
+
+/// Replaces the payload reference of at most `$4` effects of site `$1` in a terminal state among
+/// `$2` that changed (or, without a change time, were created) strictly before `$3` with the empty
+/// marker, oldest first, and queues the handles of the references it cleared for byte deletion, all
+/// in **one statement**: the data-modifying CTEs commit or roll back together, so there is never a
+/// cleared reference without its queued handle. The row stays. Idempotent: an already-purged
+/// reference is not selected again. `FOR UPDATE SKIP LOCKED` keeps two purgers off the same rows.
+pub(crate) const PURGE_PAYLOADS: &str = "\
+WITH picked AS ( \
+    SELECT id, payload_ref -> 'Stored' ->> 'handle' AS handle \
+    FROM spot_effect_hold_effect \
+    WHERE site = $1 AND status = ANY($2) AND status IN ('dispatched', 'discarded') \
+      AND payload_ref <> '\"Absent\"'::jsonb \
+      AND COALESCE(changed_at, created_at) < $3 \
+    ORDER BY COALESCE(changed_at, created_at), id \
+    LIMIT $4 \
+    FOR UPDATE SKIP LOCKED), \
+cleared AS ( \
+    UPDATE spot_effect_hold_effect SET payload_ref = '\"Absent\"'::jsonb \
+    WHERE id IN (SELECT id FROM picked) \
+    RETURNING id), \
+queued AS ( \
+    INSERT INTO spot_effect_hold_payload_delete (site, handle) \
+    SELECT DISTINCT $1::text, handle FROM picked WHERE handle IS NOT NULL \
+    ON CONFLICT DO NOTHING \
+    RETURNING handle) \
+SELECT count(*) FROM cleared";
+
+/// The queued handles of site `$1` that no effect (of any site) still references, at most `$2`, in
+/// a stable order.
+pub(crate) const PENDING_PAYLOAD_DELETES: &str = "\
+SELECT d.handle FROM spot_effect_hold_payload_delete d \
+WHERE d.site = $1 \
+  AND NOT EXISTS ( \
+    SELECT 1 FROM spot_effect_hold_effect e \
+    WHERE e.payload_ref -> 'Stored' ->> 'handle' = d.handle) \
+ORDER BY d.handle \
+LIMIT $2";
+
+/// Removes a queued handle once its bytes are gone.
+pub(crate) const COMPLETE_PAYLOAD_DELETE: &str =
+    "DELETE FROM spot_effect_hold_payload_delete WHERE site = $1 AND handle = $2";

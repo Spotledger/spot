@@ -29,3 +29,5 @@ pub const INVALID_INPUT: &str = "effect_hold.invalid_input";
 pub const RELEASE_IN_PROGRESS: &str = "effect_hold.release_in_progress";
 /// Recording a hold transition in the audit chain failed.
 pub const AUDIT_FAILED: &str = "effect_hold.audit_failed";
+/// A retention policy is out of range (zero days, or more than the maximum).
+pub const RETENTION_INVALID: &str = "effect_hold.retention_invalid";

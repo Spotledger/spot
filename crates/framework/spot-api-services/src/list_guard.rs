@@ -74,13 +74,35 @@ impl ListFieldGuard {
         spec: &QuerySpec,
     ) -> Result<(), ApiError> {
         let used = used_fields(spec);
-        if used.is_empty() {
+        if !used.is_empty() {
+            Self::refused_as_unknown(
+                self.guard
+                    .check_query_fields_for(channel, principal, doctype, &used),
+            )?;
+        }
+        // A projected column the caller may not see is answered as an unknown field too, the
+        // same answer a name the DocType does not have gets (a hidden field's name is not told).
+        let projected: Vec<String> = spec
+            .fields
+            .iter()
+            .map(|field| field.as_str().to_owned())
+            .filter(|field| field != "id")
+            .collect();
+        if projected.is_empty() {
             return Ok(());
         }
-        match self
-            .guard
-            .check_query_fields_for(channel, principal, doctype, &used)
-        {
+        Self::refused_as_unknown(
+            self.guard
+                .columns(channel, principal, doctype, &projected)
+                .map(|_| ()),
+        )
+    }
+
+    /// A refused field is an unknown field; any other guard failure is an internal error.
+    fn refused_as_unknown(
+        result: Result<(), spot_field_guard::GuardError>,
+    ) -> Result<(), ApiError> {
+        match result {
             Ok(()) => Ok(()),
             Err(error) if error.code() == "permission.field_denied" => {
                 Err(ApiError::from_code(Code::DocumentUnknownField))

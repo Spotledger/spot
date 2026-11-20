@@ -18,6 +18,8 @@ mod policy;
 mod resolver;
 #[allow(missing_docs)]
 mod sender;
+#[cfg(feature = "tls")]
+mod tls_options;
 
 pub use address::{AddrClass, classify};
 pub use connector::{EgressConnector, is_sensitive_header};
@@ -26,6 +28,8 @@ pub use hyper::body::Bytes;
 pub use policy::{AllowEntry, DenyEntry, EgressPolicy, TenantPolicy};
 pub use resolver::{Resolver, SystemResolver, TestResolver};
 pub use sender::{HttpRequest, HttpSender, MAX_REQUEST_BODY_BYTES, Method, Response, Sender};
+#[cfg(feature = "tls")]
+pub use tls_options::{CertPem, ClientIdentity, TlsOptions, TlsSummary, TlsVersion, TrustMode};
 
 use spot_core::Clock;
 
@@ -181,6 +185,15 @@ pub enum EgressError {
         /// The error message describing the configuration problem.
         String,
     ),
+
+    /// The TLS options are invalid (a PEM that does not parse, a key that does not match its
+    /// chain, a wildcard server-name override). The text is a fixed reason and never contains
+    /// PEM content.
+    #[error("invalid TLS options: {0}")]
+    InvalidTlsOptions(
+        /// A fixed, secret-free reason.
+        String,
+    ),
 }
 
 impl EgressError {
@@ -199,6 +212,7 @@ impl EgressError {
             Self::InvalidUrl => "egress.invalid_url",
             Self::ResolutionFailed => "egress.resolution_failed",
             Self::InvalidConfig(_) => "egress.invalid_config",
+            Self::InvalidTlsOptions(_) => "egress.invalid_tls_options",
         }
     }
 }
@@ -396,6 +410,34 @@ impl Guard {
         })
     }
 
+    /// Records a refused TLS connection to a host the policy had already authorised. The record
+    /// carries the host, port and (when known) the pinned address, never any request content.
+    #[cfg(feature = "tls")]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_tls_refusal(
+        &self,
+        tenant: &str,
+        purpose: Purpose,
+        actor: Option<String>,
+        host: &str,
+        port: u16,
+        addr: Option<std::net::IpAddr>,
+        rule: String,
+    ) {
+        self.sink.denied(DenialRecord {
+            tenant: tenant.to_string(),
+            purpose,
+            actor,
+            scheme: "https".to_string(),
+            host: host.to_string(),
+            port,
+            resolved: addr.into_iter().collect(),
+            class: addr.map_or(AddrClass::Other, classify),
+            rule,
+            at: self.clock.now_utc(),
+        });
+    }
+
     /// Create a guard for webhook requests (convenience method).
     pub fn for_webhook(
         policy: EgressPolicy,
@@ -571,6 +613,10 @@ mod tests {
         assert_eq!(
             EgressError::InvalidConfig(String::new()).code(),
             "egress.invalid_config"
+        );
+        assert_eq!(
+            EgressError::InvalidTlsOptions(String::new()).code(),
+            "egress.invalid_tls_options"
         );
     }
 }

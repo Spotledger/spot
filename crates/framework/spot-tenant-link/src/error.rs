@@ -83,6 +83,8 @@ pub mod codes {
     pub const STEP_UP_REQUIRED: &str = "tenant_link.step_up_required";
     /// A consent is older than the policy allows when it is used.
     pub const CONSENT_STALE: &str = "tenant_link.consent_stale";
+    /// An inbound message is larger than the configured bound.
+    pub const MESSAGE_TOO_LARGE: &str = "tenant_link.message_too_large";
     /// The audit trail could not record the event, so the operation did not proceed.
     pub const AUDIT_FAILED: &str = "tenant_link.audit_failed";
     /// The link store failed.
@@ -331,9 +333,9 @@ pub enum Error {
         link: String,
     },
     /// The same actor cannot consent for both parties.
-    #[error("the consent of {actor} cannot stand for both parties")]
+    #[error("a consent cannot stand for both parties")]
     ConsentDuplicate {
-        /// The actor.
+        /// A fingerprint of the actor ([`actor_ref`]), never the peer-supplied text.
         actor: String,
     },
     /// A consent is malformed.
@@ -343,18 +345,24 @@ pub enum Error {
         reason: &'static str,
     },
     /// A consent has no fresh strong sign-in.
-    #[error("the consent of {actor} has no recent strong sign-in")]
+    #[error("the consent has no recent strong sign-in")]
     StepUpRequired {
-        /// The actor.
+        /// A fingerprint of the actor ([`actor_ref`]), never the peer-supplied text.
         actor: String,
     },
     /// A consent is older than the policy allows when it is used.
-    #[error("the consent of {actor} is older than the allowed {max_age_ms} milliseconds")]
+    #[error("the consent is older than the allowed {max_age_ms} milliseconds")]
     ConsentStale {
-        /// The actor.
+        /// A fingerprint of the actor ([`actor_ref`]), never the peer-supplied text.
         actor: String,
         /// The maximum age the caller's policy allows.
         max_age_ms: u64,
+    },
+    /// An inbound message is larger than the configured maximum encoded size.
+    #[error("the message is larger than the {limit} bytes this side accepts")]
+    MessageTooLarge {
+        /// The configured maximum, in bytes.
+        limit: u64,
     },
     /// The audit trail could not record the event.
     #[error("the audit trail could not record {action}")]
@@ -413,6 +421,7 @@ impl Error {
             Self::ConsentInvalid { .. } => codes::CONSENT_INVALID,
             Self::StepUpRequired { .. } => codes::STEP_UP_REQUIRED,
             Self::ConsentStale { .. } => codes::CONSENT_STALE,
+            Self::MessageTooLarge { .. } => codes::MESSAGE_TOO_LARGE,
             Self::AuditFailed { .. } => codes::AUDIT_FAILED,
             Self::StoreFailed { .. } => codes::STORE_FAILED,
         }
@@ -421,3 +430,13 @@ impl Error {
 
 /// The result type of this crate.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// A stable, opaque reference to a consent actor: `actor-` and the first 12 hex digits of the
+/// SHA-256 of the actor text. Errors carry this instead of the actor, which is peer-supplied text
+/// that a hostile peer could use to inject lines into logs and audit records. The same actor gives
+/// the same reference, so an operator can match it against the directory.
+#[must_use]
+pub fn actor_ref(actor: &str) -> String {
+    let digest = crate::util::hex_lower(&crate::util::sha256(actor.as_bytes()));
+    format!("actor-{}", &digest[..12])
+}

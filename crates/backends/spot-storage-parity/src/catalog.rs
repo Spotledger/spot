@@ -48,12 +48,23 @@ pub const RANGE_FIELDS: [&str; 17] = [
     "doc", "blob", "ref", "during", "room", "state",
 ];
 
+/// The fields of `item` in the graph catalogue: the base fields plus `next` (a link to another
+/// `item`) and `owner` (a link to a `party`). The base `ref` is a third link, to `item`.
+pub const GRAPH_FIELDS: [&str; 16] = [
+    "code", "short", "note", "money", "small", "wide", "qty", "flag", "day", "clock", "seen",
+    "doc", "blob", "ref", "next", "owner",
+];
+
+/// The declared fields of `party`, the second entity of the graph catalogue.
+pub const PARTY_FIELDS: [&str; 1] = ["code"];
+
 /// The declared fields of `item` for the catalogue a case names; `exec` fills every one of them
 /// with null when a setup line omits it. An unknown name is the main catalogue.
 pub fn item_fields(catalog: Option<&str>) -> &'static [&'static str] {
     match catalog {
         Some("geo") => &GEO_FIELDS,
         Some("range") => &RANGE_FIELDS,
+        Some("graph") => &GRAPH_FIELDS,
         _ => &ITEM_FIELDS,
     }
 }
@@ -191,20 +202,81 @@ pub fn range_catalog(locale: &str) -> StorageResult<Catalog> {
 }
 
 /// The catalogue for the search cases: `item` with a search declaration over `note` (ADR-087
-/// section 7.2). No backend serves search yet (SEM-SCH-04: the projection arrives with
-/// WP-STO-13.T1), so the cases that use this catalogue assert the refusal.
+/// section 7.2). The fake does not serve search (SEM-SCH-04), so a case that uses this catalogue
+/// is scoped to PostgreSQL, where it either runs with the search hook installed
+/// (`needs_search`) or asserts what a backend without the hook answers: `Unsupported`.
 pub fn search_catalog(locale: &str) -> StorageResult<Catalog> {
     let mut item = base_item()?;
     item.search = Some(SearchDef {
         language: None,
-        fields: vec![SearchField {
-            name: name("note")?,
-            weight: SearchWeight::A,
-        }],
+        fields: vec![
+            SearchField {
+                name: name("short")?,
+                weight: SearchWeight::A,
+            },
+            SearchField {
+                name: name("note")?,
+                weight: SearchWeight::B,
+            },
+        ],
         facets: vec![],
         typo_tolerance: false,
     });
     Catalog::new(1, Collation::new(locale)?, vec![item, base_line()?])
+}
+
+/// The catalogue for the rank cases: `item` with a search declaration over `short` at weight A
+/// (the "title": a hit there outranks the same hit in the body) and over `note` at weight D (the
+/// "body"). `short` holds at most 10 characters, which is enough for a one-word title.
+pub fn search_rank_catalog(locale: &str) -> StorageResult<Catalog> {
+    let mut item = base_item()?;
+    item.search = Some(SearchDef {
+        language: None,
+        fields: vec![
+            SearchField {
+                name: name("short")?,
+                weight: SearchWeight::A,
+            },
+            SearchField {
+                name: name("note")?,
+                weight: SearchWeight::D,
+            },
+        ],
+        facets: vec![],
+        typo_tolerance: false,
+    });
+    Catalog::new(1, Collation::new(locale)?, vec![item, base_line()?])
+}
+
+/// The catalogue for the graph cases (SEM-GRA): `item` with the self-referential link `next`
+/// (and the base `ref`), a link `owner` to a second entity `party`, and the child entity
+/// `item_line`, whose `parent` is an edge too.
+pub fn graph_catalog(locale: &str) -> StorageResult<Catalog> {
+    let mut item = base_item()?;
+    let link = |target: &str| -> StorageResult<FieldType> {
+        Ok(FieldType::Link {
+            target: LinkTarget::Entity(name(target)?),
+            check: LinkCheck::Database,
+        })
+    };
+    item.fields.push(field("next", link("item")?, true)?);
+    item.fields.push(field("owner", link("party")?, true)?);
+    let party = EntityDef {
+        name: name("party")?,
+        kind: EntityKind::Document,
+        fields: vec![field(
+            "code",
+            FieldType::Text {
+                max_chars: Some(40),
+            },
+            false,
+        )?],
+        children: vec![],
+        indexes: vec![],
+        exclusions: vec![],
+        search: None,
+    };
+    Catalog::new(1, Collation::new(locale)?, vec![item, party, base_line()?])
 }
 
 /// A catalogue of 63-character names (the longest a storage name can be): two entities that
@@ -265,6 +337,15 @@ mod tests {
         assert_eq!(declared(&geo), GEO_FIELDS.to_vec());
         assert_eq!(declared(&range), RANGE_FIELDS.to_vec());
         assert_eq!(declared(&search), ITEM_FIELDS.to_vec());
+        let rank = search_rank_catalog("en")?;
+        assert_eq!(declared(&rank), ITEM_FIELDS.to_vec());
+        let rank_fields: Vec<String> = rank
+            .entity(&item)?
+            .search
+            .as_ref()
+            .map(|s| s.fields.iter().map(|f| f.name.to_string()).collect())
+            .unwrap_or_default();
+        assert_eq!(rank_fields, ["short", "note"]);
         assert_eq!(item_fields(None), &ITEM_FIELDS);
         assert_eq!(item_fields(Some("main")), &ITEM_FIELDS);
         assert_eq!(item_fields(Some("geo")), &GEO_FIELDS);
@@ -272,6 +353,10 @@ mod tests {
         // The range catalogue declares the exclusion the hold and exclusion cases rely on.
         assert_eq!(range.entity(&item)?.exclusions.len(), 1);
         assert!(search.entity(&item)?.search.is_some());
+        let graph = graph_catalog("en")?;
+        assert_eq!(declared(&graph), GRAPH_FIELDS.to_vec());
+        assert_eq!(item_fields(Some("graph")), &GRAPH_FIELDS);
+        assert!(graph.entity(&name("party")?).is_ok());
         Ok(())
     }
 }

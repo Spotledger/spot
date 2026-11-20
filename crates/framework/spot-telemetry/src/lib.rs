@@ -24,8 +24,8 @@ mod redact;
 pub use cost::RequestCost;
 pub use error::TelemetryError;
 pub use init::{
-    FILTER_ENV, LogFormat, OtlpConfig, TelemetryConfig, TelemetryGuard, init, init_for_tests,
-    init_for_tests_with,
+    BoxLayer, FILTER_ENV, LogFormat, OtlpConfig, TelemetryConfig, TelemetryGuard, init,
+    init_for_tests, init_for_tests_with, init_for_tests_with_layer, init_with,
 };
 pub use layer::{
     CANCELLED_STATUS, RouteTemplate, SiteField, TelemetryFuture, TelemetryLayer, TelemetryService,

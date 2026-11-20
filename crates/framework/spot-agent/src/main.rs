@@ -99,6 +99,7 @@ fn real_main() -> Result<(), AgentError> {
             token,
             ca,
             key_store,
+            allow_software_keys,
         } => {
             state.create()?;
             let logger = open_logger(&state, LogLevel::Info, Some(&token));
@@ -115,6 +116,7 @@ fn real_main() -> Result<(), AgentError> {
                     key_store,
                     platform: platform()?,
                     now: now(),
+                    allow_software_keys,
                 },
                 &*transport,
                 &logger,
@@ -143,6 +145,7 @@ fn real_main() -> Result<(), AgentError> {
                     key_store,
                     platform: platform()?,
                     now: now(),
+                    allow_software_keys: false,
                 },
                 &*transport,
                 &logger,
@@ -151,6 +154,51 @@ fn real_main() -> Result<(), AgentError> {
                 "key rotated for {} (new key {})",
                 summary.agent_id, summary.fingerprint
             );
+            Ok(())
+        }
+        Command::Probe => spot_agent::update::probe::probe(&state, now()),
+        Command::Service(request) => {
+            let executable = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.to_str().map(str::to_owned))
+                .ok_or_else(|| {
+                    AgentError::Usage("cannot find the running executable".to_owned())
+                })?;
+            let install_root = std::fs::read_to_string(state.config_path())
+                .ok()
+                .and_then(|text| spot_agent::config::AgentConfig::parse(&text).ok())
+                .map_or_else(
+                    || spot_agent::config::default_install_root().to_owned(),
+                    |config| config.install_root().to_owned(),
+                );
+            let env = spot_agent::service_cmd::ServiceEnv {
+                executable,
+                state_dir: state.root().to_string_lossy().into_owned(),
+                install_root,
+            };
+            let outcome = spot_agent::service_cmd::run_here(&request, &env);
+            for line in &outcome.lines {
+                println!("{line}");
+            }
+            if outcome.code != 0 {
+                std::process::exit(outcome.code);
+            }
+            Ok(())
+        }
+        Command::AuditVerify { file, agent_id } => {
+            let path = file.map_or_else(|| state.audit_path(), std::path::PathBuf::from);
+            let site = match agent_id {
+                Some(id) => id,
+                None => spot_agent_enroll::identity::AgentIdentity::load(state.key_path())
+                    .map(|identity| identity.agent_id)
+                    .map_err(|_| {
+                        AgentError::Usage(
+                            "this host is not enrolled: pass --agent-id ID".to_owned(),
+                        )
+                    })?,
+            };
+            let count = spot_agent::audit::verify_file(&path, &site)?;
+            println!("audit log ok: {count} entries");
             Ok(())
         }
         Command::Status => {
@@ -170,6 +218,16 @@ fn real_main() -> Result<(), AgentError> {
                     "gateway: {}\nallowed modules: {}",
                     config.gateway,
                     config.allowed_modules.join(",")
+                );
+            }
+            if let Ok(trust) = spot_agent::trust::TrustFile::load(&state.trust_path()) {
+                println!(
+                    "administrator keys: {}",
+                    if trust.software_keys_allowed {
+                        "software keys accepted (chosen at enrolment)"
+                    } else {
+                        "hardware-backed keys required"
+                    }
                 );
             }
             for line in spot_agent::channel::status_lines(&state) {

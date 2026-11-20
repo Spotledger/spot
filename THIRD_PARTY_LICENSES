@@ -20,7 +20,7 @@ aead 0.5.2
   licence: MIT OR Apache-2.0
   text: T-e8541ea93f (LICENSE-APACHE), T-b38f573d5b (LICENSE-MIT)
 
-aes 0.8.4 [dev only]
+aes 0.8.4
   licence: MIT OR Apache-2.0
   text: T-e8541ea93f (LICENSE-APACHE), T-33e9963826 (LICENSE-MIT)
 
@@ -276,7 +276,7 @@ castaway 0.2.4
   licence: MIT
   text: T-936b4d7e9d (LICENSE)
 
-cbc 0.1.2 [dev only]
+cbc 0.1.2
   licence: MIT OR Apache-2.0
   text: T-e8541ea93f (LICENSE-APACHE), T-f3bd9e2e77 (LICENSE-MIT)
 
@@ -652,7 +652,7 @@ dragonbox_ecma 0.1.12
   licence: Apache-2.0 WITH LLVM-exception OR BSL-1.0
   text: T-7fa3f523d0 (LICENSE-Apache2-LLVM), T-8d8291caf1 (LICENSE-Boost)
 
-ecb 0.1.2 [dev only]
+ecb 0.1.2
   licence: MIT
   text: T-305f0f8f4d (LICENSE)
 
@@ -1320,7 +1320,7 @@ loom 0.7.2
   licence: MIT
   text: T-12c7116c44 (LICENSE)
 
-lopdf 0.42.0 [dev only]
+lopdf 0.42.0
   licence: MIT
   text: T-acd31f1bfb (LICENSE)
 
@@ -1344,7 +1344,7 @@ matchit 0.8.4
   licence: MIT AND BSD-3-Clause
   text: T-805009861c (LICENSE), T-2f77e11b6c (LICENSE.httprouter)
 
-md-5 0.10.6 [dev only]
+md-5 0.10.6
   licence: MIT OR Apache-2.0
   text: T-e8541ea93f (LICENSE-APACHE), T-4031faf621 (LICENSE-MIT)
 
@@ -1940,7 +1940,7 @@ rand_xoshiro 0.7.0
   licence: MIT OR Apache-2.0
   text: T-85ad950cce (LICENSE-APACHE), T-b27b33ef41 (LICENSE-MIT)
 
-rangemap 1.8.0 [dev only]
+rangemap 1.8.0
   licence: MIT OR Apache-2.0
   text: T-669312b448 (LICENSE-APACHE), T-d67de7009d (LICENSE-MIT)
 

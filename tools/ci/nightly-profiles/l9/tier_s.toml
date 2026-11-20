@@ -1,0 +1,21 @@
+# Tier S floor on Linux (WP-TST-15.T3): 10 users under a real 4 GB / 2 CPU cgroup scope; the
+# test refuses to run uncapped when L9_REQUIRE_CAP=1. The PostgreSQL the run uses must be started
+# inside the same scope with the desktop package settings (the runner script's job).
+name = "tier_s"
+description = "10 users, desktop configuration, 4 GB and 2 CPUs (cgroup), README tier S budgets"
+runner = "large"
+timeout_minutes = 45
+pr_gate = false
+test = "tier_s"
+l9_profile = "tier_s"
+prebuild = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "tier_s", "--no-run"]
+command = [
+  "systemd-run", "--user", "--scope", "--collect",
+  "-p", "MemoryMax=4G", "-p", "MemorySwapMax=0", "-p", "CPUQuota=200%",
+  "cargo", "test", "-p", "l9-scale", "--release", "--test", "tier_s", "--", "--nocapture",
+]
+artefacts = ["target/l9/tier_s.log"]
+
+[env]
+L9_DURATION_SCALE = "1"
+L9_REQUIRE_CAP = "1"

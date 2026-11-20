@@ -29,6 +29,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
@@ -55,12 +56,12 @@ use spot_http::api::service::{BoxFuture, FieldIssue, RequestCtx};
 use spot_permissions::Principal;
 use time::format_description::well_known::Rfc3339;
 
-use crate::Result;
 use crate::audit::PathClass;
 use crate::live::SiteLive;
 use crate::services::SiteCtx;
 use crate::services::process::{ProcessEngine, ProcessHost};
 use crate::services::process_documents::PgAfterCaseFile;
+use crate::{Error, Result};
 
 /// Start order: after the process engine (1100) and the node-kind modules.
 pub const ORDER: u32 = 1150;
@@ -1061,25 +1062,113 @@ impl Access for LiveAccess {
     }
 }
 
+/// What a site's first build made, so a reload reaches the same port and the same durable
+/// Idempotency-Key store.
+struct Built {
+    port: Arc<ProcessApi>,
+    idempotency: Arc<dyn IdempotencyStore>,
+}
+
 /// The ports of the sites built so far (a reload must reach the same one).
-fn built() -> &'static Mutex<BTreeMap<String, Arc<ProcessApi>>> {
-    static BUILT: OnceLock<Mutex<BTreeMap<String, Arc<ProcessApi>>>> = OnceLock::new();
+fn built() -> &'static Mutex<BTreeMap<String, Built>> {
+    static BUILT: OnceLock<Mutex<BTreeMap<String, Built>>> = OnceLock::new();
     BUILT.get_or_init(Mutex::default)
+}
+
+/// `[services.idempotency]` as this module reads it: **leniently** (no `deny_unknown_fields`;
+/// the host owns the rest of the table, the retention keys included) and only the one switch the
+/// host also honours. The dev-site switch is the host's alone and a hosted module cannot see it,
+/// so only `allow_memory_idempotency = true` selects memory here.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct IdempotencySwitch {
+    /// Keep the Idempotency-Keys of the process routes in memory (they do not survive a restart,
+    /// Recorded security finding).
+    pub allow_memory_idempotency: bool,
+}
+
+/// The least time a pending reservation outlives its request.
+const MIN_IDEMPOTENCY_LEASE: Duration = Duration::from_secs(120);
+
+/// The durable Idempotency-Key store of the process routes: the host's own table
+/// (`spot_idempotency_key`) on the site's pool, the standard retention (24 h, capped at 7 d) and
+/// a lease of `max(2 * request_timeout, 120 s)`. The host's prune service deletes the expired
+/// rows of this table, so no prune is added here.
+///
+/// # Errors
+/// The store cannot be configured, or its table cannot be created; the message names the site
+/// and a recorded security finding, never a key or a body.
+pub async fn durable_idempotency_store(
+    site: &str,
+    backend: &spot_postgres::PgBackend,
+    clock: Arc<dyn Clock>,
+    request_timeout: Duration,
+) -> Result<Arc<dyn IdempotencyStore>> {
+    let lease = (request_timeout * 2).max(MIN_IDEMPOTENCY_LEASE);
+    let config = spot_idempotency_pg::PgIdempotencyConfig::new(
+        lease,
+        spot_idempotency_pg::RetentionPolicy::standard(),
+    );
+    let store = spot_idempotency_pg::PgIdempotencyStore::new(backend.pool(), clock, config)
+        .map_err(|_| {
+            Error(format!(
+                "site `{site}`: the idempotency store of the process routes cannot start"
+            ))
+        })?;
+    store.prepare().await.map_err(|_| {
+        Error(format!(
+            "site `{site}`: the idempotency table cannot be created"
+        ))
+    })?;
+    Ok(Arc::new(store))
+}
+
+/// The in-memory store, for a site that says so in writing (`allow_memory_idempotency`): the
+/// keys do not survive a restart and are not shared with a second node. Logs one warning.
+#[must_use]
+pub fn memory_idempotency_store(site: &str, clock: Arc<dyn Clock>) -> Arc<dyn IdempotencyStore> {
+    tracing::warn!(
+        site,
+        "process routes: Idempotency-Keys are kept in memory and do not survive a restart"
+    );
+    Arc::new(MemoryIdempotencyStore::new(clock))
+}
+
+/// The process routes of one site over `port` and `idempotency`, as the host mounts them.
+pub fn process_routes(
+    port: Arc<ProcessApi>,
+    idempotency: Arc<dyn IdempotencyStore>,
+) -> axum::Router {
+    let mut ports = Ports::new();
+    ports.provide::<dyn ProcessPort>(port);
+    ports.provide::<dyn IdempotencyStore>(idempotency);
+    // Mounted here like the other hosted groups: the host authenticates every request before
+    // the router sees it, and the port authenticates again.
+    let mounted = routes::mount(&[routes::process::registration()], &ports, &[]);
+    if let Some((module, reason)) = mounted.report.skipped.first() {
+        tracing::error!(
+            module = *module,
+            ?reason,
+            "the process routes were not mounted"
+        );
+    }
+    mounted.authenticated
 }
 
 /// Registers the process API: the [`ProcessPort`] and its routes on the site's router. Inert when
 /// the module is off or the process engine is not hosted.
 ///
 /// # Errors
-/// A setting that does not decode, or a port provided twice.
-pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
+/// A setting that does not decode; the durable Idempotency-Key store cannot start; a
+/// port provided twice.
+pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let settings: Settings = ctx.settings_or_default("process_api")?;
     if !settings.enabled {
         return Ok(());
     }
     let env = *ctx.env()?;
     let site_name = env.site.site.clone();
-    let port = if ctx.assembling() {
+    let (port, idempotency) = if ctx.assembling() {
         let Some(host) = ctx.port::<ProcessHost>() else {
             tracing::debug!("process_api: the process engine is not hosted; no routes");
             return Ok(());
@@ -1095,6 +1184,19 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         };
         let definitions = PgDefinitionStore::new(env.backend.pool()).with_tenant(site.as_str());
         let catalog = Arc::clone(&env.permission.catalog);
+        // Never a silent fall back to memory: a durable store that cannot start stops the start.
+        let switch: IdempotencySwitch = ctx.settings_or_default("idempotency")?;
+        let idempotency = if switch.allow_memory_idempotency {
+            memory_idempotency_store(&site_name, Arc::clone(&clock))
+        } else {
+            durable_idempotency_store(
+                &site_name,
+                env.backend,
+                Arc::clone(&clock),
+                env.loaded.server.request_timeout,
+            )
+            .await?
+        };
         let port = Arc::new(ProcessApi::new(Deps {
             definitions: Arc::new(definitions),
             case_file: Arc::new(PgAfterCaseFile::new(env.backend.clone(), catalog)),
@@ -1110,31 +1212,51 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             clock,
         }));
         let mut built = built().lock().unwrap_or_else(|p| p.into_inner());
-        built.insert(site_name, Arc::clone(&port));
-        port
+        built.insert(
+            site_name,
+            Built {
+                port: Arc::clone(&port),
+                idempotency: Arc::clone(&idempotency),
+            },
+        );
+        (port, idempotency)
     } else {
         let built = built().lock().unwrap_or_else(|p| p.into_inner());
-        let Some(port) = built.get(&site_name).cloned() else {
+        let Some(made) = built.get(&site_name) else {
             return Ok(());
         };
-        port
+        (Arc::clone(&made.port), Arc::clone(&made.idempotency))
     };
     ctx.provide::<dyn ProcessPort>(Arc::clone(&port) as Arc<dyn ProcessPort>)?;
-    let mut ports = Ports::new();
-    ports.provide::<dyn ProcessPort>(port);
-    let idempotency = MemoryIdempotencyStore::new(Arc::clone(ctx.clock()));
-    ports.provide::<dyn IdempotencyStore>(Arc::new(idempotency));
-    // Mounted here like the other hosted groups: the host authenticates every request before
-    // the router sees it, and the port authenticates again.
-    let mounted = routes::mount(&[routes::process::registration()], &ports, &[]);
-    if let Some((module, reason)) = mounted.report.skipped.first() {
-        tracing::error!(
-            module = *module,
-            ?reason,
-            "the process routes were not mounted"
-        );
-    }
-    let router = mounted.authenticated;
+    let router = process_routes(port, idempotency);
     ctx.router_layer(move |base| base.merge(router));
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_memory_switch_defaults_off_and_ignores_the_hosts_other_keys() {
+        assert!(!IdempotencySwitch::default().allow_memory_idempotency);
+        let empty: IdempotencySwitch = toml::from_str("").unwrap();
+        assert!(!empty.allow_memory_idempotency);
+        let on: IdempotencySwitch = toml::from_str(
+            "allow_memory_idempotency = true\nsomething_new = 1\n[retention]\ndefault = \"24h\"\n",
+        )
+        .unwrap();
+        assert!(
+            on.allow_memory_idempotency,
+            "unknown keys are not an error here"
+        );
+    }
+
+    #[test]
+    fn the_lease_is_twice_the_request_timeout_and_at_least_two_minutes() {
+        let lease = |timeout: Duration| (timeout * 2).max(MIN_IDEMPOTENCY_LEASE);
+        assert_eq!(lease(Duration::from_secs(30)), Duration::from_secs(120));
+        assert_eq!(lease(Duration::from_secs(90)), Duration::from_secs(180));
+    }
 }

@@ -360,9 +360,13 @@ pub trait ProcessInsightPort: Send + Sync {
 // Metrics
 // ---------------------------------------------------------------------------------------------
 
+/// Counter: process events folded into the insight read model.
 const FOLDED_TOTAL: &str = "spot_bpm_insight_folded_total";
+/// Counter: process events the insight fold skipped, by `process`.
 const SKIPPED_TOTAL: &str = "spot_bpm_insight_skipped_total";
+/// Gauge: open attempts of the process, by `process`.
 const OPEN_ATTEMPTS: &str = "spot_bpm_insight_open_attempts";
+/// Gauge: runs of the process that are stuck, by `process`.
 const STUCK_RUNS: &str = "spot_bpm_insight_stuck_runs";
 
 /// Bounds the process names a label may carry: the first [`MAX_METRIC_PROCESSES`] distinct

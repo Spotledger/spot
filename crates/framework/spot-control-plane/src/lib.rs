@@ -238,7 +238,7 @@ impl CpError {
 }
 
 /// A background task of a module: runs until the stop signal turns true.
-pub type TaskFn = Box<dyn FnOnce(watch::Receiver<bool>) -> BoxFuture<'static, ()> + Send>;
+pub type TaskFn = Box<dyn FnOnce(watch::Receiver<bool>) -> BoxFuture<'static, ()> + Send + Sync>;
 /// A readiness check of a module.
 pub type ReadyFn = Arc<dyn Fn() -> BoxFuture<'static, bool> + Send + Sync>;
 

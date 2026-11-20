@@ -161,4 +161,5 @@ refusals are asserted structurally (the `Refusal` kind, the colliding field name
    three layers as `NotSupported` on the registry adapter; when a layer lands, its adapter
    makes the same scenario assert the version it sees with no suite change.
 4. **Per-change budget.** 500 ms per change is a gross liveness bound stated here per the
-   brief ("generous"); real performance budgets belong to L9 (the scale suite).
+   brief ("generous"); real performance budgets belong to L9 (the scale suite). A host may record its own bound
+   through `LivenessHost::per_change_budget` (the real PostgreSQL stack does: see `l10-stack`).

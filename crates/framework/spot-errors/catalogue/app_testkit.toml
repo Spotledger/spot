@@ -1,0 +1,28 @@
+# app_testkit codes: the extension SDK's test kit (WP-EXT-07.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "app_testkit.app_invalid"
+class = "none"
+summary = "The app directory failed its checks: every problem is listed."
+explanation_key = "error.app_testkit.app_invalid"
+params = []
+remedy = "Fix each listed problem (the same list the app check prints) and load the app again."
+since = "0.1.0"
+
+[[entry]]
+code = "app_testkit.unknown_user"
+class = "none"
+summary = "The test named a user the harness has not declared."
+explanation_key = "error.app_testkit.unknown_user"
+params = []
+remedy = "Declare the user first with harness.user(name).with_roles([...])."
+since = "0.1.0"
+
+[[entry]]
+code = "app_testkit.unsupported"
+class = "none"
+summary = "The test kit does not run this part of an app (a TypeScript script, a component, a manifest fixture or a list query)."
+explanation_key = "error.app_testkit.unsupported"
+params = []
+remedy = "Test it with the l3-http style suite against a running host, or wait for the kit to cover it."
+since = "0.1.0"

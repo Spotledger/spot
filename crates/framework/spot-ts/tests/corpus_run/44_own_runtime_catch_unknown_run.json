@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "catch_unknown_run",
+  "args": null,
+  "expect": "caught"
+}

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # External peers (`[services.link_external]`)
 
 Runs the external carrier of a tenant link: message topics exchanged with a peer that is not a platform

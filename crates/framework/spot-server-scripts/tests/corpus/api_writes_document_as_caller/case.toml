@@ -1,0 +1,11 @@
+kind = "api"
+pattern = "endpoint that writes a document as the caller"
+[input.args]
+message = "hello from the portal"
+[expect]
+ok = true
+[[expect.documents]]
+doctype = "log_entry"
+field = "message"
+value = "hello from the portal"
+count = 1

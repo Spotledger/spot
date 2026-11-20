@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Sync hub (`services.sync_hub`)
 
 The hub half of sync inside `spot serve`: edges dial in over mutual TLS; the hub never dials out. The service is **off unless configured** and runs only on a site whose node role is `hub`. A hub site without `listen` refuses to start.

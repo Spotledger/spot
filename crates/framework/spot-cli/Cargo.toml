@@ -45,6 +45,8 @@ spot-http = { path = "../spot-http" }
 spot-api-services = { path = "../spot-api-services" }
 spot-document = { path = "../spot-document" }
 spot-meta = { path = "../spot-meta" }
+# `spot types generate|check` (WP-EXT-09.T2): the TypeScript declarations of a site's effective metadata.
+spot-dts = { path = "../spot-dts" }
 spot-auth = { path = "../spot-auth" }
 spot-telemetry = { path = "../spot-telemetry", features = ["otlp"] }
 spot-seams = { path = "../spot-seams" }
@@ -55,6 +57,9 @@ spot-manifest = { path = "../spot-manifest" }
 # `spot install-app <bundle>`: the one verify the installer calls, and the publisher trust types it takes
 # (anchor, certificate, signature, revocation list). No other bundle crate is a direct dependency.
 spot-pack = { path = "../spot-pack" }
+# The developer commands (WP-DX-01.T3): `spot app|doctype|controller|script` forward to the
+# scaffolder.
+spot-scaffold = { path = "../spot-scaffold" }
 spot-bundle-signing = { path = "../spot-bundle-signing" }
 # `spot bundle export|diff|import` (WP-ALM-02.T3): the customisation bundle, the three-way merge and
 # conflict detection against the installed platform, and the environment ladder's `Role`; `semver` is
@@ -94,9 +99,13 @@ spot-files-service = { path = "../spot-files-service" }
 spot-mail = { path = "../spot-mail" }
 spot-mail-queue = { path = "../spot-mail-queue" }
 spot-mail-queue-pg = { path = "../../backends/spot-mail-queue-pg" }
+# Incoming mail (WP-PLT-11.T13): the engine, and its PostgreSQL cursor and seen stores.
+spot-mail-intake = { path = "../spot-mail-intake" }
+spot-mail-intake-pg = { path = "../../backends/spot-mail-intake-pg" }
 spot-egress = { path = "../spot-egress" }
 spot-print = { path = "../spot-print" }
 spot-template = { path = "../spot-template" }
+spot-mail-render = { path = "../spot-mail-render" }
 spot-realtime = { path = "../spot-realtime" }
 spot-realtime-bridge = { path = "../spot-realtime-bridge" }
 spot-meta-live = { path = "../spot-meta-live", features = ["storage"] }
@@ -153,6 +162,8 @@ spot-sync-loops = { path = "../spot-sync-loops" }
 spot-edge-sync = { path = "../spot-edge-sync" }
 spot-edge-pg = { path = "../../backends/spot-edge-pg" }
 spot-secrets = { path = "../spot-secrets" }
+# The customer-managed-key provider hosted (WP-SEC-03.T14).
+spot-secrets-kms = { path = "../spot-secrets-kms" }
 # `spot backup` (WP-PRD-04.T2): the runner, ledger and encryption of the package, and the
 # `pg_dump` snapshot provider it takes and restores with. No other backup crate is used here.
 spot-backup = { path = "../spot-backup" }
@@ -172,6 +183,18 @@ spot-functions = { path = "../spot-functions" }
 # LAN discovery (WP-PRD-06.T2): the host's optional mDNS advertisement and the `spot discover`
 # client command.
 spot-discovery = { path = "../spot-discovery" }
+# Hot reload for `spot serve` in development (WP-DX-02.T2): the pipeline of WP-DX-02.T1 with the host's
+# own seams (`services/devserver.rs`). Loopback and an explicit `enabled` only.
+spot-devserver = { path = "../spot-devserver" }
+# Debugging and tracing library (WP-DX-03.T3). The `dev-server` feature must stay off here
+# (spot-devtools/tests/production_build.rs): the module runs its own listener over `serve_pair`.
+spot-devtools = { path = "../spot-devtools" }
+# The layer that feeds the trace collector from the host's `tracing` spans.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+# `Transpiled`, the compiled script the script seam receives.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# UTF-8 paths, as the dev server's watcher and classifier use.
+camino = "1"
 # Workload routing (WP-PLT-20.T2): the policy engine `workload_routing.rs` hosts — queue
 # affinity, report-path routing and replica-read decisions.
 spot-workload-routing = { path = "../spot-workload-routing" }
@@ -440,19 +463,40 @@ spot-journal-audit-host-pg = { path = "../../backends/spot-journal-audit-host-pg
 # The journal and sync management operations' typed executors (WP-RTB-04.T3).
 spot-mgmt-journal = { path = "../spot-mgmt-journal" }
 spot-mgmt-sync = { path = "../spot-mgmt-sync" }
+# The operational series the signals service sets (WP-OPS-01.T3), and the health view it reads.
+spot-ops-signals = { path = "../spot-ops-signals" }
+spot-sync-health = { path = "../spot-sync-health" }
 
 # Process definitions as hub-owned master data that syncs (WP-SYN-12.T1/T2).
 spot-sync-process = { path = "../spot-sync-process" }
 
 # Data policy and residency hosting (WP-SEC-05); the sync health view the management executor returns.
 spot-data-policy = { path = "../spot-data-policy" }
-spot-sync-health = { path = "../spot-sync-health" }
+# The journal access surface (WP-JRN-09.T4): the journal_reader grants, the manifest-gated reader and
+# its PostgreSQL store; the signed manifest's verifying keys and the journal object store it reads.
+# The journal wiring (WP-RTB-01.T9): the segment and fork types the audit options take, the empty
+# upcast registry of an audit run and the chain verification `journal.verify` runs.
+spot-image-upcast = { path = "../spot-image-upcast" }
+spot-journal-verify = { path = "../spot-journal-verify" }
+# The sync and rebuild wiring (WP-RTB-01.T10): the rebuild host's seams and the executor.
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+spot-journal-rebuild-host = { path = "../spot-journal-rebuild-host" }
+# Sync catch-up served and applied (WP-RTB-02.T14): the bootstrap session's types and the closure
+# limits the chunks are cut with.
+spot-sync-bootstrap = { path = "../spot-sync-bootstrap" }
+# Occupancy, licence and catch-up hosting (WP-OCC, WP-LIC, WP-SYN catch-up).
+spot-occupancy = { path = "../spot-occupancy" }
+spot-license = { path = "../spot-license" }
+spot-sync-catchup = { path = "../spot-sync-catchup" }
 
 [target.'cfg(windows)'.dependencies]
 # Stop and start of the Windows service for an update (`spot_winsvc::service::install`).
 spot-winsvc = { path = "../spot-winsvc" }
 
 [dev-dependencies]
+# tests/fleet_loop: the control plane library the fleet rig drives, and the base64 of its tokens.
+spot-control-plane = { path = "../spot-control-plane" }
+base64 = "0.22"
 # The contract store samples the SSO module tests use (WP-IAM-05.T11/T13/T14).
 spot-sso = { path = "../spot-sso", features = ["testing"] }
 spot-sync-closure = { path = "../spot-sync-closure" }
@@ -473,6 +517,7 @@ spot-journal-verify = { path = "../spot-journal-verify" }
 tempfile = "3"
 # tests/journal_access_host.rs: signs the test journal's manifest.
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Scratch app directories of the dev server's tests (WP-DX-02.T2).
 spot-node-role-pg = { path = "../../backends/spot-node-role-pg", features = ["testing"] }
 tokio = { version = "1", features = ["net", "io-util"] }
 spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
@@ -491,6 +536,8 @@ rcgen = "0.14"
 # tests/process_conversations.rs: two sites joined by a real handshake (tenant ids, the consent
 # step-up) and the peer-region case.
 spot-tenancy = { path = "../spot-tenancy" }
+# tests/types.rs: the generated declarations are run through the script tier's parser.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
 
 [lints]
 workspace = true

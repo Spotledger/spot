@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Usage metering emitter (`[services.metering]`)
 
 Counts active users, transactions, storage and AI tokens on the tenant host and ships them to the control plane

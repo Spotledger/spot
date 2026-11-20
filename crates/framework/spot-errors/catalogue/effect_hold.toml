@@ -111,3 +111,12 @@ explanation_key = "error.effect_hold.audit_failed"
 params = ["reason"]
 remedy = "Check the audit store; the hold transition itself is unchanged and stays fail-closed."
 since = "0.1.0"
+
+[[entry]]
+code = "effect_hold.retention_invalid"
+class = "Validation"
+summary = "A retention period of the side-effect hold is zero days or more than 3650 days."
+explanation_key = "error.effect_hold.retention_invalid"
+params = []
+remedy = "Use a whole number of days from 1 to 3650; the defaults are 7 days after release and 30 after discard."
+since = "0.1.0"

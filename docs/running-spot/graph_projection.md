@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Graph projection (`[services.graph_projection]`)
 
 Optional, **off by default**: nothing is created unless `enabled = true`. Mirrors edge keys and edge

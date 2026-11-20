@@ -1,0 +1,6 @@
+{
+  "case": "export_let",
+  "entry": "bump",
+  "args": null,
+  "expect": 1
+}

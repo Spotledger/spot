@@ -48,6 +48,51 @@ remedy = "Migrate only Cases that are still running; a finished Case keeps its p
 since = "0.1.0"
 
 [[entry]]
+code = "bpm_versioning.case_not_found"
+class = "none"
+summary = "The Run no longer existed when the move was attempted, so it was skipped."
+explanation_key = "error.bpm_versioning.case_not_found"
+params = []
+remedy = "Nothing to do: the Run was deleted or archived between the plan and the move; plan again if you expected it to still be there."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_not_on_version"
+class = "none"
+summary = "The Run was no longer on the source version when the move was attempted, so it was skipped."
+explanation_key = "error.bpm_versioning.case_not_on_version"
+params = []
+remedy = "Check the Run's current version: another migration or a rollback moved it first, and no further action is needed if it is on the version you wanted."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_changed"
+class = "none"
+summary = "The Run advanced after the migration was planned, so it was skipped rather than moved on stale information."
+explanation_key = "error.bpm_versioning.case_changed"
+params = []
+remedy = "Plan and start the migration again; the new plan is made from the Run's current state."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_mid_node"
+class = "none"
+summary = "A node of the Run was executing at the moment of the move, so it was skipped and not moved."
+explanation_key = "error.bpm_versioning.case_mid_node"
+params = []
+remedy = "Run the migration again later: the Run can move once the running node settles."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_versioning.case_waiting"
+class = "none"
+summary = "The Run was waiting on a timer, an event, a person's task or a child Run, and Runs that wait are not migrated in this version, so it was skipped."
+explanation_key = "error.bpm_versioning.case_waiting"
+params = []
+remedy = "Run the migration again after the wait ends; until then the Run finishes on its pinned version."
+since = "0.1.0"
+
+[[entry]]
 code = "bpm_versioning.version_mismatch"
 class = "none"
 summary = "The Case is pinned to a different process version than the one the caller named."
@@ -173,47 +218,3 @@ params = []
 remedy = "Publish through publish_guarded with a PublishCheck instead of the unguarded publish."
 since = "0.1.0"
 
-[[entry]]
-code = "bpm_versioning.case_changed"
-class = "none"
-summary = "The Case changed since the migration plan was made."
-explanation_key = "error.bpm_versioning.case_changed"
-params = []
-remedy = "Plan the migration again for the Case's current state."
-since = "0.1.0"
-
-[[entry]]
-code = "bpm_versioning.case_mid_node"
-class = "none"
-summary = "The Case is in the middle of a node and cannot be migrated now."
-explanation_key = "error.bpm_versioning.case_mid_node"
-params = []
-remedy = "Wait for the node to finish and migrate the Case then."
-since = "0.1.0"
-
-[[entry]]
-code = "bpm_versioning.case_not_found"
-class = "none"
-summary = "The Case to migrate does not exist."
-explanation_key = "error.bpm_versioning.case_not_found"
-params = []
-remedy = "Check the Case id."
-since = "0.1.0"
-
-[[entry]]
-code = "bpm_versioning.case_not_on_version"
-class = "none"
-summary = "The Case is not on the version the migration starts from."
-explanation_key = "error.bpm_versioning.case_not_on_version"
-params = []
-remedy = "Plan the migration from the version the Case is on."
-since = "0.1.0"
-
-[[entry]]
-code = "bpm_versioning.case_waiting"
-class = "none"
-summary = "The Case is waiting and cannot be migrated now."
-explanation_key = "error.bpm_versioning.case_waiting"
-params = []
-remedy = "Migrate the Case when it is not waiting."
-since = "0.1.0"

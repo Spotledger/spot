@@ -143,3 +143,12 @@ explanation_key = "error.effects.invalid"
 params = []
 remedy = "Fix the declaration named in the message."
 since = "0.1.0"
+
+[[entry]]
+code = "effects.governed_reversal_unconfirmed"
+class = "none"
+summary = "A resumed governed reversal could not tell whether it had already committed, so it was refused rather than repeated."
+explanation_key = "error.effects.governed_reversal_unconfirmed"
+params = []
+remedy = "Check the record the reversal touched, then reverse it by hand if it did not commit."
+since = "0.1.0"

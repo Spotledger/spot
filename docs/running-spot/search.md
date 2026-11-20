@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Search
 
 `spot serve` can search the DocTypes that declare a `[search]` projection (ADR-087 section 7): a

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Invitations (`[services.invitations]`)
 
 An administrator invites a person (`POST /api/v1/identity/users` with `invite: true`, or

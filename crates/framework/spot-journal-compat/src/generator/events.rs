@@ -14,7 +14,8 @@
 //! * a tombstone (`account` `a2`);
 //! * a record updated three times (`account` `a1`, versions 2, 3 and 4);
 //! * a personal-field envelope left sealed: opaque JSON the harness never opens;
-//! * one audit entry (`sys_role_changed`) and one domain event (`doc_posted`), which the rebuild
+//! * one audit entry (`identity_role_changed`, a registered identity audit topic whose payload
+//!   passes `spot_events_contract::identity::validate`) and one domain event (`doc_posted`), which the rebuild
 //!   replays and skips respectively.
 
 use serde_json::{Map, Value, json};
@@ -25,7 +26,8 @@ use crate::SOURCE;
 pub struct Event {
     /// The position (sequence number) in generation 1.
     pub position: u64,
-    /// The envelope's topic: `doc_state` for state, `sys_…` for audit, anything else domain.
+    /// The envelope's topic: a topic of the events registry: `doc_state` is state, `identity_*` is audit, `doc_posted`
+    /// is domain. The fixture may hold only registered topics (`tests/topics_registered.rs`).
     pub topic: &'static str,
     /// The subject's entity.
     pub entity: &'static str,
@@ -282,11 +284,11 @@ pub fn script() -> Vec<Event> {
         },
         Event {
             position: 13,
-            topic: "sys_role_changed",
+            topic: "identity_role_changed",
             entity: "role",
             id: 9_000,
             version: None,
-            data: json!({ "role": "accountant", "granted_to": uuid(8_001) }),
+            data: json!({ "name": "accountant", "change": "created", "origin": "custom" }),
         },
     ]
 }

@@ -96,5 +96,5 @@ class = "none"
 summary = "The continuous verification found the stored journal chain damaged (a hash, a link, the manifest signature or a listed segment does not check out); the shipper stopped advancing and raised JOURNAL_GAP."
 explanation_key = "error.journal_ship.chain_damaged"
 params = []
-remedy = "Follow the recovery steps in docs/journal-hosting.md: compare the verification findings with the replica, restore the damaged object, then restart the shipper. Never write on top of a broken chain."
+remedy = "Follow the recovery steps in docs/runbooks/journal-recovery.md: compare the verification findings with the replica, restore the damaged object, then restart the shipper. Never write on top of a broken chain."
 since = "0.1.0"

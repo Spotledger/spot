@@ -2508,7 +2508,7 @@ fn the_0_15_0_webhook_signing_secret_operations_are_additive_and_pinned() {
     assert!(answer.is_valid(&json!({"data": {"key_version": 2, "fingerprint": "0123456789ab"}})));
     assert!(answer.is_valid(&json!({"data": {
         "key_version": 2, "fingerprint": "0123456789ab",
-        "secret": "kq3Zt1m0WcVJb8x2uQnR5eYhLd7SfAaPgT4oXvC9iBw"
+        "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     }})));
     assert!(
         !answer.is_valid(&json!({"data": {"key_version": 2, "fingerprint": "not hex at all"}}))

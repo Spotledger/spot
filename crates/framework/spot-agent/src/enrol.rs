@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use spot_agent_core::ResultLog as _;
 use spot_agent_enroll::identity::AgentIdentity;
+use spot_agent_enroll::keys::{KeyStore, Protection};
 use spot_agent_enroll::message::PublicKeyB64;
 
 use crate::audit::{LocalAuditLog, event_record};
@@ -126,6 +127,35 @@ pub struct EnrolInput<'a> {
     pub platform: PlatformWire,
     /// The current instant, Unix seconds.
     pub now: i64,
+    /// The operator accepts software administrator keys on a host without a hardware-backed
+    /// key store (`--allow-software-keys`). Read by [`enrol`] only: a rotation never changes
+    /// the stored policy.
+    pub allow_software_keys: bool,
+}
+
+/// What the enrolment decided about key protection, from the store that was really created.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct KeyDecision {
+    /// The identity key store is hardware-backed.
+    hardware: bool,
+    /// Software administrator keys are accepted on this host.
+    software_allowed: bool,
+}
+
+/// Decides the key protection policy of a new enrolment: hardware-backed stores keep the
+/// strict policy; a software store needs the operator's explicit flag.
+fn decide(protection: Protection, allow_software_keys: bool) -> Result<KeyDecision, AgentError> {
+    match protection {
+        Protection::Hardware => Ok(KeyDecision {
+            hardware: true,
+            software_allowed: false,
+        }),
+        Protection::Software if allow_software_keys => Ok(KeyDecision {
+            hardware: false,
+            software_allowed: true,
+        }),
+        Protection::Software => Err(AgentError::SoftwareKeysNotAllowed),
+    }
 }
 
 /// Runs the enrolment.
@@ -141,6 +171,33 @@ pub fn enrol(
     if input.state.is_enrolled() {
         return Err(AgentError::AlreadyEnrolled);
     }
+    // A file store is a software key by construction: refuse before the key is created and
+    // before the one-time token is spent.
+    if input.key_store == KeyStoreKind::File && !input.allow_software_keys {
+        return Err(AgentError::SoftwareKeysNotAllowed);
+    }
+    // The key file lives in the state directory: it must exist before the store creates the key.
+    input.state.create()?;
+    let store = open_key_store(input.key_store, &input.state.key_path())?;
+    enrol_with_store(input, store, gateway, logger)
+}
+
+/// [`enrol`] with the identity key store already opened (the seam tests use to present a
+/// hardware-backed store; the TPM wiring is a later task).
+///
+/// # Errors
+/// As [`enrol`]; [`AgentError::SoftwareKeysNotAllowed`] when `store` is a software store
+/// and `input.allow_software_keys` is not set.
+pub fn enrol_with_store(
+    input: &EnrolInput<'_>,
+    store: Box<dyn KeyStore>,
+    gateway: &dyn EnrolGateway,
+    logger: &Logger,
+) -> Result<EnrolSummary, AgentError> {
+    if input.state.is_enrolled() {
+        return Err(AgentError::AlreadyEnrolled);
+    }
+    let decision = decide(store.protection(), input.allow_software_keys)?;
     let token = input.token;
     if !(16..=256).contains(&token.len()) || !token.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
         return Err(AgentError::Usage(
@@ -151,7 +208,6 @@ pub fn enrol(
     let config = AgentConfig::new(input.gateway_url, input.ca.map(str::to_owned));
     config.validate()?;
     input.state.create()?;
-    let store = open_key_store(input.key_store, &input.state.key_path())?;
     let public = store.public_key();
     let digest = token_digest_prefix(token);
     logger.info(
@@ -174,7 +230,8 @@ pub fn enrol(
     let keys = parse_trust_anchor(&response.trust_anchor)?;
 
     // Order: trust anchor, config, then the identity (the marker of "enrolled").
-    TrustFile::from_keys(&keys).save(&input.state.trust_path())?;
+    TrustFile::from_keys_with(&keys, decision.hardware, decision.software_allowed)
+        .save(&input.state.trust_path())?;
     atomic_write(&input.state.config_path(), config.to_toml()?.as_bytes())?;
     let identity = AgentIdentity {
         agent_id: response.agent_id.clone(),
@@ -186,13 +243,14 @@ pub fn enrol(
         .map_err(|_| AgentError::StateIo("cannot write the enrolment record".to_owned()))?;
 
     let audit = LocalAuditLog::open(input.state.audit_path(), response.agent_id.clone())?;
-    let mut record = event_record(
-        &response.agent_id,
-        "agent.enrol",
-        "enrolled",
-        None,
-        input.now,
-    );
+    // The audit record carries the truth about key protection: a host that accepted
+    // software keys says so in its own log.
+    let outcome = if decision.software_allowed {
+        "enrolled_software_keys"
+    } else {
+        "enrolled"
+    };
+    let mut record = event_record(&response.agent_id, "agent.enrol", outcome, None, input.now);
     record.command_id = format!("token:{digest}");
     audit
         .append(&record)
@@ -234,6 +292,16 @@ pub fn rotate_key(
     let next = std::path::PathBuf::from(next_name);
     let store = open_key_store(input.key_store, &next)?;
     let public = store.public_key();
+    // The policy is the one stored at enrolment: a rotation never loosens it. A software
+    // key on a host that did not accept software keys is refused (the new key file is
+    // removed so no half-created key stays behind).
+    let policy_file = TrustFile::load(&input.state.trust_path())?;
+    let hardware = store.protection() == Protection::Hardware;
+    if !hardware && !policy_file.software_keys_allowed {
+        drop(store);
+        let _ = std::fs::remove_file(&next);
+        return Err(AgentError::SoftwareKeysNotAllowed);
+    }
     let digest = token_digest_prefix(token);
     let response = gateway.enrol(&EnrolRequestWire {
         token: token.to_owned(),
@@ -246,7 +314,8 @@ pub fn rotate_key(
         ));
     }
     let keys = parse_trust_anchor(&response.trust_anchor)?;
-    TrustFile::from_keys(&keys).save(&input.state.trust_path())?;
+    TrustFile::from_keys_with(&keys, hardware, policy_file.software_keys_allowed)
+        .save(&input.state.trust_path())?;
     drop(store);
     std::fs::rename(&next, input.state.key_path())
         .map_err(|_| AgentError::StateIo("cannot install the new key".to_owned()))?;

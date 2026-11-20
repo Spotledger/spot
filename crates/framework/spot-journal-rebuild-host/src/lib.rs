@@ -26,6 +26,7 @@
 
 pub mod checkpoint;
 mod error;
+pub mod invariants;
 pub mod projector;
 mod request;
 pub mod run;

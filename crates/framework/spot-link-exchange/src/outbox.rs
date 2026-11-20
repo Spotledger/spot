@@ -103,6 +103,8 @@ pub struct Outbox<'a> {
     ids: &'a dyn IdSource,
     lifetimes: Lifetimes,
     config: OutboxConfig,
+    /// The most doublings of the resend interval a stuck message gets (0: a fixed interval).
+    backoff_shift: u32,
 }
 
 impl<'a> Outbox<'a> {
@@ -122,7 +124,19 @@ impl<'a> Outbox<'a> {
             ids,
             lifetimes,
             config: OutboxConfig::default(),
+            backoff_shift: 0,
         }
+    }
+
+    /// Lets the resend interval of a message that keeps going unanswered double with every
+    /// attempt, at most `max_doublings` times (capped at 16, 65,536 times the base interval): a
+    /// stuck peer is asked less and less often instead of every `resend_after_ms`. The message is
+    /// still never retried past its expiry: `expire_due` ends it as `Expired`, and a terminal entry
+    /// is not handed to the carrier again. `0` (the default) keeps a fixed interval.
+    #[must_use]
+    pub fn with_backoff(mut self, max_doublings: u32) -> Self {
+        self.backoff_shift = max_doublings.min(16);
+        self
     }
 
     /// Replaces the tuning.
@@ -197,6 +211,8 @@ impl<'a> Outbox<'a> {
             } else {
                 self.config.resend_after_ms
             };
+            let doublings = self.backoff_shift.min(entry.attempts.saturating_sub(1));
+            let interval = interval.saturating_mul(1u64 << doublings);
             let last = if sends_original {
                 entry.last_sent_at
             } else {

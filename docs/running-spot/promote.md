@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # spot promote
 
 A customisation bundle goes from one environment to the next (dev to test, test to prod) inside one

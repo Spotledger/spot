@@ -297,3 +297,21 @@ explanation_key = "error.bpm_model.text_invalid"
 params = []
 remedy = "Fix the definition text so it follows the process format and publish again."
 since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.trigger_field_invalid"
+class = "none"
+summary = "A trigger's start roles, input schema, condition, zone or missed-run setting is malformed or out of range: {node}."
+explanation_key = "error.bpm_model.trigger_field_invalid"
+params = ["node"]
+remedy = "Fix the setting: at most 32 distinct roles of 1 to 128 bytes with no whitespace; an input schema that is a JSON object of at most 16 KiB, 32 levels deep, with no fractional numbers; a condition that parses; a zone of 1 to 64 letters, digits and _/+-; catch_up_max from 1 to 1000 with missed = catch_up (and only then)."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_model.trigger_field_misplaced"
+class = "none"
+summary = "A trigger sets a field its trigger type does not read: {node}."
+explanation_key = "error.bpm_model.trigger_field_misplaced"
+params = ["node"]
+remedy = "Move the field to a trigger that reads it: roles and input_schema belong to manual and api triggers, condition to document_event triggers, and zone, missed and catch_up_max to schedule triggers; otherwise remove it."
+since = "0.1.0"

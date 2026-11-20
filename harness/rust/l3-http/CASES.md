@@ -8,6 +8,8 @@ distance between the brief and the product is visible in every run instead of be
 The pass or fail state is not listed here: the run report carries it.
 
 241 cases, of which 153 are blocked by surfaces the host does not serve yet.
+70 cases, of which 16 are blocked by surfaces the host does not serve yet.
+63 cases, of which 17 are blocked by surfaces the host does not serve yet.
 
 ## Authentication and sessions
 
@@ -504,3 +506,23 @@ The pass or fail state is not listed here: the run report carries it.
 | `support_access: a_two_person_consent_cannot_be_confirmed_by_its_own_requester` | when the policy asks for a second administrator, the user who gave the consent cannot also confirm it | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
 | `support_access: an_expired_consent_a_consent_for_another_scope_and_another_tenants_request_are_refused` | each refusal carries its stable code, writes an audit record and leaves no credential; the other tenant's request answers like a missing one | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
 | `support_access: an_operator_cannot_delete_an_archive_object_or_alter_a_chain_entry` | a delete or rewrite of an archive object, or an edit of a chain entry, is refused and the chain still verifies | blocked: WP-SEC-07.T2: the host mounts no support-access routes and no module provides the customer side of support access |
+| `function: a_declared_function_is_served_with_its_verbs_schema_limit_and_sign_in_rules` | a function an app declares is called with `GET` and `POST` as declared (`405` with the `Allow` set otherwise), a bad argument is `400` naming the problem and never the value, an unknown function is `404`, nobody signed in is `401`, a user the function refuses is `403 permission.denied` (not an empty success), and a spent rate limit is `429` with `Retry-After` | case |
+
+## Print
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `print: a_template_cannot_inject_or_escape` | a project whose title holds Typst markup prints it literally; a template that reads `/etc/passwd`, or a symlink in the template folder that points outside it, never puts file content in the PDF or the body | case |
+| `print: print_formats` | `?format=invoice` renders `<doctype>.invoice.typ` (its marker is in the PDF text), a well-formed format with no file is `print.format_unknown`, and a name with a separator, a parent step or a percent-encoded variant is `400 api.invalid_request` without echoing the name or reading a file | case |
+| `print: print_is_deterministic_and_bounded` | the same document and format twice give the same page count and text, a task with a 2,000-row checklist prints or is refused with an envelope inside the client timeout (never a hang), and 20 parallel prints each answer 200, or 429 or 503 with `Retry-After` | case |
+| `print: print_money_stays_exact` | a Time Entry's `0.25` and `0.75` hours print as the stored decimals through the `number` filter (no float noise; the sample's smallest value is 0.25, so the classic 0.1 + 0.2 pair cannot be stored), and a template that does arithmetic on the decimal does not print a computed sum | case |
+| `print: print_of_an_unreadable_or_missing_document_is_one_404` | a document that does not exist and an unknown DocType give the same `404 document.not_found` body (request id aside), and so does a document the caller may not read when the sample roles have one | case |
+| `print: print_requires_sign_in` | an anonymous `GET /print/...` is 401 and the body is not a PDF | case |
+| `print: print_returns_a_pdf_with_the_right_headers` | a signed-in member prints a project with the built-in layout: 200, `Content-Type: application/pdf`, a body that starts `%PDF-`, `Content-Disposition` `inline; filename="project-<id>.pdf"` (built from the validated path names, no title, no separator, no extra quote), `Cache-Control: private, no-store` and `nosniff` | case |
+| `print: print_shows_what_the_caller_may_read_and_nothing_else` | a template printing a task's subject and its confidential details shows the subject to a Viewer and never the details' cleartext (hidden or masked exactly as `GET /resource` reads it), and shows a Project Manager what the read path shows them | case |
+## Incoming mail
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `mail_intake: two_messages_become_two_documents_as_the_run_as_user_and_a_repeat_poll_creates_none` | with `[services.mail_intake]` pointing at the fake IMAP server, two messages create two documents whose creator is the `run_as` user, a second poll creates none, an auto-reply is dropped, and a message the DocType refuses is rejected without stopping the next one | blocked: WP-PLT-11.T2: spot-mail's fake IMAP server is test support inside its `tests/` folder, not a crate or a `testing` feature a harness can use |
+| `script_kinds: an_api_script_is_served_as_its_caller_and_a_scheduled_script_runs_as_its_user` | an API script created as a document is served as a function (`200` for a signed-in user, `404` for nobody (a function that is not declared `guest` does not exist to a guest), `400` for a bad argument, never a guest), and a scheduled script that fires every second writes one document per slot as its `run_as` user; a `run_as` user that does not exist produces no document and a recorded error | case |

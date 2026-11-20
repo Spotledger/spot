@@ -1,0 +1,3 @@
+Dear {{ customer }},
+Invoice {{ number }} for {{ total | money('PKR') }} is due on {{ due | date(format='medium') }}.
+Thank you.

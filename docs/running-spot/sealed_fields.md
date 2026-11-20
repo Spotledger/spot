@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # sealed_fields
 
 Hosts the node side of sealed and encrypted protected fields (ADR-070 rule 12.13): the rules built

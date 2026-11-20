@@ -13,6 +13,7 @@ fn every_code_the_driver_raises_is_catalogued_and_nothing_else_is() {
         },
         CommitError::UnknownSeq { seq: 1 },
         CommitError::RelayStopped { cause: "x" },
+        CommitError::EntryTooLarge { bytes: 2, limit: 1 },
         CommitError::InvalidSetting { name: "x" },
     ];
     let mut raised: Vec<&str> = all.iter().map(CommitError::code).collect();

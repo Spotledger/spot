@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # `spot mgmt`: the management API client
 
 `spot mgmt` is an equal client of the management API (ADR-44), the same API the Admin Center console

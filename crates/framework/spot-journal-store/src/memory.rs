@@ -7,7 +7,7 @@ use crate::error::StoreError;
 use crate::layout::Key;
 use crate::store::{
     JournalStore, ObjectEntry, ObjectMeta, StoreFuture, StoredObject, etag, guard_delete,
-    guard_put_new, guard_put_replace, length, page,
+    guard_delete_snapshot, guard_put_new, guard_put_replace, length, page,
 };
 
 /// One stored object: the bytes, their etag and their length.
@@ -158,6 +158,18 @@ impl JournalStore for MemoryStore {
         Box::pin(async move {
             let key = key.to_owned();
             guard_delete(&key)?;
+            let mut objects = self.lock()?;
+            objects
+                .remove(&key)
+                .map(|_| ())
+                .ok_or(StoreError::NotFound { key })
+        })
+    }
+
+    fn delete_snapshot<'a>(&'a self, key: &'a str) -> StoreFuture<'a, ()> {
+        Box::pin(async move {
+            let key = key.to_owned();
+            guard_delete_snapshot(&key)?;
             let mut objects = self.lock()?;
             objects
                 .remove(&key)

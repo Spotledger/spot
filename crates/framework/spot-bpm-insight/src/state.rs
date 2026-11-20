@@ -24,8 +24,15 @@ use crate::event::{RunState, WaitReason};
 use crate::histogram::{Histogram, HistogramState};
 use crate::process::{ProcessKey, StepKey};
 
-/// The version [`Accumulator::export_state`] writes and [`Accumulator::from_state`] accepts.
-pub const STATE_VERSION: u32 = 1;
+/// The version [`Accumulator::export_state`] writes.
+///
+/// Version 2 (WP-BPM-11.T9) added the per-step `max_wait` and `max_work`.
+pub const STATE_VERSION: u32 = 2;
+
+/// The oldest version [`Accumulator::from_state`] still reads. A version-1 state loads with
+/// `max_wait` and `max_work` of every step set to `None` (a version-1 document did not record
+/// them), so after a resume those two fields cover only the attempts folded after the resume.
+pub const OLDEST_STATE_VERSION: u32 = 1;
 
 /// The stored form of one step's running aggregate.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +61,12 @@ pub struct StepState {
     pub wait: Millis,
     /// The completed attempts' cycle times.
     pub cycles: HistogramState,
+    /// The longest wait of one completed attempt (version 2; absent in version 1).
+    #[serde(default)]
+    pub max_wait: Option<Millis>,
+    /// The longest work time of one completed attempt (version 2; absent in version 1).
+    #[serde(default)]
+    pub max_work: Option<Millis>,
     /// Times an attempt entered a wait.
     pub queue_entered: u64,
     /// Times an attempt left a wait.
@@ -159,6 +172,8 @@ impl Accumulator {
                 work: agg.work,
                 wait: agg.wait,
                 cycles: agg.cycles.to_state(),
+                max_wait: agg.max_wait,
+                max_work: agg.max_work,
                 queue_entered: agg.queue_entered,
                 queue_left: agg.queue_left,
                 waiting: agg.waiting,
@@ -215,12 +230,13 @@ impl Accumulator {
     /// [`InsightError::StateCorrupt`] for any inconsistent content. The state is never partly
     /// loaded.
     pub fn from_state(state: AccumulatorState) -> Result<Self, InsightError> {
-        if state.version != STATE_VERSION {
+        if !(OLDEST_STATE_VERSION..=STATE_VERSION).contains(&state.version) {
             return Err(InsightError::StateVersion {
                 found: state.version,
                 supported: STATE_VERSION,
             });
         }
+        let from_v1 = state.version < 2;
         let mut accumulator = Self::new();
         for step in state.steps {
             let StepState {
@@ -235,11 +251,24 @@ impl Accumulator {
                 work,
                 wait,
                 cycles,
+                max_wait,
+                max_work,
                 queue_entered,
                 queue_left,
                 waiting,
                 max_waiting,
             } = step;
+            // A version-1 document never recorded the maxima: they start empty, whatever it holds.
+            let (max_wait, max_work) = if from_v1 {
+                (None, None)
+            } else {
+                (max_wait, max_work)
+            };
+            if completed == 0 && (max_wait.is_some() || max_work.is_some()) {
+                return Err(corrupt(
+                    "a step with no completed attempt has a longest time",
+                ));
+            }
             let cycles = Histogram::from_state(cycles)?;
             let outcomes = done
                 .checked_add(failed)
@@ -260,6 +289,8 @@ impl Accumulator {
                 work,
                 wait,
                 cycles,
+                max_wait,
+                max_work,
                 queue_entered,
                 queue_left,
                 waiting,
@@ -392,7 +423,7 @@ mod tests {
     #[test]
     fn an_unknown_version_is_refused_with_a_stable_code() {
         let mut state = sample().export_state();
-        state.version = 2;
+        state.version = 3;
         let err = Accumulator::from_state(state).unwrap_err();
         assert_eq!(err.code(), "bpm_insight.state_version");
         let mut state = sample().export_state();
@@ -401,6 +432,35 @@ mod tests {
             Accumulator::from_state(state).unwrap_err().code(),
             "bpm_insight.state_version"
         );
+    }
+
+    #[test]
+    fn a_version_one_state_loads_with_the_new_maxima_empty() {
+        let mut state = sample().export_state();
+        state.version = 1;
+        for step in &mut state.steps {
+            step.max_wait = Some(Millis::from_seconds(999));
+            step.max_work = Some(Millis::from_seconds(999));
+        }
+        let acc = Accumulator::from_state(state).unwrap();
+        let exported = acc.export_state();
+        assert_eq!(exported.version, STATE_VERSION);
+        assert!(
+            exported
+                .steps
+                .iter()
+                .all(|s| s.max_wait.is_none() && s.max_work.is_none())
+        );
+    }
+
+    #[test]
+    fn maxima_on_a_step_with_nothing_completed_are_corrupt() {
+        let mut state = sample().export_state();
+        state.steps.retain(|s| s.completed > 0);
+        let mut bad = state.clone();
+        bad.open.clear();
+        bad.steps[0].completed = 0;
+        assert!(Accumulator::from_state(bad).is_err());
     }
 
     #[test]

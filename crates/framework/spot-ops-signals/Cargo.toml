@@ -1,0 +1,17 @@
+[package]
+name = "spot-ops-signals"
+description = "The names, units, labels and meanings of the operational series of the journal, sync, quarantine, conditions and migration subsystems, as typed recorder helpers over the metrics facade (WP-OPS-01.T2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The metric facade `spot-telemetry` installs the Prometheus recorder for.
+metrics = "0.24"
+# The recorder (`install`) and the `/metrics` text (`render_prometheus`).
+spot-telemetry = { path = "../spot-telemetry" }
+
+[lints]
+workspace = true

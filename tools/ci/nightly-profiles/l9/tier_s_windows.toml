@@ -1,0 +1,16 @@
+# Tier S floor on Windows (WP-TST-15.T3): the Windows VM runner is configured with 4 GB of RAM
+# and 2 vCPUs, so the machine is the cap (L9_REQUIRE_CAP=vm). The footprint and swap checks read
+# /proc and are skipped there; the baseline file records the counters the runner script keeps.
+name = "tier_s_windows"
+description = "10 users on the Windows VM runner (4 GB, 2 vCPUs), README tier S budgets"
+runner = "windows-vm"
+timeout_minutes = 60
+pr_gate = false
+test = "tier_s"
+l9_profile = "tier_s"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "tier_s", "--", "--nocapture"]
+artefacts = ["target/l9/tier_s_windows.log"]
+
+[env]
+L9_DURATION_SCALE = "1"
+L9_REQUIRE_CAP = "vm"

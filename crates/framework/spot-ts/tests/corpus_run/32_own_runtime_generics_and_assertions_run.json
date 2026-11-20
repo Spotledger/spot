@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "generics_and_assertions_run",
+  "args": 41,
+  "expect": 42
+}

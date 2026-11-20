@@ -9,7 +9,8 @@ use spot_storage_contract::StorageBackend;
 
 use crate::cases::{Case, Divergence, Scope, load_cases, load_register};
 use crate::catalog::{
-    geo_catalog, long_names_catalog, parity_catalog, range_catalog, search_catalog,
+    geo_catalog, graph_catalog, long_names_catalog, parity_catalog, range_catalog, search_catalog,
+    search_rank_catalog,
 };
 use crate::driver::{BackendFactory, CaseNeeds};
 use crate::exec::{Observed, error_kind, execute};
@@ -280,6 +281,8 @@ impl ParityRunner {
                 Some("geo") => geo_catalog(locale),
                 Some("range") => range_catalog(locale),
                 Some("search") => search_catalog(locale),
+                Some("search_rank") => search_rank_catalog(locale),
+                Some("graph") => graph_catalog(locale),
                 Some("long") => long_names_catalog(locale),
                 Some(other) => {
                     outcomes.insert(
@@ -301,6 +304,8 @@ impl ParityRunner {
             };
             let needs = CaseNeeds {
                 extensions: &case.extensions,
+                search: case.needs_search,
+                protected: &case.search_protected,
             };
             let fresh = factory.fresh(catalog, &needs).await;
             let observed = match fresh {
@@ -596,6 +601,9 @@ fn variant_name(v: &spot_storage_contract::Value) -> &'static str {
 
 fn expected_text(case: &Case) -> String {
     let e = &case.expect;
+    if let Some(nodes) = &e.nodes {
+        return Observed::Rows(nodes.iter().map(|n| vec![n.clone()]).collect()).to_string();
+    }
     if let Some(rows) = &e.rows {
         return Observed::Rows(expected_rows(rows)).to_string();
     }
@@ -635,6 +643,10 @@ fn sorted(mut rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
 /// Whether `obs` is what `case` expects.
 fn verdict(case: &Case, obs: &Observed, reference: Option<&Observed>, is_reference: bool) -> bool {
     let e = &case.expect;
+    if let Some(nodes) = &e.nodes {
+        let want: Vec<Vec<String>> = nodes.iter().map(|n| vec![n.clone()]).collect();
+        return matches!(obs, Observed::Rows(got) if *got == want);
+    }
     if let Some(rows) = &e.rows {
         let want = expected_rows(rows);
         return match obs {

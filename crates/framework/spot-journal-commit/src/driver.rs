@@ -11,11 +11,12 @@ use spot_journal_durability::{
     AckGate, Admission, BatchId, CommandOutcome, Event, FailureReason, Output, Position, RpoBreach,
     Seq,
 };
+use spot_journal_relay::tail::encoded_len_upper_bound_for;
 use tokio::sync::{Notify, oneshot};
 
 use crate::error::CommitError;
 use crate::runtime::Runtime;
-use crate::seam::{ChunkRelay, ShipEntry, ShipError, Shipped};
+use crate::seam::{BatchLimits, ChunkRelay, ShipEntry, ShipError, Shipped};
 use crate::settings::CommitSettings;
 use crate::ticket::{CommitAnswer, CommitRequest, CommitTicket, Observer};
 
@@ -100,12 +101,42 @@ pub struct CommitDriver<R: ChunkRelay, T: Runtime> {
     relay: tokio::sync::Mutex<R>,
     runtime: T,
     settings: CommitSettings,
+    /// The size limits of one batch, read from the relay when the driver is built.
+    limits: BatchLimits,
     /// The acknowledgement deadline, read from the gate's configuration when the driver is built.
     ack_deadline_millis: u64,
     generation: u64,
     wake: Notify,
     stop: AtomicBool,
     observer: Option<Arc<dyn Observer>>,
+}
+
+fn entry_len(entry: &[u8]) -> u64 {
+    u64::try_from(entry.len()).unwrap_or(u64::MAX)
+}
+
+/// How many requests, from the front of `queue`, make the next batch, and whether the size
+/// limits (not `max_batch`) cut it short.
+///
+/// The batch takes requests while their lines add up to at most `limits.line_budget` and the
+/// relay's size bound for the chunk stays within `limits.max_chunk_bytes`; a first request that
+/// alone passes the line budget still ships, alone (`submit` already refused one that would
+/// make an oversize chunk). The prefix is consecutive, so order and sequence numbers hold.
+fn batch_prefix(queue: &VecDeque<Queued>, max_batch: usize, limits: BatchLimits) -> (usize, bool) {
+    let mut count = 0_usize;
+    let mut line_bytes = 0_u64;
+    for queued in queue.iter().take(max_batch) {
+        let next_bytes = line_bytes.saturating_add(entry_len(&queued.entry));
+        let next_count = u64::try_from(count).unwrap_or(u64::MAX).saturating_add(1);
+        let over = next_bytes > limits.line_budget
+            || encoded_len_upper_bound_for(next_count, next_bytes) > limits.max_chunk_bytes;
+        if count > 0 && over {
+            return (count, true);
+        }
+        count += 1;
+        line_bytes = next_bytes;
+    }
+    (count, false)
 }
 
 fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
@@ -237,6 +268,7 @@ impl<R: ChunkRelay, T: Runtime> CommitDriver<R, T> {
             ..settings
         };
         let generation = relay.generation();
+        let limits = relay.batch_limits();
         let inner = Inner {
             gate,
             generation,
@@ -263,6 +295,7 @@ impl<R: ChunkRelay, T: Runtime> CommitDriver<R, T> {
             relay: tokio::sync::Mutex::new(relay),
             runtime,
             settings,
+            limits,
             ack_deadline_millis,
             wake: Notify::new(),
             stop: AtomicBool::new(false),
@@ -329,6 +362,15 @@ impl<R: ChunkRelay, T: Runtime> CommitDriver<R, T> {
             Admission::Proceed => {
                 if let Some(cause) = inner.stopped {
                     return Err(CommitError::RelayStopped { cause });
+                }
+                // A chunk the relay would refuse is refused here, before anything is queued or
+                // shipped; the sequence number stays free.
+                let alone = encoded_len_upper_bound_for(1, entry_len(&request.entry));
+                if alone > self.limits.max_chunk_bytes {
+                    return Err(CommitError::EntryTooLarge {
+                        bytes: alone,
+                        limit: self.limits.max_chunk_bytes,
+                    });
                 }
                 if request.seq != inner.next_seq {
                     return Err(CommitError::SeqOutOfOrder {
@@ -594,7 +636,10 @@ impl<R: ChunkRelay, T: Runtime> CommitDriver<R, T> {
             return None;
         }
         let front = inner.queue.front()?;
+        let (take, cut) = batch_prefix(&inner.queue, self.settings.max_batch, self.limits);
+        // A batch the size limits cut short is full: it ships at once, as one at `max_batch` does.
         let due = inner.queue.len() >= self.settings.max_batch
+            || cut
             || front
                 .queued_at
                 .saturating_add(self.settings.group_window_millis)
@@ -602,7 +647,6 @@ impl<R: ChunkRelay, T: Runtime> CommitDriver<R, T> {
         if !due {
             return None;
         }
-        let take = inner.queue.len().min(self.settings.max_batch);
         let batch: Vec<Queued> = inner.queue.drain(..take).collect();
         let batch_id = inner.next_batch_id;
         inner.next_batch_id = inner.next_batch_id.saturating_add(1);

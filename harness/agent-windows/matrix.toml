@@ -39,7 +39,8 @@ probe = "the local user and group enumerations return without error"
 
 # The target operating systems. Each is one machine the real suite runs on; `run.ps1`
 # refuses a target whose declared capabilities its machine does not offer. The runner
-# labels name the disposable Windows VM the suite runs on (`windows-vm`).
+# labels name the disposable Windows VM the suite runs on (`windows-vm`); a deployment whose
+# runners carry other labels sets `SPOT_AGENT_WINDOWS_RUNNER_LABELS` (see orchestrator.py).
 [[targets]]
 name = "windows-server-2022"
 os = "Windows Server"

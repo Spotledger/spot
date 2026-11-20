@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// The longest controller module read.
 pub(super) const MAX_MODULE_BYTES: u64 = 1024 * 1024;
 
@@ -94,14 +93,16 @@ pub fn typescript_factory(
     dir: PathBuf,
     limits: TsLimits,
 ) -> TsControllerFactory {
-    TsControllerFactory::new(app, slot.ts_engine().clone(), Arc::new(DirModules::new(dir)))
-        .with_limits(limits)
-        .with_view(Arc::new(SlotView {
-            slot: Arc::clone(slot),
-        }))
+    TsControllerFactory::new(
+        app,
+        slot.ts_engine().clone(),
+        Arc::new(DirModules::new(dir)),
+    )
+    .with_limits(limits)
+    .with_view(Arc::new(SlotView {
+        slot: Arc::clone(slot),
+    }))
 }
-
-
 
 /// Registers the Server Script controllers into `registry`: the administration controller for
 /// `server_script` and one [`ScriptHub`] for each of `doctypes` that is [`is_scriptable`]. Call
@@ -117,11 +118,7 @@ pub fn register_controllers<'a>(
     doctypes: impl IntoIterator<Item = &'a str>,
 ) {
     let slot = slot(site);
-    registry.register(
-        APP,
-        Arc::new(ScriptAdmin::new(Arc::clone(&slot), Arc::new(NoStore))),
-        ControllerSource::TypeScript,
-    );
+    register_admin(registry, site);
     let budget = settings.step_budget();
     for doctype in doctypes {
         if is_scriptable(doctype) {
@@ -132,6 +129,19 @@ pub fn register_controllers<'a>(
             );
         }
     }
+}
+
+/// Registers only the administration controller of `server_script` (compile on save, the target
+/// check, the cache bump and the elevation save gate), not the hubs. The host calls this for
+/// every site, since none of it depends on the module having finished assembling; the hubs
+/// ([`register_controllers`]) refuse writes until it has.
+pub fn register_admin(registry: &mut ControllerRegistry, site: &str) {
+    let slot = slot(site);
+    registry.register(
+        APP,
+        Arc::new(ScriptAdmin::new(Arc::clone(&slot), Arc::new(NoStore))),
+        ControllerSource::TypeScript,
+    );
 }
 
 /// The store the admin controller records compile results through: it keeps nothing.
@@ -164,4 +174,3 @@ impl ScriptStore for NoStore {
         Box::pin(async { Ok(()) })
     }
 }
-

@@ -1,0 +1,29 @@
+[package]
+name = "spot-l8-job-faults"
+version = "0.1.0"
+description = "L8 fault injection for the job pipeline on PostgreSQL (WP-TST-08.T7): kill -9 of the database between a document commit, the outbox, the job intake, the job store and the handler's effect; every committed enqueue runs exactly once as to effect, no uncommitted one ever runs"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+spot-l8-faults = { path = "../l8-faults" }
+spot-l7-engine = { path = "../l7-engine" }
+spot-l7-invariants = { path = "../l7-invariants" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-document = { path = "../../../crates/framework/spot-document" }
+spot-core = { path = "../../../crates/framework/spot-core" }
+spot-jobs = { path = "../../../crates/framework/spot-jobs" }
+spot-jobs-pg = { path = "../../../crates/backends/spot-jobs-pg" }
+spot-postgres = { path = "../../../crates/backends/spot-postgres" }
+spot-seams = { path = "../../../crates/framework/spot-seams" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+serde_json = "1"
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

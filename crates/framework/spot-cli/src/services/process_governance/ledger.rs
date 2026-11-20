@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS spot_bpm_gov_draft (\
     doctype text NOT NULL, owner text NOT NULL, state text NOT NULL, payload text NOT NULL, \
     created_us bigint NOT NULL, updated_us bigint NOT NULL, submitted_us bigint, \
     PRIMARY KEY (tenant, id));\
+CREATE TABLE IF NOT EXISTS spot_bpm_gov_reversal (\
+    tenant text NOT NULL, request text NOT NULL, key text NOT NULL, state text NOT NULL, \
+    code text NOT NULL DEFAULT '', started_us bigint NOT NULL, finished_us bigint, \
+    PRIMARY KEY (tenant, request, key));\
+CREATE TABLE IF NOT EXISTS spot_bpm_gov_close_wanted (\
+    tenant text NOT NULL, request text NOT NULL, wanted_us bigint NOT NULL, \
+    PRIMARY KEY (tenant, request));\
 CREATE INDEX IF NOT EXISTS spot_bpm_gov_draft_age ON spot_bpm_gov_draft (tenant, updated_us);";
 
 const UPSERT_ATTEMPT: &str = "\
@@ -53,6 +60,36 @@ WHERE spot_bpm_gov_request.closed_us IS NULL AND spot_bpm_gov_request.attempt <=
 const CLOSE_REQUEST: &str = "\
 UPDATE spot_bpm_gov_request SET closed_us = $3 \
 WHERE tenant = $1 AND request = $2 AND closed_us IS NULL";
+
+const BEGIN_REVERSAL: &str = "\
+INSERT INTO spot_bpm_gov_reversal (tenant, request, key, state, started_us) \
+VALUES ($1, $2, $3, 'pending', $4) \
+ON CONFLICT (tenant, request, key) DO UPDATE SET key = EXCLUDED.key RETURNING state";
+
+const FINISH_REVERSAL: &str = "\
+UPDATE spot_bpm_gov_reversal SET state = $4, code = $5, finished_us = $6 \
+WHERE tenant = $1 AND request = $2 AND key = $3 AND state = 'pending'";
+
+const PENDING_REVERSALS: &str = "\
+SELECT count(*) FROM spot_bpm_gov_reversal WHERE tenant = $1 AND request = $2 AND state = 'pending'";
+
+const WANT_CLOSE: &str = "\
+INSERT INTO spot_bpm_gov_close_wanted (tenant, request, wanted_us) VALUES ($1, $2, $3) \
+ON CONFLICT DO NOTHING";
+
+const CLOSE_WANTED: &str = "\
+SELECT 1 FROM spot_bpm_gov_close_wanted WHERE tenant = $1 AND request = $2";
+
+const CLEAR_WANTED: &str =
+    "DELETE FROM spot_bpm_gov_close_wanted WHERE tenant = $1 AND request = $2";
+
+const READY_TO_CLOSE: &str = "\
+SELECT w.request FROM spot_bpm_gov_close_wanted w WHERE w.tenant = $1 AND NOT EXISTS (\
+    SELECT 1 FROM spot_bpm_gov_reversal r \
+    WHERE r.tenant = w.tenant AND r.request = w.request AND r.state = 'pending')";
+
+const REAP_REVERSALS: &str = "\
+DELETE FROM spot_bpm_gov_reversal WHERE tenant = $1 AND state <> 'pending' AND finished_us < $2";
 
 const OPEN_SLOTS: &str = "\
 SELECT request, node, process, attempt, doctypes FROM spot_bpm_gov_request \
@@ -374,6 +411,117 @@ impl Ledger {
         }
     }
 
+    /// Notes that the undo identified by `key` of `request` has started and returns its state
+    /// (`pending`, `done` or `failed`). Idempotent: a second call with the same key (a retry
+    /// after a crash) changes nothing and returns the stored state.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn begin_reversal(
+        &self,
+        request: &str,
+        key: &str,
+        at_us: i64,
+    ) -> Result<String, LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        let row = client
+            .query_one(BEGIN_REVERSAL, &[&self.tenant, &request, &key, &at_us])
+            .await
+            .map_err(|_| LedgerError("begin_reversal"))?;
+        row.try_get(0).map_err(|_| LedgerError("row"))
+    }
+
+    /// Records the end of the undo `key` (`done` or `failed` with a catalogue `code`). Only a
+    /// pending undo changes; returns whether this call changed it.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn finish_reversal(
+        &self,
+        request: &str,
+        key: &str,
+        state: &str,
+        code: &str,
+        at_us: i64,
+    ) -> Result<bool, LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        let changed = client
+            .execute(
+                FINISH_REVERSAL,
+                &[&self.tenant, &request, &key, &state, &code, &at_us],
+            )
+            .await
+            .map_err(|_| LedgerError("finish_reversal"))?;
+        Ok(changed == 1)
+    }
+
+    /// How many undos of `request` have not finished.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn pending_reversals(&self, request: &str) -> Result<i64, LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        let row = client
+            .query_one(PENDING_REVERSALS, &[&self.tenant, &request])
+            .await
+            .map_err(|_| LedgerError("pending_reversals"))?;
+        row.try_get(0).map_err(|_| LedgerError("row"))
+    }
+
+    /// Remembers that closing `request` was asked for while an undo was pending.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn want_close(&self, request: &str, at_us: i64) -> Result<(), LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        client
+            .execute(WANT_CLOSE, &[&self.tenant, &request, &at_us])
+            .await
+            .map(|_| ())
+            .map_err(|_| LedgerError("want_close"))
+    }
+
+    /// Whether a close of `request` is waiting for its undos.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn close_wanted(&self, request: &str) -> Result<bool, LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        client
+            .query_opt(CLOSE_WANTED, &[&self.tenant, &request])
+            .await
+            .map(|row| row.is_some())
+            .map_err(|_| LedgerError("close_wanted"))
+    }
+
+    /// Forgets a waiting close (it was carried out).
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn clear_wanted(&self, request: &str) -> Result<(), LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        client
+            .execute(CLEAR_WANTED, &[&self.tenant, &request])
+            .await
+            .map(|_| ())
+            .map_err(|_| LedgerError("clear_wanted"))
+    }
+
+    /// The requests whose close was asked for and whose undos have all finished.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn ready_to_close(&self) -> Result<Vec<String>, LedgerError> {
+        let client = self.pool.get().await.map_err(|_| LedgerError("pool"))?;
+        let rows = client
+            .query(READY_TO_CLOSE, &[&self.tenant])
+            .await
+            .map_err(|_| LedgerError("ready_to_close"))?;
+        rows.iter()
+            .map(|row| row.try_get(0).map_err(|_| LedgerError("row")))
+            .collect()
+    }
+
     /// Removes closed or expired steps and old use rows older than `before_us`.
     ///
     /// # Errors
@@ -388,6 +536,10 @@ impl Ledger {
             .execute(REAP_USES, &[&self.tenant, &before_us])
             .await
             .map_err(|_| LedgerError("reap"))?;
-        Ok(steps + uses)
+        let reversals = client
+            .execute(REAP_REVERSALS, &[&self.tenant, &before_us])
+            .await
+            .map_err(|_| LedgerError("reap"))?;
+        Ok(steps + uses + reversals)
     }
 }

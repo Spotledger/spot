@@ -398,7 +398,7 @@ impl CustomiseService {
     pub async fn recover(&self) -> CustomiseResult<Recovery> {
         let _guard = self.lock.lock().await;
         let resolved = self.settle().await?;
-        let swapped = self.converge().await?;
+        let swapped = self.converge_patiently().await?;
         Ok(Recovery { resolved, swapped })
     }
 
@@ -408,7 +408,7 @@ impl CustomiseService {
         self.authorise(caller)?;
         let _guard = self.lock.lock().await;
         self.settle().await?;
-        self.converge().await?;
+        self.converge_patiently().await?;
 
         let records = self.load().await?;
         let intent = next_intent(&records);
@@ -453,6 +453,7 @@ impl CustomiseService {
         self.fault("validated")?;
 
         // (c) persist the intent.
+        let owned: Vec<RecordKey> = prepared.ops.iter().map(RecordOp::key).collect();
         self.records
             .commit(prepared.ops)
             .await
@@ -460,15 +461,31 @@ impl CustomiseService {
         self.fault("persisted")?;
 
         // (d) apply the additive plan, then give the rows that were already there the default.
-        let held = self.load().await?;
-        let fills = self.fills_for(&candidate, &held);
-        if let Err(message) = self.schema.apply(&catalog).await {
-            self.roll_back(&held, &message).await?;
-            return Err(CustomiseError::Schema { message });
+        // Another node may have persisted its own change since the scratch copy was made, and
+        // may already have added its column: the database is brought to everything held now, or
+        // the plan would see that column as a drop. Only this change's records are rolled back
+        // on a failure; the other node owns its records.
+        let mut held = self.load().await?;
+        let mut catalog = self
+            .schema_catalog(&held, version)
+            .unwrap_or_else(|_| catalog.clone());
+        if let Err(first) = self.schema.apply(&catalog).await {
+            // A refusal may only mean another node persisted and applied its own change after
+            // `held` was read (its column is in the database, not in this catalogue): read again
+            // and retry once before giving the change up.
+            held = self.load().await?;
+            catalog = self
+                .schema_catalog(&held, version)
+                .unwrap_or_else(|_| catalog.clone());
+            if self.schema.apply(&catalog).await.is_err() {
+                self.roll_back(&held, Some(&owned), &first).await?;
+                return Err(CustomiseError::Schema { message: first });
+            }
         }
+        let fills = self.fills_for(&candidate, &held);
         self.fault("schema_applied")?;
         if let Err(message) = self.schema.backfill(&catalog, &fills).await {
-            self.roll_back(&held, &message).await?;
+            self.roll_back(&held, Some(&owned), &message).await?;
             return Err(CustomiseError::Schema { message });
         }
         self.fault("backfilled")?;
@@ -476,7 +493,7 @@ impl CustomiseService {
         // (e) mark applied, swap, publish.
         let finished = self.finish(&held, version).await?;
         self.fault("marked")?;
-        self.converge().await?;
+        self.converge_patiently().await?;
         // Requests that started on the old snapshot may have written a row without the new
         // field since the pass above; one more sweep fills those. Best effort: every row that
         // existed when the change started is already filled.
@@ -514,7 +531,7 @@ impl CustomiseService {
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("; ");
-                self.roll_back(&records, &reason).await?;
+                self.roll_back(&records, None, &reason).await?;
             }
             Ok(candidate) => {
                 let catalog = self.schema_catalog(&records, version)?;
@@ -530,7 +547,7 @@ impl CustomiseService {
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join("; ");
-                    self.roll_back(&records, &reason).await?;
+                    self.roll_back(&records, None, &reason).await?;
                 } else {
                     let fills = self.fills_for(&candidate, &records);
                     let done = match self.schema.apply(&catalog).await {
@@ -541,12 +558,29 @@ impl CustomiseService {
                         Ok(()) => {
                             self.finish(&records, version).await?;
                         }
-                        Err(message) => self.roll_back(&records, &message).await?,
+                        Err(message) => self.roll_back(&records, None, &message).await?,
                     }
                 }
             }
         }
         Ok(true)
+    }
+
+    /// [`converge`](Self::converge), retried a few times when the swap is refused: another node
+    /// that is in the middle of its own change has added a column the applied records do not
+    /// describe yet, and the engine refuses the schema until that node marks its record applied
+    /// (moments later). Any other failure, and a refusal that lasts, is returned.
+    async fn converge_patiently(&self) -> CustomiseResult<Option<Version>> {
+        let mut waited = 0u64;
+        loop {
+            match self.converge().await {
+                Err(CustomiseError::Swap { .. }) if waited < 600 => {
+                    waited += 100;
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                other => return other,
+            }
+        }
     }
 
     /// Brings this node's snapshot in line with the applied records. Returns the version
@@ -622,9 +656,13 @@ impl CustomiseService {
     /// and the audit entries. Returns the events to emit once the change is live.
     async fn finish(
         &self,
-        records: &Records,
+        held: &Records,
         version: Version,
     ) -> CustomiseResult<Vec<CustomiseEvent>> {
+        // Another node may have finished some of these since they were read (its own recovery
+        // finishes what it finds pending): only what is still unfinished is finished, so no
+        // grant, audit entry or event is written twice.
+        let records = &self.load().await?.unfinished_among(held, None);
         let mut ops = Vec::new();
         let mut events = Vec::new();
         let event = |kind: &'static str, doctype: &str, field: Option<&str>| CustomiseEvent {
@@ -707,6 +745,12 @@ impl CustomiseService {
                     }));
                 }
                 RecordState::Removing => {
+                    // The column stays with its data; the backend is told before the metadata
+                    // without the field is served.
+                    self.schema
+                        .retire_column(&r.doctype, &r.name)
+                        .await
+                        .map_err(|message| CustomiseError::Schema { message })?;
                     audit(
                         &r.actor,
                         "remove_custom_field",
@@ -771,9 +815,20 @@ impl CustomiseService {
         Ok(events)
     }
 
-    /// Rolls every unfinished record back: a new record becomes `failed` with `reason`, a
-    /// replaced one returns to its previous value, a removal is undone.
-    async fn roll_back(&self, records: &Records, reason: &str) -> CustomiseResult<()> {
+    /// Rolls every unfinished record of `held` back (only those named by `owned`, when given):
+    /// a new record becomes `failed` with `reason`, a replaced one returns to its previous
+    /// value, a removal is undone.
+    ///
+    /// The store is read again first and only a record that is still unfinished is touched:
+    /// another node may have finished it since `held` was read (its recovery applies what it
+    /// finds pending), and a stale rollback must not mark that record failed.
+    async fn roll_back(
+        &self,
+        held: &Records,
+        owned: Option<&[RecordKey]>,
+        reason: &str,
+    ) -> CustomiseResult<()> {
+        let records = &self.load().await?.unfinished_among(held, owned);
         let mut ops = Vec::new();
         for r in &records.doctypes {
             if r.state == RecordState::Pending {
@@ -795,11 +850,16 @@ impl CustomiseService {
         }
         for r in &records.fields {
             match r.state {
-                RecordState::Pending => ops.push(RecordOp::PutField(FieldRecord {
-                    state: RecordState::Failed,
-                    reason: Some(reason.to_owned()),
-                    ..r.clone()
-                })),
+                RecordState::Pending => {
+                    // The column may already be there (the schema step ran, the backfill
+                    // failed): it stays, with its data, but no longer counts for the metadata.
+                    let _ = self.schema.retire_column(&r.doctype, &r.name).await;
+                    ops.push(RecordOp::PutField(FieldRecord {
+                        state: RecordState::Failed,
+                        reason: Some(reason.to_owned()),
+                        ..r.clone()
+                    }));
+                }
                 RecordState::Removing => ops.push(RecordOp::PutField(FieldRecord {
                     state: RecordState::Applied,
                     reason: Some(reason.to_owned()),

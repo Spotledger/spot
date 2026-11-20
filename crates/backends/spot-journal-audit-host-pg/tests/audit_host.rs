@@ -12,6 +12,7 @@ use spot_journal_audit_host_pg::{
 use spot_journal_audit_job::{
     Cadence, FailureInfo, ResultSink, TenantDirectory, TenantOutcome, TenantResult,
 };
+use spot_journal_audit_run::{ClassifierKind, UnknownTopics};
 use spot_journal_recovery::AuditHistory;
 use spot_journal_store::TenantId;
 use spot_postgres::testing::TestDb;
@@ -39,6 +40,8 @@ fn result(tenant: &TenantId, started: i64, outcome: TenantOutcome) -> TenantResu
         outcome,
         run: None,
         condition_failure: None,
+        classifier: ClassifierKind::Registry,
+        unknown_topics: UnknownTopics::none(),
     }
 }
 
@@ -77,10 +80,7 @@ async fn the_directory_reads_cadence_and_last_run_from_the_result_table() {
             &result(
                 &acme,
                 T0 + 5000,
-                TenantOutcome::Failed(FailureInfo {
-                    stage: "rebuild",
-                    code: "journal_rebuild.position_gap",
-                }),
+                TenantOutcome::Failed(FailureInfo::new("rebuild", "journal_rebuild.position_gap")),
             ),
         )
         .unwrap();

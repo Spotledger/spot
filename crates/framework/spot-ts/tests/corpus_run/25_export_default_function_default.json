@@ -1,0 +1,6 @@
+{
+  "case": "export_default_function",
+  "entry": "default",
+  "args": "Ada",
+  "expect": "hello Ada"
+}

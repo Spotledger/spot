@@ -1,0 +1,19 @@
+kind = "doc_event"
+event = "validate"
+pattern = "credit limit check reading another document"
+[[before]]
+key = "c1"
+doctype = "customer"
+[before.fields]
+name = "Acme Traders"
+price_list = "Wholesale"
+address = "12 Canal Road, Karachi"
+tier = "gold"
+credit_limit = "1000.00"
+outstanding = "200.00"
+[input.fields]
+customer = "${c1}"
+total = "900.00"
+[expect]
+ok = false
+error_fields = ["total"]

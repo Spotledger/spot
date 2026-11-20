@@ -34,7 +34,8 @@ pub enum StoreError {
         /// The key that may not be replaced.
         key: String,
     },
-    /// [`crate::JournalStore::delete`] was offered a key under `segments/` or `snapshots/`.
+    /// [`crate::JournalStore::delete`] was offered a key under `segments/` or `snapshots/`, or
+    /// [`crate::JournalStore::delete_snapshot`] was offered a key that is not a snapshot object.
     #[error("the object {key} is under a prefix that may not be deleted")]
     DeleteRefused {
         /// The key that may not be deleted.

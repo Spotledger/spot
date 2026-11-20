@@ -84,6 +84,28 @@ pub use seams::{
 /// Start order: after the process engine (1100) and the node-kind modules (1110 to 1115).
 pub const ORDER: u32 = 1130;
 
+/// The trigger intake as a port: what a publish or a retire calls so its triggers change at once
+/// instead of on the next 15 s pass (WP-BPM-03.T5).
+///
+/// Provided by this module on every site where the intake runs; a module that reads it treats a
+/// missing port (the intake is off on this site) as "nothing to reload", never as an error.
+pub trait TriggerReload: Send + Sync {
+    /// Reconciles the trigger index (document, schedule and webhook triggers) from the live
+    /// published versions now. It is the code the 15 s pass runs, not a copy: a published set that
+    /// did not change costs one read and changes nothing, and two calls never start a second
+    /// schedule slot (the slot key is the dedup key).
+    ///
+    /// # Errors
+    /// The definition store's failure. The trigger set in force before the call stays in force.
+    fn reload_now(&self) -> Fut<'_, Result<usize>>;
+}
+
+impl TriggerReload for TriggerHost {
+    fn reload_now(&self) -> Fut<'_, Result<usize>> {
+        Box::pin(async move { self.reload().await })
+    }
+}
+
 const CONSUMER: &str = "process_triggers";
 const TICK: Duration = Duration::from_secs(15);
 const HOOK_PATH: &str = "/api/v1/process/hook/{trigger}";
@@ -339,6 +361,8 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             host: Arc::clone(&host),
             outbox,
         }));
+        let reload: Arc<dyn TriggerReload> = Arc::clone(&host) as Arc<dyn TriggerReload>;
+        ctx.provide::<dyn TriggerReload>(reload)?;
         let port: Arc<dyn WebhookPort> = Arc::new(HookPort::new(host));
         lock(built()).insert(site_name, Arc::clone(&port));
         ctx.provide::<dyn WebhookPort>(Arc::clone(&port))?;

@@ -518,3 +518,102 @@ mod tests {
         Ok(())
     }
 }
+
+/// A traversal, as written in a case: `start` is `entity:name` (the name an id was made for, so a
+/// name no setup line creates is a missing start node), `edges` are `entity.field`, `direction`
+/// is `out`, `in` or `both`.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TraversalSpec {
+    /// The start nodes.
+    pub start: Vec<String>,
+    /// The edge types that may be followed.
+    pub edges: Vec<String>,
+    /// `out`, `in` or `both`; default `out`.
+    pub direction: Option<String>,
+    /// The deepest level returned.
+    pub max_depth: u16,
+    /// The most nodes the walk may reach.
+    pub max_nodes: u32,
+}
+
+/// Builds the IR traversal of a spec.
+pub fn build_traversal(
+    spec: &TraversalSpec,
+    ids: &mut Ids,
+) -> Result<spot_storage_contract::Traversal, String> {
+    use spot_storage_contract::{Direction, EdgeSpec, NodeRef, Traversal};
+    let mut start = Vec::new();
+    for s in &spec.start {
+        let (entity, doc) = s
+            .split_once(':')
+            .ok_or_else(|| format!("start `{s}` is not entity:name"))?;
+        start.push(NodeRef {
+            entity: name(entity)?,
+            id: ids.get(doc)?,
+        });
+    }
+    let mut edges = Vec::new();
+    for e in &spec.edges {
+        let (entity, field) = e
+            .split_once('.')
+            .ok_or_else(|| format!("edge `{e}` is not entity.field"))?;
+        edges.push(EdgeSpec {
+            entity: name(entity)?,
+            field: name(field)?,
+        });
+    }
+    let direction = match spec.direction.as_deref().unwrap_or("out") {
+        "out" => Direction::Outgoing,
+        "in" => Direction::Incoming,
+        "both" => Direction::Both,
+        other => return Err(format!("unknown direction `{other}`")),
+    };
+    Ok(Traversal {
+        start,
+        edges,
+        direction,
+        max_depth: spec.max_depth,
+        max_nodes: spec.max_nodes,
+    })
+}
+
+/// A reached node as the line a case compares: `entity:name@depth<predecessor:edge`.
+pub fn node_line(r: &spot_storage_contract::Reached, ids: &Ids) -> String {
+    let who = |n: &spot_storage_contract::NodeRef| {
+        ids.name_of(&n.id)
+            .map_or_else(|| n.id.to_string(), str::to_owned)
+    };
+    let mut line = format!("{}:{}@{}", r.node.entity, who(&r.node), r.depth);
+    if let Some((pred, edge)) = &r.via {
+        line.push_str(&format!("<{}:{}", who(pred), edge.field));
+    }
+    line
+}
+
+#[cfg(test)]
+mod traversal_tests {
+    use super::*;
+
+    #[test]
+    fn a_traversal_table_parses_and_names_ids() -> Result<(), String> {
+        let spec: TraversalSpec = toml::from_str(
+            "start = ['item:a', 'item:zz']\nedges = ['item.next']\ndirection = 'both'\nmax_depth = 3\nmax_nodes = 10\n",
+        )
+        .map_err(|e| e.to_string())?;
+        let mut ids = Ids::new();
+        let t = build_traversal(&spec, &mut ids)?;
+        assert_eq!(t.start.len(), 2);
+        assert_eq!((t.max_depth, t.max_nodes), (3, 10));
+        assert!(matches!(
+            t.direction,
+            spot_storage_contract::Direction::Both
+        ));
+        assert_eq!(ids.name_of(&t.start[0].id), Some("a"));
+        let bad: TraversalSpec =
+            toml::from_str("start = ['a']\nedges = ['item.next']\nmax_depth = 1\nmax_nodes = 1\n")
+                .map_err(|e| e.to_string())?;
+        assert!(build_traversal(&bad, &mut ids).is_err());
+        Ok(())
+    }
+}

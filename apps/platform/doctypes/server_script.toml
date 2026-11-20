@@ -106,3 +106,36 @@ read_only = true
 no_copy = true
 max_chars = 500
 description = "Why the script was disabled automatically, when it was."
+
+[[fields]]
+name = "elevated"
+label = "Elevated"
+type = "bool"
+default = "false"
+in_list_view = true
+in_standard_filter = true
+description = "Run the script's document and function calls as the platform instead of as the triggering user. Only a holder of the scripts.elevate permission can set it; every elevated run is audited with the triggering user. Editing the source without that permission switches it off."
+
+[[fields]]
+name = "elevation_reason"
+label = "Elevation Reason"
+type = "long_text"
+description = "Why the script needs to act as the platform (20 to 500 characters). Required when Elevated is on."
+
+[[fields]]
+name = "elevated_by"
+label = "Elevated By"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 140
+description = "Who turned elevation on, stamped on save."
+
+[[fields]]
+name = "elevated_at"
+label = "Elevated At"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 40
+description = "When elevation was turned on, stamped on save."

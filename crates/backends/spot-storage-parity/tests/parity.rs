@@ -19,7 +19,7 @@ fn every_decided_rule_has_a_case_and_every_case_a_rule() {
     let problems = runner.completeness_problems();
     assert!(problems.is_empty(), "{}", problems.join("\n"));
     assert!(
-        runner.cases.len() >= 150,
+        runner.cases.len() >= 191,
         "the matrix has {} cases",
         runner.cases.len()
     );

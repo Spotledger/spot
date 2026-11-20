@@ -1,6 +1,8 @@
-//! The wire: one blocking HTTPS exchange per request over **TLS 1.3 pinned to the gateway
-//! trust anchor** (only the anchor's certificates are trusted; there is no system trust
-//! store fallback and no `insecure` option). The agent only connects out; it never listens.
+//! The wire: one blocking HTTPS exchange per request over **TLS 1.3**. With a CA file the
+//! channel is **pinned to the gateway trust anchor**: only the anchor's certificates are
+//! trusted and the system roots are not consulted. Without one the system trust store is
+//! used ([`super::sysroots`]). There is no `insecure` option. The agent only connects out; it
+//! never listens.
 //!
 //! [`Transport`] is a trait so the client and the pipeline are tested without sockets; the
 //! TLS implementation is exercised against a loopback gateway.
@@ -130,18 +132,41 @@ pub fn split_url(url: &str) -> Result<(String, u16), AgentError> {
 }
 
 impl TlsTransport {
-    /// Builds the transport for `url`, trusting exactly the certificates in `ca_pem`.
+    /// Builds the transport for `url`, trusting exactly the certificates in `ca_pem` (the
+    /// system roots are not added: the anchor replaces them).
     ///
     /// # Errors
     /// [`AgentError::Transport`] for a bad URL, bad PEM or an unusable anchor.
     pub fn new(url: &str, ca_pem: &str) -> Result<Self, AgentError> {
-        let (host, port) = split_url(url)?;
         let mut roots = rustls::RootCertStore::empty();
         for der in parse_pem_certificates(ca_pem)? {
             roots
                 .add(CertificateDer::from(der))
                 .map_err(|_| AgentError::Transport("the CA certificate is unusable".to_owned()))?;
         }
+        Self::with_store(url, roots)
+    }
+
+    /// Builds the transport for `url`, trusting the DER certificates of the system trust
+    /// store (`roots`, from [`super::sysroots::system_roots`]). Certificates rustls cannot
+    /// parse are skipped; none usable is an error.
+    ///
+    /// # Errors
+    /// [`AgentError::Transport`] for a bad URL or when no certificate is usable.
+    pub fn with_system_roots(url: &str, roots: Vec<Vec<u8>>) -> Result<Self, AgentError> {
+        let mut store = rustls::RootCertStore::empty();
+        let (added, _ignored) =
+            store.add_parsable_certificates(roots.into_iter().map(CertificateDer::from));
+        if added == 0 {
+            return Err(AgentError::Transport(
+                "the system trust store holds no usable certificate; pass --ca".to_owned(),
+            ));
+        }
+        Self::with_store(url, store)
+    }
+
+    fn with_store(url: &str, roots: rustls::RootCertStore) -> Result<Self, AgentError> {
+        let (host, port) = split_url(url)?;
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let config = rustls::ClientConfig::builder_with_provider(provider)
             .with_protocol_versions(&[&rustls::version::TLS13])

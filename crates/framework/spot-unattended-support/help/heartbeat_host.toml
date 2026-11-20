@@ -1,0 +1,30 @@
+# Help for the heartbeat_host error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "heartbeat_host.credential_file"
+what_happened = "A heartbeat credential file is missing or unreadable, or the private key is readable by group or others."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Enrol the host certificate (docs/running-spot/heartbeat.md), point services.heartbeat.host_cert, host_key and ca_file at readable files, and set the key to mode 0600.", "If it keeps happening, tell your administrator and quote the code heartbeat_host.credential_file."]
+audience = "user"
+
+[[help]]
+code = "heartbeat_host.egress_not_allowed"
+what_happened = "The control plane is not on this site's egress allow-list, so the heartbeat cannot be sent."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Add the host:port the message names to the site's egress allow-list for the heartbeat, then restart.", "If it keeps happening, tell your administrator and quote the code heartbeat_host.egress_not_allowed."]
+audience = "user"
+
+[[help]]
+code = "heartbeat_host.invalid_setting"
+what_happened = "A [services.heartbeat] setting is missing or out of range."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the setting the message names: control_plane is an https://host[:port] URL, interval_seconds is at least 5, sample_budget_ms at least 50, outbox_max_batches at least 4.", "If it keeps happening, tell your administrator and quote the code heartbeat_host.invalid_setting."]
+audience = "user"
+
+[[help]]
+code = "heartbeat_host.no_ports"
+what_happened = "The heartbeat is enabled but the host provided no samplers or shipper."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Run a host build that provides the heartbeat ports, or set services.heartbeat.enabled = false.", "If it keeps happening, tell your administrator and quote the code heartbeat_host.no_ports."]
+audience = "operator"

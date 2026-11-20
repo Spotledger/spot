@@ -44,6 +44,9 @@ use crate::services::apps::limits::LimitTable;
 use crate::services::apps::store::BundleStore;
 use crate::services::apps::verify::{self, Trust};
 
+/// Counter: connector runs, by `outcome` (`ok`, `retry`, `failed`, `dead_letter`).
+const CONNECTOR_RUNS_TOTAL: &str = "spot_connector_runs_total";
+
 /// The job a run is queued under.
 pub const JOB_NAME: &str = "platform:connector_run";
 /// `connector.disabled`: the connector is disabled, failed or in the dead-letter state.
@@ -343,7 +346,7 @@ impl Connectors {
         code: Option<&str>,
         attempt: u32,
     ) {
-        metrics::counter!("connector_runs_total", "outcome" => outcome.as_str()).increment(1);
+        metrics::counter!(CONNECTOR_RUNS_TOTAL, "outcome" => outcome.as_str()).increment(1);
         let now = self.now_micros();
         let record = RunRecord {
             site: self.parts.site.clone(),

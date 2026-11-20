@@ -170,6 +170,33 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("git tag", publish)
         self.assertNotIn("git push", publish)
 
+    def test_build_writes_release_notes_before_the_checksums(self):
+        names = [s.get("name") for s in self.steps("build")]
+        self.assertIn("write RELEASE-NOTES.md", names)
+        self.assertIn("SBOM and checksums", names)
+        self.assertLess(names.index("write RELEASE-NOTES.md"), names.index("SBOM and checksums"))
+        step = next(s for s in self.steps("build") if s.get("name") == "write RELEASE-NOTES.md")
+        run = step["run"]
+        self.assertIn("dist/RELEASE-NOTES.md", run)
+        self.assertEqual(run.count("SOURCE-COMMIT:"), 1)
+        self.assertNotIn("sha256", run.lower())
+
+    def test_notes_commit_reaches_the_step_through_env_only(self):
+        step = next(s for s in self.steps("build") if s.get("name") == "write RELEASE-NOTES.md")
+        self.assertEqual(step["env"]["SHA"], "${{ needs.gate.outputs.sha }}")
+        self.assertEqual(step["env"]["TAG"], "${{ inputs.tag }}")
+        self.assertNotIn("${{", step["run"])
+        self.assertIn('"SOURCE-COMMIT: $SHA"', step["run"])
+
+    def test_publish_body_is_built_from_the_notes_asset(self):
+        step = next(s for s in self.steps("publish") if s.get("name") == "write the release notes")
+        self.assertIn("dist/RELEASE-NOTES.md", step["run"])
+        self.assertIn("dist/SHA256SUMS", step["run"])
+        create = next(s for s in self.steps("publish") if s.get("name") == "create the Release")
+        self.assertIn("--notes-file notes.md", create["run"])
+        self.assertIn("dist/*", create["run"])
+
+
     def test_release_workflow_passes_the_lint(self):
         self.assertEqual(workflow_lint.lint_paths([WORKFLOW]), [])
         self.assertEqual(workflow_lint.lint_paths([WORKFLOW.parent]), [])

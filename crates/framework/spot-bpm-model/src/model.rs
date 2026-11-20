@@ -510,6 +510,41 @@ pub struct TriggerConfig {
     /// The path for a webhook or API trigger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// Roles a person or caller must hold to start the process (manual and
+    /// API triggers). Empty means no role is required.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<String>,
+    /// The start-input JSON Schema as JSON **text** (manual and API
+    /// triggers). Text, not a table: TOML cannot carry JSON `null` and the
+    /// model forbids floats (ADR-12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<String>,
+    /// A boolean expression over the `doc` root (document-event triggers).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition: Option<String>,
+    /// The IANA zone a schedule reads its cron in; absent means UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+    /// What a schedule does with firings missed while no node led; absent
+    /// keeps the runtime default (`run_once`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missed: Option<MissedPolicy>,
+    /// The most firings a `catch_up` schedule replays (1..=1000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catch_up_max: Option<u32>,
+}
+
+/// What a schedule trigger does with firings it missed (the triggers crate
+/// maps this onto the scheduler's own policy).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissedPolicy {
+    /// Drop every missed firing.
+    Skip,
+    /// Fire once for all missed firings.
+    RunOnce,
+    /// Replay the missed firings, up to `catch_up_max`.
+    CatchUp,
 }
 
 /// What a document node does to its document.

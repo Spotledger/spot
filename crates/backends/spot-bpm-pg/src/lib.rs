@@ -48,6 +48,10 @@
 //! move on the host's `spot_bpm_migration` record and writes its `spot_bpm_migration_audit` row in
 //! one transaction, skipping (never forcing) a Case that is busy, waiting or changed since the plan.
 //!
+//! The two migration tables are owned by this crate ([`migration_schema`], WP-BPM-09.T8): a host
+//! that migrates calls [`prepare_migration_tables`]. [`PgCaseStore::prepare`] does not create them
+//! (a process that never migrates a Case does not need them).
+//!
 //! # The node-run log (WP-BPM-11.T6)
 //!
 //! [`PgCaseStore`] also implements [`NodeRunLog`](spot_bpm_engine::NodeRunLog), the ordered,
@@ -64,6 +68,13 @@
 //! record above the slowest registered consumer's checkpoint. A consumer that rebuilds from zero
 //! after a prune sees only the retained window.
 //!
+//! # Throughput (WP-BPM-11.T10)
+//!
+//! [`PgThroughput`] counts the Cases that completed per process version per UTC ISO week
+//! straight from `spot_bpm_case` (no table of its own), for the `bpm_throughput_by_week` report.
+//! Its [`PgThroughput::prepare`] creates the one index (`spot_bpm_case_ended_idx`) it needs and
+//! is separate from [`PgCaseStore::prepare`].
+//!
 //! # Tests and the database
 //!
 //! The integration tests need a PostgreSQL server and skip cleanly (printing `SKIPPED:`) when
@@ -77,17 +88,26 @@ mod convert;
 pub mod error;
 mod jobs;
 mod migration;
+pub mod migration_schema;
 mod node_run_log;
+mod run_directory;
 pub mod schema;
 pub mod sql;
 mod state;
 mod store;
+pub mod throughput;
 mod timer;
 
 pub use error::MIGRATION_FAILED;
 pub use jobs::PgCaseJobs;
 pub use migration::{MigrationMove, MigrationOutcome, SkipReason};
+pub use migration_schema::{MIGRATION_DDL, prepare_migration_tables};
+pub use run_directory::{
+    CaseStatusFilter, LISTING_SQL, ListingCursor, ListingPage, ListingQuery, MAX_ALSO_CASES,
+    MAX_LIMIT, PgRunDirectory,
+};
 pub use store::{DEFAULT_TENANT, PgCaseStore, PgCaseStoreFactory, VisibleCases};
+pub use throughput::{PgThroughput, WeeklyRow};
 pub use timer::FencedTimerPort;
 
 /// The name of this crate.

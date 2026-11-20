@@ -8,7 +8,9 @@
 //!   day it fires once, at the first occurrence; cron's day-of-month/day-of-week union rule
 //!   holds as cron 0.12 defines it, see [`Schedule`] and [`crate::cron_union`].
 //! - [`MissedRunPolicy`]: what happens to runs missed while nobody was ticking — `skip`,
-//!   `run_once`, `catch_up(max)` — producing [`RunSlot`]s whose
+//!   `run_once`, `catch_up(max)`. A firing a tick reaches within the grace period
+//!   ([`DEFAULT_SKIP_GRACE`], `Scheduler::with_skip_grace`) is on time and runs under every
+//!   policy; only older firings are missed, and `skip` drops those. It produces [`RunSlot`]s whose
 //!   [`RunSlot::deduplication_key`] makes a double enqueue harmless.
 //! - [`lease`]: `LeaseStore` with strictly-increasing fencing tokens per name;
 //!   [`FencedWrite`] rejects a write from a stale token; [`InMemoryLeaseStore`] for tests and
@@ -37,7 +39,10 @@ pub use cron_union::{DAY_OF_WEEK_SUNDAY, day_matches};
 pub use error::{Error, Result, SCHEDULER_ERROR_PREFIX};
 pub use fence::{FenceGuard, FencedWrite};
 pub use lease::{FencingToken, InMemoryLeaseStore, Lease, LeaseId, LeaseStore, still_holds};
-pub use policy::{MissedRunPolicy, PLAN_DUP_LIMIT, PLAN_FROM};
+pub use policy::{
+    DEFAULT_SKIP_GRACE, MissedRunPolicy, PLAN_DUP_LIMIT, PLAN_FROM, plan_origins_with_grace,
+    plan_with_grace,
+};
 pub use schedule::{MAX_CRON_LOOKAHEAD_DAYS, Schedule, ScheduleBuilder, TimeZone};
 pub use scheduler::{
     HighWater, HighWaterStore, InMemoryHighWater, Scheduler, SchedulerConfig, SlotSink,

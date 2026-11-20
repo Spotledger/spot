@@ -1,0 +1,65 @@
+# mail_intake codes (WP-PLT-11.T12). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# These ride poll reports, audit entries and readiness notes, never an AppError, so the class is `none`.
+
+[[entry]]
+code = "mail_intake.account_invalid"
+class = "none"
+summary = "An incoming-mail account breaks a rule of the account model (name, server, interval or limits)."
+explanation_key = "error.mail_intake.account_invalid"
+params = []
+remedy = "Correct the account in the site configuration; the error names the field and the rule."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.auth_failed"
+class = "none"
+summary = "The mail server refused the account's credentials; polling stopped until an operator acts."
+explanation_key = "error.mail_intake.auth_failed"
+params = []
+remedy = "Check the password stored under the account's credential reference, then restart or resume the account."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.mailbox_reset"
+class = "none"
+summary = "The mailbox was rebuilt on the server (its UIDVALIDITY changed); the new generation was recorded and nothing was imported from the reset read."
+explanation_key = "error.mail_intake.mailbox_reset"
+params = []
+remedy = "No action is needed: the next poll reads the mailbox again and skips messages already imported; check the count of new messages if the mailbox was restored from a backup."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.sink_rejected"
+class = "none"
+summary = "A message was rejected as a poison message and skipped; it will not be retried."
+explanation_key = "error.mail_intake.sink_rejected"
+params = []
+remedy = "Look at the sink's reason code in the audit entry, fix the target DocType or the message source, and re-deliver the message by hand if it matters."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.store_unavailable"
+class = "none"
+summary = "The cursor or seen store could not be reached; the poll stopped and will be retried with backoff."
+explanation_key = "error.mail_intake.store_unavailable"
+params = []
+remedy = "Restore the database connection; polling resumes by itself and no mail is lost."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.daily_cap_reached"
+class = "none"
+summary = "The account reached its daily message cap; further mail of the day is dropped and counted."
+explanation_key = "error.mail_intake.daily_cap_reached"
+params = []
+remedy = "Raise max_messages_per_day for the account if the volume is legitimate, or find the source of the flood."
+since = "0.1.0"
+
+[[entry]]
+code = "mail_intake.own_mail"
+class = "none"
+summary = "A message this site sent itself came back to the mailbox and was dropped before the sink (loop protection)."
+explanation_key = "error.mail_intake.own_mail"
+params = []
+remedy = "None needed; if it keeps happening, check that the intake mailbox is not also an outgoing recipient of the site."
+since = "0.1.0"

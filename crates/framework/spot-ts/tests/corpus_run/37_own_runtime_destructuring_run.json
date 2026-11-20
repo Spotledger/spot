@@ -1,0 +1,10 @@
+{
+  "case": "own_runtime",
+  "entry": "destructuring_run",
+  "args": {},
+  "expect": [
+    1,
+    2,
+    3
+  ]
+}

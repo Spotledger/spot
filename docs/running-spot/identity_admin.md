@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # User administration (`[services.identity_admin]`)
 
 Serves the user part of `/api/v1/identity/*`: users (list, create, get, patch, disable, enable,

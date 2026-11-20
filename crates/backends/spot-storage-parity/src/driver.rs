@@ -9,12 +9,14 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use spot_pg_search::{Language, Protection, SearchHook};
 use spot_postgres::PgBackend;
 use spot_postgres::testing::TestDb;
 use spot_storage_contract::{
-    Catalog, Change, Document, DocumentData, DocumentStore, ErrorKind, FeedPosition, Isolation,
-    Name, Query, QueryExecutor, ReadSource, RecordId, Rows, StorageBackend, StorageError,
-    StorageResult, Transaction, TxOptions, Version,
+    Catalog, Change, Document, DocumentData, DocumentStore, ErrorKind, FeedPosition,
+    GraphTraversal, Isolation, Name, Query, QueryExecutor, ReadSource, RecordId, Rows,
+    StorageBackend, StorageError, StorageResult, Transaction, Traversal, TraversalResult,
+    TxOptions, Version,
 };
 use spot_storage_fake::FakeBackend;
 
@@ -27,6 +29,14 @@ use spot_storage_fake::FakeBackend;
 pub struct CaseNeeds<'a> {
     /// The extensions to create in the scratch database first.
     pub extensions: &'a [String],
+    /// Whether the case runs search: the scratch database gets `pg_trgm` and `unaccent` too, and
+    /// the backend is connected with the search hook installed before `prepare` (the harness
+    /// stands in for the host that installs `spot_pg_search::SearchHook`). A backend without a
+    /// hook answers `Unsupported`, which is what a case that does not ask asserts (SEM-SCH-04).
+    pub search: bool,
+    /// Fields of `item` the harness puts in a protection group when it installs the hook
+    /// (SEM-SCH-02). Only meaningful with `search`.
+    pub protected: &'a [String],
 }
 
 /// The operations a case needs. Every write runs in its own transaction and commits, so a
@@ -85,6 +95,38 @@ pub trait Driver: Send + Sync {
 
     /// Runs a query outside a transaction, on the primary.
     fn read(&self, query: &Query) -> impl Future<Output = StorageResult<Rows>> + Send;
+
+    /// Runs a graph traversal in a transaction of its own (SEM-GRA). A driver that does not
+    /// serve graphs answers `Unsupported`.
+    fn traverse(
+        &self,
+        traversal: &Traversal,
+    ) -> impl Future<Output = StorageResult<TraversalResult>> + Send {
+        let _ = traversal;
+        async {
+            Err(StorageError::new(
+                ErrorKind::Unsupported,
+                "this driver does not run traversals",
+            ))
+        }
+    }
+
+    /// Inserts the documents and traverses **in the same transaction**, then rolls back: the
+    /// traversal must see the transaction's own uncommitted writes.
+    fn insert_then_traverse(
+        &self,
+        docs: &[DocumentData],
+        traversal: &Traversal,
+        max_writes: Option<u32>,
+    ) -> impl Future<Output = StorageResult<TraversalResult>> + Send {
+        let _ = (docs, traversal, max_writes);
+        async {
+            Err(StorageError::new(
+                ErrorKind::Unsupported,
+                "this driver does not run traversals",
+            ))
+        }
+    }
 }
 
 /// Makes a fresh, prepared driver per case.
@@ -211,6 +253,28 @@ impl<B: StorageBackend> Driver for StorageDriver<B> {
             .read(self.catalog.clone(), ReadSource::Primary, query)
             .await
     }
+
+    async fn traverse(&self, traversal: &Traversal) -> StorageResult<TraversalResult> {
+        let mut tx = self.begin(None).await?;
+        let result = tx.traverse(traversal).await;
+        tx.rollback().await?;
+        result
+    }
+
+    async fn insert_then_traverse(
+        &self,
+        docs: &[DocumentData],
+        traversal: &Traversal,
+        max_writes: Option<u32>,
+    ) -> StorageResult<TraversalResult> {
+        let mut tx = self.begin(max_writes).await?;
+        for d in docs {
+            tx.insert(d).await?;
+        }
+        let result = tx.traverse(traversal).await;
+        tx.rollback().await?;
+        result
+    }
 }
 
 #[cfg(test)]
@@ -318,7 +382,16 @@ impl BackendFactory for PgFactory {
         // `extension.install` operation (WP-STO-12.T2). The harness stands in for it here, so a
         // case that needs PostGIS gets it and a case that asserts its absence asks for nothing.
         // A server that does not offer one is a failure naming the package: never a skip.
-        let names: Vec<&str> = needs.extensions.iter().map(String::as_str).collect();
+        let mut names: Vec<&str> = needs.extensions.iter().map(String::as_str).collect();
+        if needs.search {
+            // The projection folds accents (`unaccent`) and a declaration may ask for typo
+            // tolerance (`pg_trgm`): both are created, as `extension.install` would.
+            for ext in ["pg_trgm", "unaccent"] {
+                if !names.contains(&ext) {
+                    names.push(ext);
+                }
+            }
+        }
         let missing = db.create_extensions(&names).await;
         if let Some(ext) = missing.first() {
             return Err(StorageError::new(
@@ -330,7 +403,12 @@ impl BackendFactory for PgFactory {
                 ),
             ));
         }
-        let backend = PgBackend::connect(db.config()).await?;
+        let mut backend = PgBackend::connect(db.config()).await?;
+        if needs.search {
+            // Before `prepare`, so the projection table and its index are created with the
+            // entity (SEM-SCH-04: search cases run against a real projection).
+            backend = with_search_hook(backend, needs.protected)?;
+        }
         backend.prepare(&catalog).await?;
         Ok(Some(StorageDriver::new(
             backend,
@@ -338,4 +416,19 @@ impl BackendFactory for PgFactory {
             Some(Box::new(db)),
         )))
     }
+}
+
+/// Installs the search hook on `backend`: English as the default language and the `protected`
+/// fields of `item` in one protection group, the way a host that guards a field would.
+fn with_search_hook(backend: PgBackend, protected: &[String]) -> StorageResult<PgBackend> {
+    let item = Name::new("item")?;
+    let mut protection = Protection::new();
+    for field in protected {
+        protection = protection.group_field(&item, &Name::new(field)?, "owner")?;
+    }
+    Ok(SearchHook::install(
+        backend,
+        Language::new("en")?,
+        protection,
+    ))
 }

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Sign-in throttle (`[services.signin_throttle]`)
 
 Every credential door of a site is admitted through one shared throttle before the name or the password is looked at. The counters are rows of the site database (the coordinator tables), so they are shared by every node and survive a restart.

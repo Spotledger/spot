@@ -433,7 +433,8 @@ pub fn from_egress(error: EgressError) -> IntegrationError {
         | EgressError::ResponseTooLarge
         | EgressError::RequestTooLarge { .. }
         | EgressError::InvalidUrl
-        | EgressError::InvalidConfig(_) => egress_denied(code),
+        | EgressError::InvalidConfig(_)
+        | EgressError::InvalidTlsOptions(_) => egress_denied(code),
     }
 }
 

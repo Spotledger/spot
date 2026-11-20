@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Data import
 
 `spot serve` imports a CSV or XLSX file into a DocType, in two phases: a **dry run** that reads,

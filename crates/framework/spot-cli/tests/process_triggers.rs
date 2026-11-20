@@ -33,7 +33,7 @@ use spot_cli::services::ports::{
 use spot_cli::services::process::ProcessHost;
 use spot_cli::services::process_triggers::{
     Audit, AuditEntry, Fut, HookPort, Meta, Parts, SecretSource, Settings, TriggerHost,
-    WebhookSetting, case_id,
+    TriggerReload, WebhookSetting, case_id,
 };
 use spot_core::{Clock, ManualClock};
 use spot_document::engine::{MemoryPrincipals, PrincipalSource};
@@ -867,4 +867,89 @@ async fn the_port_refuses_with_the_one_error_and_site_a_cannot_reach_site_b() {
     );
     // The port type is the module's own receiver; it wraps the same host.
     let _port = HookPort::new(host_b);
+}
+
+// --- the reload port (WP-BPM-03.T5) --------------------------------------------------------------
+
+#[tokio::test]
+async fn a_reload_brings_in_a_version_published_after_the_node_started_and_repeating_it_changes_nothing()
+ {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    let db = db.unwrap();
+    let s = site(&db, "reload-doc").await;
+    let a = s.node().await;
+    s.publish(&doc_text()).await;
+    let doc = RecordId::new_v7();
+    s.reader.put(widget(&doc, Some(DocState::Posted)));
+    // The node started before the publish: until a reload it does not know the trigger.
+    a.ingest(&[posted(1, &doc, None)]).await.unwrap();
+    assert_eq!(a.stats().started, 0);
+    assert_eq!(a.reload_now().await.unwrap(), 1);
+    let record = posted(2, &doc, None);
+    a.ingest(std::slice::from_ref(&record)).await.unwrap();
+    assert_eq!(a.stats().started, 1);
+    // A second and a third reload find the same published set and change nothing; the redelivered
+    // event is the same Case.
+    assert_eq!(a.reload_now().await.unwrap(), 1);
+    assert_eq!(a.reload_now().await.unwrap(), 1);
+    a.ingest(std::slice::from_ref(&record)).await.unwrap();
+    assert_eq!(a.stats().started, 1);
+    assert_eq!(a.stats().existing, 1);
+}
+
+#[tokio::test]
+async fn reloads_do_not_start_a_second_schedule_slot() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    let db = db.unwrap();
+    let s = site(&db, "reload-sched").await;
+    s.publish(&sched_text()).await;
+    let a = s.node().await;
+    assert_eq!(a.tick_schedules(at(1_700_000_010)).await.unwrap(), 0);
+    a.reload_now().await.unwrap();
+    a.reload_now().await.unwrap();
+    let later = at(1_700_000_070);
+    assert_eq!(a.tick_schedules(later).await.unwrap(), 1);
+    // Reloading between ticks, or ticking the same slot again, starts nothing more.
+    a.reload_now().await.unwrap();
+    assert_eq!(a.tick_schedules(later).await.unwrap(), 0);
+    assert_eq!(a.stats().started, 1);
+}
+
+#[tokio::test]
+async fn a_reload_on_site_a_never_touches_site_bs_triggers() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    let db = db.unwrap();
+    let a = site(&db, "reload-a").await;
+    let b = site(&db, "reload-b").await;
+    b.publish(&doc_text()).await;
+    let (host_a, host_b) = (a.node().await, b.node().await);
+    // Site A publishes its own process on the same doctype and event, then reloads.
+    a.publish(&process_text(
+        "a_only",
+        "trigger = \"document_event\"\ndoctype = \"widget\"\nevent = \"post\"",
+    ))
+    .await;
+    assert_eq!(host_a.reload_now().await.unwrap(), 1);
+    // B's set is B's own: one trigger (its process), unchanged by A's reload.
+    assert_eq!(host_b.reload_now().await.unwrap(), 1);
+    let (da, db_doc) = (RecordId::new_v7(), RecordId::new_v7());
+    a.reader.put(widget(&da, Some(DocState::Posted)));
+    b.reader.put(widget(&db_doc, Some(DocState::Posted)));
+    host_a.ingest(&[posted(1, &da, None)]).await.unwrap();
+    host_b.ingest(&[posted(1, &db_doc, None)]).await.unwrap();
+    // Each event starts exactly the Case of its own site's process.
+    assert_eq!(host_a.stats().started, 1);
+    assert_eq!(host_b.stats().started, 1);
+    let engine_b = b.process.engine().unwrap();
+    assert!(engine_b.processes().get("a_only", 1).is_none());
+    assert!(engine_b.processes().get(DOC_PROCESS, 1).is_some());
 }

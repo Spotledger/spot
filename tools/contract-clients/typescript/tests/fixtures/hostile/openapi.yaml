@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info: {title: Hostile, version: 0.0.1}
+paths:
+  /x:
+    get:
+      operationId: hostile_get
+      summary: "*/ ; process.exit(1); /*"
+      responses:
+        '200':
+          description: ok
+          content: {application/json: {schema: {$ref: '#/components/schemas/Evil'}}}
+components:
+  schemas:
+    Evil:
+      type: object
+      description: "*/ ; process.exit(1); /*"
+      properties:
+        __proto__: {type: string, description: "*/ process.exit(2) /*"}
+        "a\"b": {type: string}
+        "quote'n\nline": {type: string}
+        mode: {type: string, enum: ["a\"; process.exit(3); \"", "line\nbreak", "back\\slash"]}

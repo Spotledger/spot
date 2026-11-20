@@ -9,21 +9,27 @@
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::json;
-use spot_app_api::prelude::{OffsetDateTime, SiteId};
+use spot_app_api::document::{DocState, Document};
+use spot_app_api::prelude::{Name, OffsetDateTime, RecordId, SiteId, Value};
 use spot_bpm_definitions::DefinitionStore;
 use spot_bpm_defs_pg::PgDefinitionStore;
 use spot_bpm_engine::{CaseStore, HandlerRegistry};
 use spot_bpm_pg::{FencedTimerPort, PgCaseStore};
-use spot_cli::services::ports::{JobSpec, JobSubmit, PortFuture};
+use spot_cli::services::ports::{JobSpec, JobSubmit, PortFuture, SystemReader};
 use spot_cli::services::process::ProcessHost;
-use spot_cli::services::process_triggers::{Fut, Settings as TriggerSettings};
+use spot_cli::services::process_triggers::{
+    Fut, Meta, NoSecrets, Parts as TriggerParts, Settings as TriggerSettings, TracingAudit,
+    TriggerHost, TriggerReload,
+};
 use spot_cli::services::process_versions::{Access, Caller, Parts, Settings, VersionHost};
 use spot_core::{Clock, ManualClock};
+use spot_document::engine::{MemoryPrincipals, PrincipalSource};
+use spot_events_contract::{Actor, EventMeta, PayloadDocument};
 use spot_http::api::ports::process_version::{
     MigrationMapping, MigrationRequest, MigrationState, PublishRequest, VersionPort,
     VersionPortError, VersionState,
@@ -34,6 +40,7 @@ use spot_permissions::Principal;
 use spot_postgres::PgBackend;
 use spot_postgres::testing::TestDb;
 use spot_scheduler::{InMemoryLeaseStore, LeaseStore};
+use spot_storage_contract::{FeedPosition, NodeRef, OutboxEvent, OutboxRecord, Version};
 
 const PUBLISHER: &str = "publisher";
 const MIGRATOR: &str = "migrator";
@@ -931,4 +938,365 @@ async fn a_migration_never_runs_to_a_target_that_is_not_published() {
         .await;
     assert_eq!(started.unwrap_err(), VersionPortError::VersionNotPublished);
     assert_eq!(s.audit_rows("process.version_not_published").await, 1);
+}
+
+// --- publish and retire reload the triggers at once (WP-BPM-03.T5) -----------------------------
+
+/// A process started by a document event on `doctype`.
+fn event_process(name: &str, doctype: &str) -> String {
+    format!(
+        "name = \"{name}\"\napp = \"versions_test\"\nversion = 1\nstatus = \"published\"\n\n\
+         [[nodes]]\nid = \"start\"\nkind = \"trigger\"\ntrigger = \"document_event\"\n\
+         doctype = \"{doctype}\"\nevent = \"post\"\n\n\
+         [[nodes]]\nid = \"done\"\nkind = \"logic\"\nlogic = \"join\"\nterminal = true\n\n\
+         [[edges]]\nfrom = \"start\"\nto = \"done\"\n"
+    )
+}
+
+/// The platform reader: the documents the events are about.
+#[derive(Default)]
+struct Reader(Mutex<HashMap<(String, String), Document>>);
+
+impl Reader {
+    /// A posted document of `doctype`, and the id to name it by.
+    fn posted(&self, doctype: &str) -> RecordId {
+        let id = RecordId::new_v7();
+        let mut doc = Document::new(Name::new(doctype).unwrap(), id);
+        doc.set(Name::new("title").unwrap(), Value::Text("w".to_owned()));
+        doc.mark_saved(Version(1), Some(DocState::Posted));
+        self.0
+            .lock()
+            .unwrap()
+            .insert((doctype.to_owned(), id.to_string()), doc);
+        id
+    }
+}
+
+impl SystemReader for Reader {
+    fn read<'a>(&'a self, doctype: &'a str, name: &'a str) -> PortFuture<'a, Option<Document>> {
+        Box::pin(async move {
+            let key = (doctype.to_owned(), name.to_owned());
+            Ok(self.0.lock().unwrap().get(&key).cloned())
+        })
+    }
+}
+
+/// Both doctypes have a lifecycle; no permission engine (the events are the platform's).
+struct Stateful;
+
+impl Meta for Stateful {
+    fn stateful(&self) -> Option<BTreeSet<String>> {
+        Some(
+            ["widget", "gadget"]
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect(),
+        )
+    }
+    fn engine(&self) -> Option<spot_permissions::PermissionEngine> {
+        None
+    }
+}
+
+/// A `doc_posted` event of the platform about `doc`, at feed position `seq`.
+fn posted_event(seq: u64, doctype: &str, doc: &RecordId) -> OutboxRecord {
+    let payload = PayloadDocument {
+        meta: EventMeta {
+            occurred_at: at(1_700_000_000),
+            actor: Actor::System {
+                component: Name::new("test").unwrap(),
+            },
+            command_id: None,
+            causation_id: None,
+            correlation_id: RecordId::new_v7(),
+            trace_id: None,
+        },
+        data: json!({}),
+    };
+    OutboxRecord {
+        position: FeedPosition::new(1, seq),
+        transaction: RecordId::new_v7(),
+        ordinal: 0,
+        event: OutboxEvent {
+            id: RecordId::new_v7(),
+            topic: Name::new("doc_posted").unwrap(),
+            subject: NodeRef {
+                entity: Name::new(doctype).unwrap(),
+                id: *doc,
+            },
+            subject_version: Some(Version(1)),
+            schema_version: 1,
+            payload: serde_json::to_string(&payload).unwrap(),
+        },
+    }
+}
+
+/// The trigger port a test can make fail: it reloads the real intake unless told not to.
+struct Switch {
+    inner: Arc<TriggerHost>,
+    fail: AtomicBool,
+    calls: AtomicU32,
+}
+
+impl TriggerReload for Switch {
+    fn reload_now(&self) -> Fut<'_, spot_cli::Result<usize>> {
+        Box::pin(async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.fail.load(Ordering::SeqCst) {
+                return Err(spot_cli::Error(
+                    "reading the process definitions failed: unavailable".to_owned(),
+                ));
+            }
+            self.inner.reload_now().await
+        })
+    }
+}
+
+/// A site with a real trigger intake (the platform reader and metadata are fakes) and a versions
+/// host that reloads it through the port.
+struct Wired {
+    site: Site,
+    reader: Arc<Reader>,
+    triggers: Arc<TriggerHost>,
+    switch: Arc<Switch>,
+    versions: Arc<VersionHost>,
+    seq: AtomicU32,
+}
+
+impl Site {
+    /// A trigger intake over this site's stores (the intake's own seams are fakes).
+    async fn trigger_host(&self, reader: Arc<Reader>) -> Arc<TriggerHost> {
+        let principals: Arc<dyn PrincipalSource> = Arc::new(MemoryPrincipals::new());
+        let host = TriggerHost::new(TriggerParts {
+            site: SiteId::new(self.tenant.replace('_', "-")).unwrap(),
+            clock: self.clock.clone(),
+            settings: TriggerSettings::default(),
+            process: self.process.clone(),
+            definitions: self.definitions.clone(),
+            submit: Arc::new(NullSubmit),
+            reader,
+            principals,
+            meta: Arc::new(Stateful),
+            secrets: Arc::new(NoSecrets),
+            audit: Arc::new(TracingAudit),
+            pool: self.pool.clone(),
+        });
+        host.prepare().await.unwrap();
+        host.reload().await.unwrap();
+        host
+    }
+}
+
+async fn wired(db: &TestDb, tenant: &str) -> Wired {
+    let site = site(db, tenant).await;
+    let reader = Arc::new(Reader::default());
+    let triggers = site.trigger_host(reader.clone()).await;
+    let switch = Arc::new(Switch {
+        inner: triggers.clone(),
+        fail: AtomicBool::new(false),
+        calls: AtomicU32::new(0),
+    });
+    let versions = VersionHost::new(Parts {
+        site: SiteId::new(site.tenant.replace('_', "-")).unwrap(),
+        pool: site.pool.clone(),
+        definitions: site.definitions.clone(),
+        process: site.process.clone(),
+        access: site.grants.clone(),
+        guard: None,
+        triggers: Some(switch.clone()),
+        trigger_settings: TriggerSettings::default(),
+        clock: site.clock.clone(),
+        settings: Settings::default(),
+    });
+    versions.prepare().await.unwrap();
+    Wired {
+        site,
+        reader,
+        triggers,
+        switch,
+        versions,
+        seq: AtomicU32::new(0),
+    }
+}
+
+impl Wired {
+    /// Cases the intake started so far.
+    fn started(&self) -> u64 {
+        self.triggers.stats().started
+    }
+
+    /// Delivers one fresh `doc_posted` event on a new document of `doctype` to the intake, with
+    /// no other reload in between: what the intake does is what it knows right now.
+    async fn event(&self, doctype: &str) {
+        let doc = self.reader.posted(doctype);
+        let seq = u64::from(self.seq.fetch_add(1, Ordering::SeqCst)) + 1;
+        let record = posted_event(seq, doctype, &doc);
+        self.triggers.ingest(&[record]).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_published_trigger_fires_for_the_next_event_without_waiting_for_the_pass() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    // The database lives as long as the test: a temporary would drop it after this line.
+    let db = db.unwrap();
+    let w = wired(&db, "trig_publish").await;
+    let ctx = w.site.ctx(PUBLISHER, Some("k1"));
+    // Nothing is published: an event starts nothing.
+    w.event("widget").await;
+    assert_eq!(w.started(), 0);
+    // The publish returns; the very next event starts a Case (no tick, no manual reload).
+    w.versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "widget"), None),
+        )
+        .await
+        .unwrap();
+    assert_eq!(w.switch.calls.load(Ordering::SeqCst), 1);
+    w.event("widget").await;
+    assert_eq!(w.started(), 1);
+    // Version 2 moves the trigger to another doctype: the old one stops, the new one starts, at once.
+    w.versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "gadget"), Some(1)),
+        )
+        .await
+        .unwrap();
+    w.event("widget").await;
+    assert_eq!(w.started(), 1, "the replaced trigger no longer fires");
+    w.event("gadget").await;
+    assert_eq!(w.started(), 2);
+}
+
+#[tokio::test]
+async fn retiring_the_only_published_version_turns_its_triggers_off_at_once() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    // The database lives as long as the test: a temporary would drop it after this line.
+    let db = db.unwrap();
+    let w = wired(&db, "trig_retire").await;
+    let ctx = w.site.ctx(PUBLISHER, Some("k1"));
+    w.versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "widget"), None),
+        )
+        .await
+        .unwrap();
+    w.event("widget").await;
+    assert_eq!(w.started(), 1);
+    w.versions.retire(&ctx, "ev_proc", 1).await.unwrap();
+    assert_eq!(
+        w.switch.calls.load(Ordering::SeqCst),
+        2,
+        "publish and retire"
+    );
+    w.event("widget").await;
+    assert_eq!(w.started(), 1, "a retired-only process starts nothing");
+}
+
+#[tokio::test]
+async fn with_the_triggers_module_off_a_publish_succeeds_and_the_pass_picks_it_up() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    // The database lives as long as the test: a temporary would drop it after this line.
+    let db = db.unwrap();
+    let s = site(&db, "trig_off").await;
+    let reader = Arc::new(Reader::default());
+    let triggers = s.trigger_host(reader.clone()).await;
+    // The versions host has no trigger port (the intake is not provided on this site).
+    let versions = s.node(100).await;
+    let ctx = s.ctx(PUBLISHER, Some("k1"));
+    let published = versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "widget"), None),
+        )
+        .await
+        .unwrap();
+    assert_eq!(published.version.version, 1);
+    assert_eq!(s.audit_rows("trigger_reload_failed").await, 0);
+    let doc = reader.posted("widget");
+    triggers
+        .ingest(&[posted_event(1, "widget", &doc)])
+        .await
+        .unwrap();
+    assert_eq!(triggers.stats().started, 0, "stale until the pass");
+    // The intake's own pass (the same reload) brings it in.
+    triggers.reload().await.unwrap();
+    let doc = reader.posted("widget");
+    triggers
+        .ingest(&[posted_event(2, "widget", &doc)])
+        .await
+        .unwrap();
+    assert_eq!(triggers.stats().started, 1);
+}
+
+#[tokio::test]
+async fn a_failing_trigger_reload_keeps_the_stored_version_and_the_old_triggers_and_is_audited() {
+    let db = TestDb::create().await;
+    if skipped(&db) {
+        return;
+    }
+    // The database lives as long as the test: a temporary would drop it after this line.
+    let db = db.unwrap();
+    let w = wired(&db, "trig_fail").await;
+    let ctx = w.site.ctx(PUBLISHER, Some("k1"));
+    w.versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "widget"), None),
+        )
+        .await
+        .unwrap();
+    w.event("widget").await;
+    assert_eq!(w.started(), 1);
+    // The reload fails while version 2 (a trigger on another doctype) is published.
+    w.switch.fail.store(true, Ordering::SeqCst);
+    let second = w
+        .versions
+        .publish(
+            &ctx,
+            "ev_proc",
+            request(event_process("ev_proc", "gadget"), Some(1)),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        second.version.version, 2,
+        "the publish is stored and not rolled back"
+    );
+    let page = w
+        .versions
+        .list_versions(&ctx, "ev_proc", None, 50)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert_eq!(w.site.audit_rows("trigger_reload_failed").await, 1);
+    // The trigger set in force is the old one.
+    w.event("gadget").await;
+    assert_eq!(w.started(), 1);
+    w.event("widget").await;
+    assert_eq!(w.started(), 2);
+    // The worker's retry (the module's own `reload`) brings the new set in once the intake answers.
+    w.switch.fail.store(false, Ordering::SeqCst);
+    assert!(w.versions.reload().await);
+    w.event("widget").await;
+    assert_eq!(w.started(), 2);
+    w.event("gadget").await;
+    assert_eq!(w.started(), 3);
 }

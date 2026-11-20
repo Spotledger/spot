@@ -1,0 +1,34 @@
+[package]
+name = "spot-secrets-kms"
+description = "Customer-managed keys: a spot-secrets KeyProvider whose key-encryption key lives in the customer's KMS (Vault Transit compatible), reached through the egress policy (WP-SEC-03.T13)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-core = { path = "../spot-core" }
+spot-egress = { path = "../spot-egress" }
+spot-secrets = { path = "../spot-secrets" }
+async-trait = "0.1"
+base64 = "0.22"
+hmac = "0.12"
+http = "1"
+# Only behind the `Entropy` trait: nothing else in the crate draws random bytes.
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["fs", "rt", "sync", "time"] }
+url = "2"
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
+time = "0.3"
+tokio = { version = "1", default-features = false, features = ["fs", "rt", "sync", "time", "macros"] }
+
+[lints]
+workspace = true

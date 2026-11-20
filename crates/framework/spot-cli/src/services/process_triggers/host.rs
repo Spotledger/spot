@@ -83,7 +83,13 @@ impl Marks {
                  PRIMARY KEY (tenant, name))",
             )
             .await
-            .map_err(|e| Error(format!("the trigger mark table could not be prepared: {e}")))
+            .map_err(|e| {
+                // The SQLSTATE says why (a lock, a permission, a duplicate) and carries no value.
+                let state = e.code().map_or("none", |c| c.code());
+                Error(format!(
+                    "the trigger mark table could not be prepared: {e} (SQLSTATE {state})"
+                ))
+            })
     }
 
     async fn client(&self) -> Result<deadpool_postgres::Client> {

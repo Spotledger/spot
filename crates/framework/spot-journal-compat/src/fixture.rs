@@ -18,12 +18,11 @@
 use std::path::{Path, PathBuf};
 
 use spot_journal_manifest::{SignedManifest, VerifyingKeys};
-use spot_journal_rebuild::{
-    EventClass, EventClassifier, RebuildKeys, RebuildOptions, RegistryClassifier,
-};
+use spot_journal_rebuild::{RebuildKeys, RebuildOptions};
 use spot_journal_rebuild_plan::{
     JournalCatalog, RebuildPlan, SegmentRange, SnapshotInfo, Target, plan,
 };
+use spot_journal_segment::SegmentReader;
 use spot_journal_snapshot::{list_snapshots, verify_deep};
 use spot_journal_store::{JournalStore, Key, Layout, MemoryStore, TenantId};
 
@@ -66,11 +65,45 @@ impl Fixture {
     pub fn load(root: &Path) -> Result<Self, CompatError> {
         let key_text = std::fs::read_to_string(root.join(KEY_FILE))
             .map_err(|err| CompatError::new(format!("cannot read the public key: {err}")))?;
-        let snapshot_keys = FixtureKeys::from_hex(&key_text)?;
+        let golden_text = std::fs::read_to_string(root.join("golden-state.json"))
+            .map_err(|err| CompatError::new(format!("cannot read golden-state.json: {err}")))?;
+        Self::from_parts(&key_text, object_files(root)?, &golden_text)
+    }
+
+    /// Loads a fixture the generator built in memory ([`crate::generator::build_from`]), through
+    /// exactly the checks [`Fixture::load`] applies to the committed bytes.
+    ///
+    /// # Errors
+    /// As [`Fixture::load`].
+    pub fn from_generated(generated: &crate::generator::Generated) -> Result<Self, CompatError> {
+        let text = |name: &str| -> Result<String, CompatError> {
+            let bytes = generated
+                .file(name)
+                .ok_or_else(|| CompatError::new(format!("the generated fixture has no {name}")))?;
+            String::from_utf8(bytes.to_vec())
+                .map_err(|_| CompatError::new(format!("{name} is not UTF-8")))
+        };
+        let objects: Vec<(String, Vec<u8>)> = generated
+            .files
+            .iter()
+            .filter_map(|(path, bytes)| {
+                path.strip_prefix("objects/")
+                    .map(|key| (key.to_owned(), bytes.clone()))
+            })
+            .collect();
+        Self::from_parts(&text(KEY_FILE)?, objects, &text("golden-state.json")?)
+    }
+
+    fn from_parts(
+        key_text: &str,
+        objects: Vec<(String, Vec<u8>)>,
+        golden_text: &str,
+    ) -> Result<Self, CompatError> {
+        let snapshot_keys = FixtureKeys::from_hex(key_text)?;
         let manifest_keys = snapshot_keys.manifest_keys();
 
         let store = MemoryStore::new();
-        for (key, bytes) in object_files(root)? {
+        for (key, bytes) in objects {
             Key::parse(&key)?;
             block_on(store.put_new(&key, bytes))?;
         }
@@ -119,9 +152,7 @@ impl Fixture {
             .pop()
             .ok_or_else(|| CompatError::new("the fixture lists no verified snapshot"))?;
 
-        let golden_text = std::fs::read_to_string(root.join("golden-state.json"))
-            .map_err(|err| CompatError::new(format!("cannot read golden-state.json: {err}")))?;
-        let golden = Golden::parse(&golden_text)?;
+        let golden = Golden::parse(golden_text)?;
         if golden.target_schema != TARGET_SCHEMA || golden.last.position != LAST_POSITION {
             return Err(CompatError::new(
                 "the golden state describes another schema or another last position",
@@ -149,6 +180,39 @@ impl Fixture {
         })
     }
 
+    /// The `(position, topic)` of every entry of every segment of the frozen journal, in position
+    /// order, read through the segment reader the executor uses.
+    ///
+    /// # Errors
+    /// [`CompatError`] when a segment is missing, does not open, or holds an entry that is not a
+    /// JSON envelope with a topic.
+    pub fn journal_topics(&self) -> Result<Vec<(u64, String)>, CompatError> {
+        let mut topics: Vec<(u64, String)> = Vec::new();
+        let mut ranges: Vec<&SegmentRange> = self.catalog.segments.iter().collect();
+        ranges.sort_by_key(|range| (range.generation, range.first_seq));
+        for range in ranges {
+            let key = Layout::segment(TENANT, range.generation, range.first_seq, range.last_seq)?
+                .to_key();
+            let object = block_on(self.store.get(&key))?
+                .ok_or_else(|| CompatError::new("a segment the manifest lists is missing"))?;
+            let reader = SegmentReader::open(object.bytes)
+                .map_err(|err| CompatError::new(format!("a segment does not open: {err}")))?;
+            for entry in reader.entries() {
+                let entry = entry.map_err(|err| {
+                    CompatError::new(format!("a segment entry is unreadable: {err}"))
+                })?;
+                let envelope: serde_json::Value = serde_json::from_str(&entry.line)
+                    .map_err(|err| CompatError::new(format!("an entry is not JSON: {err}")))?;
+                let topic = envelope
+                    .get("topic")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| CompatError::new("an entry has no topic"))?;
+                topics.push((entry.position.seq, topic.to_owned()));
+            }
+        }
+        Ok(topics)
+    }
+
     /// The plan a rebuild to `target` runs.
     ///
     /// # Errors
@@ -173,25 +237,13 @@ impl Fixture {
     /// # Errors
     /// [`CompatError`] when the tenant id is not usable.
     pub fn options(&self) -> Result<RebuildOptions<'static>, CompatError> {
-        let mut options = RebuildOptions::new(TenantId::new(TENANT)?, SOURCE, TARGET_SCHEMA);
-        options.classifier = Some(&FIXTURE_CLASSES);
-        Ok(options)
-    }
-}
-
-/// The classes of the topics the frozen journal holds: the events contract registry's, and the
-/// fixture's own audit entry (`sys_role_changed`, which the registry does not list).
-struct FixtureClasses;
-
-/// The one classifier every fixture rebuild uses.
-static FIXTURE_CLASSES: FixtureClasses = FixtureClasses;
-
-impl EventClassifier for FixtureClasses {
-    fn class_of(&self, topic: &str) -> Option<EventClass> {
-        if topic == "sys_role_changed" {
-            return Some(EventClass::Audit);
-        }
-        RegistryClassifier.class_of(topic)
+        // The default classifier (the events registry) and strict topics: the frozen journal
+        // holds only registered topics (`tests/topics_registered.rs`).
+        Ok(RebuildOptions::new(
+            TenantId::new(TENANT)?,
+            SOURCE,
+            TARGET_SCHEMA,
+        ))
     }
 }
 

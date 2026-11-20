@@ -1,0 +1,15 @@
+# Tier M (WP-TST-15.T2): 200 sessions, 10 tx/s, 30 minutes, on the large self-hosted runner,
+# whose label the README budgets are enforced on (L9_RUNNER_LABEL=large).
+name = "tier_m"
+description = "200 sessions, 10 tx/s sustained for 30 minutes, README tier M budgets"
+runner = "large"
+timeout_minutes = 90
+pr_gate = false
+test = "tier_m"
+l9_profile = "tier_m"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "tier_m", "--", "--nocapture"]
+artefacts = ["target/l9/tier_m.log"]
+
+[env]
+L9_DURATION_SCALE = "1"
+L9_RUNNER_LABEL = "large"

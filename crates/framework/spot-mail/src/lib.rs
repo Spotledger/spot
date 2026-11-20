@@ -18,6 +18,7 @@
 pub mod capture;
 pub mod error;
 pub mod imap;
+pub mod incoming;
 pub mod message;
 pub mod mime;
 pub mod smtp;
@@ -29,6 +30,7 @@ pub use imap::{
     FetchBatch, FetchLimits, FetchOutcome, ImapConfig, ImapSecurity, IncomingMessage, MailAddress,
     MailboxCursor, fetch_new, fetch_new_pinned, thread_key,
 };
+pub use incoming::{MAX_HEADER_VALUE_BYTES, SELECTED_HEADER_NAMES, SelectedHeader};
 pub use message::{
     Attachment, HeaderName, InlineImage, Mailbox, OutgoingMessage, Secret, validate_address,
 };

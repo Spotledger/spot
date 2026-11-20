@@ -1,0 +1,6 @@
+# Drift the docsite knows about and shows (WP-DX-04.T2). `build.py --check` fails when a number
+# GROWS, so new drift fails while old drift stays visible; lower the number when you fix some.
+
+# Error codes the native API contract (contracts/native-api/openapi.yaml) names that no file of
+# crates/framework/spot-errors/catalogue/ defines. Listed on the error catalogue page.
+contract_codes_without_catalogue_entry = 86

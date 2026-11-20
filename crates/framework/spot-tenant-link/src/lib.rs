@@ -65,9 +65,11 @@ pub mod consent;
 pub mod delivery;
 pub mod error;
 pub mod grant;
+pub mod grant_revocation;
 pub mod handshake;
 pub mod ids;
 pub mod keys;
+pub mod limits;
 pub mod model;
 pub mod nonce;
 pub mod peers;
@@ -84,14 +86,16 @@ pub use consent::{
     CONSENT_OPERATION, Consent, ConsentPolicy, PolicyStepUp, StepUpGate, StepUpProof,
 };
 pub use delivery::{DeliveryState, RevocationOutcome, after_revocation};
-pub use error::{Error, Result, codes};
+pub use error::{Error, Result, actor_ref, codes};
 pub use grant::{
     Direction, ExchangePayload, FieldCatalog, FieldList, FieldName, FieldValue, Filtered, Grant,
     Offer, SchemaRange, TopicKind, grant_allowed, grants_digest, grants_match,
 };
+pub use grant_revocation::{GrantRevocations, MemoryGrantRevocations};
 pub use handshake::{Handshake, HandshakePolicy, Received, Resume};
 pub use ids::{Digest, ExternalPeerId, LinkId, Nonce, Topic};
 pub use keys::{IdentitySigner, PeerKey, SIGNATURE_BYTES, SeedSigner, SignatureBytes};
+pub use limits::{DEFAULT_MAX_MESSAGE_BYTES, MAX_CONFIGURABLE_BYTES, WireLimits};
 pub use model::{Carrier, Link, LinkDraft, LinkState, Party, Revocation, RevokeReason};
 pub use nonce::{
     AsyncNonceClaimer, MemoryNonceLog, NonceClaim, NonceClaimer, NonceLog, claim_with,

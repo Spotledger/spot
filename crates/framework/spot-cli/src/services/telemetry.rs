@@ -13,7 +13,8 @@
 //! The exporter itself is installed once per process by `spot`'s `main` from
 //! `common.toml` `[telemetry]`, before any site exists.
 
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::Router;
 use axum::extract::Request;
@@ -73,6 +74,195 @@ pub fn router() -> Router {
     Router::new().route("/metrics", get(scrape))
 }
 
+/// The routes development tools add to a site's router, filed by site name (WP-DX-03.T4).
+///
+/// A development module files its router here when it registers (it registers only under its own
+/// guards, so a production host files nothing); the host merges what is filed for the site with
+/// [`DevRoutes::router_for`] when it builds the site's router. A site with nothing filed gets an
+/// empty router, so the hook costs a non-dev host one map lookup.
+#[derive(Default)]
+pub struct DevRoutes {
+    routes: Mutex<BTreeMap<String, Router>>,
+}
+
+/// The process's route hook for development tools.
+#[must_use]
+pub fn dev_routes() -> &'static DevRoutes {
+    static ROUTES: OnceLock<DevRoutes> = OnceLock::new();
+    ROUTES.get_or_init(DevRoutes::default)
+}
+
+impl DevRoutes {
+    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<String, Router>> {
+        self.routes.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Files `router` for `site`, replacing what was filed.
+    pub fn register(&self, site: &str, router: Router) {
+        self.lock().insert(site.to_owned(), router);
+    }
+
+    /// Removes what is filed for `site`.
+    pub fn remove(&self, site: &str) {
+        self.lock().remove(site);
+    }
+
+    /// What is filed for `site`, or an empty router.
+    pub fn router_for(&self, site: &str) -> Router {
+        self.lock().get(site).cloned().unwrap_or_default()
+    }
+
+    /// Whether anything is filed for `site`.
+    #[must_use]
+    pub fn has(&self, site: &str) -> bool {
+        self.lock().contains_key(site)
+    }
+}
+
+/// The metrics route with the development routes of `site` merged in (none on a host that filed
+/// none, which is every non-dev host).
+pub fn router_for(site: &str) -> Router {
+    router().merge(dev_routes().router_for(site))
+}
+
+/// Gauge: 1 for the readiness state the process is in and 0 for the others, labelled `state`
+/// (`starting`, `ready`, `degraded`, `failed`).
+pub const READINESS_STATE: &str = "spot_readiness_state";
+
+/// What a process's services say about whether it can serve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReadinessState {
+    /// A required service has not finished starting.
+    Starting,
+    /// Every required service runs and no optional one is off.
+    Ready,
+    /// Every required service runs; an optional one (mail, print) is off or starting.
+    Degraded,
+    /// A required service is stopped: the site cannot serve.
+    Failed,
+}
+
+impl ReadinessState {
+    /// Every state, in publishing order.
+    pub const ALL: [ReadinessState; 4] = [
+        ReadinessState::Starting,
+        ReadinessState::Ready,
+        ReadinessState::Degraded,
+        ReadinessState::Failed,
+    ];
+
+    /// The `state` label value.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReadinessState::Starting => "starting",
+            ReadinessState::Ready => "ready",
+            ReadinessState::Degraded => "degraded",
+            ReadinessState::Failed => "failed",
+        }
+    }
+}
+
+/// The readiness state of `health`: the same rule the site's readiness check applies, as one
+/// word. A stopped required service is `Failed` even when another is still starting.
+#[must_use]
+pub fn readiness_of(health: &super::Health) -> ReadinessState {
+    use super::{Level, State};
+    let mut starting = false;
+    let mut degraded = false;
+    for (level, state) in health.states().into_values() {
+        match (level, state) {
+            (_, State::Running) => {}
+            (Level::Required, State::Stopped(_)) => return ReadinessState::Failed,
+            (Level::Required, State::Starting) => starting = true,
+            (Level::Optional, _) => degraded = true,
+        }
+    }
+    if starting {
+        ReadinessState::Starting
+    } else if degraded {
+        ReadinessState::Degraded
+    } else {
+        ReadinessState::Ready
+    }
+}
+
+/// Publishes `state`: its series reads 1, the other three read 0.
+pub fn publish_readiness(state: ReadinessState) {
+    for each in ReadinessState::ALL {
+        let value = if each == state { 1.0 } else { 0.0 };
+        metrics::gauge!(READINESS_STATE, "state" => each.as_str()).set(value);
+    }
+}
+
+/// The Prometheus side of the queue and realtime metrics: each sink call becomes one series
+/// update. The crates that own the numbers define the names and the shape; this is the only place
+/// that touches the recorder.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PrometheusSink;
+
+impl spot_jobs::metrics::JobMetricsSink for PrometheusSink {
+    fn queue_depth(&self, queue: &'static str, depth: u64) {
+        metrics::gauge!(spot_jobs::metrics::JOB_QUEUE_DEPTH, "queue" => queue).set(depth as f64);
+    }
+
+    fn oldest_age_seconds(&self, queue: &'static str, seconds: u64) {
+        metrics::gauge!(spot_jobs::metrics::JOB_OLDEST_AGE_SECONDS, "queue" => queue)
+            .set(seconds as f64);
+    }
+}
+
+impl spot_mail_queue::metrics::MailMetricsSink for PrometheusSink {
+    fn queue_depth(&self, depth: u64) {
+        metrics::gauge!(spot_mail_queue::metrics::MAIL_QUEUE_DEPTH).set(depth as f64);
+    }
+}
+
+impl spot_realtime::metrics::RealtimeMetricsSink for PrometheusSink {
+    fn dropped(&self, reason: &'static str, count: u64) {
+        metrics::counter!(spot_realtime::metrics::REALTIME_DROPPED_TOTAL, "reason" => reason)
+            .increment(count);
+    }
+}
+
+/// Registers the descriptions of the metrics this module and the process-wide ones carry, so the
+/// exposition has `# HELP` lines and the metrics lint (rule M4) finds a description for each. A
+/// no-op until a recorder is installed; safe to call more than once.
+pub fn describe_all() {
+    metrics::describe_gauge!(
+        READINESS_STATE,
+        "1 for the readiness state of the process (starting, ready, degraded, failed), else 0"
+    );
+    metrics::describe_gauge!(
+        spot_jobs::metrics::JOB_QUEUE_DEPTH,
+        "Jobs waiting to run, by queue (default, short, long, other)"
+    );
+    metrics::describe_gauge!(
+        spot_jobs::metrics::JOB_OLDEST_AGE_SECONDS,
+        "Seconds the oldest waiting job of the queue has waited"
+    );
+    metrics::describe_gauge!(
+        spot_mail_queue::metrics::MAIL_QUEUE_DEPTH,
+        "Mail messages waiting to be sent"
+    );
+    metrics::describe_counter!(
+        spot_realtime::metrics::REALTIME_DROPPED_TOTAL,
+        "Realtime events or subscriptions dropped, by reason"
+    );
+    // The BPM runtime (services/process.rs) records these; its constants carry no description.
+    metrics::describe_counter!("spot_bpm_runs_started_total", "Process runs started");
+    metrics::describe_counter!(
+        "spot_bpm_runs_completed_total",
+        "Process runs that completed"
+    );
+    metrics::describe_counter!("spot_bpm_runs_failed_total", "Process runs that failed");
+    metrics::describe_counter!("spot_bpm_steps_run_total", "Process steps run");
+    metrics::describe_gauge!(
+        "spot_bpm_resume_backlog",
+        "Process runs waiting to be resumed after a restart"
+    );
+}
+
 /// The metrics service: its check proves the recorder renders, its task only waits.
 pub struct Telemetry {
     enabled: bool,
@@ -117,6 +307,7 @@ impl Service for Telemetry {
             // Installing is idempotent and is the only way to learn the recorder is usable:
             // an empty rendering is normal before the first request is counted.
             spot_telemetry::metrics::install().map_err(|e| e.to_string())?;
+            describe_all();
             Ok(())
         })
     }
@@ -143,4 +334,134 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
     }
     ctx.add(Telemetry::new(metrics.enabled, metrics.require_auth));
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod dev_route_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt as _;
+
+    async fn status(app: Router, path: &str) -> StatusCode {
+        app.oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn a_site_with_nothing_filed_has_no_dev_routes() {
+        let routes = DevRoutes::default();
+        assert!(!routes.has("acme"));
+        assert_eq!(
+            status(routes.router_for("acme"), "/dev/ping").await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn a_filed_router_is_served_only_for_its_site() {
+        let routes = DevRoutes::default();
+        routes.register(
+            "acme",
+            Router::new().route("/dev/ping", get(|| async { "pong" })),
+        );
+        assert_eq!(
+            status(routes.router_for("acme"), "/dev/ping").await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(routes.router_for("other"), "/dev/ping").await,
+            StatusCode::NOT_FOUND
+        );
+        routes.remove("acme");
+        assert_eq!(
+            status(routes.router_for("acme"), "/dev/ping").await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn the_metrics_route_is_unchanged_by_the_hook() {
+        // Nothing is filed for this site name in the process-wide hook.
+        let app = router_for("no-such-dev-site");
+        assert_ne!(status(app, "/metrics").await, StatusCode::NOT_FOUND);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod metric_tests {
+    use super::*;
+    use crate::services::{Health, Level, State};
+    use spot_jobs::metrics::QueueSnapshot;
+    use spot_realtime::metrics::DropReason;
+
+    #[test]
+    fn readiness_follows_the_services() {
+        let health = Health::new();
+        assert_eq!(
+            readiness_of(&health),
+            ReadinessState::Ready,
+            "no services, nothing wrong"
+        );
+        health.set("storage", Level::Required, State::Starting);
+        assert_eq!(readiness_of(&health), ReadinessState::Starting);
+        health.set("storage", Level::Required, State::Running);
+        health.set("mail", Level::Optional, State::Stopped("smtp down".into()));
+        assert_eq!(readiness_of(&health), ReadinessState::Degraded);
+        health.set("jobs", Level::Required, State::Stopped("lost".into()));
+        assert_eq!(readiness_of(&health), ReadinessState::Failed);
+    }
+
+    #[test]
+    fn the_readiness_labels_are_a_closed_set() {
+        let names: Vec<&str> = ReadinessState::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(names, ["starting", "ready", "degraded", "failed"]);
+    }
+
+    #[test]
+    fn every_new_metric_appears_in_the_exposition() {
+        spot_telemetry::metrics::install().unwrap();
+        describe_all();
+        publish_readiness(ReadinessState::Degraded);
+        spot_jobs::metrics::publish(
+            &PrometheusSink,
+            &[QueueSnapshot {
+                queue: "short".to_owned(),
+                depth: 3,
+                oldest_age_seconds: 12,
+            }],
+        );
+        spot_mail_queue::metrics::publish(&PrometheusSink, &[4]);
+        spot_realtime::metrics::record_dropped(&PrometheusSink, DropReason::SlowConsumer, 2);
+        let text = spot_telemetry::render_prometheus();
+        for needle in [
+            "spot_readiness_state{state=\"degraded\"}",
+            "spot_job_queue_depth{queue=\"short\"}",
+            "spot_job_oldest_age_seconds{queue=\"short\"}",
+            "spot_mail_queue_depth",
+            "spot_realtime_dropped_total{reason=\"slow_consumer\"}",
+        ] {
+            assert!(text.contains(needle), "missing {needle} in the exposition");
+        }
+        // Labels carry only the bounded sets: no id-like value reaches a series.
+        assert!(!text.contains("tenant"), "no tenant label");
+    }
+
+    #[test]
+    fn the_sink_traits_are_all_implemented_once() {
+        // A compile-time check that one sink serves the three crates.
+        fn takes_all<
+            T: spot_jobs::metrics::JobMetricsSink
+                + spot_mail_queue::metrics::MailMetricsSink
+                + spot_realtime::metrics::RealtimeMetricsSink,
+        >(
+            _: &T,
+        ) {
+        }
+        takes_all(&PrometheusSink);
+    }
 }

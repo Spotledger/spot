@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The app store server: `spot-store-server`
 
 This is the operator guide for the Spotledger app store as a service (WP-STR-03.T3, ADR-21). It

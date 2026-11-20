@@ -28,6 +28,7 @@
 //! write, create, delete) and is closed to everyone else until granted.
 
 mod assemble;
+pub mod effective;
 pub mod error;
 pub mod host;
 pub mod node;
@@ -40,6 +41,7 @@ pub mod storage_records;
 pub mod pg;
 
 pub use assemble::CUSTOM_MODULE;
+pub use effective::{effective_definitions, effective_definitions_with};
 pub use error::{CustomiseError, CustomiseResult, Issue, codes};
 pub use host::{
     AuditEntry, AuditSink, Caller, CustomiseAccess, CustomiseEvent, DefaultGrant, EventSink,

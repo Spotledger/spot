@@ -1,0 +1,8 @@
+kind = "api"
+pattern = "endpoint calling another function"
+unsupported = "the corpus world has no whitelisted methods registered on its DocTypes, so host.call is refused; a host that registers methods runs this case unchanged"
+[input.args]
+id = "00000000-0000-0000-0000-000000000000"
+[expect]
+ok = false
+error_code = "script.thrown"

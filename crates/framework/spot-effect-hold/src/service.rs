@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::Duration;
 
 use spot_coordinator::{Coordinator, LockExt};
@@ -101,8 +101,13 @@ pub struct HoldService {
     pub(crate) dispatcher: Arc<dyn Dispatcher>,
     pub(crate) notifier: Arc<dyn Notifier>,
     pub(crate) coordinator: Option<Arc<dyn Coordinator>>,
+    /// Where the bytes behind purged payload references are deleted (none: handles stay queued).
+    pub(crate) payloads: Option<Arc<dyn crate::payload::PayloadStore>>,
     pub(crate) requests: crate::request::RequestGuards,
     stale: AtomicU64,
+    /// The latest instant a public method was called with: the time a transition is stamped with
+    /// (the ledger keeps when an effect last changed, for the retention purge).
+    pub(crate) stamp: AtomicI64,
 }
 
 impl HoldService {
@@ -130,8 +135,10 @@ impl HoldService {
             dispatcher,
             notifier,
             coordinator: None,
+            payloads: None,
             requests: crate::request::RequestGuards::default(),
             stale: AtomicU64::new(0),
+            stamp: AtomicI64::new(0),
         }
     }
 
@@ -153,7 +160,13 @@ impl HoldService {
     ) -> Result<bool> {
         match self
             .ledger
-            .transition_effect(effect.id, expected, next, note)
+            .transition_effect_at(
+                effect.id,
+                expected,
+                next,
+                note,
+                self.stamp.load(Ordering::Relaxed),
+            )
             .await?
         {
             Transition::Applied => Ok(true),
@@ -169,6 +182,65 @@ impl HoldService {
     pub fn with_coordinator(mut self, coordinator: Arc<dyn Coordinator>) -> Self {
         self.coordinator = Some(coordinator);
         self
+    }
+
+    /// The same service deleting the bytes behind purged payload references through `payloads`
+    /// (see [`crate::payload`]). Without it a purge clears the references and queues the handles;
+    /// the bytes stay until a service with a store drains the queue.
+    #[must_use]
+    pub fn with_payload_store(mut self, payloads: Arc<dyn crate::payload::PayloadStore>) -> Self {
+        self.payloads = Some(payloads);
+        self
+    }
+
+    /// Purges the expired payload references of this site (irreversible; see
+    /// [`crate::retention`]), deletes the stored bytes behind them when a payload store is set, and
+    /// records one `purged` audit event with the counts (`purged`, and `payloads_deleted` when a
+    /// store is set; counts only). Scheduling it is the host's job. Call again while
+    /// [`PurgeReport::more`] is set.
+    ///
+    /// # Errors
+    /// The ledger's error, or [`Error::AuditFailed`] (the references were already purged then: the
+    /// purge is not undone, and the caller sees that the record is missing).
+    pub async fn purge_expired(
+        &self,
+        policy: crate::retention::RetentionPolicy,
+        now: i64,
+        limit: usize,
+    ) -> Result<crate::retention::PurgeReport> {
+        let report = match &self.payloads {
+            Some(payloads) => {
+                crate::retention::purge_expired_with_payloads(
+                    self.ledger.as_ref(),
+                    payloads.as_ref(),
+                    &self.site,
+                    policy,
+                    now,
+                    limit,
+                )
+                .await?
+            }
+            None => {
+                crate::retention::purge_expired(
+                    self.ledger.as_ref(),
+                    &self.site,
+                    policy,
+                    now,
+                    limit,
+                )
+                .await?
+            }
+        };
+        let mut event = AuditEvent::new(AuditKind::Purged, self.site.clone(), None, now)
+            .with_count("purged", i64::try_from(report.purged).unwrap_or(i64::MAX));
+        if self.payloads.is_some() {
+            event = event.with_count(
+                "payloads_deleted",
+                i64::try_from(report.payloads_deleted).unwrap_or(i64::MAX),
+            );
+        }
+        self.audit.record(event).await?;
+        Ok(report)
     }
 
     /// The site.
@@ -267,6 +339,7 @@ impl HoldService {
         plan: ReleasePlan,
         now: i64,
     ) -> Result<ReleaseReport> {
+        self.stamp.store(now, Ordering::Relaxed);
         let migration_id = MigrationId::new(migration_id)?;
         let _lease = self.acquire_release_lease().await?;
         let _cap = plan.max_concurrency_per_class.max(1);
@@ -515,6 +588,7 @@ impl HoldService {
         reason: impl Into<String>,
         now: i64,
     ) -> Result<DiscardReport> {
+        self.stamp.store(now, Ordering::Relaxed);
         let migration_id = MigrationId::new(migration_id)?;
         let reason = reason.into();
         let _lease = self.acquire_release_lease().await?;

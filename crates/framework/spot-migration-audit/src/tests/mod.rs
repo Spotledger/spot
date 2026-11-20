@@ -4,6 +4,7 @@
 mod lifecycle;
 mod performance;
 mod permission;
+mod reason;
 mod tamper;
 
 use std::collections::HashMap;

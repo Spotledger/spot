@@ -120,8 +120,10 @@ pub fn value_text(value: &Value) -> String {
         Value::Id(id) => id.to_string(),
         Value::Json(j) => j.clone(),
         Value::Bytes(b) => base64::engine::general_purpose::STANDARD.encode(b),
-        // ADR-087: no field kind produces these yet (WP-MET-05.T1); the exact debug form.
-        Value::GeoPoint(_) | Value::Range(_) => format!("{value:?}"),
+        // ADR-087: the one cell-text form shared with the importer (`spot-spatial-text`).
+        Value::GeoPoint(p) => spot_spatial_text::format_point(p),
+        // A range that cannot be printed cannot be stored either: print nothing, never panic.
+        Value::Range(r) => spot_spatial_text::format_range(r).unwrap_or_default(),
     }
 }
 
@@ -225,7 +227,7 @@ fn write_json_scalar(out: &mut Vec<u8>, value: &Value) {
         Value::Bytes(b) => {
             write_json_string(out, &base64::engine::general_purpose::STANDARD.encode(b))
         }
-        // ADR-087: no field kind produces these yet (WP-MET-05.T1); the exact debug form.
-        Value::GeoPoint(_) | Value::Range(_) => write_json_string(out, &format!("{value:?}")),
+        // The same text as the CSV cell, as a JSON string (no object form: a native API decision).
+        Value::GeoPoint(_) | Value::Range(_) => write_json_string(out, &value_text(value)),
     }
 }

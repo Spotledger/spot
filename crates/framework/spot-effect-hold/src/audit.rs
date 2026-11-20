@@ -26,6 +26,8 @@ pub enum AuditKind {
     Resume,
     /// A stale effect waited for confirmation.
     Confirmation,
+    /// Payload references of released or discarded effects were purged (counts only).
+    Purged,
 }
 
 impl AuditKind {
@@ -38,6 +40,7 @@ impl AuditKind {
             AuditKind::Discard => "discard",
             AuditKind::Resume => "resume",
             AuditKind::Confirmation => "confirmation",
+            AuditKind::Purged => "purged",
         }
     }
 }
@@ -210,6 +213,94 @@ impl<S: AuditStore + Default + 'static> AuditSink for ChainAudit<S> {
                 masked: true,
             };
             chain
+                .append(record)
+                .await
+                .map_err(|error| Error::AuditFailed {
+                    reason: error.to_string(),
+                })?;
+            Ok(())
+        })
+    }
+}
+
+/// The scope the hold's transitions are chained under for `site`: `hold:<site>`.
+#[must_use]
+pub fn chain_scope(site: &SiteId) -> String {
+    format!("hold:{site}")
+}
+
+/// An [`AuditSink`] that appends each transition of **one site** to a tamper-evident chain kept in a
+/// shared [`AuditStore`], under the scope [`chain_scope`] (`hold:<site>`), record kind
+/// `hold.<AuditKind::name()>`.
+///
+/// The record body is the [`AuditEvent`] and nothing else: the kind, the site, the migration id,
+/// the time and the counts. The type of the argument is the guarantee that no payload, effect key or
+/// recipient can reach the chain: an event has none to carry. The append retries a moved head
+/// (the chain's own bounded retry) and then fails with [`Error::AuditFailed`]; the service treats a
+/// sink error as a failure of the transition (a hold that began stays held: fail closed), so a
+/// transition that cannot be audited is reported, never silently dropped. An event of another site
+/// is refused.
+pub struct ChainAuditSink<S: AuditStore> {
+    site: SiteId,
+    chain: AuditChain<S>,
+}
+
+impl<S: AuditStore> ChainAuditSink<S> {
+    /// A sink for `site` over `store`; checkpoints are signed with `signer` per `policy`.
+    #[must_use]
+    pub fn new(
+        site: SiteId,
+        store: S,
+        signer: Arc<dyn CheckpointSigner>,
+        policy: CheckpointPolicy,
+    ) -> Self {
+        let chain = AuditChain::new(store, chain_scope(&site), signer, policy);
+        Self { site, chain }
+    }
+
+    /// The chain, for verification.
+    #[must_use]
+    pub fn chain(&self) -> &AuditChain<S> {
+        &self.chain
+    }
+}
+
+impl<S: AuditStore> AuditSink for ChainAuditSink<S> {
+    fn record<'a>(&'a self, event: AuditEvent) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            if event.site != self.site {
+                return Err(Error::AuditFailed {
+                    reason: "the event belongs to another site".to_owned(),
+                });
+            }
+            let mut payload = BTreeMap::new();
+            payload.insert(
+                "kind".to_owned(),
+                PayloadValue::Text(event.kind.name().to_owned()),
+            );
+            payload.insert(
+                "site".to_owned(),
+                PayloadValue::Text(event.site.as_str().to_owned()),
+            );
+            if let Some(migration_id) = &event.migration_id {
+                payload.insert(
+                    "migration".to_owned(),
+                    PayloadValue::Text(migration_id.as_str().to_owned()),
+                );
+            }
+            for (name, value) in &event.counts {
+                payload.insert(name.clone(), PayloadValue::Int(*value));
+            }
+            let record = AuditRecord {
+                kind: format!("hold.{}", event.kind.name()),
+                actor: "system".to_owned(),
+                on_behalf_of: None,
+                subject: None,
+                at: event.at,
+                payload,
+                masked: true,
+            };
+            self.chain
                 .append(record)
                 .await
                 .map_err(|error| Error::AuditFailed {

@@ -1,0 +1,13 @@
+kind = "doc_event"
+event = "before_save"
+pattern = "line total and document total with tax"
+[input.fields]
+qty = "3"
+rate = "19.99"
+tax_rate = "10"
+[expect]
+ok = true
+host_calls = 2
+[expect.fields]
+amount = "59.97"
+total = "65.97"

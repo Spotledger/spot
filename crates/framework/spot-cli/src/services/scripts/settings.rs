@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// `[services.scripts]`: the operator's ceilings. Unknown keys are refused. A script can lower
 /// what it uses and never raise a ceiling.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -132,4 +131,3 @@ impl Settings {
         ) + Duration::from_millis(100)
     }
 }
-

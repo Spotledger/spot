@@ -26,7 +26,11 @@ fn slots(policy: MissedRunPolicy, last: &str, now: &str) -> Vec<RunSlot> {
 }
 
 #[test]
-fn skip_plans_nothing() {
+fn skip_drops_firings_older_than_the_grace_and_plans_nothing_for_a_window_of_only_those() {
+    // Every firing in the window (01:00 .. 05:00) is at least 30 minutes older than `now`,
+    // far past the default grace, so they are all missed and `skip` replays none of them.
+    // (Before WP-PLT-07.T2 this test asserted the same empty plan for the wrong reason: `skip`
+    // dropped on-time firings too. The on-time case lives in tests/skip_fires.rs.)
     assert!(
         slots(
             MissedRunPolicy::Skip,
@@ -69,7 +73,7 @@ fn catch_up_runs_each_missed_firing_up_to_the_limit_keeping_the_latest() {
 }
 
 #[test]
-fn nothing_missed_plans_nothing_under_every_policy() {
+fn an_empty_window_plans_nothing_under_every_policy() {
     for policy in [
         MissedRunPolicy::Skip,
         MissedRunPolicy::RunOnce,

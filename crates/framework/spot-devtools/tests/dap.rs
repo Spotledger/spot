@@ -787,6 +787,7 @@ fn a_program_inside_the_root_launches_and_every_escape_is_refused() {
     client.ok("disconnect", json!({}));
 
     let outside = base.join("secret.ts").display().to_string();
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut escapes = vec![
         "../secret.ts".to_owned(),
         "a/../../secret.ts".to_owned(),

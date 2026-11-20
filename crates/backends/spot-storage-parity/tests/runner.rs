@@ -393,3 +393,226 @@ fn a_case_needs_exactly_one_expectation() {
     assert!(spot_storage_parity::cases::check_shape(&cases[0]).is_err());
     assert!(parse_cases("[[case]]\nid = 'x'\nbogus = 1").is_err());
 }
+
+/// A factory that forgets to install the search hook: the matrix must notice.
+struct ForgetsTheHook;
+
+impl BackendFactory for ForgetsTheHook {
+    type Driver = <spot_storage_parity::PgFactory as BackendFactory>::Driver;
+
+    fn name(&self) -> &'static str {
+        "postgres"
+    }
+
+    async fn fresh(
+        &self,
+        catalog: Arc<Catalog>,
+        needs: &CaseNeeds<'_>,
+    ) -> StorageResult<Option<Self::Driver>> {
+        let without = CaseNeeds {
+            extensions: needs.extensions,
+            search: false,
+            protected: &[],
+        };
+        spot_storage_parity::PgFactory
+            .fresh(catalog, &without)
+            .await
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_factory_that_ignores_needs_search_fails_the_search_cases() {
+    let url_set = std::env::var("SPOT_TEST_PG_URL").is_ok();
+    if !url_set && !spot_storage_parity::pg_required() {
+        println!("SKIPPED: needs SPOT_TEST_PG_URL");
+        return;
+    }
+    let full = ParityRunner::from_repo().unwrap();
+    let search: Vec<_> = full
+        .cases
+        .iter()
+        .filter(|c| c.needs_search)
+        .cloned()
+        .collect();
+    assert!(search.len() >= 15, "{} search cases", search.len());
+    let runner = ParityRunner::new(search, vec![], full.rules.clone());
+    let run = runner.run_backend(&ForgetsTheHook).await;
+    let report = runner.report(&[run], "postgres");
+    assert!(
+        !report.is_green(),
+        "the matrix did not notice the missing hook"
+    );
+    assert_eq!(report.unregistered.len(), runner.cases.len(), "{report}");
+}
+
+#[tokio::test]
+async fn try_write_leaves_nothing_behind() {
+    let cases = parse_cases(
+        r#"
+[[case]]
+id = "tw"
+rule = "SEM-AAA-01"
+title = "a failing batch rolls back"
+setup = ['a code="t:a"']
+try_write = ['c code="t:c"', 'd code="t:a"']
+op = "query"
+query = { select = ["code"], order = ["code"] }
+expect = { rows = [["t:a"]] }
+"#,
+    )
+    .unwrap();
+    let runner = ParityRunner::new(cases, vec![], parse_rules(RULES).unwrap());
+    let run = runner.run_backend(&FakeFactory).await;
+    assert_eq!(
+        run.outcomes["tw"],
+        Observed::Rows(vec![vec!["t:\"a\"".into()]])
+    );
+}
+
+/// A driver whose traversals reverse the order inside each depth: the bug SEM-GRA-02 exists for.
+struct ReversesTies<D>(D);
+
+impl<D: Driver> Driver for ReversesTies<D> {
+    async fn insert(&self, docs: &[DocumentData], max_writes: Option<u32>) -> StorageResult<()> {
+        self.0.insert(docs, max_writes).await
+    }
+    async fn insert_then_delete(
+        &self,
+        docs: &[DocumentData],
+        max_writes: Option<u32>,
+    ) -> StorageResult<()> {
+        self.0.insert_then_delete(docs, max_writes).await
+    }
+    async fn changes(&self, after: FeedPosition, limit: u32) -> StorageResult<Vec<Change>> {
+        self.0.changes(after, limit).await
+    }
+    async fn update(
+        &self,
+        doc: &DocumentData,
+        expected: Version,
+        max_writes: Option<u32>,
+    ) -> StorageResult<Version> {
+        self.0.update(doc, expected, max_writes).await
+    }
+    async fn delete(
+        &self,
+        entity: &Name,
+        id: RecordId,
+        expected: Version,
+        max_writes: Option<u32>,
+    ) -> StorageResult<()> {
+        self.0.delete(entity, id, expected, max_writes).await
+    }
+    async fn load(&self, entity: &Name, id: RecordId) -> StorageResult<Option<Document>> {
+        self.0.load(entity, id).await
+    }
+    async fn query(&self, query: &Query) -> StorageResult<Rows> {
+        self.0.query(query).await
+    }
+    async fn read(&self, query: &Query) -> StorageResult<Rows> {
+        self.0.read(query).await
+    }
+    async fn traverse(
+        &self,
+        traversal: &spot_storage_contract::Traversal,
+    ) -> StorageResult<spot_storage_contract::TraversalResult> {
+        let result = self.0.traverse(traversal).await?;
+        let mut nodes = Vec::new();
+        let mut group: Vec<spot_storage_contract::Reached> = Vec::new();
+        for n in result.nodes {
+            if group.first().is_some_and(|g| g.depth != n.depth) {
+                group.reverse();
+                nodes.append(&mut group);
+            }
+            group.push(n);
+        }
+        group.reverse();
+        nodes.append(&mut group);
+        Ok(spot_storage_contract::TraversalResult { nodes })
+    }
+}
+
+struct ReversingFactory;
+
+impl BackendFactory for ReversingFactory {
+    type Driver = ReversesTies<StorageDriver<FakeBackend>>;
+
+    fn name(&self) -> &'static str {
+        "reversing"
+    }
+
+    async fn fresh(
+        &self,
+        catalog: Arc<Catalog>,
+        needs: &CaseNeeds<'_>,
+    ) -> StorageResult<Option<Self::Driver>> {
+        Ok(FakeFactory.fresh(catalog, needs).await?.map(ReversesTies))
+    }
+}
+
+#[tokio::test]
+async fn a_backend_that_reverses_ties_fails_the_ordering_rule() {
+    let runner = ParityRunner::from_repo().unwrap();
+    let right = runner.run_backend(&FakeFactory).await;
+    let wrong = runner.run_backend(&ReversingFactory).await;
+    let report = runner.report(&[right, wrong], "fake");
+    assert!(!report.is_green());
+    let broken: Vec<&str> = report
+        .unregistered
+        .iter()
+        .map(|d| d.rule.as_str())
+        .collect();
+    assert!(broken.contains(&"SEM-GRA-02"), "{broken:?}");
+    assert!(
+        report
+            .unregistered
+            .iter()
+            .all(|d| d.failed_on.iter().all(|b| b == "reversing"))
+    );
+}
+
+#[test]
+fn the_traverse_case_shape_and_the_party_entity_parse() {
+    let cases = parse_cases(
+        r#"
+[[case]]
+id = "g"
+rule = "SEM-AAA-01"
+title = "t"
+catalog = "graph"
+setup = ['p code="t:p" @entity=party', 'a code="t:a" owner="id:p"']
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.owner"], direction = "out", max_depth = 2, max_nodes = 5 }
+expect = { nodes = ["item:a@0", "party:p@1<a:owner"] }
+"#,
+    )
+    .unwrap();
+    assert!(spot_storage_parity::cases::check_shape(&cases[0]).is_ok());
+    let no_traversal = parse_cases(
+        "[[case]]\nid='x'\nrule='SEM-AAA-01'\ntitle='t'\nop='traverse'\nexpect={ nodes = [] }\n",
+    )
+    .unwrap();
+    assert!(spot_storage_parity::cases::check_shape(&no_traversal[0]).is_err());
+}
+
+#[tokio::test]
+async fn the_fake_answers_a_traverse_case_with_a_party_in_it() {
+    let cases = parse_cases(
+        r#"
+[[case]]
+id = "g"
+rule = "SEM-AAA-01"
+title = "t"
+catalog = "graph"
+setup = ['p code="t:p" @entity=party', 'a code="t:a" owner="id:p"']
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.owner"], direction = "out", max_depth = 2, max_nodes = 5 }
+expect = { nodes = ["item:a@0", "party:p@1<a:owner"] }
+"#,
+    )
+    .unwrap();
+    let runner = ParityRunner::new(cases, vec![], parse_rules(RULES).unwrap());
+    let run = runner.run_backend(&FakeFactory).await;
+    let report = runner.report(&[run], "fake");
+    assert!(report.is_green(), "{report}");
+}

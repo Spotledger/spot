@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Site operations of the management API (`[services.mgmt_site]`)
 
 The management API (`mgmt_api.md`) serves eighteen site operations. This module hosts them: it adds

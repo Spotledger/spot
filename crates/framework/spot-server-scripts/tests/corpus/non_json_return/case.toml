@@ -1,0 +1,7 @@
+kind = "api"
+negative = true
+pattern = "a function is not a JSON result"
+[input.args]
+[expect]
+ok = false
+error_code_prefix = "script."

@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 pub(super) const STEP_PREFIX: &str = "server_script:run_";
 
 /// The step of `event` on `doctype`. Step names are unique across the registry, so each DocType's
@@ -101,10 +100,7 @@ impl Controller for ScriptHub {
                     ),
                 ));
             }
-            due.sort_by(|a, b| {
-                a.0.cmp(&b.0)
-                    .then_with(|| a.1.as_str().cmp(b.1.as_str()))
-            });
+            due.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.as_str().cmp(b.1.as_str())));
             for (_, name) in &due {
                 controller.run_step(name, ctx).await?;
             }
@@ -112,8 +108,6 @@ impl Controller for ScriptHub {
         })
     }
 }
-
-
 
 pub(super) const STEP_CHECK: &str = "server_script:check_target";
 pub(super) const STEP_SAVED: &str = "server_script:reload_saved";
@@ -135,6 +129,7 @@ pub(super) fn is_own(inv: &Invocation) -> bool {
 /// The controller of the `server_script` DocType.
 pub struct ScriptAdmin {
     compile: ServerScriptController,
+    elevation: ElevationStep,
     slot: Arc<ScriptSlot>,
 }
 
@@ -145,6 +140,11 @@ impl ScriptAdmin {
     pub fn new(slot: Arc<ScriptSlot>, store: Arc<dyn ScriptStore>) -> ScriptAdmin {
         ScriptAdmin {
             compile: ServerScriptController::new(slot.script_engine().clone(), store),
+            elevation: ElevationStep::new(
+                SERVER_SCRIPT_DOCTYPE,
+                false,
+                Arc::new(SlotPermissions::new(Arc::clone(&slot))),
+            ),
             slot,
         }
     }
@@ -163,6 +163,8 @@ impl Controller for ScriptAdmin {
 
     fn steps(&self) -> Vec<StepDecl> {
         let mut steps = self.compile.steps();
+        // The elevation gate runs before the compile step, so a refused flag is never compiled.
+        steps.extend(self.elevation.decl().ok());
         let named = |name: &str, point: HookPoint, priority: i32| {
             StepName::new(name).ok().map(|name| StepDecl {
                 name,
@@ -195,6 +197,9 @@ impl Controller for ScriptAdmin {
         ctx: &'a mut dyn HookContext,
     ) -> BoxFuture<'a, AppResult<()>> {
         Box::pin(async move {
+            if self.elevation.owns(step) {
+                return self.elevation.run(ctx).await;
+            }
             match step.as_str() {
                 STEP_CHECK => {
                     let doctype = text(ctx.doc(), "doctype").unwrap_or_default();
@@ -219,4 +224,3 @@ impl Controller for ScriptAdmin {
         })
     }
 }
-

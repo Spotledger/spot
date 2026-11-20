@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The migration audit: `spot migrate-audit`
 
 Every lifecycle verb leaves a run record in the site's tamper-evident chain (`migration:<site>`):

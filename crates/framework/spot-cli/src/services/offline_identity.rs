@@ -986,8 +986,12 @@ mod tests {
             "invitations",
             "journal_access",
             "link_exchange",
+            // A gate layer over every request, not a route: it refuses, it grants nothing.
+            "maintenance_gate",
             "mcp",
             "node_role",
+            // Authenticated API routes: decided by the `Api` row.
+            "occupancy",
             "offline_identity",
             "process_api",
             "process_tasks",

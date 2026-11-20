@@ -1091,6 +1091,180 @@ impl Service for Jobs {
     }
 }
 
+// ---- dynamic schedules: a service whose schedules change while the site runs ----
+
+/// One schedule a [`ScheduleSource`] plans now, and the job each of its slots enqueues.
+///
+/// Unlike an internal schedule (fixed when the site is assembled) a source may return a
+/// different set on every call; the scheduler follows it at its next tick.
+#[derive(Clone)]
+pub struct DynamicSchedule {
+    /// The registering service (the app part of the schedule's deduplication key).
+    pub service: String,
+    /// The schedule; its name is unique among everything the site schedules.
+    pub schedule: Arc<Schedule>,
+    /// What a run missed while no node led does.
+    pub policy: MissedRunPolicy,
+    /// The job handler name every slot of this schedule enqueues (`<app>:<job>`). The handler is
+    /// registered with `SiteCtx::job_handlers` like any other.
+    pub job: String,
+    /// The job's own arguments (a JSON object); the schedule's budget is added as `budget_ms`.
+    pub args: serde_json::Value,
+}
+
+/// A service's current dynamic schedules. Cheap and synchronous: the source keeps the answer it
+/// last computed and returns it.
+pub trait ScheduleSource: Send + Sync {
+    /// The schedules in force now.
+    fn schedules(&self) -> Vec<DynamicSchedule>;
+}
+
+/// The sources of one site, provided by the jobs module as a port (`ctx.port::<ScheduleSources>()`)
+/// on the assembling build. A source is registered under an id (a second registration of the id
+/// replaces the first, so a reload never doubles one).
+#[derive(Default)]
+pub struct ScheduleSources {
+    sources: std::sync::Mutex<std::collections::BTreeMap<String, Arc<dyn ScheduleSource>>>,
+}
+
+impl ScheduleSources {
+    /// An empty set.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Registers (or replaces) the source called `id`.
+    pub fn set(&self, id: &str, source: Arc<dyn ScheduleSource>) {
+        self.sources
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id.to_owned(), source);
+    }
+
+    /// Every source's schedules, in source-id order.
+    #[must_use]
+    pub fn current(&self) -> Vec<DynamicSchedule> {
+        let sources: Vec<Arc<dyn ScheduleSource>> = self
+            .sources
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect();
+        sources.iter().flat_map(|s| s.schedules()).collect()
+    }
+}
+
+/// One planned dynamic schedule as the leader runs it.
+struct DynamicNode {
+    signature: String,
+    node: Scheduler<InMemoryLeaseStore, InMemoryHighWater>,
+    sink: Arc<dyn SlotSink>,
+}
+
+/// What a dynamic schedule's slots enqueue, found by `(service, schedule name)`.
+#[derive(Clone)]
+struct DynamicTarget {
+    job: String,
+    args: serde_json::Value,
+}
+
+/// How late a tick may reach a schedule's firing and still run it under every missed-run policy
+/// (`spot_scheduler::DEFAULT_SKIP_GRACE` is a minute, as long as a cron firing of every minute: no
+/// firing of it would ever count as missed, so `skip` would replay a long outage's last firing).
+/// The host knows its tick: five of them, at least a second.
+fn skip_grace(tick: Duration) -> Duration {
+    tick.saturating_mul(5).max(Duration::from_secs(1))
+}
+
+/// The leader's view of the dynamic schedules: its nodes, and every target seen this lease (a
+/// slot planned just before a schedule was removed still finds its job).
+#[derive(Default)]
+struct DynamicNodes {
+    nodes: Vec<DynamicNode>,
+    targets: HashMap<(String, String), DynamicTarget>,
+}
+
+fn dynamic_signature(planned: &DynamicSchedule) -> String {
+    format!(
+        "{}:{}|{}|{}|{:?}|{:?}|{}|{}",
+        planned.service,
+        planned.schedule.name,
+        planned.schedule.cron.as_str(),
+        planned.schedule.zone.name(),
+        planned.schedule.queue,
+        planned.policy,
+        planned.job,
+        planned.args
+    )
+}
+
+impl DynamicNodes {
+    /// Follows `wanted`: a schedule whose signature is unchanged keeps its node (and so its
+    /// high-water mark), a new or changed one gets a fresh node, a removed one is dropped.
+    fn sync(
+        &mut self,
+        wanted: Vec<DynamicSchedule>,
+        build: impl Fn(&DynamicSchedule) -> DynamicNode,
+    ) {
+        let signatures: Vec<String> = wanted.iter().map(dynamic_signature).collect();
+        let current: Vec<&str> = self.nodes.iter().map(|n| n.signature.as_str()).collect();
+        if signatures
+            .iter()
+            .map(String::as_str)
+            .eq(current.iter().copied())
+        {
+            return;
+        }
+        let mut old: HashMap<String, DynamicNode> = std::mem::take(&mut self.nodes)
+            .into_iter()
+            .map(|n| (n.signature.clone(), n))
+            .collect();
+        for (planned, signature) in wanted.iter().zip(signatures) {
+            self.targets.insert(
+                (planned.service.clone(), planned.schedule.name.clone()),
+                DynamicTarget {
+                    job: planned.job.clone(),
+                    args: planned.args.clone(),
+                },
+            );
+            let node = old.remove(&signature).unwrap_or_else(|| build(planned));
+            self.nodes.push(node);
+        }
+    }
+
+    /// The job a slot of a dynamic schedule enqueues, or `None` for any other slot.
+    fn job_for(&self, slot: &RunSlot, site: &SiteId) -> Option<spot_jobs::Result<NewJob>> {
+        let target = self
+            .targets
+            .get(&(slot.slot_ref.app.clone(), slot.schedule.clone()))?;
+        let queue = slot.slot_ref.queue.as_str();
+        if !matches!(queue, "default" | "short" | "long") {
+            return Some(Err(spot_jobs::Error::UnknownQueue));
+        }
+        let mut args = match &target.args {
+            serde_json::Value::Object(map) => map.clone(),
+            _ => serde_json::Map::new(),
+        };
+        args.insert(
+            "budget_ms".to_owned(),
+            serde_json::Value::from(slot.slot_ref.budget_ms),
+        );
+        let scheduled_at =
+            time::OffsetDateTime::from_unix_timestamp(slot.scheduled_for.as_second())
+                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+        Some(Ok(NewJob::new(
+            target.job.clone(),
+            serde_json::Value::Object(args),
+            queue.to_owned(),
+            site.clone(),
+            scheduled_at,
+        )
+        .with_idempotency_key(slot.deduplication_key.clone())))
+    }
+}
+
 /// The scheduler: the one node that plans manifest schedules and enqueues their runs.
 pub struct Scheduling {
     site: SiteId,
@@ -1100,6 +1274,8 @@ pub struct Scheduling {
     /// The internal schedules of services, with the service that registered each (the app part of
     /// the job name).
     internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+    /// The sources of schedules that change while the site runs.
+    dynamic: Arc<ScheduleSources>,
     tick_interval: Duration,
     lease_ttl: Duration,
     clock: Arc<dyn Clock>,
@@ -1119,12 +1295,24 @@ impl Scheduling {
         settings: &Settings,
         internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
     ) -> Arc<Self> {
+        Self::with_sources(settings, internal, Arc::new(ScheduleSources::new()))
+    }
+
+    /// As [`Scheduling::with_internal`], also following the `dynamic` sources: their schedules
+    /// are re-read at every tick, so one added, changed or removed while the site runs is
+    /// planned from the next tick (a changed schedule starts a fresh high-water mark).
+    pub fn with_sources(
+        settings: &Settings,
+        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+        dynamic: Arc<ScheduleSources>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             site: settings.site.clone(),
             store: Arc::clone(&settings.store),
             node: settings.node.clone(),
             schedules: settings.schedules.clone(),
             internal,
+            dynamic,
             tick_interval: settings.tick_interval,
             lease_ttl: settings.lease_ttl,
             clock: Arc::clone(&settings.clock),
@@ -1172,12 +1360,14 @@ impl Scheduling {
                 },
                 Arc::new(InMemoryLeaseStore::new()),
                 InMemoryHighWater::new(),
-            ));
+            )
+            .with_skip_grace(skip_grace(self.tick_interval)));
             sinks.push(spot_scheduler::scheduler::sink({
                 let sender = sender.clone();
                 move |slot: &RunSlot| sender.send(slot.clone()).is_ok()
             }));
         }
+        let mut dynamic = DynamicNodes::default();
         let mut ticker = tokio::time::interval(self.tick_interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut renew = tokio::time::interval((self.lease_ttl / 3).max(Duration::from_millis(100)));
@@ -1216,8 +1406,52 @@ impl Scheduling {
                             ),
                         }
                     }
+                    dynamic.sync(self.dynamic.current(), |planned| {
+                        let node = Scheduler::new(
+                            SchedulerConfig {
+                                site: self.site.to_string(),
+                                node: self.node.clone(),
+                                ttl: self.lease_ttl,
+                                schedules: vec![(Arc::clone(&planned.schedule), planned.policy)],
+                                app: planned.service.clone(),
+                            },
+                            Arc::new(InMemoryLeaseStore::new()),
+                            InMemoryHighWater::new(),
+                        )
+                        .with_skip_grace(skip_grace(self.tick_interval));
+                        let sink = spot_scheduler::scheduler::sink({
+                            let sender = sender.clone();
+                            move |slot: &RunSlot| sender.send(slot.clone()).is_ok()
+                        });
+                        DynamicNode {
+                            signature: dynamic_signature(planned),
+                            node,
+                            sink,
+                        }
+                    });
+                    for planned in &mut dynamic.nodes {
+                        match planned.node.tick(self.clock.as_ref(), planned.sink.as_ref()) {
+                            Ok(slots) => {
+                                for slot in slots {
+                                    tracing::info!(
+                                        site = %self.site,
+                                        schedule = slot.key(),
+                                        "schedule fired"
+                                    );
+                                }
+                            }
+                            Err(e) => tracing::debug!(
+                                site = %self.site,
+                                %e,
+                                "dynamic scheduler tick did not lead"
+                            ),
+                        }
+                    }
                     while let Ok(slot) = receiver.try_recv() {
-                        match spot_jobs::enqueue_scheduled(&slot, &self.site) {
+                        let enqueued = dynamic
+                            .job_for(&slot, &self.site)
+                            .unwrap_or_else(|| spot_jobs::enqueue_scheduled(&slot, &self.site));
+                        match enqueued {
                             Ok(job) => {
                                 // The slot's deduplication key makes a second insert
                                 // harmless: a duplicate is reported, not fatal.
@@ -1363,6 +1597,9 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
     // Services that start later (a larger ORDER) register schedules of their own here.
     let internal = Arc::new(InternalScheduleRegistry::new());
     ctx.provide::<dyn InternalSchedules>(Arc::clone(&internal) as Arc<dyn InternalSchedules>)?;
+    // Services whose schedules change while the site runs (script schedules) add a source.
+    let sources = Arc::new(ScheduleSources::new());
+    ctx.provide::<ScheduleSources>(Arc::clone(&sources))?;
     // The narrow ports later modules take (job submit, outbox lease, system reader); each is
     // built from this site's own store, coordinator, feed and engine.
     crate::services::ports::provide(
@@ -1421,7 +1658,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
             jobs.register_final_attempt_hook(mail.final_attempt_hook());
         }
         ctx.add(jobs);
-        ctx.add(Scheduling::with_internal(&settings, planned));
+        ctx.add(Scheduling::with_sources(&settings, planned, sources));
         Ok(())
     });
     Ok(())

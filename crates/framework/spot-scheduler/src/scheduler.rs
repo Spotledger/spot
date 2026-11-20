@@ -8,7 +8,7 @@ use spot_core::Clock;
 
 use crate::error::{Error, Result};
 use crate::lease::{Lease, LeaseStore};
-use crate::policy::{MissedRunPolicy, plan};
+use crate::policy::{DEFAULT_SKIP_GRACE, MissedRunPolicy, plan_with_grace};
 use crate::schedule::Schedule;
 use crate::slot::{RunSlot, SlotRef};
 
@@ -138,6 +138,8 @@ pub struct Scheduler<L: LeaseStore, H: HighWaterStore> {
     high_water: H,
     /// The lease acquired at the last successful tick, kept to renew before re-acquiring.
     lease: Option<Lease>,
+    /// How late a tick may reach a firing and still run it under every policy.
+    skip_grace: Duration,
 }
 
 impl<L: LeaseStore, H: HighWaterStore> Scheduler<L, H> {
@@ -148,7 +150,17 @@ impl<L: LeaseStore, H: HighWaterStore> Scheduler<L, H> {
             leases,
             high_water,
             lease: None,
+            skip_grace: DEFAULT_SKIP_GRACE,
         }
+    }
+
+    /// Sets the grace period: a firing the tick reaches at most this long after its scheduled
+    /// instant is on time and runs under every policy (default
+    /// [`DEFAULT_SKIP_GRACE`]); older firings are the missed ones the policy decides on.
+    #[must_use]
+    pub fn with_skip_grace(mut self, grace: Duration) -> Self {
+        self.skip_grace = grace;
+        self
     }
 
     /// The node's identity.
@@ -218,13 +230,14 @@ impl<L: LeaseStore, H: HighWaterStore> Scheduler<L, H> {
                 .and_then(|mark| mark.last)
                 .unwrap_or(now - jiff::Span::new().nanoseconds(1));
             let slot_ref = SlotRef::from_planned(&self.config.app, schedule);
-            let slots = plan(
+            let slots = plan_with_grace(
                 schedule,
                 &self.config.app,
                 Some(from),
                 now,
                 *policy,
                 slot_ref,
+                self.skip_grace,
             );
             let mut refused = false;
             for slot in &slots {

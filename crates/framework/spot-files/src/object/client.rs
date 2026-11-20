@@ -14,6 +14,7 @@ use super::config::{AzureConfig, AzureCredential};
 #[cfg(feature = "azure")]
 use url::Url;
 
+use super::egress::EgressHttp;
 use super::{Backend, ObjectFileStore};
 use crate::error::FileError;
 use crate::store::FileResult;
@@ -26,7 +27,10 @@ impl ObjectFileStore {
     /// with an `endpoint` set, addressing is bucket-in-path, which self-hosted services
     /// require.
     #[cfg(feature = "s3")]
-    pub fn new_s3(config: S3Config) -> FileResult<Self> {
+    ///
+    /// Every request goes through `http` (the policy-checked egress path); the store never
+    /// builds an HTTP client of its own.
+    pub fn new_s3(config: S3Config, http: EgressHttp) -> FileResult<Self> {
         use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
 
         tracing::info!(
@@ -34,7 +38,9 @@ impl ObjectFileStore {
             endpoint = ?config.endpoint,
             "building the s3 file store"
         );
-        let mut builder = AmazonS3Builder::new().with_bucket_name(&config.bucket);
+        let mut builder = AmazonS3Builder::new()
+            .with_bucket_name(&config.bucket)
+            .with_http_connector(http);
         builder = builder.with_conditional_put(S3ConditionalPut::ETagMatch);
         if let Some(endpoint) = &config.endpoint {
             builder = builder.with_endpoint(endpoint.as_str());
@@ -68,7 +74,10 @@ impl ObjectFileStore {
     /// `http://127.0.0.1:10000`); the configured endpoint must match, so callers set
     /// that environment to their endpoint.
     #[cfg(feature = "azure")]
-    pub fn new_azure(config: AzureConfig) -> FileResult<Self> {
+    ///
+    /// Every request goes through `http` (the policy-checked egress path); the store never
+    /// builds an HTTP client of its own.
+    pub fn new_azure(config: AzureConfig, http: EgressHttp) -> FileResult<Self> {
         use object_store::azure::MicrosoftAzureBuilder;
 
         tracing::info!(
@@ -79,7 +88,8 @@ impl ObjectFileStore {
         );
         let mut builder = MicrosoftAzureBuilder::new()
             .with_account(config.account.clone())
-            .with_container_name(config.container.clone());
+            .with_container_name(config.container.clone())
+            .with_http_connector(http);
         if let Some(endpoint) = &config.endpoint {
             if endpoint.scheme() == "http" {
                 // The emulator (Azurite): the standard branch only takes `https` URLs,

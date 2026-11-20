@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Service ports of the jobs module
 
 The `jobs` module (order 600) provides three narrow ports to modules that register after it.

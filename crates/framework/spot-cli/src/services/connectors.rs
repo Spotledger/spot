@@ -19,7 +19,7 @@
 //!   dead-letter state and raises an alert.
 //! - **Egress** ([`connectors::egress`]): every outbound call passes `spot-egress` under the
 //!   connector's own allow-list; an empty list means no network at all.
-//! - **Monitoring**: `connector_runs_total{outcome}`, the host's duration histograms, the age of the
+//! - **Monitoring**: `spot_connector_runs_total{outcome}`, the host's duration histograms, the age of the
 //!   last success in [`ConnectorsPort::status`]; a connector that is `failed` or in dead letter
 //!   degrades readiness.
 //!

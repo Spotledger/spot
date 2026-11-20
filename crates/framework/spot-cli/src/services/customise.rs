@@ -74,6 +74,7 @@ impl CustomiseAccess for RoleCheck {
 /// derived from the records at every swap, so a node that restarts needs no memory of them.
 struct SiteHost {
     site: String,
+    live: Arc<SiteLive>,
 }
 
 impl GrantSink for SiteHost {
@@ -108,9 +109,54 @@ impl EventSink for SiteHost {
 }
 
 impl ReferrerLookup for SiteHost {
-    fn referrers(&self, _doctype: &str, _field: &str) -> Vec<Referrer> {
-        Vec::new()
+    /// What, in the metadata the site serves, refers to `doctype.field` from another DocType.
+    fn referrers(&self, doctype: &str, field: &str) -> Vec<Referrer> {
+        match self.live.served() {
+            Some(served) => referrers_in(served.meta.definitions(), doctype, field),
+            None => Vec::new(),
+        }
     }
+}
+
+/// The most referrers one answer names: a sample, never the whole site's list.
+pub const MAX_REFERRERS: usize = 50;
+
+/// The fields of other DocTypes that refer to `doctype.field`: a field whose `fetch_from` is
+/// `<link>.<field>` where `<link>` is a link field of its own DocType pointing at `doctype`
+/// (child-table DocTypes are DocTypes too, so a child row's fetch is found the same way).
+/// References inside `doctype` itself are the pipeline's own check and are not repeated here.
+/// The answer is in DocType and field order and holds at most [`MAX_REFERRERS`] entries: names
+/// only, read from the metadata, so the cost does not grow with the number of documents.
+#[must_use]
+pub fn referrers_in(
+    definitions: &[spot_meta::Definition],
+    doctype: &str,
+    field: &str,
+) -> Vec<Referrer> {
+    let mut found = Vec::new();
+    for definition in definitions.iter().filter(|d| d.name != doctype) {
+        for spec in &definition.fields {
+            let Some((link, target)) = spec.fetch_from.as_deref().and_then(|f| f.split_once('.'))
+            else {
+                continue;
+            };
+            let points_here = definition.fields.iter().any(|candidate| {
+                candidate.name == link
+                    && candidate.ty == spot_meta::FieldType::Link
+                    && candidate.options.as_deref() == Some(doctype)
+            });
+            if points_here && target == field {
+                found.push(Referrer {
+                    kind: "field".to_owned(),
+                    name: format!("{}.{}", definition.name, spec.name),
+                });
+                if found.len() == MAX_REFERRERS {
+                    return found;
+                }
+            }
+        }
+    }
+    found
 }
 
 /// The schema step: the online migration engine, over a catalogue that keeps the version
@@ -143,6 +189,10 @@ impl SchemaBackend for SiteSchema {
 
     fn backfill<'a>(&'a self, wanted: &'a Catalog, fills: &'a [Fill]) -> SchemaFuture<'a, u64> {
         Box::pin(async move { self.inner.backfill(&self.merged(wanted)?, fills).await })
+    }
+
+    fn retire_column<'a>(&'a self, doctype: &'a str, field: &'a str) -> SchemaFuture<'a, ()> {
+        self.inner.retire_column(doctype, field)
     }
 }
 
@@ -262,7 +312,10 @@ impl Customise {
             schema,
         })
         .with_access(Arc::new(RoleCheck))
-        .with_host(Arc::new(SiteHost { site }))
+        .with_host(Arc::new(SiteHost {
+            site,
+            live: Arc::clone(&live),
+        }))
         .with_listener(swapper.clone());
         let service = Arc::new(service);
         live.stamp_version(metadata.current().version().get());

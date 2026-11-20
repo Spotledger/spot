@@ -6,6 +6,7 @@
 mod contract_suite;
 mod corpus;
 mod crash;
+mod delete_snapshot;
 mod layout_rules;
 
 use std::future::Future;

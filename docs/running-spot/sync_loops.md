@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # sync_loops
 
 The periodic sync loops, hosted. Each step has its own interval, examines a bounded number of

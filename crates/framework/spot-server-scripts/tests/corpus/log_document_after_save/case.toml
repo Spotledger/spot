@@ -1,0 +1,13 @@
+kind = "doc_event"
+event = "after_save"
+pattern = "after-save side effect writing another document"
+[input.fields]
+title = "PO-2002"
+[expect]
+ok = true
+host_calls = 1
+[[expect.documents]]
+doctype = "log_entry"
+field = "message"
+value = "saved PO-2002"
+count = 1

@@ -189,7 +189,10 @@ fn egress_code(error: &EgressError) -> &'static str {
         E::AddressDenied { .. } | E::PolicyDenied | E::PortDenied { .. } | E::ResolutionMixed => {
             codes::EGRESS_DENIED
         }
-        E::InvalidUrl | E::InvalidConfig(_) | E::RequestTooLarge { .. } => codes::MISCONFIGURED,
+        E::InvalidUrl
+        | E::InvalidConfig(_)
+        | E::InvalidTlsOptions(_)
+        | E::RequestTooLarge { .. } => codes::MISCONFIGURED,
         E::ResolutionFailed | E::ResponseTooLarge | E::RedirectDenied | E::TooManyRedirects => {
             codes::PEER_UNREACHABLE
         }

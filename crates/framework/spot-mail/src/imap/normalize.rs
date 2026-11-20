@@ -34,6 +34,7 @@ pub(super) fn normalize(bytes: &[u8], headers_only: bool) -> Option<IncomingMess
         });
         (text, html, body_attachments(&parsed))
     };
+    let headers = crate::incoming::selected_headers(&parsed, in_reply_to.as_deref(), &references);
     Some(IncomingMessage {
         uid: 0,
         raw_size: 0,
@@ -51,6 +52,7 @@ pub(super) fn normalize(bytes: &[u8], headers_only: bool) -> Option<IncomingMess
         html,
         attachments,
         auto_submitted: is_auto_submitted(&parsed),
+        headers,
     })
 }
 

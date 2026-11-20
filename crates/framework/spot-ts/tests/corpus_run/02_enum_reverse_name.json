@@ -1,0 +1,6 @@
+{
+  "case": "enum_reverse",
+  "entry": "name",
+  "args": 2,
+  "expect": "South"
+}

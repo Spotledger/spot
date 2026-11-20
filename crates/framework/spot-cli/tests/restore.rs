@@ -163,6 +163,8 @@ impl Rig {
     }
 
     fn apply_with(&self, id: &str, token: &str, extra: &[&str], envs: &[(&str, &str)]) -> Output {
+        // `--confirm=TOKEN`: a random token may start with `-` and would be read as a flag.
+        let confirm = format!("--confirm={token}");
         let mut args = vec![
             "restore",
             "apply",
@@ -170,8 +172,7 @@ impl Rig {
             self.site(),
             "--from",
             id,
-            "--confirm",
-            token,
+            &confirm,
             "--accept-unverified-schema",
         ];
         args.extend_from_slice(extra);

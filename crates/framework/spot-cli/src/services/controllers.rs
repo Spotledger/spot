@@ -248,6 +248,33 @@ pub fn install_strict(set: &spot_controllers::ControllerSet) -> Result<Arc<spot_
         .map_err(|conflicts| Error(format!("conflict: {conflicts:?}")))
 }
 
+/// Registers the controllers of the script DocTypes before the engine exists (the seam registry
+/// cannot be extended afterwards): the `server_script` administration controller on every site,
+/// and the `api_script` and `scheduled_script` controllers on a site that lists the `scripting`
+/// app. Each carries the compile-on-save step and the elevation save gate (WP-EXT-06.T10); the
+/// gates ask the site's permission check late, so installing them here needs no engine.
+///
+/// The Server Script hubs (`scripts::register_controllers`) are not installed here: they refuse
+/// every write to a scriptable DocType until `scripts::register` has filled the site's slot,
+/// which a tool that builds the controllers without assembling the services (the console) never
+/// does.
+///
+/// `hubs_registered` says that [`register_scripts`] already put the `server_script`
+/// administration controller in (it does, with the hubs, when `[services.scripts]` is enabled),
+/// so it is not registered a second time.
+fn register_script_controllers(registry: &mut ControllerRegistry, site: &Site, hubs_registered: bool) {
+    if !hubs_registered {
+        crate::services::scripts::register_admin(registry, &site.site);
+    }
+    if site
+        .apps
+        .iter()
+        .any(|app| app == crate::services::script_kinds::SCRIPTING_APP)
+    {
+        crate::services::script_kinds::register_controllers(registry, &site.site);
+    }
+}
+
 /// `[services.scripts]` of the host configuration (the defaults when the table is absent), read
 /// the way the scripts module reads it, so the hubs and the module agree on one set of ceilings.
 ///
@@ -544,6 +571,7 @@ pub fn build(
     if !errors.is_empty() {
         return Err(Error(errors.join("\n")));
     }
+    register_script_controllers(&mut registry, site, settings.enabled);
     let set = registry.set();
     let seams = install_strict(&set)
         .map_err(|e| Error(format!("site `{}`: controllers: {}", site.site, e.0)))?;

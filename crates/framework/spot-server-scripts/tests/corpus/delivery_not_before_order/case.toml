@@ -1,0 +1,9 @@
+kind = "doc_event"
+event = "validate"
+pattern = "date order check"
+[input.fields]
+order_date = "2026-11-10"
+delivery_date = "2026-11-02"
+[expect]
+ok = false
+error_fields = ["delivery_date"]

@@ -45,12 +45,13 @@ pub mod permission;
 pub mod registry;
 pub mod source;
 pub mod spec;
+mod spec_fields;
 pub mod starter;
 pub mod webhook;
 
-pub use error::{Error, Result, TriggerErrorCode};
+pub use error::{Error, Result, TriggerErrorCode, TriggerFault};
 pub use index::{MatchRejection, MatchReport, TriggerIndex, TriggerMatch};
-pub use input::validate_input;
+pub use input::{check_schema, validate_input};
 pub use intake::{IntakeReport, RejectedEvent, TriggerIntake};
 pub use permission::{AllowAll, PermissionGate, StartGate, StartPermission};
 pub use registry::{TriggerMatcher, TriggerRegistry, TriggerStarter};

@@ -1,0 +1,8 @@
+kind = "doc_event"
+event = "validate"
+pattern = "conditional required field"
+[input.fields]
+status = "Closed"
+[expect]
+ok = false
+error_fields = ["notes"]

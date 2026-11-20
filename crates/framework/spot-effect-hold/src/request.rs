@@ -276,6 +276,7 @@ impl HoldService {
         sources: Option<&BTreeSet<String>>,
         now: i64,
     ) -> Result<RequestReleaseReport> {
+        self.stamp.store(now, std::sync::atomic::Ordering::Relaxed);
         let _single = self.requests.lock(request).await;
         let _lease = self.acquire_release_lease().await?;
         let mut report = RequestReleaseReport {
@@ -434,6 +435,7 @@ impl HoldService {
         reason: &str,
         now: i64,
     ) -> Result<RequestDiscardReport> {
+        self.stamp.store(now, std::sync::atomic::Ordering::Relaxed);
         bounded("discard reason", reason, MAX_REASON_LEN)?;
         let _single = self.requests.lock(request).await;
         let _lease = self.acquire_release_lease().await?;

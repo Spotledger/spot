@@ -14,8 +14,8 @@ Linux CI host:
   printable matrix (``MatrixReport.to_junit``, ``MatrixReport.render``).
 
 The real work -- building and running the ``spot-agent-windows-real`` cargo crate on a
-Windows machine -- is done by ``run.ps1`` on a disposable Windows VM runner. ``PwshRunner`` is the production ``Runner``: it shells out
-to ``pwsh run.ps1 -Json``. Tests inject a stub runner instead, so this whole module is
+Windows machine -- is done by ``run.ps1`` on a disposable Windows VM runner. ``PwshRunner`` is
+the production ``Runner``: it shells out to ``pwsh run.ps1 -Json``. Tests inject a stub runner instead, so this whole module is
 exercised on Linux with no Windows, no ``pwsh`` and no cargo.
 
 The command line mirrors the two things a caller wants:
@@ -29,12 +29,13 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import subprocess
 import sys
 import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Iterable, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 #: This file's directory: the harness root.
 HARNESS_DIR = Path(__file__).resolve().parent
@@ -42,6 +43,11 @@ HARNESS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HARNESS_DIR.parent.parent
 #: The checked-in matrix definition.
 MATRIX_PATH = HARNESS_DIR / "matrix.toml"
+
+#: A deployment whose Windows runners carry other labels than the neutral ones in
+#: ``matrix.toml`` sets this to a comma-separated list; it replaces every target's labels in
+#: what ``main`` prints and in the JSON ``run.ps1`` reads. The file stays neutral.
+RUNNER_LABELS_ENV = "SPOT_AGENT_WINDOWS_RUNNER_LABELS"
 #: The standalone cargo crate the real tests live in.
 TESTS_REAL_DIR = HARNESS_DIR / "tests-real"
 #: The PowerShell runner.
@@ -294,6 +300,17 @@ def load_matrix(path: Path | str = MATRIX_PATH) -> Matrix:
         capabilities=tuple(capabilities),
         targets=tuple(targets),
         tests=tuple(tests),
+    )
+
+
+def with_runner_labels(matrix: Matrix, environ: Mapping[str, str]) -> Matrix:
+    """The matrix with every target's labels replaced by ``RUNNER_LABELS_ENV``, when it is set."""
+    labels = tuple(part.strip() for part in environ.get(RUNNER_LABELS_ENV, "").split(",") if part.strip())
+    if not labels:
+        return matrix
+    return dataclasses.replace(
+        matrix,
+        targets=tuple(dataclasses.replace(target, runner_labels=labels) for target in matrix.targets),
     )
 
 
@@ -601,7 +618,7 @@ def _print_matrix(matrix: Matrix, as_json: bool) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        matrix = load_matrix()
+        matrix = with_runner_labels(load_matrix(), os.environ)
     except MatrixError as exc:
         print(f"orchestrator: {exc}", file=sys.stderr)
         return 2

@@ -23,17 +23,24 @@
 //!    `function.verb_not_allowed` with the `Allow` set; a guest calling a verb that changes
 //!    things answers `function.auth_required`; a spent rate limit answers
 //!    `function.rate_limited` with `retry_after`; and failed argument schemas answer
-//!    `function.bad_arguments`. Rate limiting is a token bucket per `(function, caller)` over
-//!    the injectable [`Clock`](spot_core::clock::Clock), with bounded memory: buckets idle
-//!    for longer than the threshold are evicted by the host.
+//!    `function.bad_arguments`. Rate limiting goes through a [`RateGate`]: by default the
+//!    [`LocalGate`], a token bucket per `(function, caller)` over the injectable
+//!    [`Clock`](spot_core::clock::Clock) with bounded memory (buckets idle for longer than
+//!    the threshold are evicted by the host); a host that runs a cluster installs a shared
+//!    gate with [`FunctionRegistry::with_gate`].
 //! 4. [`FunctionRegistry::list`] is the admin override listing: every function with its
 //!    declaring app, verbs, guest flag, limit, schema, and override by whom and why.
+//!
+//! 5. The rate limit is asked of a [`RateGate`]: the in-process [`LocalGate`] by default, or a
+//!    shared one a host installs with [`FunctionRegistry::with_gate`] so the limit holds across
+//!    the nodes of a cluster.
 //!
 //! The crate reads time only through `spot_core::clock::Clock`, never logs arguments, uses no
 //! floats and no unwraps outside tests.
 
 mod args;
 mod builder;
+mod gate;
 mod key;
 mod limit;
 mod registry;
@@ -41,6 +48,7 @@ mod schema;
 
 pub use args::{Caller, Context, FunctionHandler, FunctionHandlerInfo, HandlerFuture};
 pub use builder::{Conflict, FunctionDecl, FunctionInfo, FunctionRegistryBuilder, RateLimit};
+pub use gate::{GateFuture, GateKey, LocalGate, RateGate};
 pub use key::{FunctionKey, InvalidFunctionKey, ModuleKey, NAME_MAX_BYTES, is_storage_name};
 pub use limit::{LimitError, RateLimiter, TokenBucket};
 pub use registry::FunctionRegistry;

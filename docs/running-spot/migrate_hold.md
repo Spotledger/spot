@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The side-effect hold: `spot migrate-hold`
 
 While a migration runs, or a restored copy is being verified, **nothing may leave the process**:

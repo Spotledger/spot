@@ -169,3 +169,54 @@ async fn a_deleted_outbox_row_is_caught_on_postgres() {
         after.to_text()
     );
 }
+
+/// The check snapshot is a read-only transaction the server ends when it sits idle too long (the
+/// first red nightly: every check after a long idle gap failed with `storage.unavailable`). The
+/// snapshot is taken again instead. The test ends the snapshot's backend from outside, which is
+/// what the server's idle timeout does.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_check_snapshot_survives_a_connection_ended_by_the_server() {
+    use spot_l7_engine::runner::EngineAccess;
+    use spot_l7_invariants::invariant::StoreAccess;
+    use spot_storage_contract::{Expr, Name, Query, QueryPath, Selection};
+
+    let Some(db) = pg_env().await else {
+        println!("SKIPPED: set SPOT_TEST_PG_URL to run on PostgreSQL");
+        return;
+    };
+    let world = Arc::new(World::new());
+    let (run, report) = run_engine(world.clone(), engine_config(20_261_013), connect(&db).await)
+        .await
+        .unwrap();
+    assert!(report.ok, "{}", report.to_text());
+
+    let access = EngineAccess::new(run.engine.clone(), world.catalog.clone());
+    let alias = Name::new("l").unwrap();
+    let mut query = Query::from(
+        &Name::new("label").unwrap(),
+        &alias,
+        QueryPath::Transactional,
+    );
+    query.select = vec![Selection {
+        expr: Expr::field(&alias, &Name::new("id").unwrap()),
+        alias: Name::new("doc_id").unwrap(),
+    }];
+    let before = access.query(&query).await.expect("first query");
+
+    let admin = db.admin_client().await;
+    let ended = admin
+        .query(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+             WHERE application_name LIKE '%l7_check%' AND datname = $1",
+            &[&db.name()],
+        )
+        .await
+        .expect("terminate");
+    assert_eq!(ended.len(), 1, "exactly the snapshot's backend");
+
+    let after = access
+        .query(&query)
+        .await
+        .expect("query after the connection ended");
+    assert_eq!(before.rows.len(), after.rows.len());
+}

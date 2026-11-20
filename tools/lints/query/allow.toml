@@ -291,7 +291,7 @@ reason = "WP-ALM-04.T5 DEBT: the host-side store of this module keeps its own Po
 
 [[allow]]
 path = "crates/framework/spot-cli/src/commands/sandbox.rs"
-pattern = "SQL"
+pattern = "SQL|database driver crate path"
 reason = "WP-ALM-05.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
 
 [[allow]]
@@ -573,3 +573,145 @@ reason = "WP-RTB-02.T5 DEBT: the host-side store of this module keeps its own Po
 path = "crates/framework/spot-sync-node-host/tests/pg.rs"
 pattern = "SQL"
 reason = "WP-RTB-02.T5: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+# --- bundle3: host-side stores and tests added by the bundle 3 tasks ---
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/extension.rs"
+pattern = "SQL SELECT"
+reason = "WP-STO-12.T4: `spot extension list` reads the installed extension names and versions from the PostgreSQL catalogue (pg_extension), a server-level view no tenant table or storage-contract operation covers; one read-only statement. DEBT: move behind the extension port of a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/devtools.rs"
+pattern = "SQL LISTEN"
+reason = "False positive: the LISTEN pattern matches the warning text 'may listen on a non-loopback address'; no SQL in this file."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/emergency_access/store.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-IAM-08.T14 DEBT: the host-side store of the emergency-access grants keeps its own PostgreSQL table and runs its tenant-scoped statements through the driver in this one file; move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/maintenance_gate.rs"
+pattern = "database driver crate path"
+reason = "WP-MIG-07.T5: the shared gate state holds a deadpool pool type next to the PostgreSQL admission gate; no statement is issued in this file. DEBT: hold the pool behind a port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/occupancy/sweeper.rs"
+pattern = "SQL SELECT"
+reason = "WP-STO-14.T3: the sweeper checks that the btree_gist extension is installed (pg_extension) before the first sweep, a server-level read the occupancy storage contract does not express; one read-only statement. DEBT: move behind the occupancy store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sandbox_reaper.rs"
+pattern = "SQL SELECT"
+reason = "WP-ALM-05.T5: the reaper asks the server catalogue (pg_database) whether a sandbox database still exists before dropping its entry; a server-level read, not a tenant table. DEBT: move behind the sandbox store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/support_access_wiring.rs"
+pattern = "database driver crate path"
+reason = "WP-ADM-11.T4: the wiring holds an optional deadpool pool type to find the site's components; no statement is issued in this file. DEBT: hold the pool behind a port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sync_rebuild_wiring.rs"
+pattern = "SQL SELECT"
+reason = "WP-RTB-01.T10: the pin source counts running process cases by DAG key and version (tenant-scoped) so a sync or rebuild keeps the versions in use; one read-only statement. DEBT: move behind the process store port of spot-bpm-pg."
+
+[[allow]]
+path = "crates/framework/spot-journal-rebuild-host/src/invariants.rs"
+pattern = "SQL SELECT"
+reason = "WP-RTB-01.T14: the rebuild invariants count rows and digest the content of the validated table names (identifiers checked at construction) to compare a rebuilt database with its journal; such a whole-table digest exists only as a query. DEBT: move behind the rebuild store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/extension_command.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/fleet_loop.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/fleet_loop/rig.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/mail_intake.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/maintenance_gate_serve.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/occupancy_service.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/ops_signals_host.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_api_idempotency.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_effects_governance.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_governance_undo.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_run_directory.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_throughput.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_trigger_fields.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sandbox_reaper.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sandbox_tables.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/secret_canary_sweep.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-reports/tests/run_errors.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-sandbox/tests/tables_complete.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/ai_isolation/role.rs"
+pattern = "database driver crate path"
+reason = "Public CI fix: provisioning the cluster-wide ai role must recognise PostgreSQL's 'tuple concurrently updated' catalog race (SQLSTATE XX000) and release a session advisory lock on a pooled connection; both exist only in the driver's error type and pool object, so this one host-side file names them. The statements themselves stay in the statement builder."

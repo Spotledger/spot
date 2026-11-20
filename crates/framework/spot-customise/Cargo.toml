@@ -31,7 +31,7 @@ sha2 = "0.10"
 # Typed errors with stable `customise.*` codes.
 thiserror = "2"
 # The one in-process lock that serialises the pipeline on a node (never held across a database lock).
-tokio = { version = "1", default-features = false, features = ["sync"] }
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 # `postgres`-gated: the online migration engine and its backend.
 spot-pg-migrate = { path = "../../backends/spot-pg-migrate", optional = true }
 spot-postgres = { path = "../../backends/spot-postgres", optional = true }

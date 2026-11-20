@@ -1,0 +1,154 @@
+# emergency_access_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "emergency_access_host.disabled"
+class = "none"
+summary = "Emergency access is not enabled on this site."
+explanation_key = "error.emergency_access_host.disabled"
+params = []
+remedy = "Set [services.emergency_access] enabled = true with its roles, approvers, controllers and escalation target."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.settings_invalid"
+class = "none"
+summary = "A setting of [services.emergency_access] is missing or out of range, so the site does not start with it."
+explanation_key = "error.emergency_access_host.settings_invalid"
+params = []
+remedy = "Name at least one emergency role, approver and controller, a duration of 1 to 1440 minutes, and an escalation target that is a user id or role:<name>."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.unavailable"
+class = "none"
+summary = "A part emergency access needs (the grant store, the directory, the governance gate or the process host) cannot answer now, so nothing was changed."
+explanation_key = "error.emergency_access_host.unavailable"
+params = []
+remedy = "Restore the part the readiness text names and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.not_found"
+class = "none"
+summary = "There is no such emergency grant on this site."
+explanation_key = "error.emergency_access_host.not_found"
+params = []
+remedy = "Check the grant id with the list command."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.not_self"
+class = "none"
+summary = "An emergency request is made by the user it is for."
+explanation_key = "error.emergency_access_host.not_self"
+params = []
+remedy = "Ask as the user who needs the access."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.approver_not_allowed"
+class = "none"
+summary = "The approver named is not one the tenant's policy allows."
+explanation_key = "error.emergency_access_host.approver_not_allowed"
+params = []
+remedy = "Name an approver from [services.emergency_access] approvers."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.approval_unavailable"
+class = "none"
+summary = "The approval process cannot be started now, so the request waits."
+explanation_key = "error.emergency_access_host.approval_unavailable"
+params = []
+remedy = "Start the process host; the sweep launches the waiting approval."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.conflict"
+class = "none"
+summary = "The segregation-of-duties gate refuses this grant, or the policy does not allow an override of it."
+explanation_key = "error.emergency_access_host.conflict"
+params = []
+remedy = "Resolve the conflict, or allow an override in the policy and approve with a reason and a mitigating control."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.override_required"
+class = "none"
+summary = "The grant would create a segregation-of-duties conflict and the approver has not submitted a complete override."
+explanation_key = "error.emergency_access_host.override_required"
+params = []
+remedy = "Approve again with a reason, a control id and the control in words."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.state_invalid"
+class = "none"
+summary = "A stored emergency grant does not match its key, its site or its digest, so it was not loaded."
+explanation_key = "error.emergency_access_host.state_invalid"
+params = []
+remedy = "Restore the record from backup; it is never repaired automatically."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.state_version"
+class = "none"
+summary = "A stored emergency grant is in a format version this release does not read."
+explanation_key = "error.emergency_access_host.state_version"
+params = []
+remedy = "Run the release that wrote it, or migrate the record."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.audit_unavailable"
+class = "none"
+summary = "The change could not be written to the access-change journal, so it was not made."
+explanation_key = "error.emergency_access_host.audit_unavailable"
+params = []
+remedy = "Restore the audit store and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.review_unassigned"
+class = "none"
+summary = "No controller is eligible to review the ended session (every configured controller is the session's user)."
+explanation_key = "error.emergency_access_host.review_unassigned"
+params = []
+remedy = "Add a controller to [services.emergency_access] controllers."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.session_full"
+class = "none"
+summary = "The session has recorded as many actions as one grant may hold."
+explanation_key = "error.emergency_access_host.session_full"
+params = []
+remedy = "End the session and request a new one."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.recording_unavailable"
+class = "none"
+summary = "The recording of an ended session could not be archived; its actions stay in the grant and the audit trail."
+explanation_key = "error.emergency_access_host.recording_unavailable"
+params = []
+remedy = "Wire the break-glass archive and the secrets service."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.not_permitted"
+class = "none"
+summary = "Only the session's user, its approver or a review controller may do this to the grant."
+explanation_key = "error.emergency_access_host.not_permitted"
+params = []
+remedy = "Act as one of them."
+since = "0.1.0"
+
+[[entry]]
+code = "emergency_access_host.write_failed"
+class = "none"
+summary = "The assignment could not be written or ended, so nothing was granted or the grant is still in force."
+explanation_key = "error.emergency_access_host.write_failed"
+params = []
+remedy = "Check the role exists and the database is healthy; the sweep retries."
+since = "0.1.0"

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Rule graph (`[services.rule_graph]`)
 
 Hosts `spot-rule-graph`: business rules as Datalog over the graph. Rule sets are

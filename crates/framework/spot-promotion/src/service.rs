@@ -823,7 +823,16 @@ impl PromotionService {
 
     /// Closes the current audit run with a terminal outcome.
     async fn finish(&self, id: &RunId, outcome: Outcome, at: i64) -> Result<(), PromotionError> {
-        self.audit.finish(id, FinishEvent { outcome, at }).await
+        self.audit
+            .finish(
+                id,
+                FinishEvent {
+                    outcome,
+                    at,
+                    reason: None,
+                },
+            )
+            .await
     }
 
     /// Loads a promotion or says it does not exist.

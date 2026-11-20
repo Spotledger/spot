@@ -8,13 +8,16 @@ use spot_journal_audit::{
     AuditResult, DerivedEntities, FingerprintReport, Position, RtoVerdict, VerifiedPosition,
     compare, compare_fingerprints, rto_check,
 };
-use spot_journal_rebuild::{RebuildKeys, RebuildOptions, RebuildOutcome, execute};
+use spot_journal_rebuild::{
+    EventClassifier, RebuildError, RebuildKeys, RebuildOptions, RebuildOutcome, execute,
+};
 use spot_journal_rebuild_plan::{Base, ForkInfo, JournalCatalog, SegmentRange, Target, plan};
 use spot_journal_snapshot::{SnapshotSigner, list_snapshots, mark_verified};
 use spot_journal_store::{JournalStore, TenantId};
 
 use crate::error::AuditRunError;
 use crate::sides::{Clock, LiveSide, ScratchSide};
+use crate::topics::{REBUILD_UNKNOWN_TOPIC, UnknownTopics, is_valid_topic};
 
 /// What one audit run needs besides the sides. One tenant per run, fixed here.
 pub struct AuditOptions<'a> {
@@ -41,6 +44,18 @@ pub struct AuditOptions<'a> {
     pub signer: Option<&'a dyn SnapshotSigner>,
     /// Cooperative cancellation of the rebuild.
     pub cancel: Option<&'a AtomicBool>,
+    /// Decides the class of each journal topic. `None` is the events contract registry, which
+    /// knows the platform topics only; a tenant whose journal holds application topics needs a
+    /// classifier that adds them (see [`crate::DomainTopicsClassifier`]). It is the rebuild's own
+    /// option, passed through unchanged.
+    pub classifier: Option<&'a dyn EventClassifier>,
+    /// Refuses a journal that holds a topic the classifier does not know (`true`, the default).
+    /// With `false` an unknown topic is treated as domain (not replayed), listed in the report
+    /// and flagged by [`AuditReport::policy_relaxed`]. The rebuild's own option, same meaning.
+    pub strict_topics: bool,
+    /// For a tenant in recovery only: apply an unknown topic as state instead of refusing it. The
+    /// rebuild's own option, same meaning; the default is `false`.
+    pub allow_unregistered: bool,
 }
 
 impl<'a> AuditOptions<'a> {
@@ -65,6 +80,9 @@ impl<'a> AuditOptions<'a> {
             allow_untrusted_snapshot: false,
             signer: None,
             cancel: None,
+            classifier: None,
+            strict_topics: true,
+            allow_unregistered: false,
         }
     }
 }
@@ -82,7 +100,7 @@ pub enum FailureStage {
 
 /// A rebuild that did not complete. It names the failing crate's stable code and nothing else:
 /// no record content, no object bytes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunFailure {
     /// Where it failed.
     pub stage: FailureStage,
@@ -90,6 +108,31 @@ pub struct RunFailure {
     pub code: &'static str,
     /// The position the run was pinned to.
     pub as_of: Position,
+    /// The topic the classifier did not know, when the rebuild stage failed for that reason
+    /// (`code` is then [`REBUILD_UNKNOWN_TOPIC`]). The strict policy stops at the first one, so
+    /// this is that one topic; it is `None` when the name does not match the topic grammar (it
+    /// is never echoed).
+    pub unknown_topic: Option<String>,
+}
+
+/// Which classifier decided the classes of a run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClassifierKind {
+    /// The events contract registry (no classifier was given).
+    Registry,
+    /// A classifier the caller injected.
+    Injected,
+}
+
+impl ClassifierKind {
+    /// The name a result row carries: `registry` or `injected`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Registry => "registry",
+            Self::Injected => "injected",
+        }
+    }
 }
 
 /// What happened to the snapshot the run started from.
@@ -126,6 +169,14 @@ pub struct AuditReport {
     pub verified: Option<VerifiedPosition>,
     /// What happened to the base snapshot's verified marker.
     pub marking: SnapshotMarking,
+    /// Which classifier was in effect.
+    pub classifier: ClassifierKind,
+    /// The topics the classifier did not know (names only, capped): empty under the strict
+    /// default, where an unknown topic fails the rebuild instead.
+    pub unknown_topics: UnknownTopics,
+    /// Whether the unregistered-topic policy was relaxed for this run (`strict_topics` off or
+    /// `allow_unregistered` on): the run completed although topics may be unknown, and says so.
+    pub policy_relaxed: bool,
 }
 
 impl AuditReport {
@@ -240,7 +291,14 @@ async fn run_pinned(
 ) -> Result<AuditRun, AuditRunError> {
     let as_of = live.head();
     let started = clock.now_millis();
-    let failed = |stage, code| Ok(AuditRun::Failed(RunFailure { stage, code, as_of }));
+    let failed = |stage, code| {
+        Ok(AuditRun::Failed(RunFailure {
+            stage,
+            code,
+            as_of,
+            unknown_topic: None,
+        }))
+    };
 
     let listed = match list_snapshots(store, options.tenant.as_str(), keys.snapshot).await {
         Ok(listed) => listed,
@@ -291,6 +349,9 @@ async fn run_pinned(
         .entity_targets
         .clone_from(&options.entity_targets);
     rebuild_options.cancel = options.cancel;
+    rebuild_options.classifier = options.classifier;
+    rebuild_options.strict_topics = options.strict_topics;
+    rebuild_options.allow_unregistered = options.allow_unregistered;
     let rebuilt = match execute(
         store,
         keys,
@@ -302,6 +363,14 @@ async fn run_pinned(
     .await
     {
         Ok(rebuilt) => rebuilt,
+        Err(RebuildError::UnknownTopic { topic, .. }) => {
+            return Ok(AuditRun::Failed(RunFailure {
+                stage: FailureStage::Rebuild,
+                code: REBUILD_UNKNOWN_TOPIC,
+                as_of,
+                unknown_topic: is_valid_topic(&topic).then_some(topic),
+            }));
+        }
         Err(error) => return failed(FailureStage::Rebuild, error.code()),
     };
     let finished = clock.now_millis();
@@ -341,6 +410,7 @@ async fn run_pinned(
         };
     }
 
+    let unknown_topics = UnknownTopics::from_outcome(&rebuilt);
     Ok(AuditRun::Completed(Box::new(AuditReport {
         as_of,
         base: rebuild_plan.base,
@@ -355,5 +425,12 @@ async fn run_pinned(
             at_millis: finished,
         }),
         marking,
+        classifier: if options.classifier.is_some() {
+            ClassifierKind::Injected
+        } else {
+            ClassifierKind::Registry
+        },
+        unknown_topics,
+        policy_relaxed: !options.strict_topics || options.allow_unregistered,
     })))
 }

@@ -18,18 +18,35 @@
 //! snapshot; a chunk key outside the snapshot index is refused and chunk hashes are verified
 //! before apply. Personal fields stay sealed: an edge receives the sealed form or the erased
 //! placeholder, never the subject key (an edge that must display a personal field gets it as
-//! application data, not from the journal). The reading and serving of snapshot chunks, and the
-//! application at the node, are the hub and node hosts' (WP-RTB-02.T4, T5): see the task report.
+//! application data, not from the journal).
+//!
+//! # Serving and applying chunks (WP-RTB-02.T14)
+//!
+//! - [`ChunkServer`] (hub, blocking): bootstrap chunks cut from the latest **verified** snapshot
+//!   for the node's registered scope ([`SnapshotProvider`], [`SeamsProvider`]), catch-up chunks
+//!   from a planner plan, each sealed with its hash ([`WireChunk`]); served idempotently, the
+//!   director moves only on [`ChunkServer::ack`].
+//! - [`ChunkApplier`] (node): verifies the hash, refuses an index that is not the next one,
+//!   applies through the node's apply path ([`ApplyTarget`]) and only then moves its checkpoint,
+//!   so a cut repeats at most the chunk in flight and the last bootstrap chunk gives `P + 1`.
+//!
+//! The hub and node hosts' own files (WP-RTB-02.T4, T5) call these; see the task report.
 #![forbid(unsafe_code)]
 
+mod apply;
 mod config;
 mod director;
 mod error;
 pub mod pg;
+mod serve;
 mod skew;
+mod wire;
 
+pub use apply::{Applied, ApplyTarget, ChunkApplier};
 pub use config::CatchupConfig;
 pub use director::{ChunkAck, Director, MemoryProgress, Phase, Progress, ProgressStore, Route};
 pub use error::HostError;
 pub use pg::PgProgress;
+pub use serve::{ChunkServer, NodeSeams, SeamsProvider, ServeError, SnapshotProvider};
 pub use skew::{Hello, SkewGate};
+pub use wire::{CatchUpChunk, ChunkBody, WireChunk, catch_up_chunks};

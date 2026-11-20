@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Audit verification (`services/audit_verify.rs`)
 
 The hosted watchman of the audit chain (WP-SEC-06.T8). It verifies the chain of every lane of the site on a schedule, anchors the signed heads outside the database, degrades the audit service on any mismatch and says so loudly. It never fixes, rewrites or skips an entry.

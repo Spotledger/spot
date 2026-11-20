@@ -1,0 +1,8 @@
+{
+  "case": "generic_function",
+  "entry": "wrap",
+  "args": 5,
+  "expect": [
+    5
+  ]
+}

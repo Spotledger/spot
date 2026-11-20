@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The `edi` connector kind
 
 An operator guide for the built-in connector kind `edi` (WP-INT-06.T2).

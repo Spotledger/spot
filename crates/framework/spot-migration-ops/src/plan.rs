@@ -42,7 +42,8 @@ use spot_migration_plan::{
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
 use crate::context::{
-    Actor, LifecycleContext, PlanHash, PlanState, PlanStore, StoredPlan, off_runtime,
+    Actor, AuditSpec, AuditedError, LifecycleContext, PlanHash, PlanState, PlanStore, StoredPlan,
+    off_runtime,
 };
 use crate::error::LifecycleError;
 
@@ -300,7 +301,7 @@ fn findings_of(report: &ExpandContractReport) -> Vec<Finding> {
 /// [`PlanRefused`] with `migration.not_permitted`, `migration.risk_requires_review` (an
 /// expand/contract refusal or an ungated destructive plan, with the findings) or
 /// `migration.store_failed`.
-pub fn plan(ctx: &LifecycleContext, inputs: &PlanInputs) -> Result<PlanReport, PlanRefused> {
+fn plan_body(ctx: &LifecycleContext, inputs: &PlanInputs) -> Result<PlanReport, PlanRefused> {
     ctx.require_permission()?;
     let release = inputs.release_plan();
     let digest = PlanDigest::of(&release);
@@ -394,6 +395,33 @@ pub fn plan(ctx: &LifecycleContext, inputs: &PlanInputs) -> Result<PlanReport, P
         blocking: blocking_name(release.estimate.blocking),
         conflicts,
         findings,
+    })
+}
+
+impl AuditedError for PlanRefused {
+    fn lifecycle(&self) -> &LifecycleError {
+        &self.error
+    }
+}
+
+/// Plans, gates and stores, under a run record: the permit is checked first, a refusal is recorded
+/// as a refused run (with the reason code and no plan content), and the plan's digest is on the
+/// record. See [`LifecycleContext::audited`].
+///
+/// # Errors
+/// As the unaudited body: [`PlanRefused`] with `migration.not_permitted`,
+/// `migration.risk_requires_review` or `migration.store_failed` (also when the run cannot be
+/// recorded).
+pub fn plan(ctx: &LifecycleContext, inputs: &PlanInputs) -> Result<PlanReport, PlanRefused> {
+    let release = inputs.release_plan();
+    let hash = PlanHash::from(&PlanDigest::of(&release));
+    let reference = crate::audit::plan_ref(
+        &release,
+        &release.json(),
+        &format!("plans/{}", hash.as_str()),
+    );
+    ctx.audited_sync(AuditSpec::new("plan", hash.as_str(), reference), |_| {
+        plan_body(ctx, inputs)
     })
 }
 

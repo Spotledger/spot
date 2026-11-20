@@ -32,6 +32,7 @@ extern crate self as spot_jobs;
 pub mod backoff;
 pub mod error;
 pub mod intake;
+pub mod metrics;
 pub mod model;
 pub mod policy;
 pub mod store;

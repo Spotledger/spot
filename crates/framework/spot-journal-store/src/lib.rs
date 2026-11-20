@@ -7,7 +7,7 @@
 //!
 //! * [`Layout`] — the five per-tenant key shapes of ADR-061 s5, as typed constructors and one
 //!   strict parser ([`layout`] carries the form).
-//! * [`JournalStore`] — six methods over a flat key space, all returning boxed futures
+//! * [`JournalStore`] — seven methods over a flat key space, all returning boxed futures
 //!   ([`StoreFuture`]), so this crate pulls in no async runtime and a caller on any executor (or
 //!   a test with a hand-rolled block-on) can drive them.
 //! * [`MemoryStore`] — the reference backend and what a relay unit test uses.
@@ -30,8 +30,9 @@
 //!
 //! Listed on [`JournalStore`] and checked by [`contract::run`]: canonical keys only; immutability
 //! under `put_new` (one winner per key, even under threads); an etag-guarded replace of the
-//! manifest alone; ordered, resumable listing; deletion of tail chunks only, never of a segment
-//! or a snapshot.
+//! manifest alone; ordered, resumable listing; deletion of tail chunks only through `delete`, never of a segment
+//! or a snapshot; a snapshot object only through the narrower `delete_snapshot`, which names one
+//! key and refuses everything else.
 //!
 //! # Etags
 //!

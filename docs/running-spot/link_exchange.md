@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Link exchange runner (`[services.link_exchange]`)
 
 Runs the exchange of signed record and message topics over a tenant link: the direct carrier (this

@@ -110,3 +110,43 @@ user.
   and `bucket_cap` bounds memory if the schedule does not run.
 - **Audit**: target `spot::audit::function` logs a line per call that reached the registry: caller,
   function address, verb, outcome code. Never an argument, a result, a token or a header.
+
+## Rate limits
+
+A function declares `limit = { permits = 10, per = "1m" }`. The registry asks a **rate gate** for one
+permit per call; the gate answers or refuses with a `retry_after`, and a refusal is
+`429 api.rate_limited` (`function_code` `function.rate_limited`) as before.
+
+- **On one node** (the `single` profile) the gate is the in-process token bucket: one bucket per
+  function and caller in the node's memory, refilled continuously over `per`. A bucket starts full,
+  so an idle caller may burst `permits` calls at once.
+- **In a cluster** (the `cluster` profile) the gate is the coordinator's `take`: the bucket lives in
+  the shared store (PostgreSQL or Redis), so `10 per minute` means ten calls a minute for the
+  **site**, not ten per node. Three nodes admit ten of ninety concurrent calls, not thirty. It is the
+  same token bucket as on one node; the same burst after idleness applies, and there is no sliding
+  window.
+- **The key.** The coordinator row or Redis key is `function:<site>:<function>:<caller hash>`. The
+  caller part is the first 16 bytes of the SHA-256 of the caller label (`user:<id>`, `system:<id>`
+  or `anonymous`), in hex, so a `MONITOR` line or a `spot_coord_rate` row names no user. A function
+  name that would make the key too long is replaced by its hash in the key.
+- **When the coordinator cannot answer** (the database is down, the call errors for any reason) the
+  call is checked against **this node's own bucket** instead, so a function is held to at most
+  `permits` per node. It is stricter than the cluster limit only when one node takes all the
+  traffic, and it is **never open**: a failing coordinator never lets a call through unchecked. Each
+  fallback adds one to `spot_function_gate_fallback_total`; the log says it at `warn` once a minute
+  (`the function rate gate could not reach the coordinator`), not once per call. The fallback buckets
+  are the ones the eviction job drops.
+- **Seeing it.** `spot_function_rate_limited_total` counts refusals (no function or caller label: a
+  function name is app text and a caller is a person); `spot_function_gate_seconds` is the gate's own
+  latency, a database round trip in a cluster (alert when its p95 approaches the request budget);
+  `spot_function_gate_fallback_total` should stay flat (alert on any sustained rise: the
+  coordinator is failing). A refused caller sees the `function.rate_limited` response with
+  `retry_after` in its details and `Retry-After` in its headers.
+- **One shared guest bucket, cluster-wide.** Every anonymous caller shares one bucket per function
+  (the rule above), and in a cluster that bucket is cluster-wide: one abuser can exhaust the guests'
+  allowance for everyone, on every node. That is the intended trade; a guest function that must stay
+  available declares a limit sized for the whole guest population, and signed-in callers keep their
+  own buckets.
+- **What a limit is.** A fairness and abuse bound, not a security boundary: it slows a flood and
+  shares capacity, it does not authenticate or authorise anyone, and a function that must be
+  protected still checks permissions itself.

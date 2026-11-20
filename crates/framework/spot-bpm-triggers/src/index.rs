@@ -8,7 +8,7 @@
 
 use spot_bpm_model::{NodeId, NodeKind, ProcessVersion, VersionStatus};
 
-use crate::error::Result;
+use crate::error::{Error, Result, TriggerFault};
 use crate::registry::TriggerRegistry;
 use crate::source::SourceEvent;
 use crate::spec::TriggerSpec;
@@ -66,7 +66,9 @@ impl TriggerIndex {
     /// # Errors
     ///
     /// [`Error::TriggerIncomplete`], [`Error::UnknownOperation`], [`Error::InvalidCron`] or
-    /// [`Error::ScheduleInvalid`] when a published trigger node's config does not build a spec.
+    /// [`Error::ScheduleInvalid`], [`Error::InputSchemaInvalid`], [`Error::ConditionInvalid`] or
+    /// (for two or more bad triggers in one version) [`Error::TriggersInvalid`] when a
+    /// published trigger node's config does not build a spec.
     pub fn from_versions(versions: &[ProcessVersion]) -> Result<Self> {
         let mut index = Self::new();
         for version in versions {
@@ -79,22 +81,44 @@ impl TriggerIndex {
     ///
     /// # Errors
     ///
-    /// The same spec-building errors as [`TriggerIndex::from_versions`].
+    /// The same spec-building errors as [`TriggerIndex::from_versions`]; every unusable trigger
+    /// of the version is reported in one round ([`Error::TriggersInvalid`] when more than one),
+    /// and none of the version's triggers is added.
     pub fn add_version(&mut self, version: &ProcessVersion) -> Result<()> {
         if version.status != VersionStatus::Published {
             return Ok(());
         }
+        let mut specs = Vec::new();
+        let mut errors: Vec<(String, Error)> = Vec::new();
         for node in &version.nodes {
             if let NodeKind::Trigger(config) = &node.kind {
-                let spec = TriggerSpec::from_config(&version.name, &version.app, &node.id, config)?;
-                self.add_spec(
-                    &version.name,
-                    &version.app,
-                    version.version,
-                    node.id.clone(),
-                    spec,
-                );
+                match TriggerSpec::from_config(&version.name, &version.app, &node.id, config) {
+                    Ok(spec) => specs.push((node.id.clone(), spec)),
+                    Err(error) => errors.push((node.id.to_string(), error)),
+                }
             }
+        }
+        // All or nothing: a version with an unusable trigger adds none of its triggers.
+        match errors.len() {
+            0 => {}
+            1 => {
+                return Err(errors.remove(0).1);
+            }
+            _ => {
+                return Err(Error::TriggersInvalid {
+                    process: version.name.clone(),
+                    faults: errors
+                        .into_iter()
+                        .map(|(node, error)| TriggerFault {
+                            node,
+                            code: error.code(),
+                        })
+                        .collect(),
+                });
+            }
+        }
+        for (node, spec) in specs {
+            self.add_spec(&version.name, &version.app, version.version, node, spec);
         }
         Ok(())
     }

@@ -36,7 +36,7 @@ use spot_migration_approval::{ApplyTicket, AuthoriseError, Checks, effective_ris
 use spot_migration_plan::{ReleasePlan, Risk};
 
 use crate::catalogue::{HandlerOutput, HandlerRegistry, OperationHandler};
-use crate::context::{LifecycleContext, PlanHash, PlanState, off_runtime};
+use crate::context::{AuditSpec, LifecycleContext, PlanHash, PlanState, off_runtime};
 use crate::error::LifecycleError;
 use crate::plan::{check_site, load, map_approval, param, parse_stored, subject};
 
@@ -150,6 +150,28 @@ fn version_word(version: Version) -> &'static str {
     }
 }
 
+/// Applies the approved plan `hash` (or resumes it) under a run record: permit first, a refusal
+/// recorded, the plan's digest on the record, `failed` with the reason code when the apply fails.
+/// See [`LifecycleContext::audited`].
+///
+/// # Errors
+/// As the body; `migration.store_failed` when the run cannot be recorded.
+pub async fn apply(
+    ctx: &Arc<LifecycleContext>,
+    host: &Arc<dyn ApplyHost>,
+    hash: &str,
+    resume: bool,
+) -> Result<ApplyReport, LifecycleError> {
+    let (digest, plan) = {
+        let (ctx, hash) = (Arc::clone(ctx), hash.to_owned());
+        off_runtime(move || ctx.plan_audit(&hash)).await?
+    };
+    ctx.audited(AuditSpec::new("apply", digest, plan), |_| {
+        apply_body(ctx, host, hash, resume)
+    })
+    .await
+}
+
 /// Applies the approved plan `hash`, or with `resume` continues an unfinished apply.
 ///
 /// # Errors
@@ -157,7 +179,7 @@ fn version_word(version: Version) -> &'static str {
 /// `migration.not_approved`, `migration.not_rehearsed`, `migration.site_busy`,
 /// `migration.apply_failed` (the plan is `failed`; the next action is `spot migrate rescue HASH`
 /// or `spot migrate apply HASH --resume`), `migration.port_unavailable`, `migration.store_failed`.
-pub async fn apply(
+async fn apply_body(
     ctx: &Arc<LifecycleContext>,
     host: &Arc<dyn ApplyHost>,
     hash: &str,

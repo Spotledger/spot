@@ -95,7 +95,7 @@ impl Fixture {
     /// PostgreSQL is configured (`SKIPPED` is printed, and `SPOT_REQUIRE_PG=1` turns that into a
     /// panic inside `TestDb::create` instead).
     pub async fn start() -> Option<Fixture> {
-        Self::start_with_pool(36, "").await
+        Self::start_with_pool(36, "", None, None).await
     }
 
     /// [`Fixture::start`] for a case that runs a fixture of its own beside the suite's: a small
@@ -103,17 +103,40 @@ impl Fixture {
     /// storage health check of the second host (below about 30 a host with every service saturates
     /// its own pool, which readiness reports as degraded storage).
     pub async fn start_secondary() -> Option<Fixture> {
-        Self::start_with_pool(32, "").await
+        Self::start_with_pool(32, "", None, None).await
     }
 
     /// [`Fixture::start_secondary`] with extra `common.toml` tables from the first start, for a
     /// service a reload cannot turn on: the job worker, the outbox pumps and the other services
     /// that run once per process read their settings when the host starts.
     pub async fn start_secondary_with(extra_toml: &str) -> Option<Fixture> {
-        Self::start_with_pool(32, extra_toml).await
+        Self::start_with_pool(32, extra_toml, None, None).await
     }
 
-    async fn start_with_pool(pool: usize, extra_toml: &str) -> Option<Fixture> {
+    /// [`Fixture::start_secondary`] with one more app of the repository's `apps/` directory in
+    /// the catalogue from the start (a private copy, listed in `common.toml` before the site is
+    /// created, so the site has it installed when the host starts). A service that is built only
+    /// at start, such as the API and scheduled scripts of the `scripting` app, cannot be turned on
+    /// by installing the app into a running host.
+    pub async fn start_secondary_with_app(app: &str) -> Option<Fixture> {
+        Self::start_with_pool(32, "", Some(app), None).await
+    }
+
+    /// [`Fixture::start_secondary`] with a step that runs after the site, its key file and the
+    /// sample app exist and before the host starts: it receives the fixture root and the site
+    /// name and returns `common.toml` tables to append. For a service that is built once per
+    /// process and needs something the fixture creates first (a value sealed under the site's
+    /// key file, a DocType and its grants). A failure panics, like the fixture's own steps.
+    pub async fn start_secondary_prepared(prepare: Prepare) -> Option<Fixture> {
+        Self::start_with_pool(32, "", None, Some(prepare)).await
+    }
+
+    async fn start_with_pool(
+        pool: usize,
+        extra_toml: &str,
+        extra_app: Option<&str>,
+        prepare: Option<Prepare>,
+    ) -> Option<Fixture> {
         let db = TestDb::create().await?;
         let run = db.name().trim_start_matches("spot_test_").to_owned();
         sweep_roots();
@@ -133,6 +156,13 @@ impl Fixture {
         copy_dir(&repo.join("apps/sample"), &root.join("sample"));
         patch_sample_gaps(&root.join("sample"));
         grant_process_permissions(&root.join("sample"));
+        if let Some(app) = extra_app {
+            copy_dir(&repo.join("apps").join(app), &root.join(app));
+        }
+        let apps_list = match extra_app {
+            Some(app) => format!("\"sample\", {app:?}"),
+            None => "\"sample\"".to_owned(),
+        };
         // The catalogue lists the platform app from the repository and the fixture's own copy of
         // the sample app — the same shape `apps/sample/README.md` documents. The platform app
         // *must* come from the catalogue: the copy embedded in the binary carries 11 DocTypes and
@@ -143,7 +173,7 @@ impl Fixture {
         std::fs::write(
             root.join("common.toml"),
             format!(
-                "apps = [{:?}, \"sample\"]\n\
+                "apps = [{:?}, {apps_list}]\n\
                  [server]\n\
                  bind = [\"127.0.0.1:0\"]\n\
                  shutdown_grace = 5\n\
@@ -209,6 +239,17 @@ impl Fixture {
             output.contains("seeded"),
             "the sample app's seed did not run; install-app said: {output}"
         );
+        if let Some(prepare) = prepare {
+            let extra = prepare(&root, &site)
+                .await
+                .unwrap_or_else(|e| panic!("the case's preparation: {e}"));
+            use std::io::Write as _;
+            let mut common = std::fs::OpenOptions::new()
+                .append(true)
+                .open(root.join("common.toml"))
+                .expect("cannot open common.toml");
+            writeln!(common, "\n{extra}").expect("cannot append to common.toml");
+        }
         // 3. The users, before the host starts: `set-password` touches the reload marker, and a
         //    marker written before start is part of the host's baseline (no reload race).
         let users = make_users(&root, &site).await;
@@ -893,6 +934,237 @@ async fn make_users(root: &Path, site: &str) -> BTreeMap<&'static str, User> {
     }
     users.insert(INVITED, invite(root, site, "invited@l3.test", None).await);
     users
+}
+
+/// A step of a case that runs before its fixture's host starts ([`Fixture::start_secondary_prepared`]).
+pub type Prepare = Box<
+    dyn for<'a> FnOnce(
+            &'a Path,
+            &'a str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<String, String>> + Send + 'a>,
+        > + Send,
+>;
+
+/// How a field grant treats a protected value (see [`Fixture::grant_field`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldGrant {
+    /// The role reads the masked form (`read_masked`) and never the value.
+    Masked,
+    /// The role may reveal the value, one document at a time, with a stated reason (`reveal`,
+    /// which implies `read_masked`).
+    Revealing,
+}
+
+impl FieldGrant {
+    /// The right the grant carries in `permissions/field_grants.toml`.
+    fn access(self) -> &'static str {
+        match self {
+            Self::Masked => "read_masked",
+            Self::Revealing => "reveal",
+        }
+    }
+}
+
+/// The protection group a field gets when it has none; the grant targets the group.
+const MASKED_GROUP: &str = "l3_masked";
+
+/// Test passwords are drawn from these words: the same shape as the fixture's own users, which
+/// the password policy accepts.
+const WORDS: [&str; 12] = [
+    "quartz", "lantern", "harbor", "saffron", "meadow", "cobalt", "amber", "thicket", "copper",
+    "orchard", "pebble", "cedar",
+];
+
+/// A password no one chose and nothing prints: random words and a number, from the standard
+/// library's per-process random state.
+fn generated_password() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let draw = |salt: u8| {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u8(salt);
+        hasher.finish()
+    };
+    let word = |n: u64| WORDS[(n % WORDS.len() as u64) as usize];
+    format!(
+        "{}-{}-{}-{}",
+        word(draw(1)),
+        word(draw(2)),
+        draw(3) % 90 + 10,
+        word(draw(4))
+    )
+}
+
+impl Fixture {
+    /// Re-authenticates `user` through the real step-up route and returns a client that carries
+    /// the elevated session (its bearer token is the one the step-up was made on). The
+    /// operations that need a recent step-up answer `403 auth.step_up_required` to any other
+    /// client of the same user.
+    pub async fn step_up(&self, user: &User) -> Result<Client, Failure> {
+        let password = user
+            .password
+            .as_deref()
+            .ok_or_else(|| failure!("{} has no password to step up with", user.email))?;
+        let client = self.client.sign_in(&user.email, password).await?;
+        let reply = client.step_up(password).await?;
+        reply.expect(200)?;
+        if !reply.data()["step_up_until"].is_string() {
+            return Err(failure!(
+                "the step-up answered no `step_up_until`: {}",
+                reply.redacted_text()
+            ));
+        }
+        Ok(client)
+    }
+
+    /// Creates a user with a password the fixture generated (never printed, never logged) and
+    /// gives it `role` (one of the fixture's roles, or a platform reference role by name). The
+    /// user can sign in with [`User::password`] straight away.
+    pub async fn create_user_with_password(&self, name: &str, role: &str) -> Result<User, Failure> {
+        let clean: String = name
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
+        ensure_name(&clean)?;
+        let email = format!(
+            "{}-{}@l3.test",
+            clean.to_ascii_lowercase(),
+            &self.unique("u")[2..]
+        );
+        let user = invite(&self.root, &self.site, &email, Some(&generated_password())).await;
+        let role_id = self.role_record(role).await?;
+        let reply = self
+            .admin()
+            .create(
+                "role_assignment",
+                &json!({
+                    "user": user.id.clone(),
+                    "role": role_id,
+                    "source": "manual",
+                    "state": "active",
+                    "reason": "Assigned by the l3-http fixture helper.",
+                }),
+            )
+            .await?;
+        reply.expect(201)?;
+        Ok(user)
+    }
+
+    /// The record id of the role called `role`: a fixture role, or any role the site holds.
+    async fn role_record(&self, role: &str) -> Result<String, Failure> {
+        if let Some(id) = self.role_ids.get(role) {
+            return Ok(id.clone());
+        }
+        let roles = self.admin().list("role", "limit=100").await?;
+        roles.expect(200)?;
+        roles
+            .rows()?
+            .iter()
+            .find(|r| r.get("role_name") == Some(&json!(role)))
+            .and_then(|r| r.get("id").and_then(Json::as_str))
+            .map(str::to_owned)
+            .ok_or_else(|| failure!("the site has no role called `{role}`"))
+    }
+
+    /// Gives `role` a masked or a revealing grant on `doctype.field`, on the fixture's private
+    /// copy of the sample app, then reloads the site and waits for the metadata to show it.
+    ///
+    /// The field joins a protection group if it has none and gets a placeholder mask if it has
+    /// none (a `read_masked` grant needs a mask format to show). Existing grants stay. Call it
+    /// once per role and field; a second call adds a second, identical entry, which is harmless.
+    pub async fn grant_field(
+        &self,
+        doctype: &str,
+        field: &str,
+        grant: FieldGrant,
+        role: &str,
+    ) -> Result<(), Failure> {
+        let sample = self.root.join("sample");
+        let path = sample.join(format!("doctypes/{doctype}.toml"));
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| failure!("cannot read the `{doctype}` DocType: {e}"))?;
+        let (patched, group) = protect_field(&text, field)
+            .ok_or_else(|| failure!("the `{doctype}` DocType declares no field `{field}`"))?;
+        let before = self.admin().meta(doctype).await?;
+        std::fs::write(&path, patched)
+            .map_err(|e| failure!("cannot write the `{doctype}` DocType: {e}"))?;
+        let grants = sample.join("permissions/field_grants.toml");
+        let existing = std::fs::read_to_string(&grants).unwrap_or_default();
+        std::fs::write(
+            &grants,
+            format!(
+                "{existing}\n[[entries]]\nrole = {role:?}\ndoctype = {doctype:?}\ntarget = {{ group = {group:?} }}\naccess = [{:?}]\n",
+                grant.access()
+            ),
+        )
+        .map_err(|e| failure!("cannot write the field grants: {e}"))?;
+        spot_cli::request_reload(&self.root, &self.site)
+            .map_err(|e| failure!("cannot request a reload: {e}"))?;
+        // The metadata ETag moves when the field gains its group or mask; when it was already
+        // protected only the grant changed, and the settle time below has to do.
+        let was = before.header("etag").map(str::to_owned);
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            let now = self.admin().meta(doctype).await?;
+            if now.header("etag").map(str::to_owned) != was {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(750)).await;
+        Ok(())
+    }
+}
+
+fn ensure_name(name: &str) -> Result<(), Failure> {
+    if name.is_empty() {
+        return Err(failure!(
+            "a user needs a name made of letters, digits or `-`"
+        ));
+    }
+    Ok(())
+}
+
+/// Puts `field` of the DocType text into a protection group and gives it a placeholder mask,
+/// each only when it has none. Returns the new text and the group's name.
+fn protect_field(text: &str, field: &str) -> Option<(String, String)> {
+    let header = format!("name = {field:?}");
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.iter().position(|l| l.trim() == header)?;
+    // The field's table ends at the next table header.
+    let end = lines[start + 1..]
+        .iter()
+        .position(|l| l.trim_start().starts_with('['))
+        .map_or(lines.len(), |n| start + 1 + n);
+    let block = &lines[start..end];
+    let existing_group = block.iter().find_map(|l| {
+        let l = l.trim();
+        l.strip_prefix("protection_group")
+            .and_then(|rest| rest.trim_start().strip_prefix('='))
+            .map(|v| v.trim().trim_matches('"').to_owned())
+    });
+    let has_mask = block.iter().any(|l| l.trim_start().starts_with("masking"));
+    let group = existing_group
+        .clone()
+        .unwrap_or_else(|| MASKED_GROUP.to_owned());
+    let mut out: Vec<String> = lines[..=start].iter().map(|l| (*l).to_owned()).collect();
+    if existing_group.is_none() {
+        out.push(format!("protection_group = {group:?}"));
+    }
+    if !has_mask {
+        out.push("masking = { placeholder = true }".to_owned());
+    }
+    out.extend(lines[start + 1..].iter().map(|l| (*l).to_owned()));
+    let mut text = out.join("\n");
+    text.push('\n');
+    let declared = format!("[[protection_groups]]\nname = {group:?}");
+    if existing_group.is_none() && !text.contains(&declared) {
+        text.push_str(&format!(
+            "\n{declared}\nlabel = \"L3 masked\"\ntrace = false\n"
+        ));
+    }
+    Some((text, group))
 }
 
 async fn invite(root: &Path, site: &str, email: &str, password: Option<&str>) -> User {

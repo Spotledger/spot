@@ -272,11 +272,11 @@ impl Stack {
             .await;
         let user = users.json()["data"]
             .as_array()
-            .unwrap()
+            .unwrap_or_else(|| panic!("no user list ({}): {}", users.status, users.raw))
             .iter()
             .find(|row| row["email"] == email)
             .map(|row| row["id"].as_str().unwrap().to_owned())
-            .unwrap();
+            .unwrap_or_else(|| panic!("no user row for {email}: {}", users.raw));
         let made = self
             .call(
                 "POST",

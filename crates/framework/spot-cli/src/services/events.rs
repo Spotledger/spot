@@ -25,6 +25,16 @@
 //!   `max_streams_per_user` per caller (`429 api.rate_limited`); this budget is separate from
 //!   the realtime hub's.
 //!
+//! # Watching it
+//!
+//! A sampler (`events/metrics.rs`) reads the consumers, the outbox head and the parked partitions
+//! every `services.events.metrics_interval_seconds` and publishes gauges (consumers, open streams,
+//! parked partitions, the largest lag in events, consumers that need a resync, the head's age);
+//! the pull, ack, redelivery, skip, refusal and close counters are counted at the port. Readiness
+//! stays `200` and says `degraded` while a partition has been parked past the report time or a
+//! consumer is further behind than `lag_warn_events`. No label carries a consumer, user, topic or
+//! position.
+//!
 //! # Level
 //!
 //! Optional. A failed start-up check (the consumer store or the outbox cannot be read) degrades
@@ -92,12 +102,16 @@ use crate::{Error, Result};
 
 #[path = "events/feed.rs"]
 mod feed;
+// Not `metrics`: that name is the metrics crate, which the macros below need.
+#[path = "events/metrics.rs"]
+mod observe;
 #[path = "events/ops.rs"]
 mod ops;
 #[path = "events/seams.rs"]
 mod seams;
 
 use feed::{StreamFeed, StreamSlot};
+use observe::Sampler;
 use seams::{EventAudit, HeadCache, LiveFacts, LiveVisibility, Principals, Rights};
 
 /// Start order: after the framework's own services (they use 100 to 900).
@@ -140,6 +154,11 @@ struct Settings {
     consumer_roles: Vec<String>,
     /// Roles, besides `Tenant Administrator`, that may stream the reserved topic classes.
     stream_roles: Vec<String>,
+    /// A consumer further behind than this many events degrades readiness; `0` turns the check
+    /// off.
+    lag_warn_events: u64,
+    /// How often the stream's gauges are sampled (seconds, at least 5).
+    metrics_interval_seconds: u64,
 }
 
 impl Default for Settings {
@@ -156,6 +175,8 @@ impl Default for Settings {
             window: 1000,
             consumer_roles: Vec::new(),
             stream_roles: Vec::new(),
+            lag_warn_events: 100_000,
+            metrics_interval_seconds: 15,
         }
     }
 }
@@ -191,6 +212,12 @@ impl Settings {
         }
         if !(1..=10_000).contains(&self.window) {
             return bad("window", "must be 1 to 10000");
+        }
+        if !(5..=3_600).contains(&self.metrics_interval_seconds) {
+            return bad("metrics_interval_seconds", "must be 5 to 3600");
+        }
+        if !(5..=3_600).contains(&self.metrics_interval_seconds) {
+            return bad("metrics_interval_seconds", "must be 5 to 3600");
         }
         for (key, roles) in [
             ("consumer_roles", &self.consumer_roles),
@@ -329,6 +356,8 @@ struct Shared {
     streams: Mutex<Streams>,
     stop: watch::Sender<bool>,
     ready: AtomicBool,
+    /// Samples the stream and keeps the readiness reason (see `events/metrics.rs`).
+    sampler: Sampler,
 }
 
 /// Whether `principal` holds the administrator role, or one of `extra`, without a scope.
@@ -387,7 +416,13 @@ impl EventStreamPort for EventsPort {
         lease: Option<&'a str>,
         request: PullIn,
     ) -> BoxFuture<'a, EventsResult<PullOut>> {
-        Box::pin(async move { self.shared.pull(ctx, name, lease, request).await })
+        Box::pin(async move {
+            let partition = request.partition;
+            let redeliverable = observe::redeliverable(&self.shared, name, partition);
+            let out = self.shared.pull(ctx, name, lease, request).await?;
+            observe::pulled(&out, redeliverable);
+            Ok(out)
+        })
     }
 
     fn ack<'a>(
@@ -398,7 +433,14 @@ impl EventStreamPort for EventsPort {
         partition: u32,
         position: &'a str,
     ) -> BoxFuture<'a, EventsResult<CheckpointOut>> {
-        Box::pin(async move { self.shared.ack(ctx, name, lease, partition, position).await })
+        Box::pin(async move {
+            let done = self
+                .shared
+                .ack(ctx, name, lease, partition, position)
+                .await?;
+            observe::acked();
+            Ok(done)
+        })
     }
 
     fn restart<'a>(
@@ -417,7 +459,15 @@ impl EventStreamPort for EventsPort {
         ctx: &'a RequestCtx,
         request: StreamIn,
     ) -> BoxFuture<'a, EventsResult<Box<dyn EventFeed>>> {
-        Box::pin(async move { self.shared.open_stream(ctx, request).await })
+        Box::pin(async move {
+            match self.shared.open_stream(ctx, request).await {
+                Ok(feed) => Ok(observe::counted(&self.shared, feed)),
+                Err(error) => {
+                    observe::refused(&self.shared, &error);
+                    Err(error)
+                }
+            }
+        })
     }
 
     fn limits(&self) -> StreamLimits {
@@ -443,6 +493,11 @@ impl Service for EventsService {
 
     fn level(&self) -> Level {
         Level::Optional
+    }
+
+    fn degraded(&self) -> Option<String> {
+        // In memory only: the sampler worked this out on its last turn.
+        self.shared.sampler.reason()
     }
 
     fn check(&self) -> CheckFuture<'_> {
@@ -471,6 +526,8 @@ impl Service for EventsService {
             if shared.head.refresh(&shared.backend).await.is_err() {
                 tracing::warn!(site = %shared.site, "the event stream could not read the outbox head");
             }
+            shared.sampler.sample(shared).await;
+            let every = Duration::from_secs(shared.settings.metrics_interval_seconds);
             loop {
                 tokio::select! {
                     changed = stop.changed() => {
@@ -478,15 +535,8 @@ impl Service for EventsService {
                             break;
                         }
                     }
-                    () = tokio::time::sleep(Duration::from_secs(60)) => {
-                        match shared.engine.parked_report().await {
-                            Ok(parked) if !parked.is_empty() => tracing::warn!(
-                                site = %shared.site,
-                                parked = parked.len(),
-                                "event consumers are parked: an operator restarts the partition"
-                            ),
-                            _ => {}
-                        }
+                    () = tokio::time::sleep(every) => {
+                        shared.sampler.sample(shared).await;
                     }
                 }
             }
@@ -507,6 +557,21 @@ impl Service for EventsService {
 fn built() -> &'static Mutex<HashMap<String, Arc<EventsPort>>> {
     static BUILT: OnceLock<Mutex<HashMap<String, Arc<EventsPort>>>> = OnceLock::new();
     BUILT.get_or_init(Mutex::default)
+}
+
+/// Takes one sample for `site` now instead of waiting for the interval: publishes the gauges and
+/// refreshes the readiness reason. Returns `false` when the site has no event stream. Tests use it
+/// to avoid sleeping for `metrics_interval_seconds`.
+#[doc(hidden)]
+pub async fn sample_now(site: &str) -> bool {
+    let port = lock(built()).get(site).cloned();
+    match port {
+        Some(port) => {
+            port.shared.sampler.sample(&port.shared).await;
+            true
+        }
+        None => false,
+    }
 }
 
 async fn build(ctx: &mut SiteCtx<'_>, settings: Settings) -> Result<Arc<EventsPort>> {
@@ -616,6 +681,7 @@ async fn build(ctx: &mut SiteCtx<'_>, settings: Settings) -> Result<Arc<EventsPo
         streams: Mutex::default(),
         stop,
         ready: AtomicBool::new(false),
+        sampler: Sampler::default(),
     });
     let _ = &shared.store;
     ctx.add(Arc::new(EventsService {

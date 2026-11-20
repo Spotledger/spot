@@ -138,6 +138,9 @@ pub(crate) fn traverse(
             t.max_depth
         )));
     }
+    if t.max_nodes == 0 {
+        return Err(invalid("max_nodes must be at least 1".into()));
+    }
     let mut edges = t
         .edges
         .iter()

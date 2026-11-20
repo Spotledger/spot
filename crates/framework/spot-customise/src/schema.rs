@@ -110,6 +110,14 @@ pub trait SchemaBackend: Send + Sync {
     /// batches, and returns how many rows it filled. Idempotent: a rerun fills only what is
     /// left, so recovery may call it again.
     fn backfill<'a>(&'a self, wanted: &'a Catalog, fills: &'a [Fill]) -> SchemaFuture<'a, u64>;
+
+    /// Called once a removed custom field is leaving the metadata, before the metadata that no
+    /// longer has it is served. The column and its data stay (a runtime change never drops
+    /// data); a backend whose own `prepare` would refuse a column the catalogue lacks marks it
+    /// as retired here. Idempotent. The default does nothing.
+    fn retire_column<'a>(&'a self, _doctype: &'a str, _field: &'a str) -> SchemaFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// Rows a backfill batch updates in one transaction.

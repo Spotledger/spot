@@ -34,8 +34,6 @@ thiserror = "2"
 spot-journal-manifest = { path = "../spot-journal-manifest" }
 spot-journal-segment = { path = "../spot-journal-segment" }
 spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
-# The tenant journal key the relay seals its remote-sync tail chunks with.
-spot-secrets = { path = "../spot-secrets" }
 # Signs the test manifests (the manifest crate takes an Ed25519 signing key and re-exports none).
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 

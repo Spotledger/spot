@@ -1,6 +1,8 @@
 //! Sending one HTTP/1.1 request to the vetted, pinned addresses of an [`Authorized`] result.
 
 use crate::{Authorized, EgressConnector, EgressError};
+#[cfg(feature = "tls")]
+use crate::{Purpose, TlsOptions, TlsSummary, tls_options::TlsRuntime};
 use http::header::{self, HeaderName, HeaderValue};
 use http::{HeaderMap, Method as HttpMethod, StatusCode};
 use http_body_util::{BodyExt, Either, Empty, Full, Limited};
@@ -164,16 +166,72 @@ type RequestBody = Either<Empty<Bytes>, Full<Bytes>>;
 pub struct HttpSender {
     connector: EgressConnector,
     total_timeout: Duration,
+    /// The TLS configurations, built once. `None` only if the TLS library rejected the fixed
+    /// default inputs, in which case every HTTPS request fails closed.
+    #[cfg(feature = "tls")]
+    tls: Option<TlsRuntime>,
+    /// Purpose and actor written into the denial record of a refused TLS connection.
+    #[cfg(feature = "tls")]
+    refusal_context: Option<(Purpose, Option<String>)>,
 }
 
 impl HttpSender {
     /// A sender over `connector`, giving each request `total_timeout` from connect to the last
     /// body byte.
+    ///
+    /// TLS is today's: the public web roots, no client certificate, TLS 1.2 or later. Use
+    /// [`HttpSender::with_tls`] for a private CA, mutual TLS, a TLS 1.3 floor or a pinned name.
     pub fn new(connector: EgressConnector, total_timeout: Duration) -> Self {
         Self {
             connector,
             total_timeout,
+            #[cfg(feature = "tls")]
+            tls: TlsOptions::public_roots()
+                .ok()
+                .map(TlsRuntime::from_options),
+            #[cfg(feature = "tls")]
+            refusal_context: None,
         }
+    }
+
+    /// A sender over `connector` whose HTTPS connections follow `options`.
+    ///
+    /// The options were validated, and their rustls configurations built, when they were
+    /// created; the sender keeps those configurations and never rebuilds or alters them. The
+    /// options (and so the client key's PEM buffer) are consumed here and wiped. The
+    /// authorisation path is unchanged: address vetting, DNS pinning and redirect re-validation
+    /// all happen before TLS, and a client identity or a server-name override applies to one
+    /// origin only (see [`crate::ClientIdentity`]).
+    #[cfg(feature = "tls")]
+    pub fn with_tls(
+        connector: EgressConnector,
+        total_timeout: Duration,
+        options: TlsOptions,
+    ) -> Self {
+        Self {
+            connector,
+            total_timeout,
+            tls: Some(TlsRuntime::from_options(options)),
+            refusal_context: None,
+        }
+    }
+
+    /// Records a refused TLS connection (a failed handshake: wrong name, untrusted CA, version
+    /// floor, missing client certificate) in the guard's denial sink under `purpose` and
+    /// `actor`. The record's rule says `tls_refused`, plus the server-name override when one was
+    /// applied to that connection. Without this call a TLS refusal is returned as an error only.
+    #[cfg(feature = "tls")]
+    #[must_use]
+    pub fn with_denial_context(mut self, purpose: Purpose, actor: Option<String>) -> Self {
+        self.refusal_context = Some((purpose, actor));
+        self
+    }
+
+    /// A secret-free summary of the TLS options in force (`None` only if the TLS library
+    /// rejected the fixed defaults).
+    #[cfg(feature = "tls")]
+    pub fn tls_summary(&self) -> Option<TlsSummary> {
+        self.tls.as_ref().map(TlsRuntime::summary)
     }
 
     /// Whether the sender writes `name` itself and never copies the caller's value.
@@ -291,7 +349,7 @@ impl Sender for HttpSender {
                 "http" => Self::exchange(stream, request, max_body).await,
                 #[cfg(feature = "tls")]
                 "https" => {
-                    let tls = tls_connect(stream, &authorized.original_host).await?;
+                    let tls = self.tls_connect(stream, request, authorized).await?;
                     Self::exchange(tls, request, max_body).await
                 }
                 _ => Err(EgressError::InvalidUrl),
@@ -303,23 +361,57 @@ impl Sender for HttpSender {
     }
 }
 
-/// TLS over an already-connected pinned stream; the server name is the original host.
 #[cfg(feature = "tls")]
-async fn tls_connect(
-    stream: tokio::net::TcpStream,
-    host: &str,
-) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, EgressError> {
-    let mut roots = rustls::RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = rustls::ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    let name = rustls::pki_types::ServerName::try_from(host.to_owned())
-        .map_err(|_| EgressError::InvalidUrl)?;
-    tokio_rustls::TlsConnector::from(std::sync::Arc::new(config))
-        .connect(name, stream)
-        .await
-        .map_err(|_| EgressError::ResolutionFailed)
+impl HttpSender {
+    /// TLS over an already-connected pinned stream. The certificate is verified against the
+    /// original host (or, for the peer origin only, the configured override); the connection was
+    /// already vetted and pinned, so nothing here chooses an address.
+    async fn tls_connect(
+        &self,
+        stream: tokio::net::TcpStream,
+        request: &HttpRequest,
+        authorized: &Authorized,
+    ) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, EgressError> {
+        let tls = self.tls.as_ref().ok_or(EgressError::ResolutionFailed)?;
+        let host = &authorized.original_host;
+        let port = request
+            .url
+            .port_or_known_default()
+            .or_else(|| authorized.addrs.first().map(std::net::SocketAddr::port))
+            .unwrap_or(443);
+        let selection = tls.select(host, port);
+        let name = rustls::pki_types::ServerName::try_from(selection.server_name.clone())
+            .map_err(|_| EgressError::InvalidUrl)?;
+        match tokio_rustls::TlsConnector::from(selection.config)
+            .connect(name, stream)
+            .await
+        {
+            Ok(tls_stream) => Ok(tls_stream),
+            Err(_) => {
+                self.record_refusal(authorized, port, selection.override_used.as_deref());
+                Err(EgressError::ResolutionFailed)
+            }
+        }
+    }
+
+    fn record_refusal(&self, authorized: &Authorized, port: u16, override_used: Option<&str>) {
+        let Some((purpose, actor)) = &self.refusal_context else {
+            return;
+        };
+        let rule = match override_used {
+            Some(name) => format!("tls_refused server_name_override={name}"),
+            None => "tls_refused".to_owned(),
+        };
+        self.connector.guard.record_tls_refusal(
+            self.connector.tenant(),
+            *purpose,
+            actor.clone(),
+            &authorized.original_host,
+            port,
+            authorized.addrs.first().map(std::net::SocketAddr::ip),
+            rule,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -334,6 +426,27 @@ mod tests {
         assert_eq!(Method::Put.wire(), HttpMethod::PUT);
         assert_eq!(Method::Patch.wire(), HttpMethod::PATCH);
         assert_eq!(Method::Delete.wire(), HttpMethod::DELETE);
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn new_keeps_todays_tls_defaults() {
+        let policy = crate::EgressPolicy::default();
+        let guard = std::sync::Arc::new(crate::Guard::with_defaults(
+            policy,
+            std::sync::Arc::new(spot_core::SystemClock::new()),
+        ));
+        let connector = EgressConnector::new(guard, "t", crate::Purpose::Script);
+        let sender = HttpSender::new(connector, Duration::from_secs(1));
+        assert_eq!(
+            sender.tls_summary(),
+            Some(TlsSummary {
+                trust: "public_roots",
+                client_identity: false,
+                min_version: crate::TlsVersion::Tls12,
+                server_name_override: false,
+            })
+        );
     }
 
     #[test]

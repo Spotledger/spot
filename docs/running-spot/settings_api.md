@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # The settings management service
 
 An operator guide for `services/settings_api.rs` (WP-ADM-07.T2). It serves the typed settings schema

@@ -1,7 +1,9 @@
 //! [`validate_input`]: checks a manual or API start's input against the trigger's JSON schema.
 //!
 //! The check understands the subset a start form needs: `type`, `required`, `properties`,
-//! `additionalProperties` (a boolean), `enum` and `items`. A schema keyword outside that subset
+//! `additionalProperties` (a boolean), `enum`, `items`, the integer bounds `minimum` and
+//! `maximum`, and the string lengths `minLength` and `maxLength` (in characters). `pattern` is
+//! not supported (no regular-expression engine here), so a schema that uses it is refused. A schema keyword outside that subset
 //! is reported as a problem rather than ignored, so a schema this crate cannot enforce refuses
 //! the start (fail closed) instead of silently accepting any input.
 //!
@@ -28,6 +30,92 @@ pub fn validate_input(schema: &Json, input: &Json) -> Vec<String> {
     problems
 }
 
+/// Every reason `schema` cannot be enforced by [`validate_input`]; empty when it can.
+///
+/// A problem names a JSON pointer into the schema and a fault kind only, never a keyword name
+/// or a value from the schema (it is a definition author's text, reported without echo).
+#[must_use]
+pub fn check_schema(schema: &Json) -> Vec<String> {
+    let mut problems = Vec::new();
+    check_schema_at(schema, "", &mut problems);
+    problems
+}
+
+fn check_schema_at(schema: &Json, path: &str, problems: &mut Vec<String>) {
+    let at = pointer(path);
+    let rules = match schema {
+        Json::Bool(_) => return,
+        Json::Object(rules) => rules,
+        _ => {
+            problems.push(format!("{at}: the schema is not an object"));
+            return;
+        }
+    };
+    for (keyword, value) in rules {
+        match keyword.as_str() {
+            "type" => {
+                let names: Option<Vec<&str>> = match value {
+                    Json::String(name) => Some(vec![name.as_str()]),
+                    Json::Array(items) => items.iter().map(Json::as_str).collect(),
+                    _ => None,
+                };
+                let ok = names.is_some_and(|names| {
+                    !names.is_empty()
+                        && names.iter().all(|n| type_matches(n, &Json::Null).is_some())
+                });
+                if !ok {
+                    problems.push(format!("{at}: the schema `type` is malformed"));
+                }
+            }
+            "required" => {
+                let ok = value
+                    .as_array()
+                    .is_some_and(|items| items.iter().all(Json::is_string));
+                if !ok {
+                    problems.push(format!("{at}: the schema `required` is malformed"));
+                }
+            }
+            "properties" => match value.as_object() {
+                Some(fields) => {
+                    for (name, sub) in fields {
+                        let child =
+                            format!("{path}/{}", name.replace('~', "~0").replace('/', "~1"));
+                        check_schema_at(sub, &child, problems);
+                    }
+                }
+                None => problems.push(format!("{at}: the schema `properties` is malformed")),
+            },
+            "additionalProperties" => {
+                if !value.is_boolean() {
+                    problems.push(format!(
+                        "{at}: the schema `additionalProperties` must be true or false"
+                    ));
+                }
+            }
+            "enum" => {
+                if !value.is_array() {
+                    problems.push(format!("{at}: the schema `enum` is malformed"));
+                }
+            }
+            "minimum" | "maximum" => {
+                if value.as_i64().is_none() {
+                    problems.push(format!("{at}: a schema bound must be an integer"));
+                }
+            }
+            "minLength" | "maxLength" => {
+                if value.as_u64().is_none() {
+                    problems.push(format!(
+                        "{at}: a schema length must be a non-negative integer"
+                    ));
+                }
+            }
+            "items" => check_schema_at(value, &format!("{path}/items"), problems),
+            other if ANNOTATIONS.contains(&other) => {}
+            _ => problems.push(format!("{at}: a schema keyword is not supported")),
+        }
+    }
+}
+
 fn pointer(path: &str) -> &str {
     if path.is_empty() { "/" } else { path }
 }
@@ -43,6 +131,51 @@ fn type_matches(name: &str, value: &Json) -> Option<bool> {
         "null" => value.is_null(),
         _ => return None,
     })
+}
+
+/// `minimum`/`maximum` on a number and `minLength`/`maxLength` on a string; a bound the schema
+/// states wrongly is reported by [`check_schema`], so here it is simply not applied.
+fn check_bounds(
+    rules: &serde_json::Map<String, Json>,
+    value: &Json,
+    at: &str,
+    problems: &mut Vec<String>,
+) {
+    if let Json::Number(number) = value {
+        let below = |bound: i64| match (number.as_i64(), number.as_u64()) {
+            (Some(n), _) => n < bound,
+            (None, Some(_)) => false,
+            (None, None) => number.as_f64().is_some_and(|f| f < bound as f64),
+        };
+        let above = |bound: i64| match (number.as_i64(), number.as_u64()) {
+            (Some(n), _) => n > bound,
+            (None, Some(_)) => true,
+            (None, None) => number.as_f64().is_some_and(|f| f > bound as f64),
+        };
+        if let Some(bound) = rules.get("minimum").and_then(Json::as_i64)
+            && below(bound)
+        {
+            problems.push(format!("{at}: below the minimum"));
+        }
+        if let Some(bound) = rules.get("maximum").and_then(Json::as_i64)
+            && above(bound)
+        {
+            problems.push(format!("{at}: above the maximum"));
+        }
+    }
+    if let Json::String(text) = value {
+        let length = text.chars().count() as u64;
+        if let Some(bound) = rules.get("minLength").and_then(Json::as_u64)
+            && length < bound
+        {
+            problems.push(format!("{at}: too short"));
+        }
+        if let Some(bound) = rules.get("maxLength").and_then(Json::as_u64)
+            && length > bound
+        {
+            problems.push(format!("{at}: too long"));
+        }
+    }
 }
 
 fn check(schema: &Json, value: &Json, path: &str, problems: &mut Vec<String>) {
@@ -62,7 +195,16 @@ fn check(schema: &Json, value: &Json, path: &str, problems: &mut Vec<String>) {
     for keyword in rules.keys() {
         let known = matches!(
             keyword.as_str(),
-            "type" | "required" | "properties" | "additionalProperties" | "enum" | "items"
+            "type"
+                | "required"
+                | "properties"
+                | "additionalProperties"
+                | "enum"
+                | "items"
+                | "minimum"
+                | "maximum"
+                | "minLength"
+                | "maxLength"
         ) || ANNOTATIONS.contains(&keyword.as_str());
         if !known {
             problems.push(format!("{at}: schema keyword `{keyword}` is not supported"));
@@ -92,6 +234,7 @@ fn check(schema: &Json, value: &Json, path: &str, problems: &mut Vec<String>) {
             return;
         }
     }
+    check_bounds(rules, value, at, problems);
     if let Some(Json::Array(allowed)) = rules.get("enum")
         && !allowed.contains(value)
     {
@@ -179,6 +322,39 @@ mod tests {
     fn a_non_object_input_is_refused_by_an_object_schema() {
         assert_eq!(validate_input(&schema(), &json!("text")).len(), 1);
         assert_eq!(validate_input(&schema(), &Json::Null).len(), 1);
+    }
+
+    #[test]
+    fn check_schema_accepts_the_enforceable_subset_and_names_no_keyword() {
+        assert!(check_schema(&schema()).is_empty());
+        let problems = check_schema(&json!({
+            "type": "object",
+            "properties": {"a": {"pattern": "^secret"}, "b": {"type": "wat"}},
+            "additionalProperties": "no"
+        }));
+        assert_eq!(problems.len(), 3, "{problems:?}");
+        assert!(problems.iter().all(|p| !p.contains("pattern")));
+        assert!(problems.iter().all(|p| !p.contains("secret")));
+        assert_eq!(check_schema(&json!(5)).len(), 1);
+    }
+
+    #[test]
+    fn bounds_and_lengths_are_enforced_without_echo() {
+        let schema = json!({"type": "object", "properties": {
+            "amount": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "name": {"type": "string", "minLength": 2, "maxLength": 4}
+        }});
+        assert!(validate_input(&schema, &json!({"amount": 5, "name": "abc"})).is_empty());
+        let low = validate_input(&schema, &json!({"amount": 0, "name": "a"}));
+        assert_eq!(low.len(), 2, "{low:?}");
+        assert!(low[0].starts_with("/amount: below the minimum"));
+        assert!(low[1].starts_with("/name: too short"));
+        let high = validate_input(&schema, &json!({"amount": 1001, "name": "abcde"}));
+        assert!(high[0].starts_with("/amount: above the maximum"));
+        assert!(high[1].starts_with("/name: too long"));
+        assert!(check_schema(&schema).is_empty());
+        assert_eq!(check_schema(&json!({"minimum": "1"})).len(), 1);
+        assert_eq!(check_schema(&json!({"maxLength": -1})).len(), 1);
     }
 
     #[test]

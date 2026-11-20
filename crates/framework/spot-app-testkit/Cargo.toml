@@ -1,0 +1,53 @@
+[package]
+name = "spot-app-testkit"
+description = "The extension SDK's test kit (WP-EXT-07.T2): load an app directory into the real document engine over the in-memory storage backend, act as named users with the app's own permissions, and assert documents, lifecycle effects, permission outcomes and error codes, with no database and no server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The app API: documents, controllers, errors, the document service the actors call.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The storage contract: values, the outbox the assertions read.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `ManualClock` and `SiteId`.
+spot-core = { path = "../spot-core" }
+# The real document engine, its authorizer and the principal seam.
+spot-document = { path = "../spot-document" }
+# DocType definitions and the effective metadata.
+spot-meta = { path = "../spot-meta" }
+# The permission model and snapshot the engine's authorizer decides from.
+spot-permissions = { path = "../spot-permissions" }
+# The named-permission check of the engine (methods declared with `right = permission(..)`).
+spot-app-permissions = { path = "../spot-app-permissions" }
+# The step registry a controller registers into.
+spot-seams = { path = "../spot-seams" }
+# The app check (`check_app`) the loader runs first.
+spot-pack = { path = "../spot-pack" }
+# The platform DocTypes (user, role, ...) an app's links may name.
+spot-platform-app = { path = "../spot-platform-app" }
+# The app manifest: the functions and fixtures an app declares (WP-EXT-07.T3).
+spot-manifest = { path = "../spot-manifest" }
+# The whitelisted function registry `call_function` dispatches through (WP-EXT-07.T3).
+spot-functions = { path = "../spot-functions" }
+# The TypeScript engine and transpiler `run_script` uses (WP-EXT-07.T3).
+spot-ts = { path = "../spot-ts" }
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The in-memory backend: no PostgreSQL.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+serde_json = "1"
+rust_decimal = "1"
+time = { version = "0.3", default-features = false, features = ["parsing"] }
+
+[dev-dependencies]
+# The sample app's native controllers: the proof in tests/.
+spot-sample-app = { path = "../../apps/spot-sample-app" }
+# A freshly scaffolded app, called as a library into a temp directory.
+spot-scaffold = { path = "../spot-scaffold" }
+tempfile = "3"
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

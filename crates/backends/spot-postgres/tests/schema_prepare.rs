@@ -362,6 +362,67 @@ async fn additive_changes_are_applied_and_data_survives() {
 }
 
 #[tokio::test]
+async fn a_retired_column_is_tolerated_and_keeps_its_data() {
+    let Some((env, _)) = prepared().await else {
+        return;
+    };
+    let mut es = entities();
+    entity_mut(&mut es, "party")
+        .fields
+        .push(field("nickname", FieldType::Int, false));
+    let with = catalog_v(2, es);
+    env.backend.prepare(&with).await.unwrap();
+    let mut p = party("Acme", 0);
+    p.fields.insert(n("nickname"), Value::Int(7));
+    seed(&env, &with, &[&p]).await;
+
+    // Without being retired, the column the catalog lacks is a refused drop.
+    let refused = env
+        .backend
+        .prepare(&catalog_v(3, entities()))
+        .await
+        .unwrap_err();
+    refusal(&refused, &["party.nickname", "dropping a column"]);
+
+    // Retired (twice: idempotent), the older catalog prepares, the data stays and the column
+    // no longer insists on a value.
+    env.backend
+        .retire_column("party", "nickname")
+        .await
+        .unwrap();
+    env.backend
+        .retire_column("party", "nickname")
+        .await
+        .unwrap();
+    env.backend
+        .prepare(&catalog_v(3, entities()))
+        .await
+        .unwrap();
+    let c = env.db.raw_client().await;
+    let kept: i64 = value(&c, "SELECT nickname FROM party").await;
+    assert_eq!(kept, 7);
+    let not_null: bool = value(
+        &c,
+        "SELECT attnotnull FROM pg_attribute \
+         WHERE attrelid = 'party'::regclass AND attname = 'nickname'",
+    )
+    .await;
+    assert!(!not_null);
+
+    // A column that was never retired is still refused, and retiring a missing one is a no-op.
+    env.backend
+        .retire_column("party", "no_such_column")
+        .await
+        .unwrap();
+    let mut es = entities();
+    entity_mut(&mut es, "party")
+        .fields
+        .retain(|f| f.name.as_str() != "note");
+    let refused = env.backend.prepare(&catalog_v(4, es)).await.unwrap_err();
+    refusal(&refused, &["party.note", "dropping a column"]);
+}
+
+#[tokio::test]
 async fn a_required_column_cannot_be_added_to_a_table_that_holds_records() {
     let Some((env, _)) = prepared().await else {
         return;

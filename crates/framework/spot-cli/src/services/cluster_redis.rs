@@ -10,6 +10,11 @@
 //!
 //! - **Coordinator:** a lost server answers `coordinator.unavailable`: leases are not renewed
 //!   and jobs and the scheduler stop claiming (fail closed). The server checks fencing tokens.
+//! - **Short outages:** an outage shorter than one probe interval is seen by counting failed
+//!   operations, not only the probe (see [`Status::record_failure`]): `short_outage_failures`
+//!   connection or timeout failures inside `short_outage_window_ms` degrade readiness and fence
+//!   lease holders until the window has passed with no failure and a probe answers. A business
+//!   refusal never counts.
 //! - **Cache:** a lost server is a miss; on recovery the site's namespace is cleared (the
 //!   generation bumps), so nothing cached before the outage is read.
 //! - **Bus:** [`FallbackBus`] falls back to the per-node bus while Redis fails; [`Status`] says so.
@@ -17,10 +22,11 @@
 //! The start-up check (`PING`, version, clock skew against `TIME`, an `ACL DRYRUN` probe that
 //! runs nothing) stops the site's start; see [`startup_check`]. Metrics: see [`metric`].
 
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -97,6 +103,11 @@ pub struct Settings {
     pub max_clock_skew_ms: u64,
     /// How often the supervisor probes the server, in milliseconds.
     pub probe_interval_ms: u64,
+    /// How many connection or timeout failures inside the window mark the site degraded (1 to
+    /// 100, default 2): an outage shorter than a probe interval is seen this way.
+    pub short_outage_failures: u32,
+    /// The window those failures are counted in, in milliseconds (100 to 600000, default 10000).
+    pub short_outage_window_ms: u64,
 }
 
 impl Default for Settings {
@@ -112,6 +123,8 @@ impl Default for Settings {
             require_restricted_acl: false,
             max_clock_skew_ms: 2_000,
             probe_interval_ms: 2_000,
+            short_outage_failures: 2,
+            short_outage_window_ms: 10_000,
         }
     }
 }
@@ -239,6 +252,8 @@ pub struct Validated {
     pub(crate) require_restricted_acl: bool,
     pub(crate) max_clock_skew: Duration,
     pub(crate) probe_interval: Duration,
+    pub(crate) short_outage_failures: u32,
+    pub(crate) short_outage_window: Duration,
 }
 
 impl Validated {
@@ -348,6 +363,15 @@ pub fn validate(settings: &Settings) -> Result<Validated> {
             "and probe_interval_ms must be positive",
         ));
     }
+    if !(1..=100).contains(&settings.short_outage_failures) {
+        return Err(refuse("short_outage_failures", "is 1 to 100"));
+    }
+    if !(100..=600_000).contains(&settings.short_outage_window_ms) {
+        return Err(refuse(
+            "short_outage_window_ms",
+            "is 100 to 600000 milliseconds",
+        ));
+    }
     let password_ref = settings
         .password_ref
         .as_deref()
@@ -361,6 +385,8 @@ pub fn validate(settings: &Settings) -> Result<Validated> {
         require_restricted_acl: settings.require_restricted_acl,
         max_clock_skew: Duration::from_millis(settings.max_clock_skew_ms),
         probe_interval: Duration::from_millis(settings.probe_interval_ms),
+        short_outage_failures: settings.short_outage_failures,
+        short_outage_window: Duration::from_millis(settings.short_outage_window_ms),
     })
 }
 
@@ -549,6 +575,18 @@ pub struct Status {
     bus_degraded: AtomicBool,
     fallbacks: AtomicU64,
     cache_resets: AtomicU64,
+    outage: Mutex<Outage>,
+    outage_failures: AtomicU32,
+    outage_window_ms: AtomicU64,
+    marked: AtomicBool,
+    short_outages: AtomicU64,
+    owed_epoch: AtomicU64,
+}
+
+/// The recent connection failures, newest last: a small bounded counter (at most the threshold).
+#[derive(Debug, Default)]
+struct Outage {
+    recent: VecDeque<u64>,
 }
 
 impl Status {
@@ -560,13 +598,126 @@ impl Status {
             bus_degraded: AtomicBool::new(false),
             fallbacks: AtomicU64::new(0),
             cache_resets: AtomicU64::new(0),
+            outage: Mutex::new(Outage::default()),
+            outage_failures: AtomicU32::new(2),
+            outage_window_ms: AtomicU64::new(10_000),
+            marked: AtomicBool::new(false),
+            short_outages: AtomicU64::new(0),
+            owed_epoch: AtomicU64::new(0),
         })
     }
 
-    /// Whether the server answered the last call or probe.
+    /// Sets how many failures inside which window mark the site degraded (defaults: 2 in 10 s).
+    pub fn set_outage_policy(&self, failures: u32, window: Duration) {
+        self.outage_failures
+            .store(failures.max(1), Ordering::SeqCst);
+        self.outage_window_ms.store(
+            u64::try_from(window.as_millis()).unwrap_or(u64::MAX).max(1),
+            Ordering::SeqCst,
+        );
+    }
+
+    /// Whether the server answered the last call or probe **and** no short outage is marked.
     #[must_use]
     pub fn connected(&self) -> bool {
+        self.link_up() && !self.marked()
+    }
+
+    /// Whether the last call or probe reached the server (the raw link, without the mark).
+    #[must_use]
+    pub fn link_up(&self) -> bool {
         self.connected.load(Ordering::SeqCst)
+    }
+
+    /// Whether a short outage is marked: enough connection failures inside the window, and not
+    /// yet cleared by a quiet window and a good probe.
+    #[must_use]
+    pub fn marked(&self) -> bool {
+        self.marked.load(Ordering::SeqCst)
+    }
+
+    /// How many short outages have been marked so far.
+    #[must_use]
+    pub fn short_outages(&self) -> u64 {
+        self.short_outages.load(Ordering::SeqCst)
+    }
+
+    /// Bumped whenever the cache namespace may hold an entry a lost invalidation should have
+    /// removed; the cache gate resets once per change.
+    #[must_use]
+    pub fn owed_epoch(&self) -> u64 {
+        self.owed_epoch.load(Ordering::SeqCst)
+    }
+
+    /// Notes that something that should have invalidated cache entries may have been lost.
+    pub fn owe_cache_reset(&self) {
+        self.owed_epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn outage(&self) -> std::sync::MutexGuard<'_, Outage> {
+        self.outage.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Records one connection or timeout failure of an operation at `now_ms` (a monotonic
+    /// reading of the injected clock). Returns `true` when this failure marked the site: the
+    /// threshold number of failures happened inside the window.
+    ///
+    /// Only connection and timeout failures are given here; a business refusal (a held lease, a
+    /// stale token) proves the server answered and is never counted. The counter keeps at most
+    /// the threshold of timestamps, so it is bounded however long an outage lasts.
+    pub fn record_failure(&self, now_ms: u64) -> bool {
+        let threshold = usize::try_from(self.outage_failures.load(Ordering::SeqCst).max(1))
+            .unwrap_or(usize::MAX);
+        let window = self.outage_window_ms.load(Ordering::SeqCst);
+        let mut outage = self.outage();
+        outage
+            .recent
+            .retain(|at| now_ms.saturating_sub(*at) <= window);
+        outage.recent.push_back(now_ms);
+        while outage.recent.len() > threshold {
+            outage.recent.pop_front();
+        }
+        let tripped = outage.recent.len() >= threshold;
+        drop(outage);
+        if tripped && !self.marked.swap(true, Ordering::SeqCst) {
+            self.short_outages.fetch_add(1, Ordering::SeqCst);
+            // Entries cached around the failures may be stale; the gate resets once.
+            self.owe_cache_reset();
+            metrics::gauge!(metric::CONNECTED).set(0.0);
+            return true;
+        }
+        false
+    }
+
+    /// A probe (or the cache gate's liveness check) reached the server at `now_ms`. Clears the
+    /// mark when the window has passed with no failure; returns `true` when it cleared.
+    pub fn probe_ok(&self, now_ms: u64) -> bool {
+        if !self.marked() {
+            return false;
+        }
+        let window = self.outage_window_ms.load(Ordering::SeqCst);
+        let mut outage = self.outage();
+        outage
+            .recent
+            .retain(|at| now_ms.saturating_sub(*at) <= window);
+        if !outage.recent.is_empty() {
+            return false;
+        }
+        drop(outage);
+        if self.marked.swap(false, Ordering::SeqCst) {
+            metrics::gauge!(metric::CONNECTED).set(if self.link_up() { 1.0 } else { 0.0 });
+            return true;
+        }
+        false
+    }
+
+    /// The supervisor's bookkeeping for one probe at `now_ms`: records whether the server
+    /// answered and, when it did, clears a marked short outage whose window has passed.
+    /// Returns `(was_up, cleared)`.
+    pub fn probe_result(&self, up: bool, now_ms: u64) -> (bool, bool) {
+        let was = self.set_connected(up);
+        let cleared = up && self.probe_ok(now_ms);
+        (was, cleared)
     }
 
     /// Whether invalidations go through the per-node bus because Redis refused them.
@@ -591,8 +742,10 @@ impl Status {
     #[must_use]
     pub fn degraded_reason(&self) -> Option<String> {
         let mut parts = Vec::new();
-        if !self.connected() {
+        if !self.link_up() {
             parts.push("the coordination server is unreachable; leases cannot be renewed and jobs and the scheduler do not claim");
+        } else if self.marked() {
+            parts.push("the coordination server failed several calls in a short time; leases are treated as lost and jobs and the scheduler do not claim until it answers cleanly");
         }
         if self.bus_degraded() {
             parts.push("realtime and metadata invalidations use the per-node bus only");
@@ -602,7 +755,7 @@ impl Status {
 
     fn set_connected(&self, up: bool) -> bool {
         let was = self.connected.swap(up, Ordering::SeqCst);
-        metrics::gauge!(metric::CONNECTED).set(if up { 1.0 } else { 0.0 });
+        metrics::gauge!(metric::CONNECTED).set(if up && !self.marked() { 1.0 } else { 0.0 });
         was
     }
 }
@@ -626,10 +779,29 @@ impl ObservedCoordinator {
     }
 
     fn note<T>(&self, result: &CoordResult<T>) {
-        // Any answer, even a refusal, proves the server is reachable.
+        // Any answer, even a refusal, proves the server is reachable. Only a connection or
+        // timeout failure counts toward a short outage.
         let down =
             matches!(result, Err(e) if e.code == spot_cluster_redis::coordinator::UNAVAILABLE);
         self.status.set_connected(!down);
+        if down {
+            self.status.record_failure(self.now_ms());
+        }
+    }
+
+    fn now_ms(&self) -> u64 {
+        u64::try_from(self.clock.monotonic().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// While a short outage is marked a holder treats its lease as lost: the call is refused as
+    /// unreachable without asking the server (and so without counting as a new failure).
+    fn fenced<T>(&self) -> Option<CoordResult<T>> {
+        self.status.marked().then(|| {
+            Err(spot_coordinator::Error::new(
+                spot_cluster_redis::coordinator::UNAVAILABLE,
+                "the coordination server failed several calls in a short time",
+            ))
+        })
     }
 }
 
@@ -653,6 +825,9 @@ impl Coordinator for ObservedCoordinator {
         ttl: Duration,
     ) -> BoxFuture<'a, CoordResult<Lease>> {
         Box::pin(async move {
+            if let Some(refused) = self.fenced() {
+                return refused;
+            }
             let result = bounded(self.inner.acquire(name, holder, ttl)).await;
             self.note(&result);
             result
@@ -661,6 +836,9 @@ impl Coordinator for ObservedCoordinator {
 
     fn renew<'a>(&'a self, lease: &'a Lease, ttl: Duration) -> BoxFuture<'a, CoordResult<Lease>> {
         Box::pin(async move {
+            if let Some(refused) = self.fenced() {
+                return refused;
+            }
             let started = self.clock.monotonic();
             let result = bounded(self.inner.renew(lease, ttl)).await;
             let took = self.clock.monotonic().saturating_sub(started);
@@ -684,6 +862,9 @@ impl Coordinator for ObservedCoordinator {
         token: FencingToken,
     ) -> BoxFuture<'a, CoordResult<()>> {
         Box::pin(async move {
+            if let Some(refused) = self.fenced() {
+                return refused;
+            }
             let result = bounded(self.inner.check_fence(name, token)).await;
             self.note(&result);
             result
@@ -848,6 +1029,10 @@ pub struct ResetOnRecovery {
     /// probe already cleared the namespace and the gate owes nothing.
     marked_at: AtomicU64,
     last_try_ms: AtomicU64,
+    /// The status's owed epoch the namespace was last reset (or found reset) at.
+    seen_epoch: AtomicU64,
+    /// The last time a swallowed invalidation was checked against the server.
+    last_verify_ms: AtomicU64,
 }
 
 impl ResetOnRecovery {
@@ -868,16 +1053,45 @@ impl ResetOnRecovery {
             needs_reset: AtomicBool::new(false),
             marked_at: AtomicU64::new(0),
             last_try_ms: AtomicU64::new(0),
+            seen_epoch: AtomicU64::new(0),
+            last_verify_ms: AtomicU64::new(0),
         }
     }
 
     /// Whether a reset is owed (a known outage that has not been cleared yet).
     pub fn reset_owed(&self) -> bool {
-        self.needs_reset.load(Ordering::SeqCst) || !self.status.connected()
+        self.needs_reset.load(Ordering::SeqCst)
+            || !self.status.link_up()
+            || self.status.owed_epoch() != self.seen_epoch.load(Ordering::SeqCst)
+    }
+
+    fn now_ms(&self) -> u64 {
+        u64::try_from(self.clock.monotonic().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// A `delete` or `delete_prefix` that reports nothing removed may have failed on a lost
+    /// connection (the Redis cache swallows connection errors). Asks the server, at most every
+    /// [`GATE_RETRY`]: when it does not answer, the failure counts toward a short outage and the
+    /// namespace owes a reset, because the invalidation was lost.
+    async fn verify_after_nothing_removed(&self) {
+        let now_ms = self.now_ms();
+        let last = self.last_verify_ms.load(Ordering::SeqCst);
+        let retry_ms = u64::try_from(GATE_RETRY.as_millis()).unwrap_or(250);
+        if last != 0 && now_ms.saturating_sub(last) < retry_ms {
+            return;
+        }
+        self.last_verify_ms.store(now_ms.max(1), Ordering::SeqCst);
+        if self.connection.ping().await.is_err() {
+            self.status.owe_cache_reset();
+            self.status.record_failure(now_ms);
+        }
     }
 
     async fn gate(&self) {
-        if !self.status.connected() && !self.needs_reset.swap(true, Ordering::SeqCst) {
+        let owed = self.status.owed_epoch();
+        if (!self.status.link_up() || owed != self.seen_epoch.load(Ordering::SeqCst))
+            && !self.needs_reset.swap(true, Ordering::SeqCst)
+        {
             self.marked_at
                 .store(self.status.cache_resets(), Ordering::SeqCst);
         }
@@ -887,6 +1101,7 @@ impl ResetOnRecovery {
         if self.status.cache_resets() != self.marked_at.load(Ordering::SeqCst) {
             // The supervisor's probe saw the server back and cleared the namespace first.
             self.needs_reset.store(false, Ordering::SeqCst);
+            self.seen_epoch.store(owed, Ordering::SeqCst);
             return;
         }
         let now_ms = u64::try_from(self.clock.monotonic().as_millis()).unwrap_or(u64::MAX);
@@ -899,10 +1114,12 @@ impl ResetOnRecovery {
         if self.connection.ping().await.is_err() {
             return;
         }
+        self.status.probe_ok(now_ms);
         // The first caller to see the server back clears the namespace; the others wait on the
         // same decision through the flag and then read the cleared namespace.
         if self.needs_reset.swap(false, Ordering::SeqCst) {
             self.inner.clear_site(&self.site).await;
+            self.seen_epoch.store(owed, Ordering::SeqCst);
             self.status.set_connected(true);
             self.status.cache_resets.fetch_add(1, Ordering::SeqCst);
             metrics::counter!(metric::CACHE_RESETS_TOTAL).increment(1);
@@ -952,7 +1169,11 @@ impl CacheStore for ResetOnRecovery {
     fn delete<'a>(&'a self, site: &'a SiteId, key: &'a str) -> CacheFuture<'a, bool> {
         Box::pin(async move {
             self.gate().await;
-            self.inner.delete(site, key).await
+            let removed = self.inner.delete(site, key).await;
+            if !removed {
+                self.verify_after_nothing_removed().await;
+            }
+            removed
         })
     }
 
@@ -997,7 +1218,11 @@ impl CacheStore for ResetOnRecovery {
     fn delete_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
         Box::pin(async move {
             self.gate().await;
-            self.inner.delete_prefix(site, prefix).await
+            let removed = self.inner.delete_prefix(site, prefix).await;
+            if removed == 0 {
+                self.verify_after_nothing_removed().await;
+            }
+            removed
         })
     }
 
@@ -1252,14 +1477,18 @@ pub struct ClusterRedis {
     cache: Arc<dyn CacheStore>,
     status: Arc<Status>,
     interval: Duration,
+    clock: Arc<dyn Clock>,
 }
 
 impl ClusterRedis {
     /// One probe: records the outcome and, on a recovery, resets the cache namespace.
     pub async fn probe_once(&self) {
         let up = self.connection.ping().await.is_ok();
-        let was = self.status.set_connected(up);
-        if up && !was {
+        let now_ms = u64::try_from(self.clock.monotonic().as_millis()).unwrap_or(u64::MAX);
+        // A good probe after a quiet window clears a marked short outage; the namespace may hold
+        // entries cached around it, so it resets exactly as after a long outage.
+        let (was, cleared) = self.status.probe_result(up, now_ms);
+        if up && (!was || cleared) {
             // Anything cached before the outage may be stale: bump the generation.
             self.cache.clear_site(&self.site).await;
             self.status.cache_resets.fetch_add(1, Ordering::SeqCst);
@@ -1367,6 +1596,10 @@ pub async fn build(settings: &Settings, site: &SiteId, clock: Arc<dyn Clock>) ->
         tracing::warn!(site = %site, commands = %commands.join(","), "the coordination user may run more than the plugin needs");
     }
     let status = Status::new();
+    status.set_outage_policy(
+        validated.short_outage_failures,
+        validated.short_outage_window,
+    );
     status.set_connected(true);
     let coordinator: Arc<dyn Coordinator> = Arc::new(ObservedCoordinator::new(
         Arc::new(RedisCoordinator::new(
@@ -1397,6 +1630,7 @@ pub async fn build(settings: &Settings, site: &SiteId, clock: Arc<dyn Clock>) ->
         cache: raw_cache,
         status: Arc::clone(&status),
         interval: validated.probe_interval,
+        clock: Arc::clone(&clock),
     });
     Ok(Parts {
         coordinator,

@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Key and session administration (`[services.key_admin]`)
 
 Provides the key and session areas of `/api/v1/identity/*` to the group mounted by `identity_admin`.

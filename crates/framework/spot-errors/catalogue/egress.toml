@@ -107,3 +107,21 @@ explanation_key = "error.egress.pinned_required"
 params = []
 remedy = "Check the egress policy and the destination's DNS records; nothing was sent."
 since = "0.1.0"
+
+[[entry]]
+code = "egress.invalid_tls_options"
+class = "Internal"
+summary = "The TLS options of an egress request are invalid: {reason}."
+explanation_key = "error.egress.invalid_tls_options"
+params = ["reason"]
+remedy = "Check the client certificate, key and root certificate given for the destination; nothing was sent."
+since = "0.1.0"
+
+[[entry]]
+code = "egress.method_unsupported"
+class = "Internal"
+summary = "The egress sender cannot send this HTTP method."
+explanation_key = "error.egress.method_unsupported"
+params = []
+remedy = "Use GET, PUT, POST, DELETE or PATCH; nothing was sent."
+since = "0.1.0"

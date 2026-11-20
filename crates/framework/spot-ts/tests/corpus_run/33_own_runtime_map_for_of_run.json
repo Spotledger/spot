@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "map_for_of_run",
+  "args": null,
+  "expect": 6
+}

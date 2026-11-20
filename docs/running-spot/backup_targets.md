@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Backup targets: USB drive and cloud
 
 `spot backup` writes to a named target. A folder target is described in [backup.md](backup.md);

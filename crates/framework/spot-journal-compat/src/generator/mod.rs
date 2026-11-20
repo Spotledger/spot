@@ -20,7 +20,7 @@
 //! what a snapshot is: the manifest hash it records is the one that was current when the
 //! database read was taken, not the one that lists segments written later.
 
-mod events;
+pub mod events;
 pub mod key;
 
 use std::fs;
@@ -206,8 +206,18 @@ fn objects(store: &MemoryStore) -> Result<Vec<(String, Vec<u8>)>, CompatError> {
 /// [`CompatError`] when the journal cannot be sealed, signed or snapshotted, or a document cannot
 /// be upcast — a bug in this crate, never bad input.
 pub fn build() -> Result<Generated, CompatError> {
-    let script = events::script();
-    let segments = sealed_segments(&script)?;
+    build_from(&events::script())
+}
+
+/// Every byte a fixture of `script` would hold, in memory: [`build`] for any script, so a test can
+/// freeze a throwaway journal (one with a topic the registry does not know, say) and load it with
+/// [`crate::Fixture::from_generated`]. The positions must be the frozen ones (1 to
+/// [`crate::LAST_POSITION`], the snapshot at [`crate::SNAPSHOT_POSITION`]).
+///
+/// # Errors
+/// As [`build`].
+pub fn build_from(script: &[events::Event]) -> Result<Generated, CompatError> {
+    let segments = sealed_segments(script)?;
     let summaries: Vec<SegmentSummary> = segments.iter().map(summary).collect();
 
     let first = Manifest::first(SOURCE, ISSUED_AT_MILLIS)?;
@@ -224,7 +234,7 @@ pub fn build() -> Result<Generated, CompatError> {
             Layout::segment(TENANT, header.generation, header.first_seq, header.last_seq)?.to_key();
         block_on(store.put_new(&key, segment.bytes.clone()))?;
     }
-    write_snapshot(&store, &script, hex(&manifest_hash(&at_snapshot)))?;
+    write_snapshot(&store, script, hex(&manifest_hash(&at_snapshot)))?;
 
     let mut files: Vec<(String, Vec<u8>)> = objects(&store)?
         .into_iter()
@@ -237,9 +247,9 @@ pub fn build() -> Result<Generated, CompatError> {
 
     let mut prefixes: Vec<Checkpoint> = Vec::new();
     for position in 1..=LAST_POSITION {
-        prefixes.push(Checkpoint::new(position, golden_state(&script, position)?));
+        prefixes.push(Checkpoint::new(position, golden_state(script, position)?));
     }
-    let last = golden_state(&script, LAST_POSITION)?;
+    let last = golden_state(script, LAST_POSITION)?;
     let golden = Golden::new(
         TARGET_SCHEMA,
         Checkpoint::new(LAST_POSITION, last),

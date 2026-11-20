@@ -1,0 +1,16 @@
+# Soak (WP-TST-15.T5): two hours at 50 percent of tier M with periodic events; the leak budgets
+# of harness/rust/l9-scale/budgets/soak.toml decide. The series is written as CSV.
+name = "soak"
+description = "2 hour soak at 50 percent of tier M, leak budgets (Theil-Sen slopes)"
+runner = "large"
+timeout_minutes = 210
+pr_gate = false
+test = "soak"
+l9_profile = "soak"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "soak", "--", "--nocapture"]
+artefacts = ["target/l9/soak/soak-report.md", "target/l9/soak/soak-series.csv", "target/l9/soak.log"]
+
+[env]
+L9_DURATION_SCALE = "1"
+L9_SOAK_STRICT = "1"
+L9_SOAK_OUT = "target/l9/soak"

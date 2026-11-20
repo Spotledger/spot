@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Break-glass, the customer's side
 
 `spot-break-glass` models one session; this service (`services/break_glass`, order 1170) is what the tenant server holds: the registry of sessions, the sealed recording archive, the customer's list, recording read and revoke, and the kill at expiry. The customer's audit chain is the truth; nothing the operator side holds can change what the customer sees.

@@ -30,19 +30,41 @@
 //!
 //! Required when the site's apps ship reports: a definition that does not compile fails the
 //! start-up check, which stops the site with every problem named. With no report shipped the
-//! service has nothing to fail. The settings are `services.report` (`enabled`, default true).
+//! service has nothing to fail. The settings are `services.report` (`enabled`, default true;
+//! `max_concurrent`, default 4; `max_concurrent_per_user`, default 2).
+//!
+//! # Limits and honest failures
+//!
+//! A run takes a permit before it compiles or reads anything ([`ReportGate`]): at most
+//! `max_concurrent` runs at once on the site and `max_concurrent_per_user` per signed-in user.
+//! A run that finds either full is refused at once with `429 api.rate_limited` and
+//! `Retry-After: 2`; nothing queues, so memory stays bounded. The permit is a guard, released on
+//! every exit including a request cancelled mid-run. `describe` and `list` take no permit. A
+//! report a service serves from its own data (a report source) is run through the same door.
+//!
+//! A storage failure during a run is classified by `spot-reports` (`report.timeout`,
+//! `report.unavailable` seen as `server.unavailable` with `Retry-After`, `report.failed`): the
+//! client sees fixed text only, and the stable storage code goes to the audit target with the
+//! report name and the request id.
+//!
+//! # Metrics
+//!
+//! `spot_report_runs_total{result}` (`ok`, `timeout`, `unavailable`, `refused_busy`, `denied`,
+//! `failed`), `spot_report_run_seconds` (histogram), `spot_report_rows_returned_total` and the
+//! gauge `spot_report_in_flight`. No label carries a report name, a user or an argument.
 //!
 //! # Audit
 //!
 //! Target `spot::audit::report`: a line for every run (who, report, rows, whether it was cut) and
-//! for every refusal (who, report, the reason code). Never an argument value, a filter value or
-//! a row.
+//! for every refusal (who, report, the reason code, the request id). Never an argument value, a
+//! filter value or a row.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::future::Future;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use serde_json::Value as Json;
@@ -84,6 +106,15 @@ const AUDIT_TARGET: &str = "spot::audit::report";
 /// The directory of an app that holds its report definitions.
 pub const REPORTS_DIR: &str = "reports";
 
+/// The default for [`Settings::max_concurrent`].
+pub const DEFAULT_MAX_CONCURRENT: usize = 4;
+
+/// The default for [`Settings::max_concurrent_per_user`].
+pub const DEFAULT_MAX_CONCURRENT_PER_USER: usize = 2;
+
+/// The wait, in seconds, a refused run is told to leave before it tries again.
+pub const BUSY_RETRY_AFTER_SECS: u64 = 2;
+
 /// `[services.report]`. Unknown keys are refused.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]
@@ -91,12 +122,248 @@ pub struct Settings {
     /// Whether the site serves reports at all. Off, `report_run` answers `report.not_found` and
     /// the catalogue routes are not mounted.
     pub enabled: bool,
+    /// The most reports that run at once on this site (at least 1). A run that finds the site at
+    /// this number is refused with `429 api.rate_limited`; it is never queued.
+    pub max_concurrent: usize,
+    /// The most reports one signed-in user runs at once (at least 1).
+    pub max_concurrent_per_user: usize,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            max_concurrent: DEFAULT_MAX_CONCURRENT,
+            max_concurrent_per_user: DEFAULT_MAX_CONCURRENT_PER_USER,
+        }
     }
+}
+
+impl Settings {
+    /// Refuses a limit of zero, naming the key: a site that can run no report is a mistake, and
+    /// `enabled = false` is how to switch reports off.
+    ///
+    /// # Errors
+    ///
+    /// A limit is zero.
+    pub fn validate(&self) -> Result<()> {
+        for (key, value) in [
+            ("max_concurrent", self.max_concurrent),
+            ("max_concurrent_per_user", self.max_concurrent_per_user),
+        ] {
+            if value == 0 {
+                return Err(Error(format!(
+                    "services.report.{key} must be at least 1 (set services.report.enabled = false to serve no reports)"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+// ---- admission and metrics ----
+
+/// The metric names. Bounded labels only: a result class. A report name is app-chosen text, a
+/// user is a person: neither is ever a label.
+mod metric {
+    /// Counter: report runs, by `result`.
+    pub const RUNS_TOTAL: &str = "spot_report_runs_total";
+    /// Histogram: how long a report run took.
+    pub const RUN_SECONDS: &str = "spot_report_run_seconds";
+    /// Counter: rows the reports returned.
+    pub const ROWS_TOTAL: &str = "spot_report_rows_returned_total";
+    /// Gauge: report runs in flight now.
+    pub const IN_FLIGHT: &str = "spot_report_in_flight";
+}
+
+/// How a run ended, as the `result` label of `spot_report_runs_total`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunResult {
+    /// The report ran.
+    Ok,
+    /// The storage layer stopped it at the statement timeout.
+    Timeout,
+    /// The database could not run it now (`server.unavailable`).
+    Unavailable,
+    /// The site's or the user's concurrency cap was full.
+    RefusedBusy,
+    /// The caller may not run it, or may not see it (`not_found`, a denied field).
+    Denied,
+    /// Any other failure, including a bad argument.
+    Failed,
+}
+
+impl RunResult {
+    /// The label value.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RunResult::Ok => "ok",
+            RunResult::Timeout => "timeout",
+            RunResult::Unavailable => "unavailable",
+            RunResult::RefusedBusy => "refused_busy",
+            RunResult::Denied => "denied",
+            RunResult::Failed => "failed",
+        }
+    }
+
+    /// The class of an error a run returned.
+    #[must_use]
+    pub fn of_error(error: &ApiError) -> Self {
+        match error.code.as_str() {
+            codes::TIMEOUT => RunResult::Timeout,
+            "server.unavailable" => RunResult::Unavailable,
+            "api.rate_limited" => RunResult::RefusedBusy,
+            "permission.denied" | "permission.field_denied" | codes::NOT_FOUND => RunResult::Denied,
+            _ => RunResult::Failed,
+        }
+    }
+
+    fn count(self) {
+        metrics::counter!(metric::RUNS_TOTAL, "result" => self.as_str()).increment(1);
+    }
+}
+
+#[derive(Debug, Default)]
+struct GateState {
+    total: usize,
+    per_user: HashMap<String, usize>,
+}
+
+/// The admission of one site's report runs: a site-wide cap and a per-user cap, both refusing at
+/// once. Built per site from [`Settings`].
+#[derive(Debug)]
+pub struct ReportGate {
+    max: usize,
+    max_per_user: usize,
+    state: Mutex<GateState>,
+}
+
+/// A run's place under the caps. Dropping it, on any exit including a cancelled request, frees
+/// the place.
+#[derive(Debug)]
+pub struct Permit<'a> {
+    gate: &'a ReportGate,
+    user: String,
+}
+
+impl Drop for Permit<'_> {
+    fn drop(&mut self) {
+        let mut state = lock(&self.gate.state);
+        state.total = state.total.saturating_sub(1);
+        if let Some(n) = state.per_user.get_mut(&self.user) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                state.per_user.remove(&self.user);
+            }
+        }
+        metrics::gauge!(metric::IN_FLIGHT).set(state.total as f64);
+    }
+}
+
+/// The answer to a run the caps refuse: `429 api.rate_limited` with the wait.
+fn busy() -> ApiError {
+    ApiError::from_code(Code::ApiRateLimited)
+        .detail("retry_after", Json::from(BUSY_RETRY_AFTER_SECS))
+}
+
+impl ReportGate {
+    /// A gate with the given caps (each at least 1; [`Settings::validate`] refuses zero).
+    #[must_use]
+    pub fn new(max: usize, max_per_user: usize) -> Self {
+        Self {
+            max: max.max(1),
+            max_per_user: max_per_user.max(1),
+            state: Mutex::new(GateState::default()),
+        }
+    }
+
+    /// A place for `user`, or the refusal. Never waits.
+    ///
+    /// # Errors
+    ///
+    /// `429 api.rate_limited` (`Retry-After` 2) when the site or the user is at its cap.
+    pub fn try_acquire(&self, user: &str) -> std::result::Result<Permit<'_>, ApiError> {
+        let mut state = lock(&self.state);
+        let mine = state.per_user.get(user).copied().unwrap_or(0);
+        if state.total >= self.max || mine >= self.max_per_user {
+            return Err(busy());
+        }
+        state.total += 1;
+        *state.per_user.entry(user.to_owned()).or_insert(0) += 1;
+        metrics::gauge!(metric::IN_FLIGHT).set(state.total as f64);
+        Ok(Permit {
+            gate: self,
+            user: user.to_owned(),
+        })
+    }
+
+    /// The runs in flight now.
+    #[must_use]
+    pub fn in_flight(&self) -> usize {
+        lock(&self.state).total
+    }
+
+    /// The readiness detail: `in flight n/max`.
+    #[must_use]
+    pub fn status(&self) -> String {
+        format!("in flight {}/{}", self.in_flight(), self.max)
+    }
+
+    /// Runs `body` under a permit for `user` and records the run: the result class, the seconds
+    /// and the rows (`rows` reads them off a success). The permit is taken before `body` is
+    /// polled for the first time, so a refused call has compiled and read nothing, and it is
+    /// held by this future: dropping the future (a cancelled request) frees it.
+    ///
+    /// # Errors
+    ///
+    /// The busy refusal, or `body`'s own error.
+    pub async fn run<T, F>(
+        &self,
+        user: &str,
+        rows: fn(&T) -> usize,
+        body: F,
+    ) -> std::result::Result<T, ApiError>
+    where
+        F: Future<Output = std::result::Result<T, ApiError>>,
+    {
+        let permit = match self.try_acquire(user) {
+            Ok(permit) => permit,
+            Err(refusal) => {
+                RunResult::RefusedBusy.count();
+                return Err(refusal);
+            }
+        };
+        let started = Instant::now();
+        let outcome = body.await;
+        metrics::histogram!(metric::RUN_SECONDS).record(started.elapsed().as_secs_f64());
+        match &outcome {
+            Ok(value) => {
+                RunResult::Ok.count();
+                metrics::counter!(metric::ROWS_TOTAL).increment(rows(value) as u64);
+            }
+            Err(error) => RunResult::of_error(error).count(),
+        }
+        drop(permit);
+        outcome
+    }
+}
+
+/// The client's error for a runner refusal. A refusal that hides a storage failure also writes
+/// the stable storage code, with the report and the request id, to the audit target: that line
+/// is how an operator finds what the client was not told.
+fn run_error(error: &ReportError, report: &str, request_id: &str) -> ApiError {
+    if let Some(cause) = error.cause() {
+        tracing::warn!(
+            target: AUDIT_TARGET,
+            report,
+            request_id,
+            code = error.code(),
+            storage_code = cause,
+            "a report run failed in storage"
+        );
+    }
+    error.to_api_error()
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -566,6 +833,22 @@ impl SourceBook {
         filters: &Json,
         limit: Option<u64>,
     ) -> CatalogResult<(ReportResult, Vec<Message>)> {
+        self.run_with_request(who, report, filters, limit, "").await
+    }
+
+    /// As [`SourceBook::run`], naming the request for the log line a storage failure writes.
+    ///
+    /// # Errors
+    ///
+    /// As [`SourceBook::run`].
+    pub async fn run_with_request(
+        &self,
+        who: &AdmitRequest,
+        report: &str,
+        filters: &Json,
+        limit: Option<u64>,
+        request_id: &str,
+    ) -> CatalogResult<(ReportResult, Vec<Message>)> {
         let (compiled, registered) = self.visible(who, report).ok_or_else(|| not_found(report))?;
         let admission = self.admitted(compiled, who, "run").await?;
         let args = ReportArgs::from_json(filters).map_err(|e| e.to_api_error())?;
@@ -581,7 +864,7 @@ impl SourceBook {
         let out = runner
             .run(&registered.compiled, &who.principal, &args, limit)
             .await
-            .map_err(|e| e.to_api_error())?;
+            .map_err(|e| run_error(&e, report, request_id))?;
         Ok((out.result, out.messages))
     }
 
@@ -730,6 +1013,8 @@ struct Shared {
     book: OnceLock<SourceBook>,
     prepared: Mutex<Option<Arc<Prepared>>>,
     ready: AtomicBool,
+    /// The caps on concurrent runs.
+    gate: ReportGate,
 }
 
 impl Shared {
@@ -853,7 +1138,19 @@ impl Shared {
         limit: Option<u64>,
     ) -> CatalogResult<(ReportResult, Vec<Message>)> {
         let caller = self.caller(ctx).await?;
-        let result = self.run_for(&caller, report, filters, limit).await;
+        let request_id = ctx.request_id.as_str();
+        let started = Instant::now();
+        // The permit is taken here, before the report is looked up, compiled or read, and is
+        // held until the run ends or this future is dropped.
+        let result = self
+            .gate
+            .run(
+                &caller.user,
+                |v: &(ReportResult, Vec<Message>)| v.0.rows.len(),
+                self.run_for(&caller, report, filters, limit, request_id),
+            )
+            .await;
+        let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         match &result {
             Ok((out, _)) => tracing::info!(
                 target: AUDIT_TARGET,
@@ -861,11 +1158,27 @@ impl Shared {
                 action = "run",
                 who = %caller.user,
                 report,
+                request_id,
+                result = RunResult::Ok.as_str(),
                 rows = out.rows.len(),
                 truncated = out.truncated,
+                elapsed_ms,
                 "report run"
             ),
-            Err(error) => self.refuse("run", &caller.user, report, error),
+            Err(error) => {
+                tracing::info!(
+                    target: AUDIT_TARGET,
+                    site = %self.site,
+                    action = "run",
+                    who = %caller.user,
+                    report,
+                    request_id,
+                    code = %error.code.as_str(),
+                    result = RunResult::of_error(error).as_str(),
+                    elapsed_ms,
+                    "report refused"
+                );
+            }
         }
         result
     }
@@ -876,12 +1189,16 @@ impl Shared {
         report: &str,
         filters: Json,
         limit: Option<u64>,
+        request_id: &str,
     ) -> CatalogResult<(ReportResult, Vec<Message>)> {
         let prepared = self.prepared()?;
         let Some(registered) = prepared.registry.lookup_for(report, &caller.principal) else {
             // Not a shipped report: a service's source, or nothing (`404 report.not_found`).
             let who = self.admit_request(caller);
-            return self.book().run(&who, report, &filters, limit).await;
+            return self
+                .book()
+                .run_with_request(&who, report, &filters, limit, request_id)
+                .await;
         };
         let args = ReportArgs::from_json(&filters).map_err(|e| e.to_api_error())?;
         // The request's `limit` never exceeds the report's maximum; the runner clamps to the
@@ -891,7 +1208,7 @@ impl Shared {
             .runner
             .run(&registered.compiled, &caller.principal, &args, limit)
             .await
-            .map_err(|e| e.to_api_error())?;
+            .map_err(|e| run_error(&e, report, request_id))?;
         Ok((out.result, out.messages))
     }
 
@@ -1124,10 +1441,47 @@ fn built() -> &'static Mutex<HashMap<String, Arc<Reports>>> {
     BUILT.get_or_init(Mutex::default)
 }
 
+/// The readiness line of the reports (WP-PLT-14.T7): always passing, and its detail is `in
+/// flight n/max`, the runs in flight against the site's cap. `n` never exceeds `max` (the gate
+/// refuses at the cap) and the text holds two numbers, no report, user or site data.
+///
+/// The service registry's own check has no channel for an ok-detail, so this is a
+/// [`ReadinessCheck`] of its own: the module provides it as the port `ReportReadiness`, and the
+/// host adds it to the site's readiness list next to the service health.
+pub struct ReportReadiness {
+    shared: Arc<Shared>,
+}
+
+impl ReportReadiness {
+    /// The detail text now.
+    #[must_use]
+    pub fn detail(&self) -> String {
+        self.shared.gate.status()
+    }
+}
+
+impl spot_http::health::ReadinessCheck for ReportReadiness {
+    fn name(&self) -> &str {
+        "reports"
+    }
+
+    fn check(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = spot_http::health::CheckResult> + Send + '_>> {
+        Box::pin(async move {
+            spot_http::health::CheckResult {
+                ok: true,
+                detail: self.detail(),
+            }
+        })
+    }
+}
+
 /// Registers reports: the service, the engine delegate behind `report_run`, and the catalogue
 /// port the host gives the router (the registry mounts the routes).
 pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let settings: Settings = ctx.settings_or_default("report")?;
+    settings.validate()?;
     if !settings.enabled {
         return Ok(());
     }
@@ -1150,7 +1504,11 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             book: OnceLock::new(),
             prepared: Mutex::new(None),
             ready: AtomicBool::new(false),
+            gate: ReportGate::new(settings.max_concurrent, settings.max_concurrent_per_user),
         });
+        ctx.provide(Arc::new(ReportReadiness {
+            shared: Arc::clone(&shared),
+        }))?;
         ctx.add(Arc::new(ReportService {
             shared: Arc::clone(&shared),
         }));

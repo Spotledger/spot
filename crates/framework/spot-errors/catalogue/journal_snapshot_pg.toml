@@ -53,3 +53,21 @@ explanation_key = "error.journal_snapshot_pg.key_unavailable"
 params = []
 remedy = "Check [services.secrets] and the key file."
 since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.prune_refused"
+class = "none"
+summary = "The object store refused to remove old snapshot objects."
+explanation_key = "error.journal_snapshot_pg.prune_refused"
+params = []
+remedy = "Check the store permissions for deletion; the next prune run tries again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.prune_failed"
+class = "none"
+summary = "Removing old snapshot objects failed."
+explanation_key = "error.journal_snapshot_pg.prune_failed"
+params = []
+remedy = "Check the journal target and the log; the next prune run tries again."
+since = "0.1.0"

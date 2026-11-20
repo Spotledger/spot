@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Connectors (the `connectors` service)
 
 The `connectors` service hosts the connector SDK (`spot-connectors`): a site configures a connector,
@@ -8,7 +10,7 @@ service; without the keyring it does not register.
 
 ## Writing a connector
 
-Build it from the SDK template (`crates/framework/spot-connectors/sdk/connector-template/`): a Rust
+Build it from the SDK template (`sdk/connector-template/` at the repository root): a Rust
 guest that exports `describe`, `invoke` and `webhook` and imports only `log`, `http-request`,
 `secrets-get`, `kv-get` and `kv-set`. It has no network, file system or clock of its own. Pack and
 sign it like an app (`spot-pack pack --sign`) and put the bundle in the bundle store
@@ -59,7 +61,7 @@ size and time are capped; credentials are injected by the host and never visible
 
 ## Monitoring
 
-`connector_runs_total{outcome}` (`ok`, `retry`, `failed`, `dead_letter`), the host's per-connector
+`spot_connector_runs_total{outcome}` (`ok`, `retry`, `failed`, `dead_letter`), the host's per-connector
 duration histograms, the age of the last success in the status listing, and the `connector_run`
 log (identifiers, outcome, duration and a stable code only).
 

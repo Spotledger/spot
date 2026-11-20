@@ -22,6 +22,13 @@
 //! are the only thing its policy lists: a port the guard calls dangerous (25) is opened for that
 //! host alone, and a private address only when the host is written as that address. A host that
 //! resolves to a private address is refused, as for every other outbound call.
+//!
+//! The guard is the site's **shared** egress guard when the host passes it
+//! ([`Mail::with_guard`], the port `services::egress` provides): the policy file's tenant section
+//! then decides which SMTP host and port may be reached, every denial lands in the site's denial
+//! log and counts (`spot egress denials`), and this module builds no policy or denial sink of its
+//! own. [`Mail::new`] (no shared guard: tests, a host without the egress module) keeps the
+//! private policy above. The `memory` sink never dials, so it always keeps its private guard.
 
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr};
@@ -168,11 +175,30 @@ pub struct Mail {
     /// The in-memory sink, when no durable one was given.
     bounces: Option<Arc<InMemoryBounceSink>>,
     enabled: bool,
+    shared: bool,
 }
 
 impl Mail {
-    /// Builds the sender over the site's settings.
+    /// Builds the sender over the site's settings, with a policy of its own (the site's SMTP
+    /// host and port) and an in-memory denial sink. Prefer [`Mail::with_guard`].
     pub fn new(settings: Settings) -> Arc<Self> {
+        Self::build(settings, None)
+    }
+
+    /// Builds the sender over the site's settings and the site's shared egress guard: the
+    /// connection is authorised by that guard's policy (the SMTP host and port must be listed in
+    /// the site's policy file under `purpose = "mail"`) and a denial is recorded by its sinks.
+    /// The `memory` sink ignores `guard` (it never dials).
+    pub fn with_guard(settings: Settings, guard: Arc<Guard>) -> Arc<Self> {
+        Self::build(settings, Some(guard))
+    }
+
+    /// Whether connections are authorised by the site's shared guard (false for a private one).
+    pub fn uses_shared_guard(&self) -> bool {
+        self.shared
+    }
+
+    fn build(settings: Settings, shared_guard: Option<Arc<Guard>>) -> Arc<Self> {
         let Settings {
             site,
             mail,
@@ -205,16 +231,20 @@ impl Mail {
             root_certificate_pem: None,
         };
         let capture = memory.then(|| Arc::new(CaptureTransport::new()));
-        let guard = Arc::new(Guard::new(
-            policy_for(&site, &account),
-            if memory {
-                Arc::new(FixedResolver)
-            } else {
-                Arc::new(SystemResolver)
-            },
-            Arc::new(InMemorySink::new()),
-            Arc::clone(&clock),
-        ));
+        let shared = shared_guard.filter(|_| !memory);
+        let uses_shared = shared.is_some();
+        let guard = shared.unwrap_or_else(|| {
+            Arc::new(Guard::new(
+                policy_for(&site, &account),
+                if memory {
+                    Arc::new(FixedResolver)
+                } else {
+                    Arc::new(SystemResolver)
+                },
+                Arc::new(InMemorySink::new()),
+                Arc::clone(&clock),
+            ))
+        });
         let memory_bounces = durable_bounces
             .is_none()
             .then(|| Arc::new(InMemoryBounceSink::new()));
@@ -257,6 +287,7 @@ impl Mail {
             capture,
             bounces: memory_bounces,
             enabled: mail.enabled,
+            shared: uses_shared,
         })
     }
 

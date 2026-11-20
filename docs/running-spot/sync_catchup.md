@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # Catch-up and bootstrap (`[services.sync_catchup]`, hub only)
 
 A node offline for two days catches up in dependency order with the mandatory lane first; a new node bootstraps from a snapshot; a node one release behind keeps syncing and an undecodable record is held alone and released after the upgrade (ADR-066). This is the hub-side routing; the planner, the bootstrap and the skew rules are the libraries `spot-sync-catchup`, `spot-sync-bootstrap` and `spot-sync-skew`.

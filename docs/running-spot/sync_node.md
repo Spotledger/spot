@@ -1,3 +1,5 @@
+Part of [Running Spot](../running-spot.md).
+
 # sync_node: the edge's sync loop
 
 Runs inside `spot serve` on a site with `role = "edge"` (see `node_role`). On any other role the

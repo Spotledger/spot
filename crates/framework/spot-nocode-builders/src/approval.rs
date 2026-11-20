@@ -383,6 +383,7 @@ pub fn build(
             },
             cron: None,
             path: None,
+            ..TriggerConfig::default()
         }),
     )?;
     let first = graph.node(
