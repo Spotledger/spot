@@ -262,13 +262,34 @@ jobs:
           echo "crates:$NAMES"
           OUT="$GITHUB_WORKSPACE/cargo-test.txt"
           : > "$OUT"
+          # One chunk must not be able to eat the job: a hung test binary fails its chunk after
+          # CHUNK_SECONDS, with the crate names printed, and the loop goes on. (The log of a job
+          # cancelled by timeout-minutes is deleted by GitHub, so a hang used to leave nothing to read.)
+          # Every output line carries the time it arrived, so the slow test binary shows in the log.
+          CHUNK_SECONDS=${CHUNK_SECONDS:-2400}
+          run_timed() { # run_timed <label> <command...>
+            local label=$1; shift
+            local t0=$SECONDS s
+            echo "[$(date +%T)] start: $label"
+            if timeout --version >/dev/null 2>&1; then
+              timeout --kill-after=60 "$CHUNK_SECONDS" "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            else
+              "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            fi
+            s=${PIPESTATUS[0]}
+            echo "[$(date +%T)] end after $((SECONDS - t0)) s, exit $s: $label"
+            if [ "$s" = 124 ] || [ "$s" = 137 ]; then
+              echo "::error::chunk timed out after ${CHUNK_SECONDS} s (a hung test?): $label"
+            fi
+            return "$s"
+          }
           rc=0
           set -- $NAMES
           while [ $# -gt 0 ]; do
             chunk=(); n=0
             while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
             cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" 2> >(tee -a "$OUT" >&2) || rc=1
-            cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" 2>&1 | tee -a "$OUT"
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" | tee -a "$OUT"
             [ "${PIPESTATUS[0]}" = 0 ] || rc=1
             "$PY" -c '
           import json, os, sys

@@ -104,7 +104,12 @@ jobs:
           # Balanced by test binaries (each one is a link of its own): spot-cli alone has 240, so
           # taking every fourth crate by name left shard 3 with 650 binaries and the others 360 to
           # 420. Greedy by weight; shard 1 starts heavier because it also runs fmt and clippy.
-          weight = lambda p: 1 + sum(1 for t in p["targets"] if "test" in t["kind"])
+          # spot-cli's 248 test binaries are four times the cost of any other (v0.1.13 run: 18 min to
+          # build and 31 min to run, against 33 min for a whole shard of 560 ordinary binaries), so a
+          # crate with 100 or more of them counts four times each and ends up on a shard of its own.
+          def weight(p):
+              n = sum(1 for t in p["targets"] if "test" in t["kind"])
+              return 1 + n * (4 if n >= 100 else 1)
           load = [60, 0, 0, 0]
           shards = [[], [], [], []]
           for p in sorted(pk, key=lambda p: (-weight(p), p["name"])):
@@ -137,6 +142,28 @@ jobs:
             --skip the_soak_runs_with_its_events_and_the_series_stay_within_the_leak_budgets
             --skip tier_m_under_load_with_a_second_site_loaded_beside_it
             --skip the_volume_profile_seeds_100k_rows_and_meets_its_operation_budgets)
+          # One chunk must not be able to eat the job: a hung test binary fails its chunk after
+          # CHUNK_SECONDS, with the crate names printed, and the loop goes on. (The log of a job
+          # cancelled by timeout-minutes is deleted by GitHub, so a hang used to leave nothing to read.)
+          # Every output line carries the time it arrived, so the slow test binary shows in the log.
+          CHUNK_SECONDS=${CHUNK_SECONDS:-3000}
+          run_timed() { # run_timed <label> <command...>
+            local label=$1; shift
+            local t0=$SECONDS s
+            echo "[$(date +%T)] start: $label"
+            if timeout --version >/dev/null 2>&1; then
+              timeout --kill-after=60 "$CHUNK_SECONDS" "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            else
+              "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            fi
+            s=${PIPESTATUS[0]}
+            echo "[$(date +%T)] end after $((SECONDS - t0)) s, exit $s: $label"
+            if [ "$s" = 124 ] || [ "$s" = 137 ]; then
+              echo "::error::chunk timed out after ${CHUNK_SECONDS} s (a hung test?): $label"
+            fi
+            return "$s"
+          }
+          failed_chunks=""
           rc=0
           set -- $NAMES
           while [ $# -gt 0 ]; do
@@ -149,13 +176,13 @@ jobs:
               chunk+=(-p "$1"); shift; n=$((n+1))
             done
             cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" || rc=1
-            cargo test --locked --no-fail-fast "${chunk[@]}" "${extra[@]}" || rc=1
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast "${chunk[@]}" "${extra[@]}" || { rc=1; failed_chunks="$failed_chunks [${chunk[*]}]"; }
             ignored=()
             for a in "${chunk[@]}"; do
               if [ "$a" != -p ] && [ "$RUNNER_OS" = Linux ] && [ "$a" = spot-idle-connections ]; then continue; fi
               [ "$a" = -p ] || ignored+=(-p "$a")
             done
-            if [ ${#ignored[@]} -gt 0 ]; then cargo test --locked --no-fail-fast "${ignored[@]}" -- --ignored || rc=1; fi
+            if [ ${#ignored[@]} -gt 0 ]; then run_timed "cargo test --ignored ${ignored[*]}" cargo test --locked --no-fail-fast "${ignored[@]}" -- --ignored || { rc=1; failed_chunks="$failed_chunks [ignored ${ignored[*]}]"; }; fi
             "$PY" -c '
           import json, os, sys
           for line in open(sys.argv[1]):
@@ -171,6 +198,7 @@ jobs:
                       pass
           ' "$RUNNER_TEMP/test-exes.json"
           done
+          [ -z "$failed_chunks" ] || echo "::error::failing chunks:$failed_chunks"
           exit $rc
       # The 10,000-connection run needs 20,612 descriptors; a skipped run is a red nightly.
       - if: runner.os == 'Linux'

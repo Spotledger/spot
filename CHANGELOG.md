@@ -9,6 +9,18 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.14] - 2026-11-21
+
+Continuous integration fixes after 0.1.13, no new features.
+
+### Fixed
+
+- The sandbox classifies the three tables of the LLM service (`spot_llm_send`, `spot_llm_tenant`,
+  `spot_llm_usage`) as empty, so a sandbox never copies sealed keys or send records.
+- The Rust test shards weigh `spot-cli`, which has about 250 test binaries and takes about 50
+  minutes on its own, so it gets a shard of its own; each test chunk runs under a timeout and
+  prints its crates and times, so a hung chunk can be named from the log.
+
 ## [0.1.13] - 2026-11-21
 
 Continuous integration fixes and two batches of runtime work, both compiled and tested on
