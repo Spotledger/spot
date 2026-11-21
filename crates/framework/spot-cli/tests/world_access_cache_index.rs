@@ -59,7 +59,7 @@ fn step() -> CacheNs {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn the_step_namespace_is_known_and_counts_the_sites_live_entries() {
+async fn the_step_namespace_is_known_and_counts_its_live_entries() {
     let (_store, part) = cache_world().await;
     let (namespaces, step_entries, other_entries) = blocking(move || {
         let ops = part.live();
@@ -72,7 +72,8 @@ async fn the_step_namespace_is_known_and_counts_the_sites_live_entries() {
     .await;
     assert_eq!(namespaces, vec![step()]);
     assert_eq!(step_namespace(), "step");
-    assert_eq!(step_entries, 3, "the store counts the site's live entries");
+    // T14: the store counts the prefix, so the one `other:` key of the site is not a step entry.
+    assert_eq!(step_entries, 2, "the store counts the live `step:` keys");
     assert_eq!(other_entries, 0);
 }
 
@@ -80,11 +81,84 @@ async fn the_step_namespace_is_known_and_counts_the_sites_live_entries() {
 async fn a_flush_clears_the_one_namespace_and_leaves_the_others() {
     let (store, part) = cache_world().await;
     let change = blocking(move || part.live().flush(&step()).unwrap()).await;
-    assert_eq!((change.before, change.after), (3, 1));
+    // T14: exact counts of the namespace (before T14 these were the site-wide 3 and 1).
+    assert_eq!((change.before, change.after), (2, 0));
     let site = site();
     assert!(!store.exists(&site, "step:a").await);
     assert!(!store.exists(&site, "step:b").await);
     assert!(store.exists(&site, "other:x").await, "only the namespace");
+}
+
+/// A site with 3 `step:` keys and 5 other keys.
+async fn mixed_world() -> (Arc<InProcessCache>, Arc<StoreCachePart>) {
+    let store = Arc::new(InProcessCache::new(InProcessConfig::new(1 << 20, 1 << 20)));
+    let site = site();
+    for key in ["step:1", "step:2", "step:3"] {
+        store.set(&site, key, bytes("v"), None).await.unwrap();
+    }
+    for key in ["a", "b", "c:1", "d:2", "stepper"] {
+        store.set(&site, key, bytes("v"), None).await.unwrap();
+    }
+    let part = Arc::new(StoreCachePart::new(
+        Arc::clone(&store) as Arc<dyn CacheStore>,
+        site,
+        Handle::current(),
+    ));
+    (store, part)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_step_count_is_exact_among_other_keys_and_a_flush_reports_3_to_0() {
+    let (store, part) = mixed_world().await;
+    let entries = {
+        let part = Arc::clone(&part);
+        blocking(move || part.live().entries(&step())).await
+    };
+    assert_eq!(entries, 3, "3 step keys among 8; `stepper` is not `step:`");
+    let change = blocking(move || part.live().flush(&step()).unwrap()).await;
+    assert_eq!((change.before, change.after), (3, 0));
+    let site = site();
+    assert_eq!(store.stats(&site).await.entries, 5, "the five others stay");
+    assert!(store.exists(&site, "stepper").await);
+    assert_eq!(store.count_prefix(&site, "step:").await, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_expired_step_key_is_not_counted() {
+    let clock = Arc::new(ManualClock::new(
+        OffsetDateTime::from_unix_timestamp(1_795_262_400).unwrap(),
+    ));
+    let store = Arc::new(InProcessCache::with_clock(
+        InProcessConfig::new(1 << 20, 1 << 20),
+        Arc::clone(&clock) as Arc<dyn Clock>,
+    ));
+    let site = site();
+    store
+        .set(&site, "step:live", bytes("v"), None)
+        .await
+        .unwrap();
+    store
+        .set(
+            &site,
+            "step:short",
+            bytes("v"),
+            Some(Duration::from_secs(1)),
+        )
+        .await
+        .unwrap();
+    let part = Arc::new(StoreCachePart::new(
+        Arc::clone(&store) as Arc<dyn CacheStore>,
+        site,
+        Handle::current(),
+    ));
+    let first = {
+        let part = Arc::clone(&part);
+        blocking(move || part.live().entries(&step())).await
+    };
+    assert_eq!(first, 2);
+    clock.advance(Duration::from_secs(2));
+    let second = blocking(move || part.live().entries(&step())).await;
+    assert_eq!(second, 1, "the expired key is not counted");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -126,7 +200,7 @@ async fn a_rehearsal_flush_leaves_the_live_cache_alone() {
         (change.before, ops.entries(&step()))
     })
     .await;
-    assert_eq!((before, after), (3, 0));
+    assert_eq!((before, after), (2, 0));
     let site = site();
     assert!(store.exists(&site, "step:a").await);
     assert_eq!(store.stats(&site).await.entries, 3);

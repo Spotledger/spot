@@ -239,6 +239,8 @@ mod tests {
         );
     }
 
+    // POSIX absolute paths in the fixtures: on Windows they are not absolute.
+    #[cfg(unix)]
     #[test]
     fn a_shared_log_or_a_parent_component_is_refused() {
         let shared = Settings {

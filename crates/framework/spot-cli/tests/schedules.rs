@@ -176,6 +176,9 @@ impl JobStore for FlakyStore {
     fn cancel(&self, id: JobId) -> StoreFuture<'_, ()> {
         self.inner.cancel(id)
     }
+    fn cancel_if_pending(&self, id: JobId) -> StoreFuture<'_, spot_jobs::CancelOutcome> {
+        self.inner.cancel_if_pending(id)
+    }
     fn merge_context(
         &self,
         id: JobId,

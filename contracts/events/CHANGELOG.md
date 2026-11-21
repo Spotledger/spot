@@ -2,6 +2,38 @@
 
 Every change is an ADR plus a semantic version bump (blueprint §4, contracts-first rule).
 
+## 0.7.9 (draft, awaiting architecture-owner approval)
+
+Additive (WP-CON-04.T12; the architecture owner gave the lead authority over contract changes for 21 Nov 2026).
+A patch version for the same reason as the rest of the 0.7 line (policy of 0.7.7: additive changes are
+patch versions). The freeze rule of 0.7.7 concerns the nine `sys_*` schemas only and is not touched.
+- `identity_field_accessed` gains one optional field, `reason`: text of 1 to 500 characters (Unicode
+  scalar values; `identity::MAX_REVEAL_REASON_CHARS`), plain text. It carries the reason the person
+  gave for a reveal (`POST /api/v1/resource/{doctype}/{id}/reveal`, whose contract says the reason
+  is stored in the audit trail with who, when, which document and which field), so the durable
+  audit event, not only a log target, holds it. It is present only when `right` is `reveal` or
+  `reveal_bulk`: a payload with a `reason` and `right = read` (or an unknown right) is refused. An
+  explicit `null` means absent, like every optional field of the 0.7 line. The 256 character bound
+  that every other identity string keeps is lifted for this one field of this one topic.
+- **Untrusted text.** The reason is user-supplied free text: a consumer treats it as untrusted
+  (never markup, never an instruction), and a producer never puts a value of the revealed field in
+  it (the route's own validation is the producer's side of that rule). The schema cannot check
+  that; the value of the field still has no key in the schema and a `value` key is still refused.
+- Not a new topic: one event per reveal, as before. The registry entry's class (`audit`),
+  retention and coalescing are unchanged; `registry.snapshot.json` changes only `contract_version`.
+- New example `examples/identity/identity_field_accessed.reveal.json` (a reveal with a reason);
+  the example test accepts `<topic>.<variant>.json` files that validate and still refuses any other
+  file. Tests: a reveal and a bulk reveal with a reason validate (1 and 500 characters, also
+  multi-byte); 0, 501 and 5,000 characters, a non-text value, an object and an array are refused;
+  a payload without `reason` or with `null` still validates; `reason` with `read` is refused; the
+  longer bound does not leak to other topics or fields.
+- **Compatible.** A payload without `reason` validates as before, so an old producer is unaffected.
+  A strict consumer that refuses unknown keys (the 0.7.8 schema did) must add `reason` before a
+  producer sends it; a lenient consumer ignores it. Nothing is removed or retyped.
+- **Decision taken here (open question answered with the recommended option):** the reason is
+  stored in clear, not hashed, because an auditor must read it and the audience of the `audit`
+  class is staff only. The producer is WP-SEC-10.T9.
+
 ## 0.7.8 (draft, awaiting architecture-owner approval)
 
 Additive (WP-BPM-13, ADR-080 request grants; decided with the architecture owner, 14 Nov 2026).

@@ -404,6 +404,70 @@ async fn a_bad_argument_is_refused_by_the_schema_before_the_engine() {
 }
 
 #[tokio::test]
+async fn an_unknown_argument_is_refused_by_a_closed_schema_before_the_engine() {
+    let rig = rig(ScriptLimits::default());
+    let mut script = api(
+        "double",
+        "m",
+        "f",
+        "export function on_call({ args }) { return { doubled: args.n * 2 }; }",
+    );
+    script.arguments_schema = Some(json!({
+        "type": "object",
+        "required": ["n"],
+        "additionalProperties": false,
+        "properties": { "n": { "type": "integer" } }
+    }));
+    let handler = ApiScriptHandler::new(script, rig.deps.clone());
+    let user = RecordId::new_v7();
+
+    let error = handler
+        .call(&ctx_for(&user), json!({ "n": 2, "tier": 3 }))
+        .await
+        .expect_err("the closed schema refuses the extra argument");
+    assert_eq!(error.code, "function.bad_arguments");
+    assert_eq!(error.class, ErrorClass::Validation);
+    assert_eq!(
+        error.explanation.as_deref(),
+        Some("tier: unexpected property"),
+        "the refusal names the argument"
+    );
+    assert!(
+        engine_never_entered(&rig.engine),
+        "the engine is not touched by a refused call"
+    );
+
+    let ran = handler
+        .call(&ctx_for(&user), json!({ "n": 2 }))
+        .await
+        .expect("the same call without the extra argument runs");
+    assert_eq!(ran, json!({ "doubled": 4 }));
+}
+
+#[tokio::test]
+async fn a_schema_without_additional_properties_keeps_an_unlisted_argument() {
+    let rig = rig(ScriptLimits::default());
+    let mut script = api(
+        "open",
+        "m",
+        "g",
+        "export function on_call({ args }) { return { doubled: args.n * 2 }; }",
+    );
+    script.arguments_schema = Some(json!({
+        "type": "object",
+        "required": ["n"],
+        "properties": { "n": { "type": "integer" } }
+    }));
+    let handler = ApiScriptHandler::new(script, rig.deps.clone());
+    let user = RecordId::new_v7();
+    let ran = handler
+        .call(&ctx_for(&user), json!({ "n": 3, "extra": true }))
+        .await
+        .expect("an open schema accepts an unlisted argument");
+    assert_eq!(ran, json!({ "doubled": 6 }));
+}
+
+#[tokio::test]
 async fn a_script_that_loops_forever_is_killed_and_does_not_stop_the_next_call() {
     let rig = rig(ScriptLimits::default());
     let mut looping = api(

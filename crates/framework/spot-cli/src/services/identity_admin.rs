@@ -12,7 +12,13 @@
 //!   fixed table of the caller's active role names (`Tenant Administrator`: all but impersonation;
 //!   `User Manager`: read, manage). Any failure to decide is a refusal. A cross-tenant id cannot
 //!   exist (one database per site) and an unknown id is `identity.not_found`.
-//! - **Step-up** is "the session was created within `step_up_window_secs`" (no step-up marker exists).
+//! - **Step-up** is "the session's `step_up_at` marker is within `step_up_window_secs` of now". The
+//!   marker is written only by the step-up service (`services/step_up.rs`, `POST /api/v1/auth/step-up`);
+//!   a session that never stepped up is not recent, **including a session that was just created**.
+//!   (Before WP-IAM-12.T8 "recent" meant "the session was created within the window", so a fresh
+//!   sign-in counted as a step-up; it no longer does.) Since WP-IAM-12.T9 the check is the shared
+//!   reader `services::step_up::session_is_current`, the same one the single sign-on
+//!   administration and the support-access caller use, with this module's window.
 //! - **Invitations** are records of a DocType `invitation` (fields `user`, `email`, `state`,
 //!   `expires_at`, `sent_at`, `digest`: hex of the token's digest). The platform app has no such
 //!   DocType yet: without it the invitation operations and `invite: true` answer `503` and
@@ -57,8 +63,8 @@ use spot_storage_contract::{
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::live::SiteLive;
 use crate::audit::PathClass;
+use crate::live::SiteLive;
 use crate::services::scim_store::{at, blank, doc, dt, find_id, idv, nm, put, rows, text};
 use crate::services::{Idle, Level, SiteCtx};
 use crate::{Error, Result};
@@ -87,6 +93,26 @@ impl Default for Settings {
             step_up_window_secs: 900,
         }
     }
+}
+
+/// The window a step-up lasts, in seconds: `[services.identity_admin] step_up_window_secs` (900 by
+/// default, 30 to 86,400). The step-up service (`services/step_up.rs`) answers `step_up_until`
+/// with it and [`IdentityUsers`] judges "recent" with it, so the two cannot disagree.
+///
+/// # Errors
+///
+/// A setting that does not decode or is out of range.
+pub(crate) fn step_up_window_secs(ctx: &SiteCtx<'_>) -> Result<i64> {
+    let settings: Settings = ctx.settings_or_default("identity_admin")?;
+    if !(30..=86_400).contains(&settings.step_up_window_secs) {
+        return Err(Error(
+            "services.identity_admin: step_up_window_secs is 30 to 86400".to_owned(),
+        ));
+    }
+    if let Ok(env) = ctx.env() {
+        crate::services::step_up::set_window(&env.site.site, settings.step_up_window_secs);
+    }
+    Ok(settings.step_up_window_secs)
 }
 
 /// Delivers an invitation token by mail. Provided by a mail module; the token must reach nobody
@@ -136,11 +162,7 @@ fn infra<T, E>(r: std::result::Result<T, E>) -> IdResult<T> {
 }
 
 fn iam(errors: &spot_iam_directory::IamErrors) -> ApiError {
-    let code = errors
-        .errors()
-        .first()
-        .map(|e| e.code)
-        .unwrap_or("");
+    let code = errors.errors().first().map(|e| e.code).unwrap_or("");
     match code {
         "iam.last_admin" | "iam.break_glass_minimum" => {
             ApiError::from_code(Code::IdentityLastAdministrator)
@@ -1357,19 +1379,19 @@ impl IdentityStepUpPort for IdentityUsers {
             else {
                 return Ok(false);
             };
-            let mut tx = self.begin("identity_step_up", true).await?;
-            let loaded = tx
-                .load(&infra(nm(doctype::SESSION))?, session, RowLock::None)
-                .await;
-            let _ = tx.rollback().await;
-            let created = loaded.map_err(|e| store(&e))?.and_then(|d| {
-                nm("created_at")
-                    .ok()
-                    .and_then(|n| d.data.fields.get(&n).and_then(at))
-            });
-            let now = self.clock.now_utc();
-            Ok(created
-                .is_some_and(|c| (now - c).whole_seconds() <= self.settings.step_up_window_secs))
+            // The one reader of the marker (`step_up/marker.rs`), shared with the single sign-on
+            // administration and the support-access caller: no window logic of its own, and the
+            // session's age is never looked at. A session that never stepped up has no marker
+            // and is not recent.
+            let engine = self.engine()?;
+            crate::services::step_up::session_is_current(
+                engine.backend(),
+                &self.catalog,
+                session,
+                self.clock.now_utc(),
+                self.settings.step_up_window_secs,
+            )
+            .await
         })
     }
 }
@@ -1449,6 +1471,9 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             env.permission.catalog.clone(),
         )
     };
+    // The window is read here and by the readers built without the site's settings (the single
+    // sign-on administration): one setting, one value.
+    crate::services::step_up::set_window(&site, settings.step_up_window_secs);
     let invitations = spot_platform_app::definitions()
         .map(|defs| defs.iter().any(|d| d.name == INVITATION))
         .unwrap_or(false);

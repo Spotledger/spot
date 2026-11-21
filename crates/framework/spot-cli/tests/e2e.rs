@@ -119,6 +119,9 @@ impl Env {
         let task = root.0.join("sample/doctypes/task.toml");
         let text = std::fs::read_to_string(&task)
             .unwrap()
+            // A Windows checkout may have `\r\n` line endings, where a multi-line pattern below
+            // would match nothing and the patch would silently not apply.
+            .replace("\r\n", "\n")
             .replace(
                 "title_field = \"subject\"",
                 "title_field = \"subject\"\n\n[[protection_groups]]\nname = \"confidential\"\nlabel = \"Confidential\"\ntrace = true",
@@ -900,7 +903,8 @@ async fn a_reload_swaps_the_permission_snapshot() {
     .await;
     expect(&project, 200);
     let grant = env.root.0.join("sample/permissions/grants.toml");
-    let text = std::fs::read_to_string(&grant).unwrap().replace(
+    // `\r\n` checkouts (Windows): the multi-line pattern below needs `\n`.
+    let text = std::fs::read_to_string(&grant).unwrap().replace("\r\n", "\n").replace(
         "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"report\", \"select\"]",
         "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\"read\", \"report\", \"select\", \"create\"]",
     );

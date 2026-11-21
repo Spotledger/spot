@@ -108,6 +108,20 @@ saved. An `after_commit` script cannot undo a save: its failure is logged and, a
 `failure_threshold` consecutive failures, the script is disabled (`enabled` off, the reason in
 `disabled_reason`, the code of the last failure in `last_error`).
 
+## Argument schemas of API scripts
+
+An API script may carry an argument schema (a JSON text). It is checked when the script is saved
+(`spot_functions::check_schema`) and again on every call, before the engine runs. The keywords are
+`type`, `required`, `properties`, `additionalProperties`, `items`, `enum`, `minLength`,
+`maxLength`, `minimum`, `maximum`, `minItems`, `maxItems` and `uniqueItems`; the table and the rules are in
+[function.md](function.md#argument-schema-keywords). With `additionalProperties: false` an extra
+argument is refused with `function.bad_arguments` and the script is not entered (the reason, for
+example `tier: unexpected property`, is in the error's explanation); the same call without the extra
+argument runs. A schema without `additionalProperties` keeps unlisted arguments. `uniqueItems: true`
+refuses a repeated item the same way (`items.1: duplicate item`). Keywords outside the table
+(`format`, `default`, `pattern`, `oneOf`, `anyOf`, `exclusiveMinimum`, `multipleOf`) are documented,
+not enforced.
+
 ## Logs and privacy
 
 `host.log` lines and run records are kept in memory and written to the log through `spot-redact`.

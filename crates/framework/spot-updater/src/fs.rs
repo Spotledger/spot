@@ -15,6 +15,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::UpdaterError;
 
+#[cfg(windows)]
+mod win;
+
 /// Every filesystem operation an update needs. Implementations must make
 /// [`write_atomic`](FileSystem::write_atomic) and
 /// [`durable_write`](FileSystem::durable_write) atomic: a reader sees either the old bytes or
@@ -171,10 +174,11 @@ impl FileSystem for StdFileSystem {
     }
 
     fn create_dir_all(&self, path: &Path) -> Result<(), UpdaterError> {
+        let missing = missing_ancestors(path)?;
         std::fs::create_dir_all(path)
             .map_err(|error| io_error("create directory", path, &error))?;
-        // Persist newly created ancestors as well as the leaf before a pointer may name it.
-        for directory in path.ancestors().filter(|p| !p.as_os_str().is_empty()) {
+        // Persist newly created directories as well as the leaf before a pointer may name it.
+        for directory in directories_to_sync(path, &missing) {
             sync_directory(directory)
                 .map_err(|error| io_error("sync directory", directory, &error))?;
         }
@@ -202,14 +206,21 @@ impl FileSystem for StdFileSystem {
     }
 }
 
-// Directory sync is required, not best effort, on the Unix adapter. Windows needs its
-// separately owned adapter: std does not expose a portable durable directory handle.
+// Directory sync is required, not best effort, on every platform that has an adapter. Unix
+// flushes a read-only directory handle; Windows flushes a directory handle opened with backup
+// semantics (see `win.rs`). Any other target is a typed error: the caller supplies its own
+// `FileSystem`.
 #[cfg(unix)]
 fn sync_directory(path: &Path) -> std::io::Result<()> {
     std::fs::File::open(path)?.sync_all()
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn sync_directory(path: &Path) -> std::io::Result<()> {
+    win::sync_directory(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn sync_directory(_: &Path) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
@@ -218,11 +229,66 @@ fn sync_directory(_: &Path) -> std::io::Result<()> {
 }
 
 fn sync_parent(path: &Path) -> Result<(), UpdaterError> {
+    sync_parent_with(path, sync_directory)
+}
+
+/// [`sync_parent`] with the directory flush injected, so a flush that fails can be rehearsed on
+/// every platform. A failed flush is an `updater.io` error naming the directory, never a
+/// success.
+pub(crate) fn sync_parent_with(
+    path: &Path,
+    flush: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), UpdaterError> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    sync_directory(parent).map_err(|error| io_error("sync parent", parent, &error))
+    flush(parent).map_err(|error| io_error("sync parent", parent, &error))
+}
+
+/// The directories `create_dir_all` will have to create, deepest first (those that do not exist
+/// yet). Only Windows uses the list, to avoid flushing directories it did not create.
+fn missing_ancestors(path: &Path) -> Result<Vec<PathBuf>, UpdaterError> {
+    if cfg!(not(windows)) {
+        return Ok(Vec::new());
+    }
+    let mut missing = Vec::new();
+    for directory in path.ancestors().filter(|p| !p.as_os_str().is_empty()) {
+        let exists = directory
+            .try_exists()
+            .map_err(|error| io_error("exists", directory, &error))?;
+        if exists {
+            break;
+        }
+        missing.push(directory.to_path_buf());
+    }
+    Ok(missing)
+}
+
+/// The directories to flush after `create_dir_all(path)`.
+///
+/// Unix flushes every ancestor of `path`, as it always has. Windows opens a directory for a
+/// flush with write access, which an unprivileged service is not granted on the volume root or
+/// on shared parents such as `C:\Users`; so it flushes only what the call created plus the
+/// parent that now holds the first new entry (the caller could write into it, because it just
+/// created an entry there).
+fn directories_to_sync<'a>(path: &'a Path, missing: &'a [PathBuf]) -> Vec<&'a Path> {
+    if cfg!(not(windows)) {
+        let _ = missing;
+        return path
+            .ancestors()
+            .filter(|p| !p.as_os_str().is_empty())
+            .collect();
+    }
+    let mut directories: Vec<&Path> = missing.iter().map(PathBuf::as_path).collect();
+    if let Some(top) = missing.last() {
+        let parent = top
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        directories.push(parent);
+    }
+    directories
 }
 
 /// Reports a `std::io::Error` as an [`UpdaterError::Io`], with `NotFound` folded into a
@@ -240,9 +306,10 @@ fn io_error(what: &str, path: &Path, error: &std::io::Error) -> UpdaterError {
 
 /// The free bytes on the volume holding `path`.
 ///
-/// `std` exposes no free-space API and this crate may add no dependency for it, so on Unix
-/// this asks the system's `df` for the volume's available blocks; on any other platform it is
-/// a typed error and the caller supplies its own [`FileSystem`].
+/// `std` exposes no free-space API and this crate may add no dependency for it on Unix, so
+/// there this asks the system's `df` for the volume's available blocks. On Windows it is
+/// `GetDiskFreeSpaceExW` (the bytes available to the caller, see `win.rs`). On any other
+/// platform it is a typed error and the caller supplies its own [`FileSystem`].
 #[cfg(unix)]
 fn free_space_of(path: &Path) -> Result<u64, UpdaterError> {
     let output = std::process::Command::new("df")
@@ -279,7 +346,12 @@ fn free_space_of(path: &Path) -> Result<u64, UpdaterError> {
     Ok(blocks.saturating_mul(1024))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn free_space_of(path: &Path) -> Result<u64, UpdaterError> {
+    win::free_space(path).map_err(|error| io_error("free space of", path, &error))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn free_space_of(path: &Path) -> Result<u64, UpdaterError> {
     Err(UpdaterError::Io {
         detail: format!(

@@ -9,6 +9,37 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.17] - 2026-11-22
+
+Runtime work compiled and tested on GitHub-hosted runners, and nightly fixes.
+
+### Added
+
+- Remedies can run on a real site: the world-access ports for jobs, cache, retrieval index,
+  quarantine, edge, cases and documents, the durable undo store, `JobStore::requeue` and an atomic
+  `JobStore::cancel_if_pending`, `CacheStore::count_prefix`. The hub's catch-up feed and an edge
+  roster that sees revocations are in; hub resync still waits for a seams provider.
+- Step-up: `POST /api/v1/auth/step-up` and a `session.step_up_at` marker, recorded in the identity
+  audit chain; support access has a real caller. Field reveal is served and its reason is stored in
+  `identity_field_accessed` (events contract 0.7.9).
+- `GET /api/v1/resource/{doctype}/{id}/ai-timeline` (native API 0.28.0); SSO step-up contract
+  (0.29.0, not implemented yet).
+- MCP: argument validation honours `additionalProperties`, `enum`, string and numeric bounds,
+  array sizes and `uniqueItems`.
+- `audit_verify` also walks the AI and quarantine chains.
+- Windows: the updater's durable directory flush and free-space check.
+
+### Changed
+
+- A fresh sign-in no longer counts as a step-up. `JobStore::cancel_if_pending` is a required method
+  of the `JobStore` trait.
+- Unknown arguments to MCP extension tools are refused.
+
+### Fixed
+
+- Nightly: report paths of the L7 and L8 profiles are absolute, ignored tests marked as known gaps
+  are skipped, the long soak and the in-memory fake runs are bounded, Windows checkouts keep LF.
+
 ## [0.1.16] - 2026-11-21
 
 Runtime work compiled and tested on GitHub-hosted runners, and continuous integration fixes.

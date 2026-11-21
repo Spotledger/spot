@@ -38,6 +38,17 @@ pub enum Error {
     #[error("job.context_too_large")]
     ContextTooLarge,
 
+    /// A requeue was refused because the job is not dead or retrying (it is pending, running
+    /// under a live claim, succeeded or cancelled); nothing changed. The error carries nothing
+    /// of the job.
+    #[error("job.requeue_refused")]
+    RequeueRefused,
+
+    /// A requeue was refused because another live job (pending, running or retrying) holds the
+    /// same (site, name, idempotency key); nothing changed.
+    #[error("job.requeue_key_held")]
+    RequeueKeyHeld,
+
     /// The intake needs to resync with the outbox feed.
     #[error("job.intake_resync")]
     IntakeResync,

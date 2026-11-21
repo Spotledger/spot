@@ -101,3 +101,43 @@ or an error's text can never reach a Prometheus label, by construction:
 - `spot_bpm_resume_backlog` (a gauge: how many Cases the last resume scan found runnable)
 
 Anything that needs a run id or a case id belongs in the structured logs, not in a metric.
+
+## The case desk (stuck cases and unstick)
+
+The module provides `dyn CaseDesk` (`services/process/case_desk.rs`), the port the remedy
+world's cases part sits on, so the `case.unstick` remedy runs on a live site. It is provided
+from the module's finaliser, after every module registered, and only when the process insight
+module (`process_insight`, `ORDER` 1190) is running: the definition of "stuck" comes from it.
+Without insight there is no desk and readiness for `world_access` says `no cases`, as before.
+
+**Stuck, in one rule** (`case_desk::standing`, pinned by unit tests). Process insight reports an
+open attempt that stayed in its state longer than its node expects, with a reason. The desk
+narrows that to what the platform can clear:
+
+| Insight reason      | Desk says | Meaning                                                        |
+|---------------------|-----------|----------------------------------------------------------------|
+| `running`           | stuck     | runnable, or running past its lease, and not progressing       |
+| `integration_retry` | stuck     | the retry is exhausted or overdue                              |
+| `waiting_for_task`  | waiting   | a person must act; never pushed by the platform                |
+| `timer`             | waiting   | a date or an event is awaited                                  |
+
+Any unstickable reason makes a case stuck even if another branch waits. A case with only waiting
+reasons is not listed by `stuck()`, `life()` answers `running` for it (the remedy world has no
+waiting state), and `unstick` refuses it. A finished case is `done` and is refused. The reasons
+come from the insight's last fold and the site's `[services.process_insight].stuck_after_secs`.
+
+**Unstick.** `unstick(actor, case, now)` requires that the actor holds the `process_supervise`
+permission on its **own** principal (the actor is a user record id, with or without an `agent:`
+or `user:` prefix; an agent's role set is its user record's assignments). An actor that cannot be
+resolved, or lacks the permission, is refused, and the platform's system principal never counts.
+The case must exist on this site (the store is the site's own, so another site's case is "no
+such case") and be stuck. Then one case step is queued through `ProcessHost::unstick_step`, the
+host's idempotent enqueue (the engine's own key, so a second unstick while the first job is
+queued is dropped by the job store). The answer is where the case stands afterwards: `running`
+(a step is queued) or `done`.
+
+The refusals are fixed texts that name no case data: `the actor may not supervise processes`,
+`no such case`, `the case is waiting, not stuck`, `the case is not stuck`, `the case has
+finished`, `the process engine is not available`, `the case step could not be queued`. The call
+is logged with the actor id and the case id only; the remedy host records the audit events of
+the remedy itself.

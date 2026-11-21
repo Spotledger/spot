@@ -82,4 +82,4 @@ pub use payload::{
 pub use schema::{EventSchema, FieldSchema, PayloadType, SchemaError};
 
 /// The semantic version of this contract. Implementers pin it (blueprint §4).
-pub const CONTRACT_VERSION: &str = "0.7.8";
+pub const CONTRACT_VERSION: &str = "0.7.9";

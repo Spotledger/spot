@@ -21,6 +21,15 @@
 //! modules, which provide one [`HubParts`] port at an `ORDER` below this module's. A missing
 //! port is a start-up failure that names it, never a silent no-op.
 //!
+//! # The edge desk (WP-AI-07.T9)
+//!
+//! On a hub site the service also provides `dyn EdgeDesk` ([`edge_desk::HubEdgeDesk`]): every
+//! enrolled edge with its expected and actual queue position (read from the serve cache this
+//! service creates when it runs) and a resync of one edge through the catch-up path. The remedy
+//! host's edge part reads it. Its roster is the enrolment directory (an edge's revocation is
+//! visible), see [`edge_desk::DirectoryRoster`]. A non-hub role provides nothing (`ROLES`). See
+//! [`edge_desk`] and the guide.
+//!
 //! Tables: the hub's durable state (`spot-sync-hub-pg`) is created by `spot migrate` (its DDL is
 //! in `schema::extra_tables`), never by the host.
 
@@ -40,8 +49,12 @@ use spot_sync_hub_host::{
 use spot_sync_protocol::NodeId;
 use tokio::sync::watch;
 
+use crate::services::world_access::edge::EdgeDesk;
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
+
+#[path = "sync_hub/edge_desk.rs"]
+pub mod edge_desk;
 
 /// This module's start order: after `node_role` (1005), which decides the role `ROLES` reads.
 pub const ORDER: u32 = 1300;
@@ -264,6 +277,7 @@ pub struct SyncHub {
     parts: Arc<HubParts>,
     clock: Arc<dyn Clock>,
     prepared: Mutex<Option<(tokio::net::TcpListener, tokio_rustls::TlsAcceptor)>>,
+    link: Arc<edge_desk::EdgeLink>,
 }
 
 impl SyncHub {
@@ -284,7 +298,14 @@ impl SyncHub {
             parts,
             clock,
             prepared: Mutex::new(None),
+            link: Arc::new(edge_desk::EdgeLink::default()),
         }
+    }
+
+    /// The link the edge desk reads the running hub's serve cache through.
+    #[must_use]
+    pub fn edge_link(&self) -> Arc<edge_desk::EdgeLink> {
+        Arc::clone(&self.link)
     }
 }
 
@@ -349,6 +370,7 @@ impl Service for SyncHub {
             // The relay and its PostgreSQL queue are synchronous and may not run on an async
             // thread: a plain thread drives them and publishes into the cache.
             let (cache, acks) = ServeCache::new();
+            self.link.attach(Arc::clone(&cache));
             let halt = Arc::new(AtomicBool::new(false));
             let thread = {
                 let (cache, halt, clock) = (
@@ -397,6 +419,7 @@ impl Service for SyncHub {
             let served = tls::serve(listener, acceptor, router, shutdown).await;
             halt.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = thread.join();
+            self.link.detach();
             served.map_err(|e| e.message)
         })
     }
@@ -408,6 +431,10 @@ impl Service for SyncHub {
 /// A missing or out-of-bounds setting, or a missing [`HubParts`] port, named.
 pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     if !ctx.assembling() {
+        // A reload keeps the running service; the desk it provided is provided again.
+        if let Some(desk) = edge_desk::recall(ctx.label()) {
+            ctx.provide::<dyn EdgeDesk>(desk)?;
+        }
         return Ok(());
     }
     let mut settings = ctx.settings_or_default::<Settings>("sync_hub")?;
@@ -430,12 +457,39 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         )
     })?;
     let env = *ctx.env()?;
-    ctx.add(Arc::new(SyncHub::new(
+    let hub = Arc::new(SyncHub::new(
         resolved,
         env.root.to_path_buf(),
         env.site.site.clone(),
         parts,
         Arc::clone(ctx.clock()),
-    )));
+    ));
+    // The edge desk: positions from the serve cache this service creates when it runs, the
+    // enrolled edges from a roster port (else the relay's own destinations) and the catch-up
+    // path when the catch-up wiring provided one (it is optional: without it a resync answers
+    // `not supported`).
+    let link = hub.edge_link();
+    let roster: Arc<dyn edge_desk::EdgeRoster> =
+        if let Some(provided) = ctx.port::<dyn edge_desk::EdgeRoster>() {
+            provided
+        } else if let Some(directory) = ctx.port::<spot_sync_enrol::DurableDirectory>() {
+            // The enrolment directory sees every enrolled edge and its revocation.
+            Arc::new(edge_desk::DirectoryRoster::new(directory))
+        } else {
+            // A hub with no directory port: the relay's own destinations (no revocation is visible).
+            Arc::new(edge_desk::RelayRoster::new(Arc::clone(&link)))
+        };
+    let catchup: Option<Arc<dyn edge_desk::Catchup>> = ctx
+        .port::<crate::services::sync_catchup_wiring::CatchupHub>()
+        .map(|wired| wired as Arc<dyn edge_desk::Catchup>);
+    let desk: Arc<dyn EdgeDesk> = Arc::new(edge_desk::HubEdgeDesk::new(
+        &env.site.site,
+        link,
+        roster,
+        catchup,
+    ));
+    edge_desk::remember(ctx.label(), Arc::clone(&desk));
+    ctx.provide::<dyn EdgeDesk>(desk)?;
+    ctx.add(hub);
     Ok(())
 }

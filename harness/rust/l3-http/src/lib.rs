@@ -14,6 +14,8 @@
 //!   role, a running host on an ephemeral port, and a drop guard that leaves nothing behind.
 //! * [`client`] — a typed HTTP client with session handling and the contract's error decoding,
 //!   so a case reads like a user story.
+//! * [`embed_fake`] — a deterministic in-process embeddings endpoint, for the cases that need the
+//!   product to index and retrieve by meaning (WP-AI-10.T4).
 //! * [`report`] — case outcomes, a JUnit-style document for CI and the failure text a reviewer
 //!   needs.
 //! * [`cases`] — one behaviour per case, named like the L3 suite: authentication, CRUD, child
@@ -25,6 +27,7 @@
 
 pub mod cases;
 pub mod client;
+pub mod embed_fake;
 pub mod fixture;
 pub mod index;
 pub mod report;

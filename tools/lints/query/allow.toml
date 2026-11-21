@@ -760,3 +760,24 @@ reason = "Host-side PostgreSQL store module of the remedy host: its statements a
 path = "crates/framework/spot-cli/tests/remedies_undo_store.rs"
 pattern = "database driver crate path"
 reason = "Integration test: opens a pool on a throwaway test database to round-trip the undo store through PostgreSQL (skipped without SPOT_TEST_PG_URL). Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/quarantine_wiring.rs"
+pattern = "database driver crate path"
+reason = "WP-AI-07.T8: the quarantine wiring tests build the platform audit chain and the quarantine store over the throwaway test database; their constructors take a deadpool pool, which the TestDb helper does not hand out, so this one test file builds the pool from the test database's own settings. Tests only."
+
+# Bundle 8 additions (tests only).
+[[allow]]
+path = "crates/framework/spot-cli/tests/audit_verify_extra_chains.rs"
+pattern = "SQL (UPDATE|DELETE)"
+reason = "WP-SEC-06.T9: the extra-chain verifier tests prove that an altered, swapped or removed entry of the AI and quarantine chains is found, by tampering with stored audit entries as the table owner in a throwaway test database; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/quarantine_store_port.rs"
+pattern = "database driver crate path"
+reason = "WP-AI-07.T17: the quarantine store-port tests build the platform audit chain and the quarantine store over the throwaway test database; their constructors take a deadpool pool, which the TestDb helper does not hand out, so this one test file builds the pool from the test database's own settings. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/step_up_audit.rs"
+pattern = "SQL SELECT"
+reason = "WP-IAM-12.T9: the step-up audit test reads the identity audit chain's stored records back from a throwaway test database to prove no secret reaches a record; such a read exists only in a database. Tests only."

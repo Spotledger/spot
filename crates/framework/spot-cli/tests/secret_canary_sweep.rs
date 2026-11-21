@@ -212,6 +212,18 @@ async fn no_planted_secret_reaches_any_artefact() {
     .await;
     common::expect(&changed, 200);
     let admin = changed.body["data"]["token"].as_str().unwrap().to_owned();
+    // Provider administration needs a recent step-up (WP-IAM-12.T9: a fresh sign-in no longer
+    // counts as one): the Administrator proves the password again on this session.
+    let stepped = call(
+        addr,
+        &site,
+        Some(&admin),
+        "POST",
+        "/api/v1/auth/step-up",
+        Some(json!({"password": admin_password.value()})),
+    )
+    .await;
+    common::expect(&stepped, 200);
     let member = common::token_of(addr, &site, "member@example.com", member_password.value()).await;
 
     // --- the canaries the platform made ------------------------------------------------------

@@ -30,7 +30,6 @@ const HUB_TLS: &str =
 
 fn write_hub_tls(env: &Env) {
     use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
-    use std::os::unix::fs::PermissionsExt as _;
     let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     ca_params
@@ -49,7 +48,11 @@ fn write_hub_tls(env: &Env) {
     std::fs::write(root.join("ca.pem"), ca.pem()).unwrap();
     let key_path = root.join("hub.key");
     std::fs::write(&key_path, key.serialize_pem()).unwrap();
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
 }
 
 /// Rewrites `common.toml`'s `[services.node_role]` table.

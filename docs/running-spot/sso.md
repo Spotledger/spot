@@ -125,8 +125,13 @@ okta-prod = "env:SPOT_OKTA_SECRET"         # or "file:/etc/spot/secrets/okta" (m
   the user and the IdP `sid`. A logout ends only the sessions of the provider that asked, with end
   reason `sso_logout`; open realtime sockets close within their session check interval; API keys are
   never touched.
-- **Administration** (`/api/v1/admin/sso/*`): Tenant Administrators only, step-up (a session created
-  in the last 15 minutes) before every write, every outcome audited on `spot::audit::identity`.
+- **Administration** (`/api/v1/admin/sso/*`): Tenant Administrators only, a **recent step-up**
+  before every write (the session's `step_up_at` marker within `[services.identity_admin]
+  step_up_window_secs`, read through the same function as the identity administration; see
+  [step-up](step_up.md)), every outcome audited on `spot::audit::identity`. Until WP-IAM-12.T9 this
+  was "the session was created in the last 15 minutes" (a constant of 900 s), so a fresh sign-in
+  counted: it no longer does, and an administrator calls `POST /api/v1/auth/step-up` first (`403
+  auth.step_up_required` says so). The default window is also 900 s.
 
 Tables created by `prepare` at start (idempotent): `spot_sso_saml_provider`, `spot_sso_policy`,
 `spot_sso_handover`, `spot_sso_session_index`.

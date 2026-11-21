@@ -353,6 +353,9 @@ impl tracing::Subscriber for Capture {
 async fn no_attachment_name_or_bytes_reach_a_log() {
     let capture = Capture::default();
     let _guard = tracing::subscriber::set_default(capture.clone());
+    // Another test of this binary may have run an event of the same call site under no
+    // subscriber, which caches "never" for it: look again under this one.
+    tracing::callsite::rebuild_interest_cache();
     let r = rig();
     *lock(&r.files.refuse) = Some(UploadRefused {
         code: "file.virus_detected",

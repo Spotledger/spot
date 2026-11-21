@@ -139,7 +139,7 @@ pub async fn run_all(fixture: &Fixture, filter: Filter) -> Report {
     case!(the_manager_holds_every_right, false);
     case!(the_permission_summary_matches_enforcement, false);
     case!(field_masking_hides_the_confidential_details, false);
-    blocked!("a_reveal_without_the_group_right_is_refused");
+    case!(a_reveal_without_the_group_right_is_refused, false);
 
     // Metadata, idempotency, the HTTP edge.
     case!(meta_describes_every_field_and_its_etag, true);
@@ -601,11 +601,6 @@ pub const LEGACY_BLOCKED: &[(&str, &str, &str)] = &[
         "list_returns_the_default_columns_newest_first",
         "WP-PLT-05.T2",
         "the contract says `resource_list` answers newest first, but the list passes no order and the query compiler appends `id` ascending, so the answer is oldest first",
-    ),
-    (
-        "a_reveal_without_the_group_right_is_refused",
-        "WP-PRD-01.T4",
-        "`spot serve` does not mount `field_reveal` (no `with_reveal`), so the route answers an empty 404 instead of `403 permission.reveal_denied`",
     ),
     (
         "a_throttled_sign_in_sets_the_retry_after_header",

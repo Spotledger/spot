@@ -38,7 +38,8 @@ pub fn cases() -> Vec<CaseDef> {
 }
 
 async fn keys_and_sessions(fixture: &Fixture) -> CaseResult {
-    let admin = fixture.admin();
+    // A fresh sign-in is not a step-up: the administration below needs a recent one.
+    let admin = fixture.admin_step_up().await?;
     admin.get(&format!("{BASE}/api-keys")).await?.expect(200)?;
     let viewer = fixture.sign_in(VIEWER).await?;
     viewer.get(&format!("{BASE}/api-keys")).await?.expect(403)?;

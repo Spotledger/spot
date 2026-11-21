@@ -91,7 +91,7 @@ public sealed class CapturingSink : IListExportSink
 
 /// <summary>A server fake over N generated rows. Paging is by opaque cursor ("c:offset"); one query in flight
 /// is asserted (MaxInFlight); latency honours cancellation; a hook lets a test hold a response.</summary>
-public sealed class FakeListGateway : IListGateway
+public class FakeListGateway : IListGateway
 {
     private int _inFlight;
 
@@ -171,7 +171,7 @@ public sealed class FakeListGateway : IListGateway
         }
     }
 
-    public ListRecord Record(int i, IEnumerable<string> fields)
+    public virtual ListRecord Record(int i, IEnumerable<string> fields)
     {
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var field in fields)
@@ -195,7 +195,7 @@ public sealed class FakeListGateway : IListGateway
         return new ListRecord("d-" + i.ToString("D6", System.Globalization.CultureInfo.InvariantCulture), i + 1, values);
     }
 
-    public Task<IReadOnlyDictionary<string, string>> ResolveLabelsAsync(string targetDoctype, IReadOnlyCollection<string> ids, CancellationToken cancellationToken)
+    public virtual Task<IReadOnlyDictionary<string, string>> ResolveLabelsAsync(string targetDoctype, IReadOnlyCollection<string> ids, CancellationToken cancellationToken)
     {
         LabelCalls.Add((targetDoctype, ids.ToArray()));
         return Task.FromResult<IReadOnlyDictionary<string, string>>(ids.ToDictionary(id => id, id => "Party " + id));

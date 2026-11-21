@@ -141,10 +141,70 @@ impl DurableDirectory {
         }
     }
 
+    /// Whether the snapshot is recent enough to trust (the directory authenticates only then).
+    /// [`enrolled`](Self::enrolled) is empty when this is `false`, so a caller that must tell "no
+    /// nodes" from "cannot tell" asks this first.
+    #[must_use]
+    pub fn is_fresh(&self) -> bool {
+        let now = self.clock.now();
+        self.read()
+            .refreshed_at
+            .is_some_and(|at| now - at <= self.config.fail_closed_after)
+    }
+
+    /// The nodes the snapshot knows, with their status, ordered by node id: one entry per node
+    /// however many certificates it holds (a rotation overlap, a retired certificate).
+    ///
+    /// It reads only the in-memory snapshot the host refreshes, never the store, so it is cheap
+    /// and never blocks on the database. A node revoked through this process shows as revoked at
+    /// once ([`mark`](Self::mark)); one revoked elsewhere shows after the next
+    /// [`refresh`](Self::refresh), which the host runs at least every
+    /// [`DirectoryConfig::max_staleness`] seconds. A node that has a pending enrolment code but
+    /// has not redeemed it has no certificate and is **not listed**. When the snapshot is too old
+    /// to trust (the directory then authenticates nobody) the list is empty: an unreadable
+    /// directory lists no one rather than a stale roster.
+    ///
+    /// A node whose certificates disagree on the status (which one store write cannot produce)
+    /// is listed under the most severe one: revoked over suspended over active.
+    #[must_use]
+    pub fn enrolled(&self) -> Vec<(NodeId, NodeStatus)> {
+        if !self.is_fresh() {
+            return Vec::new();
+        }
+        let snapshot = self.read();
+        let mut by_node: std::collections::BTreeMap<String, (NodeId, NodeStatus)> =
+            std::collections::BTreeMap::new();
+        for cert in snapshot.certs.values() {
+            let status = if cert.cert_state == CertState::Revoked {
+                NodeStatus::Revoked
+            } else {
+                cert.node_status
+            };
+            by_node
+                .entry(cert.node.to_string())
+                .and_modify(|(_, seen)| {
+                    if severity(status) > severity(*seen) {
+                        *seen = status;
+                    }
+                })
+                .or_insert_with(|| (cert.node.clone(), status));
+        }
+        by_node.into_values().collect()
+    }
+
     /// Adds or replaces one certificate in the local snapshot (after an enrolment or a rotation
     /// committed), so the new certificate authenticates at once.
     pub fn learn(&self, cert: PinnedCert) {
         self.write().certs.insert(cert.fingerprint.clone(), cert);
+    }
+}
+
+/// Ranks a status for [`DurableDirectory::enrolled`]: the most severe wins.
+const fn severity(status: NodeStatus) -> u8 {
+    match status {
+        NodeStatus::Active => 0,
+        NodeStatus::Suspended => 1,
+        NodeStatus::Revoked => 2,
     }
 }
 

@@ -154,14 +154,31 @@ impl MatrixReport {
                 out.push_str(&format!(
                     "  {} [{}] {}",
                     level_name(l.level),
-                    if l.report.ok() { "pass" } else { "FAIL" },
+                    if l.report.ok() {
+                        "pass"
+                    } else if l
+                        .report
+                        .violations
+                        .iter()
+                        .all(|c| { expected_forbidden(&b.backend, l.level).contains(c) })
+                    {
+                        "expected"
+                    } else {
+                        "FAIL"
+                    },
                     l.report.to_text().lines().next().unwrap_or("")
                 ));
                 out.push('\n');
                 for c in &l.report.classes {
                     out.push_str(&format!(
                         "      [{}] {} x{}\n",
-                        if c.forbidden { "FAIL" } else { "allow" },
+                        if !c.forbidden {
+                            "allow"
+                        } else if expected_forbidden(&b.backend, l.level).contains(&c.class) {
+                            "expected"
+                        } else {
+                            "FAIL"
+                        },
                         c.class.name(),
                         c.total
                     ));

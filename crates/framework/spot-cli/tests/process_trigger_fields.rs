@@ -992,16 +992,17 @@ async fn a_schema_the_triggers_crate_cannot_enforce_is_refused_at_publish() {
 /// bare token `trigger_invalid` (`services/process_versions.rs`, `check_definition`, the
 /// `TriggerIndex::from_versions(..).map_err(|_| bad("trigger_invalid"))` line). The brief wants
 /// the node id and the code (`bpm_triggers.input_schema_invalid`). Ignored until that line keeps
-/// the error's node and code.
+/// the error's node and code. The input is a look-ahead pattern, the only kind the triggers
+/// crate still cannot enforce (a plain pattern such as `^a$` is enforced since WP-BPM-02.T13).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "gap: the publish check drops the node and code of a trigger error (process_versions.rs)"]
+#[ignore = "gap: WP-BPM-09.T10 (retired, no owner) the publish check drops the node and code of a trigger error (process_versions.rs)"]
 async fn the_publish_refusal_for_an_unenforceable_schema_names_the_node_and_the_code() {
     let db = db_or_skip!();
     let s = site(&db, "tf-pattern-code").await;
     let text = process_text(
         "patterned",
         "trigger = \"manual\"\n\
-         input_schema = '{\"type\":\"object\",\"properties\":{\"supplier\":{\"type\":\"string\",\"pattern\":\"^a$\"}}}'",
+         input_schema = '{\"type\":\"object\",\"properties\":{\"supplier\":{\"type\":\"string\",\"pattern\":\"^(?=a)a+$\"}}}'",
     );
     let error = s.publish("patterned", text, None).await.unwrap_err();
     let VersionPortError::DefinitionInvalid(problems) = &error else {

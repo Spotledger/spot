@@ -1757,6 +1757,36 @@ GROUP_PINS[33] = {'version': '0.26.1',
  'op_words': {'link_inbound': ['5 minute window', 'never a `413`', 'api.rate_limited', 'no request id', 'Retry-After']}}
 
 
+# Rule 35 (contract 0.28.0, WP-AI-11.T10): the AI timeline of one document (a read; what the caller sees is decided by the caller's own read right and the field guard, never by a role).
+GROUP_PINS[35] = {'version': '0.28.0',
+ 'task': 'WP-AI-11.T10',
+ 'ops': {'resource_ai_timeline': ('get', '/api/v1/resource/{doctype}/{id}/ai-timeline', False, False, False)},
+ 'once': [],
+ 'codes': {},
+ 'schemas': ['AiTimelineEntry', 'AiTimelineResponse'],
+ 'op_words': {'resource_ai_timeline': ['staff and partner', 'none of its own, and no role', 'empty `entries` list',
+                                       'must not be told apart from a missing one', 'never carries a count',
+                                       '`503 server.unavailable` with `Retry-After`', 'never an empty list that would read as "no access"',
+                                       '`***`', '`Cache-Control: private, no-store`', '`400 api.invalid_request`']}}
+AI_TIMELINE_ROUTE = "/api/v1/resource/{doctype}/{id}/ai-timeline"
+AI_TIMELINE_ENTRY = ["seq", "at", "kind", "agent", "acting_user", "tool", "outcome", "arguments"]
+
+
+# Rule 36 (contract 0.29.0, WP-IAM-12.T10): the single sign-on step-up (auth_step_up with `sso: true`): forced re-authentication, the binding cookie, the same-user rule, a new session that carries the marker.
+GROUP_PINS[36] = {'version': '0.29.0',
+ 'task': 'WP-IAM-12.T10',
+ 'ops': {},
+ 'once': [],
+ 'codes': {},
+ 'schemas': [],
+ 'op_words': {'auth_step_up': ['`prompt=login` and `max_age=0`', 'ForceAuthn="true"', '**sets the binding cookie**',
+                               '**this session\'s own provider**', 'never upgrades a live token', 'new session of the same user',
+                               'same user as the session that asked', '`auth_time`', '`AuthnInstant`', '`401 sso.sign_in_failed`',
+                               '`400 api.invalid_request`'],
+              'sso_complete': ['new session', 'carries the step-up marker', 'has ended'],
+              'sso_callback': ['completes a step-up begun by `auth_step_up`']}}
+
+
 def run_rules(spec: dict[str, Any], realtime_text: str | None = None) -> tuple[list[str], int, int]:
     errors: list[str] = []
     check_openapi(spec, errors)
@@ -1783,6 +1813,8 @@ def run_rules(spec: dict[str, Any], realtime_text: str | None = None) -> tuple[l
     check_assignment_create_answers(spec, errors)
     check_journal_and_selectors(spec, errors)
     check_mcp_extension_tools(spec, errors)
+    check_ai_timeline(spec, errors)
+    check_sso_step_up(spec, errors)
     for rule_no, pin in GROUP_PINS.items():
         check_group(rule_no, pin, spec, errors)
         check_group_extra(rule_no, pin, spec, errors)
@@ -1799,6 +1831,55 @@ def check_mcp_extension_tools(spec: dict, errors: list[str]) -> None:
     for name in mcp.get("extension_tools", []):
         if name in ("query", "job_status") or name.startswith(("search_", "get_", "create_", "update_", "call_")):
             errors.append(f"rule 34: extension tool {name!r} collides with the generated tool names")
+
+
+def check_ai_timeline(spec: dict, errors: list[str]) -> None:
+    """Rule 35 (0.28.0): resource_ai_timeline is a bounded read of closed entries, answers a private no-store 200, and adds no error code (a 503 is the registered server.unavailable)."""
+    op = spec["paths"].get(AI_TIMELINE_ROUTE, {}).get("get")
+    schemas_ = spec["components"]["schemas"]
+    if not op:
+        return  # check_group reports the missing operation
+    limit = next((p for p in op.get("parameters", []) if p.get("name") == "limit"), {}).get("schema", {})
+    if (limit.get("minimum"), limit.get("maximum"), limit.get("default")) != (1, 100, 50):
+        errors.append("rule 35: resource_ai_timeline `limit` is an integer 1 to 100, default 50")
+    if any(p.get("name") in ("cursor", "offset", "page") for p in op.get("parameters", [])):
+        errors.append("rule 35: resource_ai_timeline has no cursor in this version")
+    headers = (op.get("responses", {}).get("200", {}).get("headers", {}) or {}).get("Cache-Control", {}).get("schema", {})
+    if headers.get("const") != "private, no-store":
+        errors.append("rule 35: resource_ai_timeline must answer Cache-Control: private, no-store")
+    entry = schemas_.get("AiTimelineEntry", {})
+    if entry.get("required") != AI_TIMELINE_ENTRY or list(entry.get("properties", {})) != AI_TIMELINE_ENTRY:
+        errors.append(f"rule 35: AiTimelineEntry is exactly {AI_TIMELINE_ENTRY} (no prompt, output, result or document value)")
+    args = entry.get("properties", {}).get("arguments", {})
+    if args.get("maxItems") != 32 or args.get("items", {}).get("properties", {}).get("value", {}).get("maxLength") != 128:
+        errors.append("rule 35: AiTimelineEntry.arguments is at most 32 pairs of values of at most 128 characters")
+    if entry.get("properties", {}).get("outcome", {}).get("enum") != ["ok", "refused", "failed"]:
+        errors.append("rule 35: AiTimelineEntry.outcome is ok, refused or failed")
+    if "enum" in entry.get("properties", {}).get("kind", {}):
+        errors.append("rule 35: AiTimelineEntry.kind is an open set (no enum)")
+    data = schemas_.get("AiTimelineResponse", {}).get("properties", {}).get("data", {})
+    entries = data.get("properties", {}).get("entries", {})
+    if list(data.get("properties", {})) != ["entries"] or entries.get("maxItems") != 100:
+        errors.append("rule 35: AiTimelineResponse.data carries exactly `entries`, at most 100 (no count, no hint of hidden entries)")
+
+
+def check_sso_step_up(spec: dict, errors: list[str]) -> None:
+    """Rule 36 (0.29.0): the step-up answer sets the binding cookie only for the single sign-on branch, and its `step_up_until` stays nullable (null until the browser comes back)."""
+    op = spec["paths"]["/api/v1/auth/step-up"]["post"]
+    headers = (op.get("responses", {}).get("200", {}).get("headers") or {})
+    cookie = " ".join(str(headers.get("Set-Cookie", {}).get("description", "")).split())
+    for word in ("Only for `sso: true`", "`__Host-`", "`HttpOnly`", "`Secure`", "`SameSite=Lax`", "Never present for a password step-up"):
+        if word not in cookie:
+            errors.append(f"rule 36: auth_step_up 200 Set-Cookie does not state {word!r}")
+    answer = spec["components"]["schemas"].get("AuthStepUpResponse", {}).get("properties", {}).get("data", {})
+    if answer.get("required") != ["step_up_until", "redirect_url"] or list(answer.get("properties", {})) != ["step_up_until", "redirect_url"]:
+        errors.append("rule 36: AuthStepUpResponse.data carries exactly step_up_until and redirect_url, both required")
+    for name in ("step_up_until", "redirect_url"):
+        if "null" not in (answer.get("properties", {}).get(name, {}).get("type") or []):
+            errors.append(f"rule 36: AuthStepUpResponse.{name} is nullable (the single sign-on answer has a null step_up_until)")
+    request = spec["components"]["schemas"].get("AuthStepUpRequest", {})
+    if set(request.get("properties", {})) != {"password", "totp", "sso"} or request.get("additionalProperties") is not False:
+        errors.append("rule 36: AuthStepUpRequest is exactly password, totp and sso (no provider and no return_to: the server uses the session's own)")
 
 
 def check_assignment_create_answers(spec: dict, errors: list[str]) -> None:
@@ -1854,6 +1935,41 @@ def self_test() -> int:
         errors, _, _ = run_rules(spec)
         if not any(e.startswith(rule) for e in errors):
             print(f"self-test: breaking {rule} was not detected; got {errors[:3]}")
+            failures += 1
+    rule35 = {
+        "an unbounded limit": lambda s: s["paths"][AI_TIMELINE_ROUTE]["get"]["parameters"][2]["schema"].update(maximum=1000),
+        "a cursor": lambda s: s["paths"][AI_TIMELINE_ROUTE]["get"]["parameters"].append(
+            {"name": "cursor", "in": "query", "required": False, "schema": {"type": "string", "maxLength": 9}}),
+        "a cacheable answer": lambda s: s["paths"][AI_TIMELINE_ROUTE]["get"]["responses"]["200"]["headers"]["Cache-Control"]["schema"].update(const="public"),
+        "a prompt on the entry": lambda s: schemas(s)["AiTimelineEntry"]["properties"].update(prompt={"type": "string", "maxLength": 9}),
+        "an unbounded argument list": lambda s: schemas(s)["AiTimelineEntry"]["properties"]["arguments"].pop("maxItems"),
+        "a closed kind": lambda s: schemas(s)["AiTimelineEntry"]["properties"]["kind"].update(enum=["tool_call"]),
+        "a hidden-entry count": lambda s: schemas(s)["AiTimelineResponse"]["properties"]["data"]["properties"].update(hidden={"type": "integer"}),
+        "a lost empty-list sentence": lambda s: s["paths"][AI_TIMELINE_ROUTE]["get"].update(
+            description=s["paths"][AI_TIMELINE_ROUTE]["get"]["description"].replace("empty `entries` list", "refusal")),
+        "a lost 503 sentence": lambda s: s["paths"][AI_TIMELINE_ROUTE]["get"].update(
+            description=s["paths"][AI_TIMELINE_ROUTE]["get"]["description"].replace("`503 server.unavailable` with `Retry-After`", "an error")),
+    }
+    for label, mutate in rule35.items():
+        errors, _, _ = run_rules(broken(mutate))
+        if not any(e.startswith("rule 35") for e in errors):
+            print(f"self-test: {label} (rule 35) was not detected; got {errors[:3]}")
+            failures += 1
+    rule36 = {
+        "a lost cookie header": lambda s: s["paths"]["/api/v1/auth/step-up"]["post"]["responses"]["200"]["headers"].pop("Set-Cookie"),
+        "a cookie for every branch": lambda s: s["paths"]["/api/v1/auth/step-up"]["post"]["responses"]["200"]["headers"]["Set-Cookie"].update(
+            description="The `__Host-` `HttpOnly` `Secure` `SameSite=Lax` cookie."),
+        "a non-nullable step_up_until": lambda s: schemas(s)["AuthStepUpResponse"]["properties"]["data"]["properties"]["step_up_until"].update(type="string"),
+        "a provider in the request": lambda s: schemas(s)["AuthStepUpRequest"]["properties"].update(provider={"type": "string", "maxLength": 9}),
+        "a lost same-user sentence": lambda s: s["paths"]["/api/v1/auth/step-up"]["post"].update(
+            description=s["paths"]["/api/v1/auth/step-up"]["post"]["description"].replace("same user as the session that asked", "someone")),
+        "a lost new-session sentence": lambda s: s["paths"]["/api/v1/auth/sso/complete"]["post"].update(
+            description=s["paths"]["/api/v1/auth/sso/complete"]["post"]["description"].replace("**new session**", "session")),
+    }
+    for label, mutate in rule36.items():
+        errors, _, _ = run_rules(broken(mutate))
+        if not any(e.startswith("rule 36") for e in errors):
+            print(f"self-test: {label} (rule 36) was not detected; got {errors[:3]}")
             failures += 1
     # The print rule has four parts; break each one on its own.
     print_breaks = {
@@ -2149,7 +2265,7 @@ def self_test() -> int:
             print(f"self-test: {label} (rule 15) was not detected; got {errors[:3]}")
             failures += 1
     total = (len(cases) + len(print_breaks) + len(principal_breaks) + len(notice_breaks) + len(feed17)
-             + len(key_breaks) + len(rule18) + len(rule19) + len(rule20) + len(rule21) + len(rule22) + group_total + 2)
+             + len(key_breaks) + len(rule18) + len(rule19) + len(rule20) + len(rule21) + len(rule22) + len(rule35) + len(rule36) + group_total + 2)
     errors, _, _ = run_rules(base, realtime_text="nothing documented")
     if not any(e.startswith("rule 7") for e in errors):
         print("self-test: an undocumented realtime message type was not detected")

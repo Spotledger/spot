@@ -436,8 +436,18 @@ pub struct Settings {
 impl Settings {
     /// The in-memory store a host that runs the memory store uses.
     pub fn memory_store() -> Arc<dyn JobStore> {
-        Arc::new(InMemoryJobStore::new())
+        Arc::new(
+            InMemoryJobStore::new().with_metrics(crate::services::telemetry::job_metrics_sink()),
+        )
     }
+}
+
+/// The durable job store on `pool`, counting requeues on the host's metrics sink
+/// (`spot_job_requeued_total`). Every place the host opens the PostgreSQL store builds it here,
+/// so the counter is wired once.
+pub fn durable_store(backend: &PgBackend) -> spot_jobs_pg::PgJobStore {
+    spot_jobs_pg::PgJobStore::new(backend.pool())
+        .with_metrics(crate::services::telemetry::job_metrics_sink())
 }
 
 /// One named lease and the handle this node holds on it.
@@ -1843,7 +1853,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
         coordinator
     };
     let store: Arc<dyn spot_jobs::JobStore> = if services_config.jobs.store == "postgres" {
-        let store = spot_jobs_pg::PgJobStore::new(backend.pool());
+        let store = durable_store(backend);
         store.prepare().await.map_err(crate::error)?;
         Arc::new(store)
     } else {

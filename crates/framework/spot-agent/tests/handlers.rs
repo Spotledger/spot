@@ -7,7 +7,9 @@
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
 use spot_agent::config::AgentConfig;
+#[cfg(target_os = "linux")]
 use spot_agent::handlers::{HandlerCtx, NAMESPACES, build_registry_with};
 use spot_agent::privilege::HELPER_PATH;
 use spot_agent::privilege::exec::{
@@ -17,9 +19,10 @@ use spot_agent::privilege::helper::{HelperReply, run_helper};
 use spot_agent::privilege::protocol::{decode_request, pipe_sddl};
 use spot_agent::privilege::runner::{Denied, PrivilegedRunner};
 use spot_agent::privilege::sudoers::sudoers_dropin;
-use spot_agent::privilege::templates::{
-    CERT_DEST_ROOT, Kind, Refused, TEMPLATES, confine, find, route, validate,
-};
+#[cfg(unix)]
+use spot_agent::privilege::templates::{CERT_DEST_ROOT, confine};
+use spot_agent::privilege::templates::{Kind, Refused, TEMPLATES, find, route, validate};
+#[cfg(target_os = "linux")]
 use spot_mgmt_ops::OpId;
 
 /// A fake privileged executor: records specs, answers with a canned result.
@@ -98,6 +101,7 @@ fn a_namespace_that_is_not_enabled_is_not_registered_at_all() {
     assert!(registry.contains(&OpId::new("os.sysctl.set").unwrap()));
 }
 
+#[cfg(unix)]
 const HOSTILE: &[&str] = &[
     ";rm -rf /",
     "a;b",
@@ -129,6 +133,8 @@ const HOSTILE: &[&str] = &[
     "nginx.service\n--now",
 ];
 
+// The path templates name POSIX locations (CERT_DEST_ROOT), which Windows cannot canonicalise.
+#[cfg(unix)]
 #[test]
 fn every_template_rejects_shell_metacharacters_newlines_and_option_like_values() {
     for template in TEMPLATES {
@@ -380,6 +386,7 @@ fn the_sudoers_output_allows_exactly_the_template_names_and_no_wildcard() {
     assert_eq!((code, out), (0, text));
 }
 
+#[cfg(unix)]
 #[test]
 fn paths_are_canonicalised_and_confined_to_the_allowed_root() {
     let dir = tempfile::tempdir().unwrap();

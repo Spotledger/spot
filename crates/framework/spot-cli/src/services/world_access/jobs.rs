@@ -2,11 +2,10 @@
 //!
 //! # Where the store comes from
 //!
-//! The jobs module does not provide its store as a port (it provides `JobSubmit`, which cannot
-//! list or read). So the part opens the **same durable store** the way the MCP service does
-//! (`PgJobStore` over the site's own pool): through the store's own trait, never a table. On the
-//! in-memory job profile (`services.jobs.store = "memory"`) the store is private to the jobs
-//! module and the site has no jobs part (`from_site` answers `None`; readiness says so).
+//! The part works through the [`JobAdmin`] port the jobs module provides (`ctx.port::<dyn
+//! JobAdmin>()`), built from the site's own store on **both** job profiles (PostgreSQL and the
+//! in-memory one), so the part no longer opens a store of its own. [`from_parts`] and
+//! [`StoreJobsPart::new`] build the same port over a store, for tests.
 //!
 //! # What each operation does
 //!
@@ -15,13 +14,22 @@
 //!   cancelled one is *done*.
 //! - `job` reads one job of this site (a job of another site answers `None`).
 //! - `unstick` moves a running job whose lease is **expired by the injected clock** back to the
-//!   queue through the store's own `reap_expired`. That operation reaps every job whose lease
+//!   queue through the port's `reap_expired`. That operation reaps every job whose lease
 //!   lapsed, not only the named one: they are exactly the jobs the jobs module's reaper takes every
 //!   two seconds, so the effect is the same, only sooner. The change returned is the named job's.
-//! - `retry` and `restore` are **not supported by the job port**: the store offers no operation
-//!   that moves a dead job back to the queue or a queued job back to dead or running. They answer
-//!   `OpError` "not supported by the jobs port" (a `restore` to the state the job already has is
-//!   accepted: it is a no-op). See the report's open questions for the operations to add.
+//! - `retry` moves a **dead** job back to the queue through the port's `requeue` (pending, due
+//!   now, attempts reset, last error kept) and returns the change from `failed` to `queued`. A job
+//!   that is not dead, or whose idempotency key another live job holds, is refused.
+//! - `restore` is the undo of a retry: `restore(job, failed)`. The store cannot put a requeued
+//!   job back to `dead` (that state is only reached by a worker running out of attempts), so the
+//!   undo is **not exact**: it cancels the requeued job, but only while it is still pending and
+//!   unclaimed (the port's `cancel_unclaimed`, one atomic `JobStore::cancel_if_pending`: a worker
+//!   that claims at the same moment is never cancelled), which returns it to a terminal state without
+//!   running again. The job ends `cancelled` (a *done* job), not `failed`, and its error history is
+//!   kept. A job a worker already claimed or finished is refused ("the job already ran again"); a
+//!   job that is already cancelled is the undone state (a no-op); a restore to the state the job
+//!   already has is a no-op. A restore to any other state (the undo of `unstick`) is not supported
+//!   by the jobs port.
 //! - `rehearsal` reads the dead and running jobs of the site (at most [`SNAPSHOT_LIMIT`] of each)
 //!   into the in-memory fixture, so a rehearsal can retry or unstick them and be thrown away.
 //!
@@ -33,8 +41,7 @@ use std::sync::Arc;
 
 use spot_core::SiteId;
 use spot_jobs::JobStore;
-use spot_jobs::model::{Job, JobId, JobState};
-use spot_jobs::store::JobFilter;
+use spot_jobs::model::{JobId, JobState};
 use spot_remedies::fixture::FakeJobs;
 use spot_remedies::{JobChange, JobLife, JobOps, JobRef, JobView, OpError};
 use time::OffsetDateTime;
@@ -42,12 +49,13 @@ use tokio::runtime::Handle;
 
 use super::parts::{JobsPart, capture_runtime};
 use crate::services::SiteCtx;
+use crate::services::ports::{JobAdmin, JobSummary, PortError, StopGate, StoreJobAdmin};
 use crate::services::remedies::world::WorldError;
 
 /// The most jobs of one state a listing or a snapshot reads.
 pub const SNAPSHOT_LIMIT: u32 = 500;
 
-/// The detail of an operation the job store has no operation for.
+/// The detail of an operation the jobs port has no operation for.
 const NOT_SUPPORTED: &str = "not supported by the jobs port";
 
 /// The state of a job as the remedy ports name it.
@@ -61,23 +69,32 @@ pub fn life_of(state: &JobState) -> JobLife {
     }
 }
 
-/// The jobs part over a job store.
+/// What the part says when a restore finds the job past the requeue it would undo.
+const RAN_AGAIN: &str = "the job already ran again";
+
+/// The jobs part over a [`JobAdmin`] port.
 pub struct StoreJobsPart {
-    store: Arc<dyn JobStore>,
-    site: SiteId,
+    admin: Arc<dyn JobAdmin>,
     handle: Handle,
 }
 
 impl StoreJobsPart {
-    /// A part over `store` for `site`. `handle` is the runtime the ops block on. The part reads no
-    /// clock: the instant of an operation is the `now` the caller passes (the injected clock's).
+    /// A part over `store` for `site`: the same admin port the jobs module provides, built over
+    /// `store` with an open stop gate (a test or an embedding without a site). `handle` is the
+    /// runtime the ops block on. The part reads no clock: the instant of an operation is the `now`
+    /// the caller passes (the injected clock's).
     #[must_use]
     pub fn new(store: Arc<dyn JobStore>, site: SiteId, handle: Handle) -> Self {
-        Self {
-            store,
-            site,
+        Self::over_admin(
+            Arc::new(StoreJobAdmin::new(site, store, StopGate::new())),
             handle,
-        }
+        )
+    }
+
+    /// A part over the site's job admin port.
+    #[must_use]
+    pub fn over_admin(admin: Arc<dyn JobAdmin>, handle: Handle) -> Self {
+        Self { admin, handle }
     }
 
     fn ops(&self) -> StoreJobOps<'_> {
@@ -99,15 +116,18 @@ pub fn from_parts(
     Some(Arc::new(StoreJobsPart::new(store, site, handle)))
 }
 
-/// The jobs part for this site, or `None` when the site has no durable job store.
+/// The part over a job admin port, or `None` when there is no port or no runtime to block on.
+#[must_use]
+pub fn from_admin(
+    admin: Option<Arc<dyn JobAdmin>>,
+    handle: Option<Handle>,
+) -> Option<Arc<dyn JobsPart>> {
+    Some(Arc::new(StoreJobsPart::over_admin(admin?, handle?)))
+}
+
+/// The jobs part for this site, or `None` when the jobs module did not provide its admin port.
 pub(super) fn from_site(ctx: &SiteCtx<'_>) -> Option<Arc<dyn JobsPart>> {
-    let env = *ctx.env().ok()?;
-    let store: Option<Arc<dyn JobStore>> = if env.loaded.common.services.jobs.store == "postgres" {
-        Some(Arc::new(spot_jobs_pg::PgJobStore::new(env.backend.pool())))
-    } else {
-        None
-    };
-    from_parts(store, &env.site.site, capture_runtime())
+    from_admin(ctx.port::<dyn JobAdmin>(), capture_runtime())
 }
 
 impl JobsPart for StoreJobsPart {
@@ -129,9 +149,7 @@ impl JobsPart for StoreJobsPart {
                     &job.id.to_string(),
                     life,
                     job.attempt,
-                    job.claim
-                        .as_ref()
-                        .map(|claim| claim.expires_at.unix_timestamp()),
+                    job.lease_expires_at.map(OffsetDateTime::unix_timestamp),
                 );
             }
         }
@@ -141,28 +159,20 @@ impl JobsPart for StoreJobsPart {
 
 impl StoreJobsPart {
     /// This site's jobs in `state`, at most [`SNAPSHOT_LIMIT`].
-    fn list(&self, state: JobState) -> Result<Vec<Job>, ()> {
-        let filter = JobFilter {
-            site: Some(self.site.clone()),
-            state: Some(state),
-            queue: None,
-            limit: Some(SNAPSHOT_LIMIT),
-        };
+    fn list(&self, state: JobState) -> Result<Vec<JobSummary>, ()> {
         self.handle
-            .block_on(self.store.list(filter))
+            .block_on(self.admin.list(Some(state), SNAPSHOT_LIMIT))
             .map_err(|_| ())
     }
 
     /// One job of this site.
-    fn get(&self, id: &JobRef) -> Result<Option<Job>, ()> {
+    fn get(&self, id: &JobRef) -> Result<Option<JobSummary>, ()> {
         let Ok(number) = id.as_str().parse::<u64>() else {
             return Ok(None);
         };
-        let job = self
-            .handle
-            .block_on(self.store.get(JobId(number)))
-            .map_err(|_| ())?;
-        Ok(job.filter(|job| job.site == self.site))
+        self.handle
+            .block_on(self.admin.get(JobId(number)))
+            .map_err(|_| ())
     }
 }
 
@@ -171,16 +181,19 @@ struct StoreJobOps<'a> {
     part: &'a StoreJobsPart,
 }
 
-fn view_of(job: &Job) -> JobView {
+fn view_of(job: &JobSummary) -> JobView {
     JobView {
         id: JobRef::new(&job.id.to_string()),
         life: life_of(&job.state),
         attempts: job.attempt,
-        lease_expires_at: job
-            .claim
-            .as_ref()
-            .map(|claim| claim.expires_at.unix_timestamp()),
+        lease_expires_at: job.lease_expires_at.map(OffsetDateTime::unix_timestamp),
     }
+}
+
+/// The text an operator sees for a refused or failed port call. A [`PortError`] never carries a
+/// payload, a key or an argument, so its text is safe to show.
+fn port_detail(error: PortError) -> String {
+    error.to_string()
 }
 
 impl JobOps for StoreJobOps<'_> {
@@ -210,8 +223,35 @@ impl JobOps for StoreJobOps<'_> {
         self.part.get(id).ok().flatten().as_ref().map(view_of)
     }
 
-    fn retry(&mut self, _id: &JobRef, _now: i64) -> Result<JobChange, OpError> {
-        Err(OpError::new("job_retry", NOT_SUPPORTED))
+    fn retry(&mut self, id: &JobRef, now: i64) -> Result<JobChange, OpError> {
+        let op = "job_retry";
+        let job = self
+            .part
+            .get(id)
+            .map_err(|()| OpError::new(op, "the job store did not answer"))?
+            .ok_or_else(|| OpError::new(op, &format!("no job `{}`", id.as_str())))?;
+        if life_of(&job.state) != JobLife::Failed {
+            return Err(OpError::new(
+                op,
+                &format!(
+                    "job `{}` is {}, not failed",
+                    id.as_str(),
+                    life_of(&job.state).as_str()
+                ),
+            ));
+        }
+        let at = OffsetDateTime::from_unix_timestamp(now)
+            .map_err(|_| OpError::new(op, "the instant is out of range"))?;
+        let after = self
+            .part
+            .handle
+            .block_on(self.part.admin.requeue(job.id, at))
+            .map_err(|error| OpError::new(op, &port_detail(error)))?;
+        Ok(JobChange {
+            id: id.clone(),
+            before: JobLife::Failed,
+            after: life_of(&after.state),
+        })
     }
 
     fn unstick(&mut self, id: &JobRef, now: i64) -> Result<JobChange, OpError> {
@@ -233,11 +273,7 @@ impl JobOps for StoreJobOps<'_> {
         }
         // Expiry is judged by the instant the caller passes (the injected clock's), the same
         // instant the reaper is asked about.
-        match job
-            .claim
-            .as_ref()
-            .map(|claim| claim.expires_at.unix_timestamp())
-        {
+        match job.lease_expires_at.map(OffsetDateTime::unix_timestamp) {
             Some(expires) if expires <= now => {}
             _ => {
                 return Err(OpError::new(
@@ -251,7 +287,7 @@ impl JobOps for StoreJobOps<'_> {
         let reaped = self
             .part
             .handle
-            .block_on(self.part.store.reap_expired(at))
+            .block_on(self.part.admin.reap_expired(at))
             .map_err(|_| OpError::new(op, "the job store did not answer"))?;
         if !reaped.contains(&job.id) {
             return Err(OpError::new(
@@ -276,6 +312,26 @@ impl JobOps for StoreJobOps<'_> {
         if life_of(&job.state) == life {
             return Ok(());
         }
-        Err(OpError::new(op, NOT_SUPPORTED))
+        if life != JobLife::Failed {
+            return Err(OpError::new(op, NOT_SUPPORTED));
+        }
+        // The undo of a retry. The job is only taken back while no worker has touched it: a job
+        // already cancelled is the undone state; a pending job nobody holds is cancelled; anything
+        // else (running, retrying after a run, succeeded) has already run again. The read above is
+        // only a shortcut: the port's cancel decides atomically, so a worker that claimed the job
+        // since is refused there (and reported as having run again) instead of being cancelled.
+        match job.state {
+            JobState::Cancelled => Ok(()),
+            JobState::Pending if job.lease_expires_at.is_none() => self
+                .part
+                .handle
+                .block_on(self.part.admin.cancel_unclaimed(job.id))
+                .map(|_| ())
+                .map_err(|error| match error {
+                    PortError::Invalid(_) => OpError::new(op, RAN_AGAIN),
+                    other => OpError::new(op, &port_detail(other)),
+                }),
+            _ => Err(OpError::new(op, RAN_AGAIN)),
+        }
     }
 }

@@ -27,7 +27,7 @@
 //! trait cannot carry: a read is a miss, a write is swallowed, a delete reports `false`, a counter
 //! reads as `0`. Nothing panics.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -40,6 +40,10 @@ use spot_core::SiteId;
 
 use crate::connection::RedisConnection;
 use crate::scripts;
+
+/// The most `SCAN` calls one [`count_prefix`](CacheStore::count_prefix) makes (500 keys each, so
+/// the work of one count is bounded at about half a million keys examined).
+const MAX_COUNT_SCAN_ROUNDS: usize = 1_000;
 
 /// How a [`RedisCacheStore`] bounds one site.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -193,6 +197,39 @@ impl RedisCacheStore {
             }
         }
         keys
+    }
+
+    /// Counts the distinct keys matching `pattern` with `SCAN`, in bounded batches and with a
+    /// bounded number of rounds ([`MAX_COUNT_SCAN_ROUNDS`]): a site with more matching keys than
+    /// the bound lets the count stop early and answer a lower bound. `SCAN` can return a key
+    /// twice while the table is being resized, so keys are de-duplicated. `SCAN` skips keys whose
+    /// time to live has passed, so the keys it names are the live ones. A failing server ends the
+    /// count with what was seen (the cache degrades rather than failing).
+    async fn count_keys(&self, pattern: &str) -> u64 {
+        let mut manager = self.connection.manager();
+        let mut cursor = "0".to_owned();
+        let mut seen: HashSet<String> = HashSet::new();
+        for _ in 0..MAX_COUNT_SCAN_ROUNDS {
+            let reply: Result<(String, Vec<String>), _> = redis::cmd("SCAN")
+                .arg(&cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(500)
+                .query_async(&mut manager)
+                .await;
+            match reply {
+                Ok((next, batch)) => {
+                    seen.extend(batch);
+                    if next == "0" {
+                        break;
+                    }
+                    cursor = next;
+                }
+                Err(_) => break,
+            }
+        }
+        u64::try_from(seen.len()).unwrap_or(u64::MAX)
     }
 
     /// Deletes a batch of `(user, data)` pairs, moving the site's accounting with them.
@@ -492,6 +529,15 @@ impl CacheStore for RedisCacheStore {
             let removed = self.delete_pairs(site, &pairs).await;
             self.bump_generation(site).await;
             removed
+        })
+    }
+
+    fn count_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
+        Box::pin(async move {
+            // The same pattern `delete_prefix` scans: the prefix is escaped, so it matches
+            // literally, and the pattern is under this site's own data namespace.
+            let keyspace = self.keyspace();
+            self.count_keys(&keyspace.cache_pattern(site, prefix)).await
         })
     }
 

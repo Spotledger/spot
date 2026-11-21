@@ -232,3 +232,49 @@ pub async fn field_masking_hides_the_confidential_details(fixture: &Fixture) -> 
     );
     Ok(())
 }
+
+/// A Viewer holds no reveal right on the confidential `details`: the reveal route refuses with
+/// `403 permission.reveal_denied`, answers the same for a field that has nothing to reveal, and
+/// never carries the value.
+pub async fn a_reveal_without_the_group_right_is_refused(fixture: &Fixture) -> CaseResult {
+    let (project_id, _, _) = fixture.project("Reveal").await?;
+    let secret = "only a manager reads this reveal canary";
+    let task = fixture
+        .admin()
+        .create(
+            "task",
+            &json!({"subject": "Reveal task", "project": project_id, "details": secret}),
+        )
+        .await?;
+    task.expect(201)?;
+    let task_id = task.id()?;
+    let viewer = fixture.sign_in(VIEWER).await?;
+    let refused = viewer
+        .reveal(
+            "task",
+            &task_id,
+            &json!({"field": "details", "reason": "the harness asks without the right"}),
+        )
+        .await?;
+    refused.expect_error("permission.reveal_denied")?;
+    ensure!(
+        refused.status == 403,
+        "the Viewer's reveal answers HTTP {}, not 403: {}",
+        refused.status,
+        refused.text()
+    );
+    ensure!(
+        !refused.text().contains(secret),
+        "the refusal carries the confidential value: {}",
+        refused.text()
+    );
+    let plain = viewer
+        .reveal(
+            "task",
+            &task_id,
+            &json!({"field": "subject", "reason": "the harness asks for a plain field"}),
+        )
+        .await?;
+    plain.expect_error("permission.reveal_denied")?;
+    Ok(())
+}

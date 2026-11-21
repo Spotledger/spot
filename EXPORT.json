@@ -1,11 +1,11 @@
 {
-  "content_sha256": "1fd1875604fa58236a81e896b2ef6c038875b07c5a060b06d3b4fc2ab2db21eb",
-  "file_count": 10433,
-  "file_list_sha256": "0ce9aa8a60f2194dfcae6aedb4709c0f6a98d457648ad579cade4459a90157c8",
-  "manifest_sha256": "f6bae14a7af7b7a1598d189f12cf4791a5cf69136a3d6acba488255bc3244487",
+  "content_sha256": "15f3f40e35342556d63040a46042a0173eab4a63e192b11065b7d3788c3a6494",
+  "file_count": 10496,
+  "file_list_sha256": "0d34d82ab68306b8cfbc4b0ae786261977c23ddd5c78ac3fe0ac6d943e2b0f2f",
+  "manifest_sha256": "54df520f73efb8dcf822e72fdc61d56991f8d557732b7e65788bc199a507c466",
   "patches": {
-    "edits": 133,
-    "files_changed": 39
+    "edits": 136,
+    "files_changed": 41
   },
   "scrub": {
     "files_changed": 231,
@@ -13,9 +13,9 @@
   },
   "scrub_words": {
     "citations_rewritten": 29,
-    "files_changed": 223
+    "files_changed": 225
   },
-  "source_commit": "1d710d97e099d4175894c2fcba8ec126ec965744",
-  "source_commit_date_utc": "2026-11-21T09:22:15Z",
+  "source_commit": "95522d513616baa48592c1f8eac93f19916c28b1",
+  "source_commit_date_utc": "2026-11-21T20:12:24Z",
   "tool_version": "1.1.0"
 }

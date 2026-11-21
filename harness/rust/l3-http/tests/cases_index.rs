@@ -54,18 +54,23 @@ fn the_agent_tool_cases_name_exactly_what_is_missing() {
             index::Kind::Case => panic!("{name} runs"),
         }
     };
-    // The extension-tool seam is served; what is missing is named, with the task that provides it.
-    let (owner, reason) =
-        blocked("retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document");
-    assert_eq!(owner, "WP-AI-03.T7");
-    assert!(reason.contains("embedding port"), "{reason}");
-    assert!(!reason.contains("no extra-tool hook"), "{reason}");
+    // The extension-tool seam and the embedding port are served: the retrieval cases run.
+    for name in [
+        "retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document",
+        "retrieval: a_revoked_share_applies_to_the_next_retrieve_call",
+    ] {
+        let entry = entries.iter().find(|entry| entry.name == name).unwrap();
+        assert_eq!(entry.kind, index::Kind::Case, "{name}");
+    }
     let (owner, reason) =
         blocked("agent_tools: a_t1_remedy_dry_runs_applies_and_undoes_through_the_tools");
     assert_eq!(owner, "WP-AI-07.T5");
     assert!(reason.contains("WorldAccess"), "{reason}");
-    let (owner, _) = blocked("agent_tools: recall_memory_is_gated_by_the_agents_tier");
-    assert_eq!(owner, "WP-AI-03.T7");
+    // What is missing for `recall_memory` is the agent credential path, named exactly.
+    let (owner, reason) = blocked("agent_tools: recall_memory_is_gated_by_the_agents_tier");
+    assert_eq!(owner, "WP-AI-06.T4");
+    assert!(reason.contains("registered agent"), "{reason}");
+    assert!(!reason.contains("no LLM tenant"), "{reason}");
     let absent = entries
         .iter()
         .find(|entry| {

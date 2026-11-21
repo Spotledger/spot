@@ -23,6 +23,7 @@ use spot_cli::services::remedies::world::{
     CtxRequest, ShippedCatalogue, WorldAccess, WorldError, WorldKind,
 };
 use spot_core::{Clock, ManualClock};
+use spot_functions::{check_schema, validate_arguments};
 use spot_mcp::principal::McpPrincipal;
 use spot_mcp::{AuditSink, ExtensionError, ExtensionTool};
 use spot_permissions::AssignmentContext;
@@ -240,6 +241,42 @@ fn the_tools_are_listed_only_for_an_agent_and_the_write_tools_only_for_a_tier_th
             spec.input_schema["additionalProperties"] == json!(false),
             "{name} refuses unknown arguments"
         );
+    }
+}
+
+#[test]
+fn the_tool_schemas_are_well_formed_and_refuse_an_unknown_argument_by_path() {
+    // The calls below go straight to `ExtensionTool::call` (the MCP service's own argument
+    // check is proved in `spot-mcp/tests/argument_schema.rs`); this checks the schemas the
+    // service would apply: each is well formed, accepts the argument shape the tests send,
+    // and refuses an argument it does not declare with that argument's path.
+    let rig = rig();
+    let t1 = agent("agent-t1", Tier::T1);
+    let shapes = [
+        ("remedy_list", json!({})),
+        (
+            "remedy_dry_run",
+            json!({"remedy": RETRY, "params": {"job_id": "j1"}}),
+        ),
+        (
+            "remedy_apply",
+            json!({"plan": {"remedy": RETRY, "params": {}, "steps": [], "hash": "h"}}),
+        ),
+        ("remedy_undo", json!({"remedy": RETRY, "undo_token": "t"})),
+    ];
+    for (name, valid) in shapes {
+        let spec = rig.tool(name).spec(&t1).unwrap();
+        assert_eq!(check_schema(&spec.input_schema), Ok(()), "{name}");
+        assert_eq!(
+            validate_arguments(&spec.input_schema, &valid),
+            Ok(()),
+            "{name} accepts the arguments the tests send"
+        );
+        let mut extra = valid.clone();
+        extra["tier"] = json!(3);
+        let error = validate_arguments(&spec.input_schema, &extra).unwrap_err();
+        assert_eq!(error.path, "tier", "{name}");
+        assert_eq!(error.message, "unexpected property", "{name}");
     }
 }
 

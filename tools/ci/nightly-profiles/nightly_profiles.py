@@ -160,7 +160,9 @@ def run_step(step: Step, environ: Mapping[str, str]) -> list[str]:
 def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = None) -> int:
     environ = os.environ if environ is None else environ
     args = parse_args(sys.argv[1:] if argv is None else argv, environ)
-    out = Path(args.out)
+    # Absolute: `cargo test` runs each test binary with the crate directory as its cwd, so a relative
+    # SPOT_L7_REPORT_DIR / SPOT_L8_FAULTS_OUT lands under the crate, not where the runner looks.
+    out = Path(args.out).resolve()
     steps = build_steps(args.base_seed, out, args.seeds, args.l8_txns)
     if args.dry_run:
         print(f"seed={args.base_seed} out={out}")

@@ -73,7 +73,7 @@ fn every_scenario_but_the_app_updates_passes_on_the_stack_with_no_layer_unsuppor
 }
 
 #[test]
-#[ignore = "an app update replaces the standard definitions; the customise service fixes them at build (see the report)"]
+#[ignore = "gap: an app update replaces the standard definitions; the customise service fixes them at build (see the report)"]
 fn the_app_update_scenarios_on_the_stack() {
     if !pg_there() {
         return;

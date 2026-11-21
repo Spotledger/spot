@@ -10,6 +10,7 @@ Nothing here is mocked: every case talks to a running host as a signed-in user.
 harness/rust/l3-http/
 ├── src/fixture.rs   one run: database, root, site, seeded apps, users per role, host, teardown
 ├── src/client.rs    a typed HTTP client: sessions, error envelopes, pages, lifecycle actions
+├── src/embed_fake.rs a deterministic in-process `POST /v1/embeddings` endpoint (retrieval cases)
 ├── src/report.rs    case outcomes, a JUnit-style document, the blocked-behaviour list
 ├── src/cases/       the cases: one module per section (auth, documents, lifecycle, lists,
 │                    permissions, edge) and one file per registered group (`export.rs`,
@@ -104,6 +105,36 @@ A new case lives in its own file `src/cases/<name>.rs` and is registered by `ORD
 * a case that cannot run because the stack does not serve the surface yet is **blocked**, not
   deleted: it returns `Status::Blocked { owner, reason }` (or stays `#[ignore = "WP-…"]` when it
   is a whole test), so the report names the gap and its work package every run.
+
+## A site that embeds text (retrieval cases)
+
+`Fixture::start_secondary_with_embedding(&fake, index_policy)` is an opt-in: the other fixtures
+are unchanged. Before the host starts it appends to `common.toml` (and writes into the fixture
+root) what an operator would configure to run retrieval against a local model:
+
+* an LLM tenant `l3-embed` of kind `ollama` (the OpenAI-compatible provider without a key: no
+  secret is stored, written or printed) whose endpoint is the fake `EmbedFake` of `src/embed_fake.rs`,
+  with an `embedding_model` and `embedding_dimensions = 64`, and `[services.llm] embedding_tenant`
+  naming it;
+* **the operator's loopback opt-in.** The product refuses a loopback endpoint unless the egress
+  policy lists it with `allow_private`. The fixture writes `egress-policy.toml` with one entry for
+  the tenant: `http`, `127.0.0.1`, the fake's port, purpose `llm`, `allow_private = ["127.0.0.1"]`,
+  and points `[services.egress] policy_file` at it. Nothing else is reachable;
+* `[services.retrieval]` on for the site, the tenant as `provider`, `dimensions = 64`, polling every
+  100 ms, and an `index_policy` (the retrieval cases index Projects by title and Roles by name).
+
+The fake derives its vectors from the text with integers only: a fixed topic table (`harbor`,
+`survey`, `quay`, `treasury`, `ledger`, `vault`, `payroll`, `audit`) gives each topic word an axis,
+so texts that share a topic word are near and texts with other topic words are orthogonal; a
+text with none lands on one hash-chosen axis. It counts the calls it served and remembers the
+texts it was asked to embed (so a case can prove a revocation caused no re-index), and it can
+refuse a request without an expected bearer key (`EmbedFake::start(width, Some(key))`; the fixture
+uses none because an `ollama` tenant sends no key).
+
+Retrieval needs the `vector` extension in the PostgreSQL server (`CREATE EXTENSION vector`
+available to the test role). Without it the site reports `degraded: retrieval
+(retrieval.pgvector_missing ...)`, `retrieve` is never listed and the retrieval cases fail with
+the readiness text.
 
 ## When it fails
 

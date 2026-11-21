@@ -13,6 +13,11 @@
 //! | relay core, tenant sinks, metadata epoch | a [`RelayAssembly`] port (the module that knows the site's streams, images and policy: WP-RTB-02.T1 and T8) |
 //! | refusal audit | the log (a durable audit is owed: the site has no audit chain yet) |
 //!
+//! Besides [`HubParts`] and [`EnrolRoute`] the module provides two ports for the modules that read
+//! what it built: `DurableDirectory` (its snapshot lists the enrolled nodes and their status, which
+//! the edge desk's roster uses) and `PgHub` (the registry, relay state and outbox reads, which the
+//! catch-up feed uses). Neither carries a secret.
+//!
 //! # Fail closed
 //!
 //! Every part is required. A part this module cannot build (a table missing: run `spot migrate`; a
@@ -321,6 +326,9 @@ pub struct Built {
     pub service: Arc<EnrolService>,
     /// The enrolment route.
     pub enrol: Router,
+    /// The hub's durable stores (the registry, the relay state, the outbox reads), for the modules
+    /// that read them after this one is built (the catch-up feed, WP-AI-07.T16).
+    pub hub: PgHub,
 }
 
 /// What [`build`] needs.
@@ -441,6 +449,7 @@ pub fn build(inputs: Inputs) -> Result<Built> {
         directory,
         service,
         enrol,
+        hub,
     })
 }
 
@@ -496,6 +505,11 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let built =
         crate::services::partition::on_plain_thread("sync hub parts", move || build(inputs))?;
     ctx.provide::<HubParts>(Arc::new(built.parts))?;
+    // The directory itself and the hub's stores are ports for the modules that start after this
+    // one and need more than `HubParts` shows: the edge desk's roster reads the directory's
+    // enrolled nodes (revocation included), the catch-up feed reads the registry and the outbox.
+    ctx.provide::<DurableDirectory>(Arc::clone(&built.directory))?;
+    ctx.provide::<PgHub>(Arc::new(built.hub))?;
     ctx.provide::<EnrolRoute>(Arc::new(EnrolRoute {
         router: Mutex::new(Some(built.enrol)),
     }))?;

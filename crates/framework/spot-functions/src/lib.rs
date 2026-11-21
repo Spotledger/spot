@@ -52,7 +52,7 @@ pub use gate::{GateFuture, GateKey, LocalGate, RateGate};
 pub use key::{FunctionKey, InvalidFunctionKey, ModuleKey, NAME_MAX_BYTES, is_storage_name};
 pub use limit::{LimitError, RateLimiter, TokenBucket};
 pub use registry::FunctionRegistry;
-pub use schema::{SchemaError, validate_arguments};
+pub use schema::{MAX_UNIQUE_ITEMS, SchemaError, check_schema, validate_arguments};
 pub use spot_manifest::{FunctionSub, HttpVerb};
 
 /// The upper-case name of an [`HttpVerb`], as a transport puts it into an `Allow` header.

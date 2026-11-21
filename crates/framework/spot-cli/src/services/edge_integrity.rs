@@ -298,9 +298,13 @@ pub async fn repair(
 // Metrics
 // ---------------------------------------------------------------------------------------------
 
+/// Gauge, labels `site` and `kind` (`missing`, `extra`, `changed`): drift entries of the last scan.
 const DRIFT_ENTRIES: &str = "spot_edge_drift_entries";
+/// Gauge, label `site`: when the last finished scan ended (seconds since the epoch).
 const LAST_RUN_SECONDS: &str = "spot_edge_verify_last_run_seconds";
+/// Gauge, label `site`: documents the last scan compared.
 const DOCUMENTS_CHECKED: &str = "spot_edge_verify_documents_checked";
+/// Counter, labels `site` and `result` (`clean`, `drift`, `skipped`, `error`): scans run.
 const RUNS_TOTAL: &str = "spot_edge_verify_runs_total";
 
 /// Publishes one finished scan.

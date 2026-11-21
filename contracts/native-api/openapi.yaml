@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Spotledger native API
-  version: 0.27.0
+  version: 0.29.0
   summary: The only way clients reach the Spotledger runtime (ADR-09, ADR-15).
   description: |
     Contract v0.4 (WP-CON-03, ADR-055). Normative rules that JSON Schema cannot express are
@@ -1323,6 +1323,50 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/RevealResponse"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /api/v1/resource/{doctype}/{id}/ai-timeline:
+    get:
+      tags: [resource]
+      operationId: resource_ai_timeline
+      summary: "The AI entries of one document, as the caller may see them"
+      description: |
+        The AI actions that touched one document, newest first: an AI tool call, an approval, a
+        rejection or an undo (the tamper-evident AI audit trail, ADR-066), as entries of at most 32
+        masked arguments each. Audience: staff and partner (ADR-083: never the consumer audience; an
+        agent principal is judged by its own roles). Permission: **none of its own, and no role**: what
+        the caller sees is decided at the moment of the call by the caller's own read right on the
+        document and by the field guard. A caller who may read the document and every field an entry
+        could show sees the argument values; a caller who may read the document but not every such
+        field sees every argument value as the literal `***` (the names, the kind, the times, the
+        agent, the user and the outcome still show); a caller who may not read the document sees an
+        **empty `entries` list**. A document that does not exist, a DocType that does not exist, an
+        id or a name that is malformed, a document in another tenant and a document the caller may not
+        read all answer the same `200` with `{"data": {"entries": []}}`: an unreadable document must
+        not be told apart from a missing one, so a malformed `doctype` or `id` is not a `400` here. The
+        answer never says which access level applied, never carries a count or a hint of hidden
+        entries, and never carries a prompt, a model output, a tool result or any value of the
+        document. At most `limit` entries (default 50, at most 100), newest first, with no cursor: a
+        client that needs more reads the audit chain through the audit export. `limit` outside 1 to
+        100 is `400 api.invalid_request`. When the caller's access cannot be decided (the permission
+        engine or the store failed) the answer is `503 server.unavailable` with `Retry-After`, never
+        entries and never an empty list that would read as "no access". The answer is
+        `Cache-Control: private, no-store`. Rate class `interactive`. A read: no `Idempotency-Key`.
+        A realtime feed of AI entries, paging past 100 and any write are not part of this operation.
+      parameters:
+        - {"name": "doctype", "in": "path", "required": true, "description": "The DocType's storage name. Deliberately not pattern-checked: a name that matches no DocType answers like a missing document, never a `400`.", "schema": {"type": "string", "minLength": 1, "maxLength": 128}}
+        - {"name": "id", "in": "path", "required": true, "description": "The document's id. Deliberately not pattern-checked: an id that matches no document answers like a missing one, never a `400`.", "schema": {"type": "string", "minLength": 1, "maxLength": 128}}
+        - {"name": "limit", "in": "query", "required": false, "description": "The most entries to return, newest first.", "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200":
+          description: The entries the caller may see; an empty list when there are none or the caller has no access.
+          headers:
+            Cache-Control:
+              description: Always `private, no-store`.
+              schema: {type: string, const: "private, no-store"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AiTimelineResponse"}
         default: {$ref: "#/components/responses/Error"}
 
   /api/v1/export:
@@ -3015,7 +3059,9 @@ paths:
         The OIDC redirect target. Verifies the binding cookie and `state`, redeems the code, validates
         the ID token and applies the sign-in policy. On success answers `303 See Other` to the
         `return_to` recorded by sso_begin (default `/`) and sets the one-time hand-over cookie; the
-        browser then calls sso_complete. A session token is never put in a URL. Every failure is a JSON
+        browser then calls sso_complete. The same route completes a step-up begun by `auth_step_up`
+        (it is told apart by the pending record, never by the request, and its answers are the same).
+        A session token is never put in a URL. Every failure is a JSON
         error of the registry (`401 sso.sign_in_failed`, `400 sso.state_invalid`, `403 sso.not_allowed`,
         `503 sso.provider_unavailable`) and never says which check failed. Audience: anyone, no bearer
         token (the tenant comes from the site). Permission: none (public sign-in). Rate class `auth (per
@@ -3060,7 +3106,11 @@ paths:
         Exchange the hand-over cookie for the session. Takes no body: the one-time cookie set by
         sso_callback or sso_acs is the credential, valid for 60 seconds and used once; the answer is the
         same `Session` as auth_login, with `Cache-Control: no-store`; the session token is shown once,
-        in this response. A missing, expired or used cookie is `400 sso.state_invalid`. Audience:
+        in this response. After a step-up (`auth_step_up` with `sso: true`) the session issued here is a
+        **new session** of the same user that carries the step-up marker, and the session that asked
+        for the step-up has ended: the response is the same `Session` shape and nothing in it says it
+        was a step-up (the client repeats the operation that needed it). A missing, expired or used
+        cookie is `400 sso.state_invalid`. Audience:
         anyone, no bearer token (the tenant comes from the site). Permission: none (the one-time
         hand-over cookie). Rate class `auth (per client address)`. Takes no `Idempotency-Key`: a repeat
         is a repeat of the action. Audited: who, what and the outcome; a refusal is audited too.
@@ -3154,17 +3204,45 @@ paths:
       summary: "Re-authenticate for a sensitive operation (step-up)"
       description: |
         Re-authenticate for a sensitive operation (step-up). A password session sends `password` (and
-        `totp` when enrolled); a single sign-on session sends `sso: true` and receives a `redirect_url`
-        for a forced re-authentication at its provider. On success `step_up_until` is when the step-up
-        lapses (the operations that need it say so; it is short, the tenant policy sets it). A wrong
-        credential is `401 auth.invalid_credentials` as in auth_login; ADR-070 section 3. Audience:
-        staff and partner (ADR-083: never the consumer audience). Permission: any signed-in person (the
-        credential is re-checked). Rate class `auth (per user and per client address)`. Takes no
-        `Idempotency-Key`: a repeat is a repeat of the action. Audited: who, what and the outcome; a
-        refusal is audited too.
+        `totp` when enrolled); a single sign-on session (`method` `oidc` or `saml`) sends `sso: true`
+        and receives a `redirect_url` for a forced re-authentication at its provider. On success
+        `step_up_until` is when the step-up lapses (the operations that need it say so; it is short,
+        the tenant policy sets it). A wrong credential is `401 auth.invalid_credentials` as in
+        auth_login; ADR-070 section 5. Audience: staff and partner (ADR-083: never the consumer
+        audience). Permission: any signed-in person (the credential is re-checked). Rate class `auth
+        (per user and per client address)`. Takes no `Idempotency-Key`: a repeat is a repeat of the
+        action. Audited: who, what and the outcome; a refusal is audited too.
+
+        **The single sign-on branch (`sso: true`).**
+        Only a session whose `method` is `oidc` or `saml` may send it; `sso: true` from a password
+        session and `password` from a single sign-on session are `400 api.invalid_request`, and a site
+        whose single sign-on service cannot serve it answers `service.not_configured` with status 501, as before.
+        The answer is `200` with `redirect_url` (the provider's authorization or SAML redirect URL for
+        **this session's own provider**, built by the server with a forced re-authentication: OIDC
+        `prompt=login` and `max_age=0`, SAML `ForceAuthn="true"`) and `step_up_until` **`null`** (nothing
+        is stepped up yet), and it **sets the binding cookie** that `sso_begin` sets (`__Host-`
+        prefixed, `HttpOnly`, `Secure`, `SameSite=Lax`, bound to this attempt), because the callback
+        refuses a request without it. The answer carries `Cache-Control: no-store`. The client sends
+        the browser to `redirect_url`; the provider returns to the existing `sso_callback` or `sso_acs`
+        (unchanged on the wire) and the browser calls `sso_complete` as after a sign-in. **A step-up
+        never upgrades a live token:** `sso_complete` then issues a **new session of the same user that
+        carries the step-up marker** and ends the session that asked; a client that ignores the new
+        token keeps the old session, unmarked, and weakens nothing. The completion is refused (`401
+        sso.sign_in_failed`, the one answer, and nothing changes) when the identity does not map to the
+        same user as the session that asked, is unlinked or no longer allowed by the sign-in policy,
+        when the session that asked has ended, or when the provider did not authenticate the person
+        again after the begin: the ID token's `auth_time` or the assertion's `AuthnInstant` must be no
+        earlier than the begin time less the configured clock skew, so a provider that ignores the
+        forced re-authentication cannot produce a step-up. The begin is throttled like a password
+        step-up (per user and per client address) and audited (`sso.begun` with purpose `step_up`; the
+        completion as a sign-in with `step_up: true`; every refusal by its reason class).
+        The begin itself can answer `403 sso.not_allowed` (the sign-in policy no longer allows the
+        provider), `503 sso.provider_unavailable` (the provider cannot be reached), `429 api.rate_limited`
+        with `Retry-After` and `503 server.unavailable`; it never answers a provider or a `return_to`
+        the client chose (the request has neither).
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AuthStepUpRequest"}}}}
       responses:
-        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/AuthStepUpResponse"}}}}
+        "200": {description: OK., headers: {"Set-Cookie": {"description": "Only for `sso: true`: the `__Host-` prefixed, `HttpOnly`, `Secure`, `SameSite=Lax` binding cookie of this step-up attempt (the one `sso_begin` sets). Never present for a password step-up.", "schema": {"type": "string", "maxLength": 1024}}, "Cache-Control": {"description": "`no-store` for `sso: true`.", "schema": {"type": "string", "maxLength": 64}}}, content: {application/json: {schema: {$ref: "#/components/schemas/AuthStepUpResponse"}}}}
         default: {$ref: "#/components/responses/Error"}
 
   /api/v1/identity/sso/providers:
@@ -6285,6 +6363,47 @@ components:
               $ref: "#/components/schemas/FieldValue"
               description: The real value of that one field, in the field's value encoding.
 
+    AiTimelineEntry:
+      type: object
+      additionalProperties: false
+      description: One AI action on a document (the wire spelling of the host's `TimelineEntry`). Never a prompt, a model output, a tool result or a document field value.
+      required: [seq, at, kind, agent, acting_user, tool, outcome, arguments]
+      properties:
+        seq: {type: integer, minimum: 0, description: "The entry's sequence number on the AI audit chain."}
+        at: {type: string, format: date-time, maxLength: 40, description: "When it happened, RFC 3339 in UTC."}
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: "`tool_call`, `approval`, `rejection` or `undo`. An open set: a client shows an unknown kind as text and never fails on it."
+        agent: {type: string, minLength: 1, maxLength: 128, description: "The agent's id."}
+        acting_user: {type: string, minLength: 1, maxLength: 128, description: "The user the agent acted for, or the reviewing user."}
+        tool: {type: string, minLength: 1, maxLength: 128, description: "The tool's name."}
+        outcome: {type: string, enum: [ok, refused, failed]}
+        arguments:
+          type: array
+          maxItems: 32
+          description: The tool's arguments by name; a value the caller may not see (or a masked one) is the literal `***`.
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, value]
+            properties:
+              name: {type: string, minLength: 1, maxLength: 128}
+              value: {type: string, maxLength: 128, description: "At most 128 characters; `***` when masked."}
+
+    AiTimelineResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [entries]
+          properties:
+            entries: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/AiTimelineEntry"}}
+
     ExportSpec:
       type: object
       additionalProperties: false
@@ -7190,7 +7309,7 @@ components:
     SsoSloPostRequest: {"type": "object", "additionalProperties": false, "properties": {"SAMLRequest": {"type": "string", "maxLength": 262144}, "SAMLResponse": {"type": "string", "maxLength": 262144}, "RelayState": {"type": "string", "maxLength": 512}}}
     SsoSamlMetadataResponse: {"type": "string", "maxLength": 262144}
     AuthStepUpRequest: {"type": "object", "additionalProperties": false, "properties": {"password": {"type": "string", "maxLength": 1024}, "totp": {"type": "string", "maxLength": 16}, "sso": {"type": "boolean"}}}
-    AuthStepUpResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["step_up_until", "redirect_url"], "properties": {"step_up_until": {"type": ["string", "null"], "format": "date-time", "maxLength": 40}, "redirect_url": {"type": ["string", "null"], "maxLength": 4096}}}}}
+    AuthStepUpResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["step_up_until", "redirect_url"], "properties": {"step_up_until": {"type": ["string", "null"], "format": "date-time", "maxLength": 40, "description": "When the step-up lapses. `null` when `redirect_url` is set: nothing is stepped up until the browser comes back through `sso_complete`."}, "redirect_url": {"type": ["string", "null"], "maxLength": 4096, "description": "Single sign-on only: where to send the browser for the forced re-authentication. `null` for a password step-up."}}}}}
     SsoAdminProviderListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/SsoProviderView"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
     SsoAdminProviderCreateRequest: {"$ref": "#/components/schemas/SsoProviderInput"}
     SsoAdminProviderCreateResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/SsoProviderView"}}}

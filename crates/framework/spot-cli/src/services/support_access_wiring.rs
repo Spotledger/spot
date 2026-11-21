@@ -50,21 +50,28 @@ use spot_audit_chain::{
 };
 use spot_audit_store::PgAuditStore;
 use spot_break_glass::BreakGlassError;
-use spot_core::SiteId;
+use spot_core::{Audience, Clock, SiteId};
 use spot_document::engine::{AppPermissionCheck, PrincipalSource};
 use spot_document::secrets::SecretVault;
 use spot_files::error::FileError;
 use spot_files::key::{FileKey, FileKeyPrefix, Visibility};
 use spot_files::store::{FileStore, PutOptions, body_from_vec};
+use spot_http::api::service::{ApiError, RequestCtx};
+use spot_postgres::PgBackend;
 use spot_secrets::SecretString;
+use spot_storage_contract::{Catalog, RecordId as StorageId};
 use tokio::io::AsyncReadExt;
 use tokio::sync::watch;
 
+use crate::audit::PathClass;
+use crate::live::SiteLive;
 use crate::services::break_glass::{
-    AgentBridge, BoxFuture, Duties, EventLog, HostError, ObjectStore, Parts, Retention, Retire,
-    Sealer,
+    ADMIN_DUTY, AgentBridge, BoxFuture, Duties, EventLog, HostError, ObjectStore, Parts, Retention,
+    Retire, Sealer,
 };
 use crate::services::secrets::SecretsHost;
+use crate::services::step_up::session_is_current;
+use crate::services::support_access::{CallerInfo, SupportCaller};
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
@@ -583,6 +590,171 @@ impl Retention for ConfiguredRetention {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The support-access caller (WP-IAM-12.T9)
+// ---------------------------------------------------------------------------------------------
+
+/// A boxed future of the callers below (the `spot-http` shape, not the break-glass one).
+pub type ApiFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
+/// Who a request's credential names, as a person's session: the user and the session record.
+pub trait SessionSource: Send + Sync {
+    /// `None` when there is no credential, it does not resolve, it is an API key (no session),
+    /// the session is restricted to choosing a password or the caller is not a person of the
+    /// staff or partner audience. Every `None` is a refusal.
+    fn session<'a>(&'a self, ctx: &'a RequestCtx) -> ApiFuture<'a, Option<(StorageId, StorageId)>>;
+}
+
+/// Whether a session's step-up marker is recent: the shared reader
+/// (`services::step_up::session_is_current`) in production.
+pub trait MarkerReader: Send + Sync {
+    /// Whether the marker of `session` is within the step-up window now.
+    ///
+    /// # Errors
+    ///
+    /// When the record cannot be read: an error is a refusal.
+    fn current<'a>(
+        &'a self,
+        session: StorageId,
+    ) -> ApiFuture<'a, std::result::Result<bool, ApiError>>;
+}
+
+/// [`SessionSource`] over the site's sign-in service.
+pub struct LiveSessions {
+    site: String,
+    live: Arc<SiteLive>,
+}
+
+impl LiveSessions {
+    /// The sessions of `site`'s sign-in service.
+    #[must_use]
+    pub fn new(site: &str, live: Arc<SiteLive>) -> Self {
+        Self {
+            site: site.to_owned(),
+            live,
+        }
+    }
+}
+
+impl SessionSource for LiveSessions {
+    fn session<'a>(&'a self, ctx: &'a RequestCtx) -> ApiFuture<'a, Option<(StorageId, StorageId)>> {
+        Box::pin(async move {
+            if ctx.site.as_str() != self.site {
+                return None;
+            }
+            let auth = self.live.auth()?;
+            let who = auth.authenticate_on(ctx, PathClass::Api).await.ok()?;
+            // A person's own session: never an API key, never a session that has not chosen its
+            // password, never another audience.
+            let session = who
+                .session_id
+                .as_deref()
+                .and_then(spot_http::api::codec::parse_record_id)?;
+            if !matches!(who.via, spot_login::Via::Password)
+                || !matches!(who.audience, Audience::Staff | Audience::Partner)
+                || auth.is_restricted(&who)
+            {
+                return None;
+            }
+            Some((who.user_id, session))
+        })
+    }
+}
+
+/// [`MarkerReader`] over the site's database and the injected clock.
+pub struct PgMarkers {
+    backend: PgBackend,
+    catalog: Arc<Catalog>,
+    clock: Arc<dyn Clock>,
+    window_secs: i64,
+}
+
+impl PgMarkers {
+    /// The marker reader of one site, judging "recent" by `window_secs` on `clock`.
+    #[must_use]
+    pub fn new(
+        backend: PgBackend,
+        catalog: Arc<Catalog>,
+        clock: Arc<dyn Clock>,
+        window_secs: i64,
+    ) -> Self {
+        Self {
+            backend,
+            catalog,
+            clock,
+            window_secs,
+        }
+    }
+}
+
+impl MarkerReader for PgMarkers {
+    fn current<'a>(
+        &'a self,
+        session: StorageId,
+    ) -> ApiFuture<'a, std::result::Result<bool, ApiError>> {
+        Box::pin(async move {
+            session_is_current(
+                &self.backend,
+                &self.catalog,
+                session,
+                self.clock.now_utc(),
+                self.window_secs,
+            )
+            .await
+        })
+    }
+}
+
+/// The [`SupportCaller`] of a site: the user is the one the credential's own session names (never
+/// a system principal), `is_security_admin` is the `security_administrator` duty decided by the
+/// permission engine for that user, and `step_up_current` is the session's marker read through the
+/// shared reader. An engine or marker error, and every credential that is not a person's session,
+/// is "no caller": a refusal, never an allow.
+pub struct PermissionCaller {
+    tenant: String,
+    sessions: Arc<dyn SessionSource>,
+    markers: Arc<dyn MarkerReader>,
+    duties: Arc<dyn Duties>,
+}
+
+impl PermissionCaller {
+    /// The caller resolver of `tenant`.
+    #[must_use]
+    pub fn new(
+        tenant: &str,
+        sessions: Arc<dyn SessionSource>,
+        markers: Arc<dyn MarkerReader>,
+        duties: Arc<dyn Duties>,
+    ) -> Self {
+        Self {
+            tenant: tenant.to_owned(),
+            sessions,
+            markers,
+            duties,
+        }
+    }
+}
+
+impl SupportCaller for PermissionCaller {
+    fn caller<'a>(&'a self, ctx: &'a RequestCtx) -> ApiFuture<'a, Option<CallerInfo>> {
+        Box::pin(async move {
+            let (user, session) = self.sessions.session(ctx).await?;
+            let user_id = user.to_string();
+            let is_security_admin = self
+                .duties
+                .holds(&self.tenant, &user_id, ADMIN_DUTY)
+                .await
+                .ok()?;
+            let step_up_current = self.markers.current(session).await.ok()?;
+            Some(CallerInfo {
+                user_id,
+                is_security_admin,
+                step_up_current,
+            })
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Assembling the parts
 // ---------------------------------------------------------------------------------------------
 
@@ -796,6 +968,35 @@ fn provide_parts(ctx: &mut SiteCtx<'_>, parts: &Parts) -> Result<()> {
     Ok(())
 }
 
+/// Provides `dyn SupportCaller` (read by `services/support_access.rs`, which starts later) when
+/// the site has its sign-in service and a duty check. A context built without a site, or a site
+/// without a permission engine, provides none, and the support-access service then has no caller:
+/// every operation is refused.
+fn provide_caller(ctx: &mut SiteCtx<'_>, parts: &Parts) -> Result<()> {
+    let Some(duties) = parts.duties.as_ref() else {
+        return Ok(());
+    };
+    let Some(env) = ctx.env().ok().copied() else {
+        return Ok(());
+    };
+    let window = crate::services::identity_admin::step_up_window_secs(ctx)?;
+    let tenant = env.site.site.clone();
+    let sessions = Arc::new(LiveSessions::new(&tenant, Arc::clone(env.live)));
+    let markers = Arc::new(PgMarkers::new(
+        env.backend.clone(),
+        env.permission.catalog.clone(),
+        Arc::clone(ctx.clock()),
+        window,
+    ));
+    let caller: Arc<dyn SupportCaller> = Arc::new(PermissionCaller::new(
+        &tenant,
+        sessions,
+        markers,
+        Arc::clone(duties),
+    ));
+    ctx.provide::<dyn SupportCaller>(caller)
+}
+
 /// Registers the wiring: provides the ports of [`Parts`] and adds the check.
 ///
 /// # Errors
@@ -813,6 +1014,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let sources = with_chain(&site, found).await;
     let (parts, report) = build_parts(sources, &settings);
     provide_parts(ctx, &parts)?;
+    provide_caller(ctx, &parts)?;
     if !report.refusing.is_empty() {
         tracing::info!(
             site = ctx.label(),

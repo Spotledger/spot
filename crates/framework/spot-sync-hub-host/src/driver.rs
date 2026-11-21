@@ -40,6 +40,13 @@ pub trait HubCore: Send {
 
     /// The destinations the hub serves.
     fn destinations(&self) -> Vec<String>;
+
+    /// The newest serve sequence ever assigned for `dest`: the head of its whole queue, deeper
+    /// than the published window. `None` (the default) when the core cannot say; the serve cache
+    /// then publishes no head and a reader falls back to the window.
+    fn head_serve(&mut self, _dest: &str) -> Option<u64> {
+        None
+    }
 }
 
 /// A boxed core drives like the core it holds (the service keeps it behind a trait object).
@@ -55,6 +62,9 @@ impl HubCore for Box<dyn HubCore> {
     }
     fn destinations(&self) -> Vec<String> {
         (**self).destinations()
+    }
+    fn head_serve(&mut self, dest: &str) -> Option<u64> {
+        (**self).head_serve(dest)
     }
 }
 
@@ -140,6 +150,11 @@ impl<Q: SendQueue + Send, S: HubStream + Send, I: ImageSource + Send> HubCore
     fn destinations(&self) -> Vec<String> {
         self.dests.clone()
     }
+
+    fn head_serve(&mut self, dest: &str) -> Option<u64> {
+        // A failing read is no head: the reader falls back to the window.
+        self.relay.queue().last_serve_seq(dest).ok()
+    }
 }
 
 /// How the driver runs.
@@ -212,6 +227,9 @@ pub fn round<C: HubCore>(
         match core.window(&dest, settings.window) {
             Ok(records) => cache.publish(&dest, records),
             Err(reason) => on_error(&reason),
+        }
+        if let Some(head) = core.head_serve(&dest) {
+            cache.publish_head(&dest, head);
         }
     }
 }

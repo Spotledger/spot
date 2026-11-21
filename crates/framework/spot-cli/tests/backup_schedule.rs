@@ -3,6 +3,8 @@
 //! the folder executor runs against a real PostgreSQL through `SPOT_TEST_PG_URL` and the client
 //! tools (`SPOT_TEST_PG_BIN`, else `pg_dump` on `PATH`): those tests print one `SKIPPED` line and
 //! pass when either is missing, and never fake them.
+//! Unix only: the targets are made unwritable with file modes, which Windows does not have.
+#![cfg(unix)]
 #![allow(
     missing_docs,
     clippy::unwrap_used,

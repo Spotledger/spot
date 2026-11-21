@@ -1,20 +1,27 @@
-//! WP-AI-07.T6: the jobs part of the world over an in-memory job store. The part's ops block on the
+//! WP-AI-07.T6 and T13: the jobs part of the world over an in-memory job store (through the
+//! `JobAdmin` port), and the retrieval-index part's durable generation. The part's ops block on the
 //! runtime handle, so every op runs on a blocking thread, as the remedy host calls them.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
+use std::collections::HashSet;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use spot_cli::services::world_access::jobs::{StoreJobsPart, from_parts, life_of};
-use spot_cli::services::world_access::parts::JobsPart;
-use spot_core::SiteId;
+use spot_cli::services::ports::{JobSpec, JobSubmit, PortFuture, StopGate, StoreJobAdmin};
+use spot_cli::services::world_access::index::{
+    FileGeneration, INDEX_NAME, IndexLag, LagFuture, RetrievalIndexPart, generation_path,
+};
+use spot_cli::services::world_access::jobs::{StoreJobsPart, from_admin, from_parts, life_of};
+use spot_cli::services::world_access::parts::{IndexPart, JobsPart};
+use spot_core::{Clock, ManualClock, SiteId};
 use spot_jobs::model::{Claim, InsertResult, Job, JobId, JobState, NewJob};
 use spot_jobs::store::{ClaimedJob, JobFilter};
-use spot_jobs::{InMemoryJobStore, JobStore};
-use spot_remedies::{JobLife, JobOps, JobRef};
+use spot_jobs::{CancelOutcome, InMemoryJobStore, JobStore};
+use spot_remedies::{IndexRef, JobLife, JobOps, JobRef};
 use spot_storage_contract::FeedPosition;
 use time::OffsetDateTime;
 use tokio::runtime::Handle;
@@ -27,10 +34,13 @@ fn at(seconds: i64) -> OffsetDateTime {
 
 type Fut<'a, T> = Pin<Box<dyn Future<Output = spot_jobs::Result<T>> + Send + 'a>>;
 
-/// An in-memory store that counts every call that writes.
+/// An in-memory store that counts every call that writes. When `claim_after_get` is armed, the
+/// next `get` answers and then a worker claims the one claimable job of the `default` queue: the
+/// gap a read-then-cancel would lose a race in.
 struct Counting {
     inner: InMemoryJobStore,
     writes: AtomicUsize,
+    claim_after_get: AtomicBool,
 }
 
 impl Counting {
@@ -38,6 +48,7 @@ impl Counting {
         Arc::new(Self {
             inner: InMemoryJobStore::new(),
             writes: AtomicUsize::new(0),
+            claim_after_get: AtomicBool::new(false),
         })
     }
 
@@ -93,6 +104,16 @@ impl JobStore for Counting {
         self.inner.cancel(id)
     }
 
+    fn cancel_if_pending(&self, id: JobId) -> Fut<'_, CancelOutcome> {
+        self.wrote();
+        self.inner.cancel_if_pending(id)
+    }
+
+    fn requeue(&self, id: JobId, now: OffsetDateTime) -> Fut<'_, Job> {
+        self.wrote();
+        self.inner.requeue(id, now)
+    }
+
     fn merge_context(
         &self,
         id: JobId,
@@ -104,7 +125,21 @@ impl JobStore for Counting {
     }
 
     fn get(&self, id: JobId) -> Fut<'_, Option<Job>> {
-        self.inner.get(id)
+        Box::pin(async move {
+            let job = self.inner.get(id).await?;
+            if self.claim_after_get.swap(false, Ordering::SeqCst) {
+                self.inner
+                    .claim(
+                        &["default".to_owned()],
+                        "worker-in-the-gap",
+                        Duration::from_secs(3_600),
+                        at(T0 + 1),
+                        10,
+                    )
+                    .await?;
+            }
+            Ok(job)
+        })
     }
 
     fn list(&self, filter: JobFilter) -> Fut<'_, Vec<Job>> {
@@ -284,21 +319,23 @@ async fn unstick_releases_an_expired_lease_through_the_store() {
     assert!(refused.unwrap_err().detail.contains("not running"));
 }
 
+// The T6 test `retry_and_a_real_restore_are_not_supported_by_the_port_and_write_nothing` asserted
+// that retry and restore answered "not supported by the jobs port". Since T13 the port requeues,
+// so retry and the undo of a retry work (below); only a restore to a state other than failed (the
+// undo of unstick) is still "not supported", and a same-state restore is still a no-op.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn retry_and_a_real_restore_are_not_supported_by_the_port_and_write_nothing() {
+async fn a_restore_to_another_state_is_not_supported_and_a_same_state_restore_is_a_no_op() {
     let s = seeded().await;
     let writes = s.store.writes();
     let (dead, stale) = (jref(s.dead), jref(s.stale_running));
-    let (retry, restore_other, restore_same) = live(&s.part, move |ops| {
+    let (restore_other, restore_same) = live(&s.part, move |ops| {
         (
-            ops.retry(&dead, T0),
             ops.restore(&dead, JobLife::Queued),
             // A restore to the state the job already has is a no-op, not a refusal.
             ops.restore(&stale, JobLife::Running),
         )
     })
     .await;
-    assert_eq!(retry.unwrap_err().detail, "not supported by the jobs port");
     assert_eq!(
         restore_other.unwrap_err().detail,
         "not supported by the jobs port"
@@ -307,6 +344,167 @@ async fn retry_and_a_real_restore_are_not_supported_by_the_port_and_write_nothin
     assert_eq!(s.store.writes(), writes);
     assert_eq!(
         s.store.get(s.dead).await.unwrap().unwrap().state,
+        JobState::Dead
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retry_requeues_a_dead_job_through_the_port() {
+    let s = seeded().await;
+    let id = jref(s.dead);
+    let change = live(&s.part, move |ops| ops.retry(&id, T0 + 5))
+        .await
+        .unwrap();
+    assert_eq!(
+        (change.before, change.after),
+        (JobLife::Failed, JobLife::Queued)
+    );
+    let job = s.store.get(s.dead).await.unwrap().unwrap();
+    assert_eq!(job.state, JobState::Pending);
+    assert_eq!(job.attempt, 0);
+    assert_eq!(job.not_before, at(T0 + 5));
+    assert_eq!(job.last_error.as_deref(), Some("boom"), "the history stays");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retry_refuses_a_job_that_is_not_dead_and_writes_nothing() {
+    let s = seeded().await;
+    let writes = s.store.writes();
+    let (running, missing) = (jref(s.live_running), JobRef::new("999"));
+    let (refused, none) = live(&s.part, move |ops| {
+        (ops.retry(&running, T0), ops.retry(&missing, T0))
+    })
+    .await;
+    assert!(refused.unwrap_err().detail.contains("not failed"));
+    assert!(none.unwrap_err().detail.contains("no job"));
+    assert_eq!(s.store.writes(), writes, "nothing was written");
+    assert_eq!(
+        s.store.get(s.live_running).await.unwrap().unwrap().state,
+        JobState::Running
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn undoing_a_retry_returns_the_job_to_a_terminal_state_without_running_it() {
+    let s = seeded().await;
+    let id = jref(s.dead);
+    let (retried, undone, again) = {
+        let (a, b, c) = (id.clone(), id.clone(), id.clone());
+        live(&s.part, move |ops| {
+            let retried = ops.retry(&a, T0);
+            let undone = ops.restore(&b, JobLife::Failed);
+            // Undoing twice finds the job already in the undone state.
+            let again = ops.restore(&c, JobLife::Failed);
+            (retried, undone, again)
+        })
+        .await
+    };
+    retried.unwrap();
+    undone.unwrap();
+    again.unwrap();
+    let job = s.store.get(s.dead).await.unwrap().unwrap();
+    assert_eq!(
+        job.state,
+        JobState::Cancelled,
+        "not exact: cancelled, not dead"
+    );
+    assert_eq!(life_of(&job.state), JobLife::Done);
+    assert_eq!(job.last_error.as_deref(), Some("boom"));
+    // No worker can claim it.
+    let claimed = s
+        .store
+        .claim(
+            &["default".to_owned()],
+            "worker-2",
+            Duration::from_secs(30),
+            at(T0 + 10),
+            10,
+        )
+        .await
+        .unwrap();
+    assert!(claimed.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn undoing_a_retry_after_a_worker_claimed_the_job_is_refused() {
+    let s = seeded().await;
+    let id = jref(s.dead);
+    let retried_id = id.clone();
+    live(&s.part, move |ops| ops.retry(&retried_id, T0))
+        .await
+        .unwrap();
+    // A worker takes the requeued job (the other seeded jobs are already running).
+    let claimed = s
+        .store
+        .claim(
+            &["default".to_owned()],
+            "worker-2",
+            Duration::from_secs(3_600),
+            at(T0 + 1),
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+    assert_eq!(claimed[0].job.id, s.dead);
+
+    let writes = s.store.writes();
+    let refused = live(&s.part, move |ops| ops.restore(&id, JobLife::Failed)).await;
+    assert_eq!(refused.unwrap_err().detail, "the job already ran again");
+    assert_eq!(s.store.writes(), writes, "nothing was written");
+    assert_eq!(
+        s.store.get(s.dead).await.unwrap().unwrap().state,
+        JobState::Running
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_worker_that_claims_between_the_read_and_the_cancel_is_not_cancelled() {
+    let s = seeded().await;
+    let id = jref(s.dead);
+    let retried_id = id.clone();
+    live(&s.part, move |ops| ops.retry(&retried_id, T0))
+        .await
+        .unwrap();
+    // The part reads the job (pending, nobody holds it); a worker claims it right after that
+    // read; the undo must find the job running and leave it alone.
+    s.store.claim_after_get.store(true, Ordering::SeqCst);
+    let refused = live(&s.part, move |ops| ops.restore(&id, JobLife::Failed)).await;
+    assert_eq!(refused.unwrap_err().detail, "the job already ran again");
+    let job = s.store.get(s.dead).await.unwrap().unwrap();
+    assert_eq!(
+        job.state,
+        JobState::Running,
+        "the worker's job was not cancelled"
+    );
+    assert!(job.claim.is_some());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stopped_port_makes_the_ops_fail_closed() {
+    let store = Counting::new();
+    let site = site();
+    let dead = enqueue(&store, &site).await;
+    let c = claim_one(&store, 30).await;
+    store.complete(&c, JobState::Dead, None).await.unwrap();
+    let gate = StopGate::new();
+    let admin = Arc::new(StoreJobAdmin::new(
+        site,
+        Arc::clone(&store) as Arc<dyn JobStore>,
+        Arc::clone(&gate),
+    ));
+    let part = Arc::new(StoreJobsPart::over_admin(admin, Handle::current()));
+    gate.close();
+    let id = jref(dead);
+    let (failed, view, retried) = live(&part, move |ops| {
+        (ops.failed(), ops.job(&id), ops.retry(&id, T0))
+    })
+    .await;
+    assert!(failed.is_empty());
+    assert!(view.is_none());
+    assert!(retried.is_err());
+    assert_eq!(
+        store.get(dead).await.unwrap().unwrap().state,
         JobState::Dead
     );
 }
@@ -342,6 +540,11 @@ async fn a_rehearsal_retries_and_unsticks_a_snapshot_and_the_real_store_is_uncha
         s.store.get(s.stale_running).await.unwrap().unwrap().state,
         JobState::Running
     );
+    assert_eq!(
+        s.store.get(s.dead).await.unwrap().unwrap().state,
+        JobState::Dead,
+        "a rehearsal retry never reaches the store"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -350,6 +553,7 @@ async fn a_part_with_no_job_store_is_none() {
     assert!(from_parts(None, "site-1", Some(Handle::current())).is_none());
     assert!(from_parts(Some(Arc::clone(&store)), "site-1", None).is_none());
     assert!(from_parts(Some(store), "site-1", Some(Handle::current())).is_some());
+    assert!(from_admin(None, Some(Handle::current())).is_none());
 }
 
 #[test]
@@ -360,4 +564,217 @@ fn the_states_map_to_lives() {
     assert_eq!(life_of(&JobState::Dead), JobLife::Failed);
     assert_eq!(life_of(&JobState::Succeeded), JobLife::Done);
     assert_eq!(life_of(&JobState::Cancelled), JobLife::Done);
+}
+
+// ---------------------------------------------------------------------------------------------
+// the retrieval index: a durable generation (T13)
+// ---------------------------------------------------------------------------------------------
+
+/// A lag that always reports the cursor behind the feed head.
+struct Behind;
+
+impl IndexLag for Behind {
+    fn behind(&self) -> LagFuture<'_> {
+        Box::pin(async { Some(true) })
+    }
+}
+
+/// A `JobSubmit` that coalesces on the idempotency key while the job is "queued".
+struct Submit {
+    queued: Mutex<HashSet<String>>,
+    count: AtomicUsize,
+}
+
+impl Submit {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            queued: Mutex::new(HashSet::new()),
+            count: AtomicUsize::new(0),
+        })
+    }
+
+    fn count(&self) -> usize {
+        self.count.load(Ordering::SeqCst)
+    }
+
+    /// The backfill finished: the key is free again.
+    fn finish(&self) {
+        self.queued.lock().unwrap().clear();
+    }
+}
+
+impl JobSubmit for Submit {
+    fn submit<'a>(&'a self, job: JobSpec) -> PortFuture<'a, bool> {
+        Box::pin(async move {
+            let fresh = self.queued.lock().unwrap().insert(job.idempotency_key);
+            if fresh {
+                self.count.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(fresh)
+        })
+    }
+}
+
+/// A scratch directory standing for a site's data root.
+fn scratch(name: &str) -> PathBuf {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    std::env::temp_dir().join(format!(
+        "spot_t13_{name}_{}_{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst)
+    ))
+}
+
+/// A part whose generation lives in `path`. Dropping it and building another over the same path is
+/// a restart.
+fn index_part(path: &std::path::Path, submit: &Arc<Submit>) -> Arc<RetrievalIndexPart> {
+    let clock = Arc::new(ManualClock::new(at(T0)));
+    Arc::new(
+        RetrievalIndexPart::new(
+            Arc::new(Behind) as Arc<dyn IndexLag>,
+            Arc::clone(submit) as Arc<dyn JobSubmit>,
+            "default".to_owned(),
+            clock as Arc<dyn Clock>,
+            Handle::current(),
+        )
+        .with_generations(Arc::new(FileGeneration::new(path.to_path_buf()))),
+    )
+}
+
+fn retrieval() -> IndexRef {
+    IndexRef::new(INDEX_NAME)
+}
+
+async fn blocking<R: Send + 'static>(work: impl FnOnce() -> R + Send + 'static) -> R {
+    tokio::task::spawn_blocking(work).await.unwrap()
+}
+
+async fn generation_of(part: &Arc<RetrievalIndexPart>) -> u64 {
+    let part = Arc::clone(part);
+    blocking(move || part.live().index(&retrieval()).unwrap().generation).await
+}
+
+#[test]
+fn the_generation_file_sits_beside_the_cursor() {
+    let path = generation_path(std::path::Path::new("/data"), "site-1");
+    assert_eq!(
+        path,
+        std::path::Path::new("/data/sites/site-1/retrieval.generation")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_generation_survives_dropping_and_rebuilding_the_part() {
+    let dir = scratch("survive");
+    let path = generation_path(&dir, "site-1");
+    let submit = Submit::new();
+
+    let first = index_part(&path, &submit);
+    assert_eq!(generation_of(&first).await, 0, "no file: generation 0");
+    let part = Arc::clone(&first);
+    let change = blocking(move || part.live().rebuild(&retrieval()).unwrap()).await;
+    assert_eq!((change.before_generation, change.after_generation), (0, 1));
+    assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "1");
+    drop(first);
+
+    // A restart: a new part over the same directory reads 1, not 0.
+    let second = index_part(&path, &submit);
+    assert_eq!(generation_of(&second).await, 1);
+    submit.finish();
+    let part = Arc::clone(&second);
+    let change = blocking(move || part.live().rebuild(&retrieval()).unwrap()).await;
+    assert_eq!(
+        (change.before_generation, change.after_generation),
+        (1, 2),
+        "a rebuild bumps it by exactly one"
+    );
+    drop(second);
+    assert_eq!(generation_of(&index_part(&path, &submit)).await, 2);
+    assert_eq!(submit.count(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refused_rebuild_leaves_the_generation_where_it_was() {
+    let dir = scratch("refused");
+    let path = generation_path(&dir, "site-1");
+    let submit = Submit::new();
+    let part = index_part(&path, &submit);
+    let error = {
+        let part = Arc::clone(&part);
+        blocking(move || {
+            let mut ops = part.live();
+            ops.rebuild(&retrieval()).unwrap();
+            ops.rebuild(&retrieval())
+        })
+        .await
+        .unwrap_err()
+    };
+    assert!(error.detail.contains("already queued"), "{error}");
+    assert_eq!(submit.count(), 1);
+    assert_eq!(generation_of(&part).await, 1);
+    assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "1");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn restore_after_a_newer_rebuild_is_refused_even_across_a_restart() {
+    let dir = scratch("restore");
+    let path = generation_path(&dir, "site-1");
+    let submit = Submit::new();
+
+    let first = index_part(&path, &submit);
+    let part = Arc::clone(&first);
+    let older = blocking(move || part.live().rebuild(&retrieval()).unwrap()).await;
+    drop(first);
+
+    // After a restart another rebuild runs; the first change must not restore any more.
+    submit.finish();
+    let second = index_part(&path, &submit);
+    let part = Arc::clone(&second);
+    let newer = blocking(move || part.live().rebuild(&retrieval()).unwrap()).await;
+    assert_eq!(newer.after_generation, 2);
+    let part = Arc::clone(&second);
+    let refused = blocking(move || part.live().restore(&older)).await;
+    assert!(refused.unwrap_err().detail.contains("newer rebuild"));
+    assert_eq!(generation_of(&second).await, 2, "nothing was restored");
+
+    // The newest change restores, and the file follows.
+    let part = Arc::clone(&second);
+    blocking(move || part.live().restore(&newer).unwrap()).await;
+    assert_eq!(generation_of(&second).await, 1);
+    assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "1");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unreadable_generation_file_reads_as_zero() {
+    let dir = scratch("garbled");
+    let path = generation_path(&dir, "site-1");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "not a number").unwrap();
+    let submit = Submit::new();
+    let part = index_part(&path, &submit);
+    assert_eq!(generation_of(&part).await, 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_generation_that_cannot_be_saved_refuses_the_rebuild_before_enqueueing() {
+    let dir = scratch("unwritable");
+    std::fs::create_dir_all(&dir).unwrap();
+    // The "directory" of the generation file is a regular file, so the write cannot succeed.
+    let blocker = dir.join("blocker");
+    std::fs::write(&blocker, "x").unwrap();
+    let path = blocker.join("retrieval.generation");
+    let submit = Submit::new();
+    let part = index_part(&path, &submit);
+    let part2 = Arc::clone(&part);
+    let error = blocking(move || part2.live().rebuild(&retrieval()))
+        .await
+        .unwrap_err();
+    assert!(error.detail.contains("could not be saved"), "{error}");
+    assert_eq!(submit.count(), 0, "no backfill was enqueued");
+    assert_eq!(generation_of(&part).await, 0);
+    let _ = std::fs::remove_dir_all(&dir);
 }

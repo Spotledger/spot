@@ -59,6 +59,21 @@ pub enum JobState {
     Cancelled,
 }
 
+/// What [`JobStore::cancel_if_pending`](crate::store::JobStore::cancel_if_pending) did.
+///
+/// The three answers a caller must tell apart: it cancelled the job, it left a job alone that it
+/// may not cancel (a worker holds it, or it is already over), and there is no such job.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CancelOutcome {
+    /// The job was pending or retrying with no claim and is now `Cancelled`.
+    Cancelled,
+    /// The job exists but was not cancelled: it is running (or any claim is held), or it is
+    /// already `Succeeded`, `Dead` or `Cancelled`. Nothing changed.
+    NotCancellable,
+    /// No job has this id. Nothing changed.
+    NotFound,
+}
+
 impl fmt::Display for JobState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

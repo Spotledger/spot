@@ -30,6 +30,7 @@ const REFUSED_BODY: &[u8] = b"refuse-me";
 /// site. A group that is in the registry and not here fails `every_registry_group_is_classified`,
 /// so the next group cannot be added without deciding it in both places.
 const GROUPS: &[(&str, &str)] = &[
+    ("ai_timeline", "service"),
     ("apps", "service"),
     ("connectors", "service"),
     ("consumer_renew", "no_provider"),
@@ -49,6 +50,7 @@ const GROUPS: &[(&str, &str)] = &[
     ("session", "service"),
     ("sso", "service"),
     ("sso_admin", "service"),
+    ("step_up", "service"),
     ("task", "no_provider"),
     ("webhook", "service"),
     ("webhook_secret", "service"),

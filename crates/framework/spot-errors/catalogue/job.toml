@@ -98,3 +98,30 @@ explanation_key = "error.job.submit_failed"
 params = []
 remedy = "Check the job store and retry."
 since = "0.1.0"
+
+[[entry]]
+code = "job.requeue_unsupported"
+class = "none"
+summary = "This job store cannot move a dead or retrying job back to the queue."
+explanation_key = "error.job.requeue_unsupported"
+params = []
+remedy = "Use the in-memory or PostgreSQL job store, which implement requeue; a custom store must override `JobStore::requeue`."
+since = "0.1.0"
+
+[[entry]]
+code = "job.requeue_refused"
+class = "none"
+summary = "The job cannot be requeued: only a dead or retrying job can go back to the queue, and a job that is pending, running, succeeded or cancelled is left unchanged."
+explanation_key = "error.job.requeue_refused"
+params = []
+remedy = "Check the job's state first. A running job has a live claim; wait for it to finish, or for its lease to lapse and the reaper to release it. A job that was requeued a moment ago is already pending."
+since = "0.1.0"
+
+[[entry]]
+code = "job.requeue_key_held"
+class = "none"
+summary = "The job cannot be requeued because another live job (pending, running or retrying) holds the same idempotency key; nothing changed."
+explanation_key = "error.job.requeue_key_held"
+params = []
+remedy = "Let the other job finish or cancel it, then requeue this one; or leave this one dead, since the other job does the same work."
+since = "0.1.0"

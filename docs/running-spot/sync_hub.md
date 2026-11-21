@@ -80,3 +80,42 @@ the directory trusts by pinned fingerprint, so a verifier that chained to a CA w
 node at the handshake (the `client_ca` setting becomes unnecessary). Authorisation is the
 directory's: the guard resolves the certificate on every other path, and a connection without one
 gets `sync_http.identity_required`.
+
+## The edge desk (WP-AI-07.T9)
+
+On a hub site the service provides one more port, `dyn EdgeDesk`: the seam the remedy host's edge
+part (`edge.repair_drift`) reads. Before this the port was provided by nobody, so the edge part
+answered "no edge". A non-hub role provides nothing (the module runs in the hub role only).
+
+**What it lists.** Each enrolled, non-revoked edge with two counts:
+
+- `actual`: the position the edge has acknowledged (the serve sequence just below the oldest item
+  still queued for it);
+- `expected`: the relay's head for that edge: the newest serve sequence the relay assigned for it,
+  which the driver publishes with each round when its relay core reports one, so it is exact however
+  deep the queue is. When the core reports none the desk falls back to `actual` plus the items in
+  the published serve window (at most `window`), which understates a deeper queue.
+
+An edge with nothing waiting is in sync. Both are read from the serve cache the driver publishes
+to; no table is read and no acknowledgement is sent. A hub that is not running, or an edge the hub
+cannot read, answers the fixed refusal `the hub cannot read its edges` (the edge part reads that as
+"no edge").
+
+**Who is "enrolled".** The desk takes the roster from a roster port when a module provides one;
+else from the enrolment directory (`sync_hub_parts` provides it as a port), which lists every
+enrolled edge with its status; else, on a hub with no directory port, from the relay's own
+destinations, which cannot tell a revoked edge from an enrolled one. A revoked edge is neither
+listed nor resynced. A revocation made through this process shows at once; one made elsewhere shows
+after the directory's next refresh (`directory_refresh_secs`, 1 to 5 seconds, default 2). A
+directory that could not refresh for 30 seconds is unreadable: the desk answers `the hub cannot
+read its edges` rather than list a stale roster. See `sync_hub_edge_desk.md`.
+
+**Resync.** `resync(edge)` asks the catch-up path how that edge comes back (the same call the
+edge's own catch-up request makes, decided from the edge's own acknowledged position), then answers
+its state. It never deletes or rewrites relay data and never skips a queued item; asking twice is
+asking once. An unknown edge answers `no such edge`, a revoked one `the edge is revoked`, and a hub
+with no catch-up path wired answers `not supported` (the catch-up wiring needs a catch-up feed,
+which the `sync_catchup_feed` module now provides on a hub; see `sync_catchup_wiring.md`). Positions move only when the edge pulls: after a resync the edge's
+next pull acknowledges what it applied, the driver trims the queue and `expected` equals `actual`.
+
+Logs and metrics carry edge ids and counts only.

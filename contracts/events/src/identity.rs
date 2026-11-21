@@ -371,6 +371,13 @@ pub fn schema_of(topic: &str) -> Option<EventSchema> {
                 "channel",
                 open(&["api", "ui", "report", "export", "realtime", "sync", "job"]),
             );
+            // Added in 0.7.9: the reason the person gave for a reveal (native API `field_reveal`).
+            // 1 to 500 characters of plain text, present only when `right` is `reveal` or
+            // `reveal_bulk` (see `validate`). It is user-supplied free text: a consumer treats
+            // it as untrusted text (never markup, never an instruction), and a producer never
+            // puts a value of the field in it (the route's own validation is its side of that
+            // rule). It is never the field's value.
+            opt(&mut f, "reason", text());
         }
         "identity_node_changed" => {
             req(&mut f, "node", text());
@@ -460,6 +467,11 @@ pub fn schema_of(topic: &str) -> Option<EventSchema> {
 /// pasted secret or a stack trace into them. [`validate`] enforces it.
 pub const MAX_STRING_CHARS: usize = 256;
 
+/// The longest `reason` of `identity_field_accessed` (0.7.9), in characters: the bound of the
+/// native API's reveal request (`field_reveal`), longer than [`MAX_STRING_CHARS`] because a person
+/// writes it. Counted in Unicode scalar values.
+pub const MAX_REVEAL_REASON_CHARS: usize = 500;
+
 /// Delivery of every identity event (ADR-056, amendment A2): `at-least-once`, so a consumer
 /// deduplicates on the event id, and kept as audit records for the audit retention period, not
 /// the shorter outbox retention. There is no best-effort identity event.
@@ -520,7 +532,8 @@ pub fn validate(topic: &str, data: &Json) -> Result<(), Vec<SchemaError>> {
         }]);
     };
     let mut errors = schema.validate(data).err().unwrap_or_default();
-    scan_keys(data, "", &mut errors);
+    scan_keys(topic, data, "", &mut errors);
+    check_reveal_reason(topic, data, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
@@ -528,7 +541,41 @@ pub fn validate(topic: &str, data: &Json) -> Result<(), Vec<SchemaError>> {
     }
 }
 
-fn scan_keys(v: &Json, path: &str, errors: &mut Vec<SchemaError>) {
+/// The longest string allowed at `path` of `topic`: [`MAX_STRING_CHARS`], except the reveal
+/// reason of `identity_field_accessed` (top level `reason`, [`MAX_REVEAL_REASON_CHARS`]).
+fn string_limit(topic: &str, path: &str) -> usize {
+    if topic == "identity_field_accessed" && path == "reason" {
+        MAX_REVEAL_REASON_CHARS
+    } else {
+        MAX_STRING_CHARS
+    }
+}
+
+/// The reveal reason (0.7.9): 1 to [`MAX_REVEAL_REASON_CHARS`] characters, and only on a reveal
+/// (`right` of `reveal` or `reveal_bulk`); a `read` trace has none. An explicit `null` is absent.
+fn check_reveal_reason(topic: &str, data: &Json, errors: &mut Vec<SchemaError>) {
+    if topic != "identity_field_accessed" {
+        return;
+    }
+    let Some(reason) = data.get("reason").and_then(Json::as_str) else {
+        return;
+    };
+    if reason.is_empty() {
+        errors.push(SchemaError {
+            path: "reason".to_owned(),
+            message: "a reveal reason is at least 1 character".into(),
+        });
+    }
+    let right = data.get("right").and_then(Json::as_str);
+    if !matches!(right, Some("reveal" | "reveal_bulk")) {
+        errors.push(SchemaError {
+            path: "reason".to_owned(),
+            message: "only a reveal carries a reason".into(),
+        });
+    }
+}
+
+fn scan_keys(topic: &str, v: &Json, path: &str, errors: &mut Vec<SchemaError>) {
     match v {
         Json::Object(map) => {
             for (k, child) in map {
@@ -544,20 +591,19 @@ fn scan_keys(v: &Json, path: &str, errors: &mut Vec<SchemaError>) {
                         message: "an identity event never carries a credential or secret".into(),
                     });
                 }
-                scan_keys(child, &here, errors);
+                scan_keys(topic, child, &here, errors);
             }
         }
         Json::Array(items) => {
             for (i, child) in items.iter().enumerate() {
-                scan_keys(child, &format!("{path}[{i}]"), errors);
+                scan_keys(topic, child, &format!("{path}[{i}]"), errors);
             }
         }
-        Json::String(text) if text.chars().count() > MAX_STRING_CHARS => {
+        Json::String(text) if text.chars().count() > string_limit(topic, path) => {
+            let limit = string_limit(topic, path);
             errors.push(SchemaError {
                 path: path.to_owned(),
-                message: format!(
-                    "an identity event string is at most {MAX_STRING_CHARS} characters"
-                ),
+                message: format!("an identity event string is at most {limit} characters"),
             });
         }
         _ => {}

@@ -677,6 +677,37 @@ impl SiteAuth {
         crate::audit::rejected(&self.recorder, presented, reason, path);
     }
 
+    /// Records one step-up attempt in the site's identity audit chain (WP-IAM-12.T9), through the
+    /// same [`Recorder`] as a sign-in: `step_up_succeeded` or `step_up_failed` with its reason
+    /// class, the user, the session id (an opaque id, never the token), the salted source digest
+    /// and the channel. No password, code or token is taken or written.
+    ///
+    /// A [`crate::audit::StepUpOutcome::Succeeded`] is written with `Recorder::required` (retried once): the
+    /// caller must not write the marker when this returns an error. A refusal is written with
+    /// `Recorder::failure` (counted against the per-minute failure budget) and this always
+    /// returns `Ok`, so an audit outage never changes the answer an unauthenticated-or-wrong
+    /// caller sees.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::audit::AuditError`] when a success could not be written.
+    pub fn record_step_up(
+        &self,
+        user: &str,
+        session: Option<&str>,
+        source: Option<&str>,
+        outcome: crate::audit::StepUpOutcome,
+    ) -> std::result::Result<(), crate::audit::AuditError> {
+        let record = crate::audit::step_up_record(&self.recorder, user, session, source, outcome);
+        match outcome {
+            crate::audit::StepUpOutcome::Succeeded => self.recorder.required(&record),
+            crate::audit::StepUpOutcome::Failed(_) => {
+                self.recorder.failure(&record);
+                Ok(())
+            }
+        }
+    }
+
     /// Whether the authenticated caller may do nothing but choose a password: its session was
     /// started by a one-time secret, or its user still holds one (so an API key of that user is
     /// restricted too).

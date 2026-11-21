@@ -90,7 +90,9 @@ of hidden documents, so an empty list says nothing about what exists. A failure 
 
 - The `retrieve` tool is on the MCP tool list while this service is ready and its last indexing pass
   did not fail (see "The `retrieve` MCP tool"). With no embedding provider the service is degraded
-  and the tool is absent; the harness case `retrieval: a_revoked_share_applies_to_the_next_retrieve_call`
-  stays blocked until the LLM service provides the embedding port (WP-AI-03.T7).
+  and the tool is absent. The l3-http harness cases `retrieval: a_revoked_share_applies_to_the_next_retrieve_call`
+  and `retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document` run against a site of their own
+  that embeds text through the harness's fake embeddings endpoint (WP-AI-10.T4); see
+  `harness/rust/l3-http/README.md`.
 - One embedding model per table: changing `dimensions` is a re-index into a new table, and the
   service refuses to start against a table of another width.

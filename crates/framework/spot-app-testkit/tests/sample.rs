@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{copy_dir, sample_dir, sample_harness};
+use common::{copy_dir, patched, sample_dir, sample_harness};
 use serde_json::json;
 use spot_app_api::prelude::Value;
 use spot_app_testkit::{AppHarness, assert};
@@ -70,6 +70,31 @@ async fn a_project_a_task_and_a_time_entry_roll_up_and_back() {
     );
     assert::assert_event_published(&harness, "doc_state").await;
     assert::assert_no_orphan_links(&harness).await;
+}
+
+#[test]
+fn the_patched_sample_attaches_the_confidential_group_to_details() {
+    let text = std::fs::read_to_string(sample_dir().join("doctypes/task.toml")).unwrap();
+    let text = text.replace("\r\n", "\n");
+    assert!(
+        text.contains("[[protection_groups]]\nname = \"confidential\""),
+        "the group is declared"
+    );
+    let details = text
+        .find("name = \"details\"")
+        .expect("the details field is in the sample");
+    let field = text[details..].split("[[fields]]").next().unwrap();
+    assert!(
+        field.contains("protection_group = \"confidential\""),
+        "the `details` field is in the confidential group: {field}"
+    );
+}
+
+#[test]
+fn a_patch_that_matches_nothing_is_refused_not_ignored() {
+    assert_eq!(patched("a\nb", &[("a\nb", "c")]), "c");
+    let outcome = std::panic::catch_unwind(|| patched("a\r\nb", &[("a\nb", "c")]));
+    assert!(outcome.is_err(), "a pattern that does not match panics");
 }
 
 #[tokio::test]

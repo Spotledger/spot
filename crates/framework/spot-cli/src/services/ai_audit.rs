@@ -44,8 +44,13 @@
 //! [`AiAudit::timeline`] first asks the [`ReadAccess`] port what the viewer may see of the
 //! document: nothing (the answer is an empty list, the same as for a missing document), the
 //! entries with their argument values hidden, or the entries as recorded. An error from the
-//! access check is a refusal, never an allow. Without a [`ReadAccess`] provider the host uses
-//! [`DenyAll`]: the timeline answers nothing until the engine-backed provider is wired.
+//! access check is a refusal, never an allow. Without a [`ReadAccess`] provider installed by another
+//! module the host uses the engine-backed one ([`read_access::EngineReadAccess`], WP-AI-11.T9),
+//! which loads the document through the live engine as the viewer and asks the field guard:
+//! [`Access::None`] for a document the viewer may not read (or that does not exist, or is
+//! another site's), [`Access::Masked`] when a protected field is not shown to them as its real
+//! value, [`Access::Full`] otherwise. [`DenyAll`] remains for a site whose name is not a valid
+//! site id.
 //!
 //! # The review digest
 //!
@@ -82,6 +87,11 @@ use tokio::sync::watch;
 
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
+
+#[path = "ai_audit/read_access.rs"]
+pub mod read_access;
+#[path = "ai_audit/timeline_port.rs"]
+pub mod timeline_port;
 
 /// Start order: after the framework's own services and the capture invariant.
 pub const ORDER: u32 = 1060;
@@ -1136,7 +1146,8 @@ fn remove_provided(site: &str) {
 
 /// Registers the service when `[services.ai_audit] enabled = true`: builds the chain over the
 /// site's pool, provides [`AiAuditPort`] as a port and adds the digest loop. A [`ReadAccess`]
-/// port provided earlier decides who sees a timeline; without one nobody does ([`DenyAll`]).
+/// port provided earlier decides who sees a timeline; without one the engine-backed access of
+/// [`read_access`] does.
 pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let settings: Settings = ctx.settings_or_default("ai_audit")?;
     settings.validate()?;
@@ -1151,14 +1162,18 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             .get(&site)
             .cloned();
         if let Some(port) = existing {
-            ctx.provide::<dyn AiAuditPort>(port)?;
+            ctx.provide::<dyn AiAuditPort>(Arc::clone(&port))?;
+            timeline_port::provide(ctx, port)?;
         }
         return Ok(());
     }
     let env = *ctx.env()?;
-    let access: Arc<dyn ReadAccess> = ctx
-        .port::<dyn ReadAccess>()
-        .unwrap_or_else(|| Arc::new(DenyAll));
+    // A provider installed earlier wins; otherwise the engine-backed one decides what a viewer
+    // may see (WP-AI-11.T9), and only a site name that is not a site id keeps `DenyAll`.
+    let access: Arc<dyn ReadAccess> = match ctx.port::<dyn ReadAccess>() {
+        Some(access) => access,
+        None => read_access::engine_backed(env.live, &env.site.site, ctx.clock()),
+    };
     let audit = Arc::new(AiAudit::new(
         PgAuditStore::new(env.backend.pool()),
         &env.site.site,
@@ -1170,6 +1185,8 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     ctx.add(service as Arc<dyn Service>);
     let port: Arc<dyn AiAuditPort> = audit;
     ctx.provide::<dyn AiAuditPort>(Arc::clone(&port))?;
+    // The timeline route (WP-AI-11.T11): the adapter over this chain, mounted with its group.
+    timeline_port::provide(ctx, Arc::clone(&port))?;
     provided()
         .lock()
         .unwrap_or_else(|p| p.into_inner())

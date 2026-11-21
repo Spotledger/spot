@@ -2,14 +2,17 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use deadpool_postgres::{Object, Pool};
+use spot_jobs::metrics::{JobMetricsSink, queue_label};
 use spot_jobs::model::InsertResult;
 use spot_jobs::store::{ClaimedJob, JobFilter};
-use spot_jobs::{Claim, Error, Job, JobId, JobState, JobStore, NewJob, Result};
+use spot_jobs::{CancelOutcome, Claim, Error, Job, JobId, JobState, JobStore, NewJob, Result};
 use spot_storage_contract::feed::FeedPosition;
 use time::OffsetDateTime;
+use tokio_postgres::error::SqlState;
 
 use crate::BATCH;
 use crate::convert::{id_from_db, id_to_db, job_from_row, millis, pg_err, pool_err, state_text};
@@ -41,6 +44,7 @@ pub struct PgJobStore {
     max_running_per_site: Option<u32>,
     reap_retry_delay: Duration,
     intake: String,
+    metrics: Option<Arc<dyn JobMetricsSink>>,
 }
 
 impl std::fmt::Debug for PgJobStore {
@@ -61,7 +65,15 @@ impl PgJobStore {
             max_running_per_site: None,
             reap_retry_delay: DEFAULT_REAP_RETRY_DELAY,
             intake: DEFAULT_INTAKE.to_owned(),
+            metrics: None,
         }
+    }
+
+    /// Count each successful [`JobStore::requeue`] on `sink` (label: the job's queue, bounded
+    /// by `spot_jobs::metrics::queue_label`).
+    pub fn with_metrics(mut self, sink: Arc<dyn JobMetricsSink>) -> Self {
+        self.metrics = Some(sink);
+        self
     }
 
     /// `max_attempts` given to jobs inserted from now on (at least 1).
@@ -231,6 +243,39 @@ impl PgJobStore {
         }
         tx.commit().await.map_err(pg_err)?;
         Ok(result)
+    }
+
+    /// The requeue statement, then the reason when it changed nothing.
+    async fn requeue_job(&self, id: JobId, now: OffsetDateTime) -> Result<Job> {
+        let db_id = id_to_db(id)?;
+        let conn = self.conn().await?;
+        let row = match conn.query_opt(sql::REQUEUE, &[&db_id, &now]).await {
+            Ok(row) => row,
+            // The only unique index an update of this row can hit is the idempotency one: another
+            // live job holds this job's (site, name, key). Nothing was written.
+            Err(e) if e.code() == Some(&SqlState::UNIQUE_VIOLATION) => {
+                return Err(Error::RequeueKeyHeld);
+            }
+            Err(e) => return Err(pg_err(e)),
+        };
+        if let Some(row) = row {
+            let job = job_from_row(&row)?;
+            if let Some(sink) = &self.metrics {
+                sink.requeued(queue_label(&job.queue));
+            }
+            return Ok(job);
+        }
+        // Nothing matched: unknown id, or a job that is not dead or retrying (or was claimed or
+        // requeued by someone else a moment ago).
+        let exists = conn
+            .query_opt("SELECT 1 FROM spot_job WHERE id = $1", &[&db_id])
+            .await
+            .map_err(pg_err)?;
+        if exists.is_some() {
+            Err(Error::RequeueRefused)
+        } else {
+            Err(Error::other("Job not found"))
+        }
     }
 
     async fn claim_jobs(
@@ -413,6 +458,40 @@ impl JobStore for PgJobStore {
                 Err(Error::other("Job not found"))
             }
         })
+    }
+
+    /// One `UPDATE ... WHERE state IN ('pending', 'retrying') AND claim_token IS NULL` and no
+    /// read before it: a worker that claims the row first leaves it `running` and the update
+    /// matches nothing. Only when it matched nothing does one `SELECT` tell an unknown id from a
+    /// job that may not be cancelled.
+    fn cancel_if_pending(&self, id: JobId) -> Fut<'_, CancelOutcome> {
+        Box::pin(async move {
+            let id = id_to_db(id)?;
+            let conn = self.conn().await?;
+            let n = conn
+                .execute(sql::CANCEL_IF_PENDING, &[&id])
+                .await
+                .map_err(pg_err)?;
+            if n == 1 {
+                return Ok(CancelOutcome::Cancelled);
+            }
+            let exists = conn
+                .query_opt("SELECT 1 FROM spot_job WHERE id = $1", &[&id])
+                .await
+                .map_err(pg_err)?;
+            if exists.is_some() {
+                Ok(CancelOutcome::NotCancellable)
+            } else {
+                Ok(CancelOutcome::NotFound)
+            }
+        })
+    }
+
+    /// One `UPDATE ... WHERE state IN ('dead', 'retrying')`: the check and the write are one
+    /// statement, so a concurrent claim, reap or second requeue is never overwritten. The
+    /// job becomes due at the earlier of the caller's `now` and the database clock.
+    fn requeue(&self, id: JobId, now: OffsetDateTime) -> Fut<'_, Job> {
+        Box::pin(self.requeue_job(id, now))
     }
 
     fn merge_context(

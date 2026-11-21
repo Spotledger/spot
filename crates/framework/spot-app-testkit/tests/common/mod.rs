@@ -26,16 +26,22 @@ pub fn sample_dir() -> PathBuf {
             ));
             copy_dir(&source, &copy);
             let task = copy.join("doctypes/task.toml");
-            let text = std::fs::read_to_string(&task)
-                .unwrap()
-                .replace(
-                    "title_field = \"subject\"",
-                    "title_field = \"subject\"\n\n[[protection_groups]]\nname = \"confidential\"\nlabel = \"Confidential\"\ntrace = true",
-                )
-                .replace(
-                    "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"",
-                    "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"\nprotection_group = \"confidential\"",
-                );
+            // A Windows checkout with `core.autocrlf` has `\r\n` line endings, where a multi-line
+            // pattern matches nothing: normalise first, and refuse a patch that changes nothing
+            // (a silent no-op would drop the protection group and a Viewer would read the field).
+            let text = patched(
+                &std::fs::read_to_string(&task).unwrap().replace("\r\n", "\n"),
+                &[
+                    (
+                        "title_field = \"subject\"",
+                        "title_field = \"subject\"\n\n[[protection_groups]]\nname = \"confidential\"\nlabel = \"Confidential\"\ntrace = true",
+                    ),
+                    (
+                        "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"",
+                        "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"\nprotection_group = \"confidential\"",
+                    ),
+                ],
+            );
             std::fs::write(&task, text).unwrap();
             let entry = copy.join("doctypes/time_entry.toml");
             let text = std::fs::read_to_string(&entry).unwrap()
@@ -44,6 +50,21 @@ pub fn sample_dir() -> PathBuf {
             copy
         })
         .clone()
+}
+
+/// Applies each `(from, to)` replacement in order and panics, naming the pattern, when one
+/// matches nothing: `str::replace` returns the text unchanged without a word, which would turn a
+/// fixture patch into a silent no-op.
+pub fn patched(text: &str, patches: &[(&str, &str)]) -> String {
+    let mut text = text.to_owned();
+    for (from, to) in patches {
+        assert!(
+            text.contains(from),
+            "the fixture patch matched nothing: {from:?}"
+        );
+        text = text.replace(from, to);
+    }
+    text
 }
 
 /// The sample app with its native controllers, loaded.

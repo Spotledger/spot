@@ -3,19 +3,19 @@
 //!
 //! # Namespaces
 //!
-//! The cache store keeps flat keys per site and has no way to list keys or to count a prefix, so a
-//! "namespace" is a key prefix the platform owns. The one the platform writes is the **step**
-//! namespace, the `step:` prefix every step's `ctx.cache()` entry lives under
-//! ([`STEP_PREFIX`]); it is the only namespace this part knows. A flush of any other name is
-//! refused as unknown (the part never clears the whole site).
+//! The cache store keeps flat keys per site, so a "namespace" is a key prefix the platform owns.
+//! The one the platform writes is the **step** namespace, the `step:` prefix every step's
+//! `ctx.cache()` entry lives under ([`STEP_PREFIX`]); it is the only namespace this part knows. A
+//! flush of any other name is refused as unknown (the part never clears the whole site).
 //!
 //! - `namespaces` answers `step`.
-//! - `entries` for `step` is the site's **live entry count** from the store's statistics. The store
-//!   cannot count one prefix, so this is exact while the platform's step entries are the only
-//!   entries of the site's cache and an upper bound otherwise (see the report's open questions).
-//!   Every other name holds 0.
+//! - `entries` for `step` is the **exact** number of live `step:` keys of the site, from the
+//!   store's `count_prefix` (an expired key is not counted, and the other keys of the site's cache
+//!   are not). Every other name holds 0. A Redis-backed store counts with a bounded scan, so a
+//!   site with an extreme number of `step:` keys may read a lower bound.
 //! - `flush` removes the `step:` prefix with the store's `delete_prefix` (never `clear_site`) and
-//!   returns the counts before and after, both read the same way as `entries`.
+//!   returns the counts before and after, both read the same way as `entries`: a flush of 3 step
+//!   keys beside 5 other keys reports `before 3, after 0` and leaves the 5.
 //! - `undo_flush` records the reversal and restores nothing: the cache is derived data and
 //!   refills from its source, exactly what the seed remedy declares. No cache value is ever read
 //!   or stored by this part.
@@ -62,10 +62,12 @@ impl StoreCachePart {
         }
     }
 
-    /// The live entries of the site's cache.
-    fn live_entries(&self) -> usize {
-        let stats = self.handle.block_on(self.store.stats(&self.site));
-        usize::try_from(stats.entries).unwrap_or(usize::MAX)
+    /// The live `step:` entries of the site's cache (exact: the store counts the prefix).
+    fn step_entries(&self) -> usize {
+        let count = self
+            .handle
+            .block_on(self.store.count_prefix(&self.site, STEP_PREFIX));
+        usize::try_from(count).unwrap_or(usize::MAX)
     }
 }
 
@@ -100,7 +102,7 @@ impl CachePart for StoreCachePart {
 
     fn rehearsal(&self) -> Result<Box<dyn CacheOps>, WorldError> {
         let mut fake = FakeCache::new();
-        fake.seed(step_namespace(), self.live_entries());
+        fake.seed(step_namespace(), self.step_entries());
         Ok(Box::new(fake))
     }
 }
@@ -123,7 +125,7 @@ impl CacheOps for StoreCacheOps<'_> {
 
     fn entries(&self, ns: &CacheNs) -> usize {
         if Self::known(ns) {
-            self.part.live_entries()
+            self.part.step_entries()
         } else {
             0
         }
@@ -136,13 +138,13 @@ impl CacheOps for StoreCacheOps<'_> {
                 &format!("no namespace `{}`", ns.as_str()),
             ));
         }
-        let before = self.part.live_entries();
+        let before = self.part.step_entries();
         // Only the namespace's own prefix: never `clear_site`.
         let _removed = self
             .part
             .handle
             .block_on(self.part.store.delete_prefix(&self.part.site, STEP_PREFIX));
-        let after = self.part.live_entries();
+        let after = self.part.step_entries();
         Ok(CacheChange {
             ns: ns.clone(),
             before,

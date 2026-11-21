@@ -85,6 +85,12 @@ owner_wp = "WP-TST"
 reason = "Test harness HTTP client for the system under test."
 
 [[allow]]
+path = "harness/rust/l3-http/src/embed_fake.rs"
+kind = "harness"
+owner_wp = "WP-AI-10"
+reason = "Test harness fake embedding server: only the accepted socket type is named; nothing is dialled."
+
+[[allow]]
 path = "harness/rust/l3-journal-sync/src/client.rs"
 kind = "harness"
 owner_wp = "WP-TST"

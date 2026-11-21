@@ -9,8 +9,8 @@
 //! is built from installed apps. No real clock, no sleep.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use spot_app_api::prelude::RecordId;
@@ -21,15 +21,21 @@ use spot_cli::services::break_glass::{
     AgentBridge, BreakGlassHost, Caller, Duties, EventLog, HostError, ObjectStore, Page, Parts,
     Retention, Retire, Sealer, Settings as BreakGlassSettings, Window,
 };
+use spot_cli::services::step_up::within_window;
+use spot_cli::services::support_access::SupportCaller;
 use spot_cli::services::support_access_wiring::{
-    self as wiring, ChainEventLog, Settings, Sources, build_parts, scope_of,
+    self as wiring, ApiFuture, ChainEventLog, MarkerReader, PermissionCaller, SessionSource,
+    Settings, Sources, build_parts, scope_of,
 };
-use spot_core::{Clock, ManualClock};
+use spot_core::{Clock, ManualClock, SiteId};
 use spot_document::engine::{AppPermissionCheck, PrincipalSource};
 use spot_files::memory::MemoryFileStore;
 use spot_files::store::FileStore;
+use spot_http::api::service::{ApiError, Credential, RequestCtx};
+use spot_http::request::RequestId;
 use spot_permissions::Principal;
 use spot_secrets::{MemoryKeyring, SecretBox};
+use spot_storage_contract::RecordId as StorageId;
 use time::OffsetDateTime;
 
 const TENANT: &str = "acme";
@@ -748,4 +754,225 @@ fn the_unused_parts_type_still_has_every_port() {
             && parts.bridge.is_none()
             && parts.retention.is_none()
     );
+}
+
+// ---- the support-access caller reads the step-up marker, never the age of the session ----------
+
+/// The step-up window the caller is built with in these tests, in seconds.
+const WINDOW: i64 = 60;
+
+/// Resolves the bearer token of a request to a fixed (user, session) pair.
+#[derive(Default)]
+struct Sessions(Mutex<BTreeMap<String, (StorageId, StorageId)>>);
+
+impl SessionSource for Sessions {
+    fn session<'a>(&'a self, ctx: &'a RequestCtx) -> ApiFuture<'a, Option<(StorageId, StorageId)>> {
+        let found = ctx
+            .credential
+            .as_ref()
+            .and_then(|c| self.0.lock().unwrap().get(c.token.as_str()).copied());
+        Box::pin(async move { found })
+    }
+}
+
+/// The markers a site would hold, read with the shared window logic and the injected clock.
+struct Markers {
+    marks: Mutex<BTreeMap<StorageId, OffsetDateTime>>,
+    clock: Arc<ManualClock>,
+    broken: Mutex<bool>,
+}
+
+impl MarkerReader for Markers {
+    fn current<'a>(&'a self, session: StorageId) -> ApiFuture<'a, Result<bool, ApiError>> {
+        let answer = if *self.broken.lock().unwrap() {
+            Err(ApiError::from_code(
+                spot_http::api::registry::Code::ServerUnavailable,
+            ))
+        } else {
+            let marked = self.marks.lock().unwrap().get(&session).copied();
+            Ok(within_window(marked, self.clock.now_utc(), WINDOW))
+        };
+        Box::pin(async move { answer })
+    }
+}
+
+struct CallerRig {
+    caller: PermissionCaller,
+    sessions: Arc<Sessions>,
+    markers: Arc<Markers>,
+    clock: Arc<ManualClock>,
+}
+
+fn caller_rig(holders: &[(&str, &str)]) -> CallerRig {
+    let mut table = Table::default();
+    for (user, duty) in holders {
+        table.0.insert(((*user).to_owned(), (*duty).to_owned()));
+    }
+    let sources = Sources {
+        tenant: TENANT.to_owned(),
+        permissions: Some((
+            Arc::new(table) as Arc<dyn AppPermissionCheck>,
+            Arc::new(Everyone) as Arc<dyn PrincipalSource>,
+        )),
+        ..Sources::default()
+    };
+    let (parts, _) = build_parts(sources, &Settings::default());
+    let clock = clock();
+    let sessions = Arc::new(Sessions::default());
+    let markers = Arc::new(Markers {
+        marks: Mutex::default(),
+        clock: Arc::clone(&clock),
+        broken: Mutex::default(),
+    });
+    let caller = PermissionCaller::new(
+        TENANT,
+        Arc::clone(&sessions) as Arc<dyn SessionSource>,
+        Arc::clone(&markers) as Arc<dyn MarkerReader>,
+        parts.duties.unwrap(),
+    );
+    CallerRig {
+        caller,
+        sessions,
+        markers,
+        clock,
+    }
+}
+
+fn request_ctx(token: &str) -> RequestCtx {
+    RequestCtx {
+        site: SiteId::new(TENANT).unwrap(),
+        credential: Some(Credential::new(token)),
+        idempotency_key: None,
+        language: None,
+        request_id: RequestId::new("req-1").unwrap(),
+        peer: None,
+    }
+}
+
+/// A user: the record id and its text (the key the permission table and the caller use).
+fn new_person() -> (StorageId, String) {
+    let id = StorageId::new_v7();
+    (id, id.to_string())
+}
+
+/// Signs `user` in under `token` with a fresh session record, returning the session id.
+fn sign_in(rig: &CallerRig, token: &str, user: StorageId) -> StorageId {
+    let session = StorageId::new_v7();
+    rig.sessions
+        .0
+        .lock()
+        .unwrap()
+        .insert(token.to_owned(), (user, session));
+    session
+}
+
+#[tokio::test]
+async fn a_session_that_never_stepped_up_is_not_recent_even_a_minute_after_it_started() {
+    let (admin_id, admin) = new_person();
+    let rig = caller_rig(&[(admin.as_str(), "security_administrator")]);
+    let session = sign_in(&rig, "token-a", admin_id);
+    rig.clock.advance(Duration::from_secs(60));
+    let info = rig.caller.caller(&request_ctx("token-a")).await.unwrap();
+    assert_eq!(info.user_id, admin);
+    assert!(info.is_security_admin);
+    // The session is a minute old and has no marker: the age is not a step-up.
+    assert!(!info.step_up_current);
+    // After a step-up (the marker is written) it is.
+    rig.markers
+        .marks
+        .lock()
+        .unwrap()
+        .insert(session, rig.clock.now_utc());
+    let info = rig.caller.caller(&request_ctx("token-a")).await.unwrap();
+    assert!(info.is_security_admin && info.step_up_current);
+}
+
+#[tokio::test]
+async fn the_marker_lapses_with_the_injected_clock() {
+    let (admin_id, admin) = new_person();
+    let rig = caller_rig(&[(admin.as_str(), "security_administrator")]);
+    let session = sign_in(&rig, "token-a", admin_id);
+    rig.markers
+        .marks
+        .lock()
+        .unwrap()
+        .insert(session, rig.clock.now_utc());
+    rig.clock.advance(Duration::from_secs(60));
+    assert!(
+        rig.caller
+            .caller(&request_ctx("token-a"))
+            .await
+            .unwrap()
+            .step_up_current
+    );
+    rig.clock.advance(Duration::from_secs(1));
+    let info = rig.caller.caller(&request_ctx("token-a")).await.unwrap();
+    assert!(info.is_security_admin && !info.step_up_current);
+}
+
+#[tokio::test]
+async fn a_stepped_up_session_of_another_user_is_not_recent() {
+    let ((admin_id, admin), (other_id, other)) = (new_person(), new_person());
+    let rig = caller_rig(&[
+        (admin.as_str(), "security_administrator"),
+        (other.as_str(), "security_administrator"),
+    ]);
+    let admin_session = sign_in(&rig, "token-a", admin_id);
+    sign_in(&rig, "token-b", other_id);
+    rig.markers
+        .marks
+        .lock()
+        .unwrap()
+        .insert(admin_session, rig.clock.now_utc());
+    assert!(
+        rig.caller
+            .caller(&request_ctx("token-a"))
+            .await
+            .unwrap()
+            .step_up_current
+    );
+    // The other administrator's own session has no marker.
+    let info = rig.caller.caller(&request_ctx("token-b")).await.unwrap();
+    assert_eq!(info.user_id, other);
+    assert!(info.is_security_admin && !info.step_up_current);
+}
+
+#[tokio::test]
+async fn a_user_without_the_duty_is_no_security_admin_and_every_unresolved_credential_is_no_caller()
+{
+    let ((_, admin), (plain_id, _)) = (new_person(), new_person());
+    let rig = caller_rig(&[(admin.as_str(), "security_administrator")]);
+    let session = sign_in(&rig, "token-plain", plain_id);
+    rig.markers
+        .marks
+        .lock()
+        .unwrap()
+        .insert(session, rig.clock.now_utc());
+    let info = rig
+        .caller
+        .caller(&request_ctx("token-plain"))
+        .await
+        .unwrap();
+    assert!(!info.is_security_admin, "a step-up is not the duty");
+    // An unknown credential, and an anonymous request, name nobody.
+    assert!(rig.caller.caller(&request_ctx("unknown")).await.is_none());
+    let mut anonymous = request_ctx("x");
+    anonymous.credential = None;
+    assert!(rig.caller.caller(&anonymous).await.is_none());
+}
+
+#[tokio::test]
+async fn a_marker_that_cannot_be_read_is_no_caller_never_an_allow() {
+    let (admin_id, admin) = new_person();
+    let rig = caller_rig(&[(admin.as_str(), "security_administrator")]);
+    sign_in(&rig, "token-a", admin_id);
+    *rig.markers.broken.lock().unwrap() = true;
+    assert!(rig.caller.caller(&request_ctx("token-a")).await.is_none());
+}
+
+#[tokio::test]
+async fn the_site_less_context_provides_no_support_caller_and_the_service_keeps_refusing() {
+    let mut ctx = ctx_with("");
+    wiring::register(&mut ctx).await.unwrap();
+    assert!(ctx.port::<dyn SupportCaller>().is_none());
 }

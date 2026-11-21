@@ -1,7 +1,8 @@
 //! The JobStore trait: the persistent backing for jobs.
 
-use crate::model::{Claim, InsertResult, Job, JobId, JobState, NewJob};
-use crate::Result;
+use crate::metrics::{queue_label, JobMetricsSink};
+use crate::model::{CancelOutcome, Claim, InsertResult, Job, JobId, JobState, NewJob};
+use crate::{Error, Result};
 use spot_core::SiteId;
 use spot_storage_contract::feed::FeedPosition;
 use std::collections::HashMap;
@@ -66,6 +67,54 @@ pub trait JobStore: Send + Sync {
         &self,
         id: JobId,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>>;
+
+    /// Cancel a job only while nobody has claimed it, in one atomic step.
+    ///
+    /// A job that is `Pending` or `Retrying` and holds no claim becomes `Cancelled` and the
+    /// answer is [`CancelOutcome::Cancelled`]. A job a worker holds (`Running`, any claim), or
+    /// one that is already `Succeeded`, `Dead` or `Cancelled`, is left exactly as it is and the
+    /// answer is [`CancelOutcome::NotCancellable`] (so a second call on a cancelled job reports
+    /// it too, unlike the idempotent [`JobStore::cancel`]). An unknown id is
+    /// [`CancelOutcome::NotFound`]; none of the three is an error.
+    ///
+    /// The state check and the write are one step (one lock in memory, one `UPDATE ... WHERE`
+    /// statement in PostgreSQL), so a worker that claims at the same moment either wins (the job
+    /// is `Running` and this answers `NotCancellable`) or loses (the job is cancelled and its
+    /// claim finds nothing): never both. [`JobStore::cancel`] is unchanged: it also cancels a
+    /// running job in PostgreSQL, which is why a caller that must not cancel running work uses
+    /// this operation instead of reading the state and then calling `cancel`.
+    ///
+    /// There is deliberately no default body: one that read the job and then called `cancel`
+    /// would be the race this operation exists to close, so every store implements it.
+    fn cancel_if_pending(
+        &self,
+        id: JobId,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CancelOutcome>> + Send + '_>>;
+
+    /// Move a dead or retrying job back to the queue: it becomes `Pending` with
+    /// `not_before = now` (never later than `now`, so it is claimable at once), `attempt` reset
+    /// to 0 (it gets its full `max_attempts` again), no claim; `last_error` stays as history.
+    /// Returns the job as stored.
+    ///
+    /// Only a job in `Dead` or `Retrying` can be requeued. A `Pending` job, a `Running` job (a
+    /// live claim), a `Succeeded` or a `Cancelled` one is
+    /// [`Error::RequeueRefused`](crate::Error::RequeueRefused) and nothing changes, so a
+    /// requeue never overwrites a concurrent claim or reap, and of two concurrent requeues of
+    /// one dead job exactly one wins. An unknown id is the store's not-found error. The job
+    /// keeps its idempotency key: if another live job (pending, running or retrying) now holds
+    /// the same (site, name, key) the requeue is
+    /// [`Error::RequeueKeyHeld`](crate::Error::RequeueKeyHeld) and nothing changes.
+    ///
+    /// The default answers `job.requeue_unsupported`, so a store or test double written before
+    /// this operation keeps compiling; the in-memory and PostgreSQL stores override it.
+    fn requeue(
+        &self,
+        id: JobId,
+        now: OffsetDateTime,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Job>> + Send + '_>> {
+        let _ = (id, now);
+        Box::pin(async { Err(Error::other("job.requeue_unsupported")) })
+    }
 
     /// Shallow-merge `patch` into the job's `context`, only while `claim` is still the job's
     /// current claim (the same fence `heartbeat` and `complete` check).
@@ -137,6 +186,8 @@ pub struct InMemoryJobStore {
     outbox_dedup: Mutex<HashMap<String, JobId>>,
     intake_position: Mutex<FeedPosition>,
     next_job_id: Mutex<u64>,
+    /// Where requeues are counted, if anywhere.
+    metrics: Option<Arc<dyn JobMetricsSink>>,
 }
 
 impl std::fmt::Debug for InMemoryJobStore {
@@ -160,7 +211,16 @@ impl InMemoryJobStore {
             outbox_dedup: Mutex::new(HashMap::new()),
             intake_position: Mutex::new(FeedPosition::START),
             next_job_id: Mutex::new(1),
+            metrics: None,
         }
+    }
+
+    /// Count each successful [`JobStore::requeue`] on `sink` (label: the job's queue, bounded
+    /// by [`queue_label`]).
+    #[must_use]
+    pub fn with_metrics(mut self, sink: Arc<dyn JobMetricsSink>) -> Self {
+        self.metrics = Some(sink);
+        self
     }
 }
 
@@ -397,6 +457,84 @@ impl JobStore for InMemoryJobStore {
             } else {
                 Err(crate::error::Error::Other("Job not found".to_string()))
             }
+        })
+    }
+
+    fn cancel_if_pending(
+        &self,
+        id: JobId,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CancelOutcome>> + Send + '_>>
+    {
+        Box::pin(async move {
+            // `claim` takes this same lock, so the check and the write cannot interleave with
+            // a claim: one of the two goes first and the other sees its result.
+            let mut jobs = self.jobs.lock().unwrap();
+            let Some(job) = jobs.get_mut(&id) else {
+                return Ok(CancelOutcome::NotFound);
+            };
+            let cancellable = matches!(job.state, JobState::Pending | JobState::Retrying { .. })
+                && job.claim.is_none();
+            if !cancellable {
+                return Ok(CancelOutcome::NotCancellable);
+            }
+            job.state = JobState::Cancelled;
+            Ok(CancelOutcome::Cancelled)
+        })
+    }
+
+    fn requeue(
+        &self,
+        id: JobId,
+        now: OffsetDateTime,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Job>> + Send + '_>> {
+        Box::pin(async move {
+            // The state check, the key check and the write happen under the same locks (taken
+            // in the order `insert_if_new` takes them), so a concurrent claim, reap or second
+            // requeue cannot interleave.
+            let (requeued, queue) = {
+                let mut jobs = self.jobs.lock().unwrap();
+                let mut idempotency = self.idempotency.lock().unwrap();
+                let Some(current) = jobs.get(&id).cloned() else {
+                    return Err(Error::Other("Job not found".to_string()));
+                };
+                let requeueable =
+                    matches!(current.state, JobState::Dead | JobState::Retrying { .. })
+                        && current.claim.is_none();
+                if !requeueable {
+                    return Err(Error::RequeueRefused);
+                }
+                if let Some(key) = &current.idempotency_key {
+                    let idem_key = (current.site.clone(), current.name.clone(), key.clone());
+                    if let Some(holder) = idempotency.get(&idem_key) {
+                        if *holder != id {
+                            if let Some(other) = jobs.get(holder) {
+                                if matches!(
+                                    other.state,
+                                    JobState::Pending
+                                        | JobState::Running
+                                        | JobState::Retrying { .. }
+                                ) {
+                                    return Err(Error::RequeueKeyHeld);
+                                }
+                            }
+                        }
+                    }
+                    // This job holds the key again.
+                    idempotency.insert(idem_key, id);
+                }
+                let Some(job) = jobs.get_mut(&id) else {
+                    return Err(Error::Other("Job not found".to_string()));
+                };
+                job.state = JobState::Pending;
+                job.attempt = 0;
+                job.not_before = now;
+                job.claim = None;
+                (job.clone(), job.queue.clone())
+            };
+            if let Some(sink) = &self.metrics {
+                sink.requeued(queue_label(&queue));
+            }
+            Ok(requeued)
         })
     }
 
@@ -894,5 +1032,502 @@ mod tests {
 
         let retrieved2 = store.intake_position().await.unwrap();
         assert_eq!(retrieved2, pos2);
+    }
+
+    // ---- requeue -------------------------------------------------------------------------
+
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const Q: &str = "default";
+
+    async fn put(store: &InMemoryJobStore, key: Option<&str>, now: OffsetDateTime) -> JobId {
+        let mut job = NewJob::new(
+            "app:test".to_string(),
+            serde_json::json!({"n": 1}),
+            Q.to_string(),
+            SiteId::new("test-site").unwrap(),
+            now,
+        );
+        if let Some(key) = key {
+            job = job.with_idempotency_key(key.to_string());
+        }
+        match store.insert_if_new(job).await.unwrap() {
+            InsertResult::Inserted(id) => id,
+            other => panic!("not inserted: {other:?}"),
+        }
+    }
+
+    async fn claim_one(store: &InMemoryJobStore, now: OffsetDateTime) -> Claim {
+        let mut claimed = store
+            .claim(
+                &[Q.to_string()],
+                "worker-1",
+                Duration::from_secs(30),
+                now,
+                1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(claimed.len(), 1, "one job should be claimable");
+        claimed.remove(0).claim
+    }
+
+    async fn make_dead(store: &InMemoryJobStore, key: Option<&str>, now: OffsetDateTime) -> JobId {
+        let id = put(store, key, now).await;
+        let claim = claim_one(store, now).await;
+        store
+            .complete(&claim, JobState::Dead, Some("boom".to_string()))
+            .await
+            .unwrap();
+        id
+    }
+
+    #[tokio::test]
+    async fn requeue_moves_a_dead_job_to_pending_and_keeps_the_error() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store, None, now).await;
+        let later = now + time::Duration::seconds(60);
+
+        let job = store.requeue(id, later).await.unwrap();
+        assert_eq!(job.state, JobState::Pending);
+        assert_eq!(job.attempt, 0);
+        assert_eq!(job.not_before, later);
+        assert!(job.claim.is_none());
+        assert_eq!(job.last_error.as_deref(), Some("boom"), "the history stays");
+        assert_eq!(store.get(id).await.unwrap().unwrap(), job);
+    }
+
+    #[tokio::test]
+    async fn requeue_moves_a_retrying_job_to_pending() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let id = put(&store, None, now).await;
+        let claim = claim_one(&store, now).await;
+        store
+            .complete(
+                &claim,
+                JobState::Retrying {
+                    at: now + time::Duration::hours(1),
+                },
+                Some("flaky".to_string()),
+            )
+            .await
+            .unwrap();
+
+        let job = store.requeue(id, now).await.unwrap();
+        assert_eq!(job.state, JobState::Pending);
+        assert_eq!(job.not_before, now);
+        assert_eq!(job.last_error.as_deref(), Some("flaky"));
+    }
+
+    #[tokio::test]
+    async fn every_other_state_is_refused_and_unchanged() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+
+        let pending = put(&store, None, now).await;
+        let before = store.get(pending).await.unwrap().unwrap();
+        assert_eq!(
+            store.requeue(pending, now).await,
+            Err(Error::RequeueRefused)
+        );
+        assert_eq!(store.get(pending).await.unwrap().unwrap(), before);
+
+        // Running (a live claim).
+        let claim = claim_one(&store, now).await;
+        let before = store.get(pending).await.unwrap().unwrap();
+        assert_eq!(before.state, JobState::Running);
+        assert_eq!(
+            store.requeue(pending, now).await,
+            Err(Error::RequeueRefused)
+        );
+        assert_eq!(store.get(pending).await.unwrap().unwrap(), before);
+
+        // Succeeded.
+        store
+            .complete(&claim, JobState::Succeeded, None)
+            .await
+            .unwrap();
+        let before = store.get(pending).await.unwrap().unwrap();
+        assert_eq!(
+            store.requeue(pending, now).await,
+            Err(Error::RequeueRefused)
+        );
+        assert_eq!(store.get(pending).await.unwrap().unwrap(), before);
+
+        // Cancelled.
+        let cancelled = put(&store, None, now).await;
+        store.cancel(cancelled).await.unwrap();
+        let before = store.get(cancelled).await.unwrap().unwrap();
+        assert_eq!(
+            store.requeue(cancelled, now).await,
+            Err(Error::RequeueRefused)
+        );
+        assert_eq!(store.get(cancelled).await.unwrap().unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn requeue_of_an_unknown_id_is_the_not_found_error() {
+        let store = InMemoryJobStore::new();
+        let err = store
+            .requeue(JobId(4242), OffsetDateTime::now_utc())
+            .await
+            .unwrap_err();
+        assert_eq!(err, Error::Other("Job not found".to_string()));
+    }
+
+    #[tokio::test]
+    async fn a_second_requeue_of_the_same_dead_job_is_refused() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store, None, now).await;
+        store.requeue(id, now).await.unwrap();
+        assert_eq!(store.requeue(id, now).await, Err(Error::RequeueRefused));
+    }
+
+    #[tokio::test]
+    async fn a_requeued_job_is_claimable_and_gets_its_attempts_back() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store, None, now).await;
+        // A dead job that used its attempts: the worker's bookkeeping says so.
+        {
+            let mut jobs = store.jobs.lock().unwrap();
+            jobs.get_mut(&id).unwrap().attempt = 3;
+        }
+        let job = store.requeue(id, now).await.unwrap();
+        assert_eq!(job.attempt, 0);
+        assert_eq!(job.max_attempts, 3);
+
+        let claimed = store
+            .claim(
+                &[Q.to_string()],
+                "worker-2",
+                Duration::from_secs(30),
+                now,
+                1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].job.id, id);
+        assert!(claimed[0].job.attempt < claimed[0].job.max_attempts);
+    }
+
+    #[tokio::test]
+    async fn requeue_refuses_when_another_live_job_holds_the_key() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let dead = make_dead(&store, Some("k1"), now).await;
+        // The key is free while the first job is dead, so a second job takes it.
+        let holder = put(&store, Some("k1"), now).await;
+        assert_ne!(holder, dead);
+
+        let before = store.get(dead).await.unwrap().unwrap();
+        assert_eq!(store.requeue(dead, now).await, Err(Error::RequeueKeyHeld));
+        assert_eq!(store.get(dead).await.unwrap().unwrap(), before);
+
+        // Once the holder is done the key is free again and the requeue goes through.
+        store.cancel(holder).await.unwrap();
+        let job = store.requeue(dead, now).await.unwrap();
+        assert_eq!(job.state, JobState::Pending);
+        assert_eq!(job.idempotency_key.as_deref(), Some("k1"));
+        // And the requeued job now owns the key: a new insert is a duplicate of it.
+        let again = NewJob::new(
+            "app:test".to_string(),
+            serde_json::json!({}),
+            Q.to_string(),
+            SiteId::new("test-site").unwrap(),
+            now,
+        )
+        .with_idempotency_key("k1".to_string());
+        assert_eq!(
+            store.insert_if_new(again).await.unwrap(),
+            InsertResult::Duplicate(dead)
+        );
+    }
+
+    #[tokio::test]
+    async fn two_concurrent_requeues_of_one_dead_job_have_one_winner() {
+        let store = Arc::new(InMemoryJobStore::new());
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store, None, now).await;
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let store = store.clone();
+            tasks.push(tokio::spawn(async move { store.requeue(id, now).await }));
+        }
+        let mut won = 0;
+        for t in tasks {
+            match t.await.unwrap() {
+                Ok(_) => won += 1,
+                Err(e) => assert_eq!(e, Error::RequeueRefused),
+            }
+        }
+        assert_eq!(won, 1);
+    }
+
+    #[derive(Default)]
+    struct CountingSink {
+        requeued: AtomicU64,
+        last: Mutex<Option<&'static str>>,
+    }
+
+    impl JobMetricsSink for CountingSink {
+        fn queue_depth(&self, _queue: &'static str, _depth: u64) {}
+        fn oldest_age_seconds(&self, _queue: &'static str, _seconds: u64) {}
+        fn requeued(&self, queue: &'static str) {
+            self.requeued.fetch_add(1, Ordering::SeqCst);
+            *self.last.lock().unwrap() = Some(queue);
+        }
+    }
+
+    #[tokio::test]
+    async fn only_a_successful_requeue_is_counted() {
+        let sink = Arc::new(CountingSink::default());
+        let store = InMemoryJobStore::new().with_metrics(sink.clone());
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store, None, now).await;
+        assert!(store.requeue(JobId(999), now).await.is_err());
+        assert_eq!(sink.requeued.load(Ordering::SeqCst), 0);
+        store.requeue(id, now).await.unwrap();
+        assert!(store.requeue(id, now).await.is_err());
+        assert_eq!(sink.requeued.load(Ordering::SeqCst), 1);
+        assert_eq!(*sink.last.lock().unwrap(), Some("default"));
+    }
+
+    /// A store written before `requeue` existed: it implements the old operations only (by
+    /// delegating) and so gets the trait's default body.
+    struct Minimal(InMemoryJobStore);
+
+    type Fut<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send + 'a>>;
+
+    impl JobStore for Minimal {
+        fn insert_if_new(&self, job: NewJob) -> Fut<'_, InsertResult> {
+            self.0.insert_if_new(job)
+        }
+        fn claim(
+            &self,
+            queues: &[String],
+            worker_id: &str,
+            ttl: Duration,
+            now: OffsetDateTime,
+            limit: u32,
+        ) -> Fut<'_, Vec<ClaimedJob>> {
+            self.0.claim(queues, worker_id, ttl, now, limit)
+        }
+        fn heartbeat(&self, claim: &Claim, ttl: Duration, now: OffsetDateTime) -> Fut<'_, ()> {
+            self.0.heartbeat(claim, ttl, now)
+        }
+        fn complete(
+            &self,
+            claim: &Claim,
+            new_state: JobState,
+            last_error: Option<String>,
+        ) -> Fut<'_, ()> {
+            self.0.complete(claim, new_state, last_error)
+        }
+        fn reap_expired(&self, now: OffsetDateTime) -> Fut<'_, Vec<JobId>> {
+            self.0.reap_expired(now)
+        }
+        fn cancel(&self, id: JobId) -> Fut<'_, ()> {
+            self.0.cancel(id)
+        }
+        fn cancel_if_pending(&self, id: JobId) -> Fut<'_, CancelOutcome> {
+            self.0.cancel_if_pending(id)
+        }
+        fn merge_context(
+            &self,
+            id: JobId,
+            claim: &Claim,
+            patch: serde_json::Map<String, serde_json::Value>,
+        ) -> Fut<'_, serde_json::Value> {
+            self.0.merge_context(id, claim, patch)
+        }
+        fn get(&self, id: JobId) -> Fut<'_, Option<Job>> {
+            self.0.get(id)
+        }
+        fn list(&self, filter: JobFilter) -> Fut<'_, Vec<Job>> {
+            self.0.list(filter)
+        }
+        fn intake_position(&self) -> Fut<'_, FeedPosition> {
+            self.0.intake_position()
+        }
+        fn set_intake_position(&self, position: FeedPosition) -> Fut<'_, ()> {
+            self.0.set_intake_position(position)
+        }
+    }
+
+    #[tokio::test]
+    async fn the_default_body_answers_unsupported_and_changes_nothing() {
+        let store = Minimal(InMemoryJobStore::new());
+        let now = OffsetDateTime::now_utc();
+        let id = make_dead(&store.0, None, now).await;
+        let before = store.get(id).await.unwrap().unwrap();
+        let err = store.requeue(id, now).await.unwrap_err();
+        assert_eq!(err, Error::Other("job.requeue_unsupported".to_string()));
+        assert_eq!(store.get(id).await.unwrap().unwrap(), before);
+    }
+
+    // ---- cancel_if_pending ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn cancel_if_pending_cancels_a_pending_job_and_an_unclaimed_retrying_one() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+        let pending = put(&store, None, now).await;
+        assert_eq!(
+            store.cancel_if_pending(pending).await.unwrap(),
+            CancelOutcome::Cancelled
+        );
+        assert_eq!(
+            store.get(pending).await.unwrap().unwrap().state,
+            JobState::Cancelled
+        );
+
+        let retrying = put(&store, None, now).await;
+        let claim = claim_one(&store, now).await;
+        store
+            .complete(
+                &claim,
+                JobState::Retrying {
+                    at: now + time::Duration::hours(1),
+                },
+                Some("flaky".to_string()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            store.cancel_if_pending(retrying).await.unwrap(),
+            CancelOutcome::Cancelled
+        );
+        let stored = store.get(retrying).await.unwrap().unwrap();
+        assert_eq!(stored.state, JobState::Cancelled);
+        assert_eq!(stored.last_error.as_deref(), Some("flaky"), "history stays");
+    }
+
+    #[tokio::test]
+    async fn cancel_if_pending_never_touches_a_claimed_or_finished_job() {
+        let store = InMemoryJobStore::new();
+        let now = OffsetDateTime::now_utc();
+
+        let running = put(&store, None, now).await;
+        let claim = claim_one(&store, now).await;
+        let before = store.get(running).await.unwrap().unwrap();
+        assert_eq!(
+            store.cancel_if_pending(running).await.unwrap(),
+            CancelOutcome::NotCancellable
+        );
+        assert_eq!(store.get(running).await.unwrap().unwrap(), before);
+        // The worker is not disturbed: it still completes the job under its claim.
+        store
+            .complete(&claim, JobState::Succeeded, None)
+            .await
+            .unwrap();
+
+        let dead = make_dead(&store, None, now).await;
+        let cancelled = put(&store, None, now).await;
+        store.cancel(cancelled).await.unwrap();
+        for (name, id) in [
+            ("succeeded", running),
+            ("dead", dead),
+            ("cancelled", cancelled),
+        ] {
+            let before = store.get(id).await.unwrap().unwrap();
+            assert_eq!(
+                store.cancel_if_pending(id).await.unwrap(),
+                CancelOutcome::NotCancellable,
+                "{name}"
+            );
+            assert_eq!(store.get(id).await.unwrap().unwrap(), before, "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_if_pending_on_an_unknown_id_is_not_found_and_not_an_error() {
+        let store = InMemoryJobStore::new();
+        assert_eq!(
+            store.cancel_if_pending(JobId(4242)).await.unwrap(),
+            CancelOutcome::NotFound
+        );
+        // `cancel` keeps its own answer for an unknown id.
+        assert_eq!(
+            store.cancel(JobId(4242)).await,
+            Err(Error::Other("Job not found".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_if_pending_racing_a_claim_has_exactly_one_winner() {
+        for _ in 0..16 {
+            let store = Arc::new(InMemoryJobStore::new());
+            let now = OffsetDateTime::now_utc();
+            let id = put(&store, None, now).await;
+            let canceller = {
+                let store = store.clone();
+                tokio::spawn(async move { store.cancel_if_pending(id).await })
+            };
+            let claimer = {
+                let store = store.clone();
+                tokio::spawn(async move {
+                    store
+                        .claim(
+                            &[Q.to_string()],
+                            "worker-1",
+                            Duration::from_secs(30),
+                            now,
+                            1,
+                        )
+                        .await
+                })
+            };
+            let outcome = canceller.await.unwrap().unwrap();
+            let claimed = claimer.await.unwrap().unwrap();
+            let stored = store.get(id).await.unwrap().unwrap();
+            match (outcome, claimed.len()) {
+                (CancelOutcome::Cancelled, 0) => {
+                    assert_eq!(stored.state, JobState::Cancelled);
+                    assert!(stored.claim.is_none());
+                }
+                (CancelOutcome::NotCancellable, 1) => {
+                    assert_eq!(stored.state, JobState::Running);
+                    assert!(stored.claim.is_some());
+                }
+                other => panic!("both or neither won: {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn eight_concurrent_cancel_if_pending_calls_have_one_winner() {
+        let store = Arc::new(InMemoryJobStore::new());
+        let id = put(&store, None, OffsetDateTime::now_utc()).await;
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let store = store.clone();
+            tasks.push(tokio::spawn(
+                async move { store.cancel_if_pending(id).await },
+            ));
+        }
+        let mut won = 0;
+        for t in tasks {
+            match t.await.unwrap().unwrap() {
+                CancelOutcome::Cancelled => won += 1,
+                CancelOutcome::NotCancellable => {}
+                CancelOutcome::NotFound => panic!("the job exists"),
+            }
+        }
+        assert_eq!(won, 1);
+    }
+
+    #[tokio::test]
+    async fn a_store_that_delegates_cancel_if_pending_gets_the_real_answer() {
+        let store = Minimal(InMemoryJobStore::new());
+        let id = put(&store.0, None, OffsetDateTime::now_utc()).await;
+        assert_eq!(
+            store.cancel_if_pending(id).await.unwrap(),
+            CancelOutcome::Cancelled
+        );
     }
 }

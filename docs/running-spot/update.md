@@ -111,6 +111,22 @@ Without `--apply` it prints the plan and changes nothing. With it, inside the wi
    (`systemctl` on Linux, the Windows Service Control Manager on Windows) and wait for readiness.
 6. **Roll back automatically** if any step fails: the previous version is put back and restarted.
 
+### How durability is achieved
+
+A pointer, the journal and every rename survive a power cut because the updater flushes the file
+and then the directory that holds it, on every platform, and treats a refused flush as a failed
+step (`updater.io`, naming the directory), never as a success.
+
+| Platform | File | Directory | Free space |
+| --- | --- | --- | --- |
+| Linux and macOS | `fsync` of the temporary file, then rename | `fsync` of a directory handle | `df -P -k` of the volume |
+| Windows | `FlushFileBuffers` of the temporary file, then rename over the old file (replace) | `FlushFileBuffers` of a directory handle opened with backup semantics and write access | `GetDiskFreeSpaceExW` (bytes available to the service account) |
+
+On Windows the service account needs write access to the install and data folders (it has it
+under `%ProgramFiles%\Spotledger` and `%ProgramData%\Spotledger`). A volume that cannot flush a
+directory (some network shares) stops the update with `updater.io` before anything is switched;
+install on a local NTFS volume. There is no "best effort" mode.
+
 A power cut at any point is resumed by running `spot update apply --apply` again: the journal ends
 in exactly one of the old version running and intact, or the new version running and committed.
 

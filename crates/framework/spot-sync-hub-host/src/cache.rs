@@ -42,6 +42,7 @@ struct Window {
 /// The windows of every destination, readable from any thread without blocking on I/O.
 pub struct ServeCache {
     windows: Mutex<BTreeMap<String, Window>>,
+    heads: Mutex<BTreeMap<String, u64>>,
     acks: mpsc::UnboundedSender<AckNote>,
 }
 
@@ -53,6 +54,7 @@ impl ServeCache {
         (
             Arc::new(Self {
                 windows: Mutex::new(BTreeMap::new()),
+                heads: Mutex::new(BTreeMap::new()),
                 acks,
             }),
             receiver,
@@ -83,6 +85,31 @@ impl ServeCache {
                 false
             }
         });
+    }
+
+    /// Records `dest`'s queue head: the newest serve sequence the relay ever assigned for it
+    /// (the whole queue, not only the published window). The driver calls it once per round when
+    /// its core can say ([`crate::driver::HubCore::head_serve`]).
+    pub fn publish_head(&self, dest: &str, head: u64) {
+        self.heads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(dest.to_owned(), head);
+    }
+
+    /// The queue head of `dest` as last published, or `None` when the relay core does not report
+    /// one (the caller then falls back to the window: front plus [`depth`](Self::depth)).
+    ///
+    /// The head is the position an edge that has applied everything is at, so the number of items
+    /// still owed to an edge that acknowledged through `n` is `head - n`, however deep the queue
+    /// is beyond the published window.
+    #[must_use]
+    pub fn head(&self, dest: &str) -> Option<u64> {
+        self.heads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(dest)
+            .copied()
     }
 
     /// The destinations that have a window.

@@ -140,6 +140,8 @@ impl SsoSecrets for ConfiguredSecrets {
 mod tests {
     use super::*;
 
+    // POSIX absolute paths in the fixtures: on Windows they are not absolute.
+    #[cfg(unix)]
     #[test]
     fn names_and_references_are_closed_grammars() {
         assert!(name_ok("okta-prod.client_secret"));

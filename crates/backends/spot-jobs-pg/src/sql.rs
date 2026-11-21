@@ -102,6 +102,33 @@ pub const REAP: &str = "UPDATE spot_job SET
          LIMIT $3)
      RETURNING id";
 
+/// Requeue: `$1` job id, `$2` the caller's clock. One statement, so the state is checked in the
+/// same step as the write: only a `dead` or `retrying` job without a claim becomes `pending` again
+/// (attempt reset, never due later than the caller's clock or the database's, `finished_at` and
+/// the claim cleared, `last_error` kept). A concurrent claim, reap or second requeue finds a
+/// different state and this updates no row. May raise a unique violation on the idempotency index
+/// (another live job holds the key).
+pub const REQUEUE: &str = concat!(
+    "UPDATE spot_job SET
+         state = 'pending', attempt = 0,
+         not_before = LEAST(now(), $2::timestamptz),
+         claim_token = NULL, claim_worker = NULL, lease_expires_at = NULL,
+         finished_at = NULL
+     WHERE id = $1 AND state IN ('dead', 'retrying') AND claim_token IS NULL
+     RETURNING ",
+    job_columns!()
+);
+
+/// Cancel only what nobody holds: `$1` job id. One statement, so the state and the claim are
+/// checked in the same step as the write: a `pending` or `retrying` job without a claim becomes
+/// `cancelled` (finished now, claim columns cleared). A worker that claimed the row a moment
+/// earlier left it `running`, so this updates no row and the running job is untouched. There is
+/// no read before it.
+pub const CANCEL_IF_PENDING: &str = "UPDATE spot_job SET
+         state = 'cancelled', finished_at = now(),
+         claim_token = NULL, claim_worker = NULL, lease_expires_at = NULL
+     WHERE id = $1 AND state IN ('pending', 'retrying') AND claim_token IS NULL";
+
 /// Retention: `$1` states, `$2` age milliseconds, `$3` batch size.
 pub const PURGE: &str = "DELETE FROM spot_job WHERE id IN (
          SELECT id FROM spot_job

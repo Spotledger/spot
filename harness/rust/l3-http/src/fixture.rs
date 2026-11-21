@@ -1020,6 +1020,22 @@ impl Fixture {
         Ok(client)
     }
 
+    /// The Administrator signed in on a fresh session that has stepped up through the real route
+    /// (a fresh sign-in is not a step-up). The operations that need a recent step-up answer
+    /// `403 auth.step_up_required` to [`Fixture::admin`].
+    pub async fn admin_step_up(&self) -> Result<Client, Failure> {
+        let client = self.client.sign_in("administrator", ADMIN_PASSWORD).await?;
+        let reply = client.step_up(ADMIN_PASSWORD).await?;
+        reply.expect(200)?;
+        if !reply.data()["step_up_until"].is_string() {
+            return Err(failure!(
+                "the step-up answered no `step_up_until`: {}",
+                reply.redacted_text()
+            ));
+        }
+        Ok(client)
+    }
+
     /// Creates a user with a password the fixture generated (never printed, never logged) and
     /// gives it `role` (one of the fixture's roles, or a platform reference role by name). The
     /// user can sign in with [`User::password`] straight away.
@@ -1117,6 +1133,116 @@ impl Fixture {
         tokio::time::sleep(Duration::from_millis(750)).await;
         Ok(())
     }
+}
+
+/// The LLM tenant an embedding site configures (the name the egress policy and
+/// `[services.retrieval] provider` use for it).
+pub const EMBED_TENANT: &str = "l3-embed";
+
+/// The index policy of the retrieval cases: Projects by title (readable by a Viewer) and Roles by
+/// name (readable by the administrators only), so one query can match a document a restricted
+/// user may read and one they may not.
+pub const RETRIEVAL_INDEX_POLICY: &str =
+    "[doctypes.project]\nfields = [\"title\"]\n\n[doctypes.role]\nfields = [\"role_name\"]\n";
+
+impl Fixture {
+    /// [`Fixture::start_secondary`] on a site that embeds text, for the cases that index and
+    /// retrieve by meaning (an opt-in: no other fixture changes).
+    ///
+    /// Before the host starts it writes, into `common.toml` and a policy file in the fixture
+    /// root:
+    ///
+    /// * an LLM tenant ([`EMBED_TENANT`], kind `ollama`, which needs no key and embeds through the
+    ///   same OpenAI-compatible provider as `openai`) whose endpoint is `fake` and whose
+    ///   `embedding_model` and `embedding_dimensions` (the fake's width) are set, and
+    ///   `[services.llm] embedding_tenant` naming it, so agent memory finds the same tenant;
+    /// * an egress policy entry that lets that tenant reach the fake's loopback address and port
+    ///   for the `llm` purpose and nothing else (the product refuses a loopback endpoint without
+    ///   the operator's `allow_private`; this is that operator setting);
+    /// * `[services.retrieval]` on for the site with the tenant as its provider, the fake's width
+    ///   and `index_policy` (see [`RETRIEVAL_INDEX_POLICY`]), polling every 100 ms.
+    ///
+    /// No key is stored or printed: an `ollama` tenant has none. Retrieval needs the `vector`
+    /// extension in the PostgreSQL server; without it the site reports `degraded: retrieval
+    /// (retrieval.pgvector_missing ...)` and `retrieve` is never listed.
+    pub async fn start_secondary_with_embedding(
+        fake: &crate::embed_fake::EmbedFake,
+        index_policy: &str,
+    ) -> Option<Fixture> {
+        let port = fake.port();
+        let policy = index_policy.to_owned();
+        let prepare: Prepare = Box::new(move |root, site| {
+            Box::pin(async move { embedding_tables(root, site, port, &policy) })
+        });
+        Self::start_secondary_prepared(prepare).await
+    }
+}
+
+/// The egress policy that lets [`EMBED_TENANT`] reach one loopback port for the `llm` purpose.
+fn embedding_egress_policy(port: u16) -> String {
+    format!(
+        r#"default = "deny_non_public"
+dangerous_ports = [22, 25, 3306, 5432, 6379, 9200, 11211, 2375, 2379, 10250]
+
+[tenants.{EMBED_TENANT}]
+connect_timeout_secs = 10
+tls_timeout_secs = 10
+total_timeout_secs = 30
+max_response_bytes = 104857600
+max_redirects = 0
+
+[[tenants.{EMBED_TENANT}.allow]]
+scheme = "http"
+host = "127.0.0.1"
+ports = [{port}]
+purpose = "llm"
+allow_private = ["127.0.0.1"]
+"#
+    )
+}
+
+/// The `common.toml` tables of an embedding site, after writing its egress policy file.
+fn embedding_tables(
+    root: &Path,
+    site: &str,
+    port: u16,
+    index_policy: &str,
+) -> Result<String, String> {
+    let policy_file = root.join("egress-policy.toml");
+    std::fs::write(&policy_file, embedding_egress_policy(port))
+        .map_err(|e| format!("cannot write the egress policy: {e}"))?;
+    if index_policy.contains("'''") {
+        return Err("the index policy may not hold three single quotes".to_owned());
+    }
+    let dimensions = crate::embed_fake::DIMENSIONS;
+    Ok(format!(
+        r#"[services.egress]
+policy_file = {:?}
+
+[services.llm]
+embedding_tenant = "{EMBED_TENANT}"
+
+[[services.llm.tenants]]
+tenant = "{EMBED_TENANT}"
+kind = "ollama"
+endpoint = "http://127.0.0.1:{port}"
+model = "l3-unused-chat-model"
+allowed_hosts = ["127.0.0.1"]
+embedding_model = "l3-fake-embedding"
+embedding_dimensions = {dimensions}
+
+[services.retrieval]
+enabled = true
+tenants = [{site:?}]
+provider = "{EMBED_TENANT}"
+dimensions = {dimensions}
+interval_ms = 100
+index_policy = '''
+{index_policy}
+'''
+"#,
+        policy_file.display().to_string(),
+    ))
 }
 
 fn ensure_name(name: &str) -> Result<(), Failure> {

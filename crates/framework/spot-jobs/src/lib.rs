@@ -46,7 +46,8 @@ pub use backoff::Backoff;
 pub use error::{Error, Result};
 pub use intake::{enqueue_scheduled, process_batch, IntakeReport, JobEnqueued, RejectedEvent};
 pub use model::{
-    merge_context_value, Claim, Job, JobId, JobState, NewJob, MAX_CONTEXT_BYTES, MAX_CONTEXT_KEYS,
+    merge_context_value, CancelOutcome, Claim, Job, JobId, JobState, NewJob, MAX_CONTEXT_BYTES,
+    MAX_CONTEXT_KEYS,
 };
 pub use policy::{QueueName, QueuePolicy};
 pub use store::{InMemoryJobStore, JobStore};

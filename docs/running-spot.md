@@ -255,6 +255,8 @@ Each hosted service has its own page. A new service adds one line here and one p
 `running-spot/`; nothing else in this file changes.
 
 - [Files](running-spot/files.md)
+- [Step-up](running-spot/step_up.md): re-authenticating for sensitive operations (`POST /api/v1/auth/step-up`)
+- [Field reveal](running-spot/field_reveal.md): reading one masked or protected field with a reason (`POST /api/v1/resource/{doctype}/{id}/reveal`)
 - [File uploads](running-spot/file-uploads.md)
 - [Durable jobs and coordination](running-spot/jobs.md)
 - [Realtime](running-spot/realtime.md)
@@ -267,6 +269,7 @@ Each hosted service has its own page. A new service adds one line here and one p
 - [`spot llm`](running-spot/llm-admin.md): configure a tenant's model provider, enter its key, usage, sends, connection test
 - [Remedies](running-spot/remedies.md)
 - [World access (what a remedy runs on)](running-spot/world-access.md)
+- [The document lifecycle port](running-spot/document_lifecycle.md): view, cancel, amend, recompute and repost a document as the remedy's actor
 - [The fix pipeline](running-spot/fix-pipeline.md)
 - [Retrieval](running-spot/retrieval.md)
 - [Agent memory](running-spot/agent-memory.md)

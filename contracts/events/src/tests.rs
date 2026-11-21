@@ -765,6 +765,80 @@ fn the_field_access_trace_names_the_field_and_never_the_value() {
     assert!(identity::validate("identity_field_accessed", &with_value).is_err());
 }
 
+#[test]
+fn a_reveal_reason_is_optional_bounded_and_only_on_a_reveal() {
+    let reveal = json!({
+        "user": id(7).to_string(), "doctype": "Employee", "group": "compensation",
+        "field": "salary", "right": "reveal", "authorised": true, "channel": "api"
+    });
+    // Without a reason (an old producer's payload), and with an explicit null: still valid.
+    assert!(identity::validate("identity_field_accessed", &reveal).is_ok());
+    let mut null = reveal.clone();
+    null["reason"] = json!(null);
+    assert!(identity::validate("identity_field_accessed", &null).is_ok());
+    // With a reason, on a reveal and on a bulk reveal; 1 and 500 characters (scalar values) pass.
+    for right in ["reveal", "reveal_bulk"] {
+        for reason in [
+            "Customer asked us to confirm the account on ticket 4521.".to_owned(),
+            "x".to_owned(),
+            "x".repeat(identity::MAX_REVEAL_REASON_CHARS),
+            "é".repeat(identity::MAX_REVEAL_REASON_CHARS),
+        ] {
+            let mut data = reveal.clone();
+            data["right"] = json!(right);
+            data["reason"] = json!(reason);
+            assert_eq!(
+                identity::validate("identity_field_accessed", &data),
+                Ok(()),
+                "{right}"
+            );
+        }
+    }
+    // 0, 501 and 5,000 characters, a non-text value and an object are refused.
+    for bad in [
+        json!(""),
+        json!("x".repeat(identity::MAX_REVEAL_REASON_CHARS + 1)),
+        json!("é".repeat(identity::MAX_REVEAL_REASON_CHARS + 1)),
+        json!("x".repeat(5000)),
+        json!(7),
+        json!(true),
+        json!({"text": "why"}),
+        json!(["why"]),
+    ] {
+        let mut data = reveal.clone();
+        data["reason"] = bad.clone();
+        assert!(
+            identity::validate("identity_field_accessed", &data).is_err(),
+            "{bad}"
+        );
+    }
+    // A `read` trace has no reason (a payload with both is refused), and neither has an unknown right.
+    let mut read = reveal.clone();
+    read["right"] = json!("read");
+    read["reason"] = json!("why");
+    assert!(identity::validate("identity_field_accessed", &read).is_err());
+    read["right"] = json!("a_future_right");
+    assert!(identity::validate("identity_field_accessed", &read).is_err());
+    // The longer bound is for this one field of this one topic: another reason stays at 256.
+    let user = id(7).to_string();
+    let long = "x".repeat(identity::MAX_STRING_CHARS + 1);
+    assert!(
+        identity::validate(
+            "identity_user_enabled",
+            &json!({"user": user, "reason": long})
+        )
+        .is_err()
+    );
+    let mut elsewhere = reveal.clone();
+    elsewhere["field"] = json!(long);
+    assert!(identity::validate("identity_field_accessed", &elsewhere).is_err());
+    // The reason is not the value: the value key stays refused whatever the reason says.
+    let mut with_value = reveal.clone();
+    with_value["reason"] = json!("why");
+    with_value["value"] = json!("120000");
+    assert!(identity::validate("identity_field_accessed", &with_value).is_err());
+}
+
 // --- the actor and impersonation -----------------------------------------------------------
 
 #[test]
@@ -861,6 +935,7 @@ fn every_identity_topic_has_a_valid_example_and_no_stray_files() {
         files.insert(entry.must().file_name().to_string_lossy().into_owned());
     }
     let mut want = BTreeSet::new();
+    let mut variants = BTreeSet::new();
     for s in identity::schemas() {
         let name = format!("{}.json", s.topic);
         let text = std::fs::read_to_string(dir.join(&name)).must();
@@ -871,8 +946,33 @@ fn every_identity_topic_has_a_valid_example_and_no_stray_files() {
             "{name}"
         );
         want.insert(name);
+        // A variant example of a topic is `<topic>.<variant>.json` (0.7.9: a reveal with a reason);
+        // it must validate too. Any other file is stray.
+        let prefix = format!("{}.", s.topic);
+        for file in &files {
+            if file.starts_with(&prefix)
+                && file.ends_with(".json")
+                && *file != format!("{}.json", s.topic)
+            {
+                let text = std::fs::read_to_string(dir.join(file)).must();
+                let data: serde_json::Value = serde_json::from_str(&text).must();
+                assert_eq!(
+                    identity::validate(s.topic.as_str(), &data),
+                    Ok(()),
+                    "{file}"
+                );
+                variants.insert(file.clone());
+            }
+        }
     }
-    assert_eq!(files, want);
+    assert_eq!(
+        files,
+        want.union(&variants).cloned().collect::<BTreeSet<_>>()
+    );
+    assert!(
+        variants.contains("identity_field_accessed.reveal.json"),
+        "the reveal example with a reason"
+    );
 }
 
 #[test]

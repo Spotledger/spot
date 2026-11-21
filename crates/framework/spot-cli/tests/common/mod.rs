@@ -150,6 +150,9 @@ impl Env {
         let task = root.0.join("sample/doctypes/task.toml");
         let text = std::fs::read_to_string(&task)
             .unwrap()
+            // A Windows checkout may have `\r\n` line endings, where a multi-line pattern below
+            // would match nothing and the patch would silently not apply.
+            .replace("\r\n", "\n")
             .replace(
                 "title_field = \"subject\"",
                 "title_field = \"subject\"\n\n[[protection_groups]]\nname = \"confidential\"\nlabel = \"Confidential\"\ntrace = true",

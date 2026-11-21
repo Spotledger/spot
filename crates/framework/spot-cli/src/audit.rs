@@ -16,6 +16,11 @@
 //! * [`AuditingEvents`] (the sign-in service's event sink) and [`AuditedThrottleStore`] (which
 //!   sees lockout start and end, a transition the service itself does not announce).
 //!
+//! A step-up (`POST /api/v1/auth/step-up`, WP-IAM-12.T9) is recorded by
+//! `SiteAuth::record_step_up` through [`step_up_record`]: `step_up_succeeded` (written with
+//! `Recorder::required` before the session's marker, so an unauditable step-up is refused) and
+//! `step_up_failed` with a [`StepUpFailure`] reason class (written with `Recorder::failure`).
+//!
 //! # Failure behaviour
 //!
 //! * A *successful* sign-in whose audit write fails (after one retry) is **refused** and the
@@ -62,8 +67,9 @@ pub struct AuditRecord {
     pub site: String,
     /// What happened: `sign_in_succeeded`, `sign_in_failed`, `sign_in_attempt`, `sign_in_refused`,
     /// `session_started`, `session_revoked`, `password_changed`, `password_change_failed` (reason `password_change_wrong_current`, `password_change_locked` or the refusal code),
-    /// `lockout_started`, `lockout_ended`, `api_key_rejected`, `failures_suppressed` or
-    /// `identity_<topic>`.
+    /// `lockout_started`, `lockout_ended`, `api_key_rejected`, `step_up_succeeded`,
+    /// `step_up_failed` (reason `bad_credentials`, `totp_required`, `totp_invalid`, `throttled`,
+    /// `not_a_person` or `marker_not_written`), `failures_suppressed` or `identity_<topic>`.
     pub kind: String,
     /// The user's record id, when the event is about a known user.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,6 +112,89 @@ pub struct AuditRecord {
     /// `LOGNAME`; a sign-in name is never put here and an OS account is never put in `attempted`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub os_user: Option<String>,
+}
+
+/// Why a step-up was refused, as the reason class of a `step_up_failed` record. Closed: it carries
+/// no value, so no credential can reach the audit through it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepUpFailure {
+    /// The password was wrong.
+    BadCredentials,
+    /// The user has a second factor and sent no code.
+    TotpRequired,
+    /// The code was wrong, replayed or spent.
+    TotpInvalid,
+    /// The attempt was refused by the sign-in throttle before the credential was looked at.
+    Throttled,
+    /// The caller is not a person's session (an API key, a restricted session, another audience).
+    NotAPerson,
+    /// The proof held and its success was recorded, but the marker could not be written, so the
+    /// step-up did not take effect.
+    MarkerNotWritten,
+}
+
+impl StepUpFailure {
+    /// The reason class written into the record.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::BadCredentials => "bad_credentials",
+            Self::TotpRequired => "totp_required",
+            Self::TotpInvalid => "totp_invalid",
+            Self::Throttled => "throttled",
+            Self::NotAPerson => "not_a_person",
+            Self::MarkerNotWritten => "marker_not_written",
+        }
+    }
+}
+
+/// The outcome of a step-up attempt, as the identity audit records it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepUpOutcome {
+    /// The proof held (the record that must stand before the marker is written).
+    Succeeded,
+    /// The step-up was refused, for the given class.
+    Failed(StepUpFailure),
+}
+
+/// The audit kind of a step-up whose proof held.
+pub const STEP_UP_SUCCEEDED: &str = "step_up_succeeded";
+/// The audit kind of a refused step-up.
+pub const STEP_UP_FAILED: &str = "step_up_failed";
+
+/// The record of one step-up attempt: the user, the session id, the salted source digest, the
+/// channel `api` and, for a refusal, the reason class. `session` and `source` are reduced to the
+/// characters an opaque id or a digest can hold (alphanumerics, `-` and `_`, at most 64), so
+/// nothing else can be put into a record through them. There is no field for a password, a code
+/// or a token, and none is taken.
+#[must_use]
+pub fn step_up_record(
+    recorder: &Recorder,
+    user: &str,
+    session: Option<&str>,
+    source: Option<&str>,
+    outcome: StepUpOutcome,
+) -> AuditRecord {
+    let opaque = |text: &str| -> Option<String> {
+        let kept: String = text
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+            .take(64)
+            .collect();
+        (!kept.is_empty()).then_some(kept)
+    };
+    let mut record = recorder.record(match outcome {
+        StepUpOutcome::Succeeded => STEP_UP_SUCCEEDED,
+        StepUpOutcome::Failed(_) => STEP_UP_FAILED,
+    });
+    record.user = opaque(user);
+    record.session = session.and_then(opaque);
+    record.source = source.and_then(opaque);
+    if let StepUpOutcome::Failed(reason) = outcome {
+        record.reason = Some(reason.as_str().to_owned());
+    }
+    record.set_channel("api", None);
+    record
 }
 
 /// The channels a record may name.
@@ -706,3 +795,112 @@ pub use throttle::{
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod step_up_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use spot_core::ManualClock;
+
+    fn recorder(sink: &Arc<CapturingAudit>) -> Recorder {
+        let clock = Arc::new(ManualClock::new(
+            time::OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap(),
+        ));
+        Recorder::new("acme", sink.clone() as Arc<dyn IdentityAudit>, clock)
+    }
+
+    #[test]
+    fn a_success_names_the_user_the_session_the_source_and_the_channel_and_no_reason() {
+        let sink = Arc::new(CapturingAudit::new());
+        let recorder = recorder(&sink);
+        let record = step_up_record(
+            &recorder,
+            "0190a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a6b",
+            Some("0190a1b2-c3d4-7e5f-8a6b-aaaaaaaaaaaa"),
+            Some("ab12cd34ef56ab78"),
+            StepUpOutcome::Succeeded,
+        );
+        assert_eq!(record.kind, "step_up_succeeded");
+        assert_eq!(record.site, "acme");
+        assert_eq!(
+            record.user.as_deref(),
+            Some("0190a1b2-c3d4-7e5f-8a6b-1c2d3e4f5a6b")
+        );
+        assert_eq!(
+            record.session.as_deref(),
+            Some("0190a1b2-c3d4-7e5f-8a6b-aaaaaaaaaaaa")
+        );
+        assert_eq!(record.source.as_deref(), Some("ab12cd34ef56ab78"));
+        assert_eq!(record.channel.as_deref(), Some("api"));
+        assert!(record.reason.is_none() && record.attempted.is_none());
+    }
+
+    #[test]
+    fn every_refusal_class_is_a_closed_word_and_is_the_reason() {
+        let sink = Arc::new(CapturingAudit::new());
+        let recorder = recorder(&sink);
+        for (class, word) in [
+            (StepUpFailure::BadCredentials, "bad_credentials"),
+            (StepUpFailure::TotpRequired, "totp_required"),
+            (StepUpFailure::TotpInvalid, "totp_invalid"),
+            (StepUpFailure::Throttled, "throttled"),
+            (StepUpFailure::NotAPerson, "not_a_person"),
+            (StepUpFailure::MarkerNotWritten, "marker_not_written"),
+        ] {
+            let record = step_up_record(&recorder, "u", None, None, StepUpOutcome::Failed(class));
+            assert_eq!(record.kind, "step_up_failed");
+            assert_eq!(record.reason.as_deref(), Some(word));
+            assert!(record.session.is_none() && record.source.is_none());
+        }
+    }
+
+    #[test]
+    fn nothing_but_an_opaque_id_or_digest_can_be_put_in_the_record() {
+        let sink = Arc::new(CapturingAudit::new());
+        let recorder = recorder(&sink);
+        let long = "x".repeat(500);
+        let record = step_up_record(
+            &recorder,
+            "user id with spaces; and \"quotes\"",
+            Some("session/with/slashes and a password: hunter2"),
+            Some(long.as_str()),
+            StepUpOutcome::Succeeded,
+        );
+        let user = record.user.unwrap();
+        assert!(!user.contains(' ') && !user.contains('"') && !user.contains(';'));
+        let session = record.session.unwrap();
+        assert!(!session.contains('/') && !session.contains(' ') && !session.contains(':'));
+        assert_eq!(record.source.unwrap().len(), 64);
+    }
+
+    #[test]
+    fn a_success_is_not_dropped_when_failures_are_over_budget_and_a_dead_sink_refuses_it() {
+        let sink = Arc::new(CapturingAudit::new());
+        let clock = Arc::new(ManualClock::new(
+            time::OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap(),
+        ));
+        let recorder =
+            Recorder::with_budgets("acme", sink.clone() as Arc<dyn IdentityAudit>, clock, 1, 1);
+        let failed = step_up_record(
+            &recorder,
+            "u",
+            None,
+            None,
+            StepUpOutcome::Failed(StepUpFailure::BadCredentials),
+        );
+        recorder.failure(&failed);
+        recorder.failure(&failed);
+        assert_eq!(
+            sink.of("step_up_failed").len(),
+            1,
+            "the second is over budget"
+        );
+        let success = step_up_record(&recorder, "u", Some("s"), None, StepUpOutcome::Succeeded);
+        recorder.required(&success).unwrap();
+        assert_eq!(sink.of("step_up_succeeded").len(), 1);
+        sink.fail_all(true);
+        assert!(recorder.required(&success).is_err());
+        assert_eq!(sink.of("step_up_succeeded").len(), 1);
+    }
+}

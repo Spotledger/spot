@@ -694,7 +694,7 @@ async fn b7_unmarked_means_absent_on_every_listener() {
 // ---- outstanding barriers (each names the task that owns it) ----------------------------------
 
 #[test]
-#[ignore = "ADR-083 task 5 not merged: user_type immutable on every channel (B4)"]
+#[ignore = "gap: ADR-083 task 5 not merged: user_type immutable on every channel (B4)"]
 fn b4_user_type_is_immutable_on_every_channel() {
     // Intended: PATCH of the user record, SCIM PATCH/PUT, import, bulk update, workflow action
     // and a server script each fail to change `user_type` after creation, with a stable error and
@@ -702,7 +702,7 @@ fn b4_user_type_is_immutable_on_every_channel() {
 }
 
 #[test]
-#[ignore = "ADR-083 task 7 not merged for the consumer door: no oracle on unauthenticated routes (B6)"]
+#[ignore = "gap: ADR-083 task 7 not merged for the consumer door: no oracle on unauthenticated routes (B6)"]
 fn b6_unauthenticated_routes_are_no_oracle() {
     // Intended: sign-in, one-time-code request, recovery and registration answer the same status,
     // body shape and cost class for a known and an unknown name; the coordinator throttle
@@ -711,7 +711,7 @@ fn b6_unauthenticated_routes_are_no_oracle() {
 }
 
 #[test]
-#[ignore = "ADR-083 tasks 16 to 18 not merged: surfaces, bundles and the command interface (B8, B9)"]
+#[ignore = "gap: ADR-083 tasks 16 to 18 not merged: surfaces, bundles and the command interface (B8, B9)"]
 fn b8_b9_surfaces_bundles_and_commands_are_closed_by_default() {
     // Intended: a consumer surface, an app bundle and a command each need an explicit consumer
     // mark; unmarked ones are absent from the consumer listener and refused on the staff one.

@@ -179,7 +179,10 @@ const VIEWER_NO_READ: &str = "role = \"Viewer\"\ndoctype = \"task\"\nrights = [\
 /// Rewrites the Viewer's grant on Task and publishes the new snapshot (a reload).
 fn set_viewer_grant(w: &World, from: &str, to: &str) {
     let grants = w.env.root.0.join("sample/permissions/grants.toml");
-    let text = std::fs::read_to_string(&grants).unwrap();
+    // `\r\n` checkouts (Windows): the callers' multi-line patterns need `\n`.
+    let text = std::fs::read_to_string(&grants)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert!(text.contains(from), "the grant to edit is not there");
     std::fs::write(&grants, text.replace(from, to)).unwrap();
     spot_cli::request_reload(&w.env.root.0, &w.env.site).unwrap();

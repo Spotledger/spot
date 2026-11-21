@@ -72,7 +72,7 @@ Regenerate with python3 tools/docs-check/gen_event_topics.py --write
 
 <!-- BEGIN GENERATED: topics -->
 
-Generated from `contracts/events/registry.snapshot.json`, contract version 0.7.8: 61 topics.
+Generated from `contracts/events/registry.snapshot.json`, contract version 0.7.9: 61 topics.
 
 ### `doc_*` topics
 
@@ -117,7 +117,7 @@ Generated from `contracts/events/registry.snapshot.json`, contract version 0.7.8
 | `identity_emergency_reviewed` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_emergency_reviewed.json) |
 | `identity_impersonation_started` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_impersonation_started.json) |
 | `identity_impersonation_ended` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_impersonation_ended.json) |
-| `identity_field_accessed` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_field_accessed.json) |
+| `identity_field_accessed` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_field_accessed.json), [reveal](../../contracts/events/examples/identity/identity_field_accessed.reveal.json) |
 | `identity_node_changed` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_node_changed.json) |
 | `identity_snapshot_published` | audit | audit | keep_all | `spot-events-contract` | 0.2.0 | active | [example](../../contracts/events/examples/identity/identity_snapshot_published.json) |
 | `identity_session_started` | audit | audit | keep_all | `spot-events-contract` | 0.3.0 | active | [example](../../contracts/events/examples/identity/identity_session_started.json) |

@@ -215,7 +215,7 @@ async fn acknowledgement_is_by_serve_sequence_under_out_of_order_serving() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "blocked: needs a linked-documents fixture and the CLOSURE_TOO_LARGE condition"]
+#[ignore = "gap: needs a linked-documents fixture and the CLOSURE_TOO_LARGE condition"]
 async fn a_closure_over_the_limit_sends_nothing_partial() {
     let Some(_cluster) = topology().await else {
         return;
@@ -223,7 +223,7 @@ async fn a_closure_over_the_limit_sends_nothing_partial() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "blocked on WP-RTB-03.T2 (per-branch naming series); owner: the edge-offline lane"]
+#[ignore = "gap: WP-RTB-03.T2 (per-branch naming series); owner: the edge-offline lane"]
 async fn a_second_writer_for_a_partition_is_rejected_and_branch_series_do_not_collide() {
     let Some(_cluster) = topology().await else {
         return;
@@ -231,7 +231,7 @@ async fn a_second_writer_for_a_partition_is_rejected_and_branch_series_do_not_co
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "blocked: needs the harness's customise fixture to create a DocType at runtime"]
+#[ignore = "gap: needs the harness's customise fixture to create a DocType at runtime"]
 async fn a_runtime_created_doctype_syncs() {
     let Some(_cluster) = topology().await else {
         return;

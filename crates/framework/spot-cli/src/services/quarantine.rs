@@ -31,6 +31,8 @@ pub mod condition;
 pub mod guards;
 #[path = "quarantine/health.rs"]
 pub mod health;
+#[path = "quarantine/live.rs"]
+pub mod live;
 
 use std::collections::BTreeMap;
 
@@ -446,16 +448,128 @@ pub fn span(seconds: i64) -> String {
     }
 }
 
-/// Registers the module's ports when the pieces it needs are provided: the library's
-/// `QuarantineStore` (PostgreSQL in production), the quarantine audit, the permission assembly
-/// of the site and a principal source. Without them the module registers nothing and says so in
-/// the log: an admin API over nothing is not offered.
+/// `[services.quarantine]`.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Settings {
+    /// Whether the module provides the backend port (default `true`).
+    pub enabled: bool,
+    /// Whether the module also provides the library's `QuarantineStore` port, the same store the
+    /// backend is built over (default `true`). A site that wants the backend only sets it
+    /// `false`. Ignored when `enabled` is `false`.
+    pub provide_store: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            provide_store: true,
+        }
+    }
+}
+
+/// Provides the module's ports into `ctx`: the backend always, the store when one is given.
+///
+/// The store is provided after the backend, so a second provider of either port is refused by
+/// the context with its message naming both modules.
 ///
 /// # Errors
 ///
-/// Never, today: the wiring that provides the ports lives in the modules that own them.
-pub fn register(ctx: &mut crate::services::SiteCtx<'_>) -> Result<()> {
-    let _ = ctx;
-    tracing::debug!("quarantine: the admin is assembled by the module that provides the store");
+/// A port that another module already provides.
+pub fn provide_ports(
+    ctx: &mut crate::services::SiteCtx<'_>,
+    backend: std::sync::Arc<dyn QuarantineBackend>,
+    store: Option<std::sync::Arc<dyn spot_quarantine::QuarantineStore>>,
+) -> Result<()> {
+    ctx.provide::<dyn QuarantineBackend>(backend)?;
+    if let Some(store) = store {
+        ctx.provide::<dyn spot_quarantine::QuarantineStore>(store)?;
+    }
     Ok(())
+}
+
+/// Provides `Arc<dyn QuarantineBackend>` and, unless `provide_store = false`,
+/// `Arc<dyn QuarantineStore>` on a site that has a PostgreSQL backend: the
+/// `PgQuarantineStore` over the site's pool (one instance, shared by both ports), the platform
+/// audit sink ([`live::PlatformAudit`]), the site's permission engine and a principal source over
+/// the site's role assignments ([`live::SitePrincipals`]), for the site's own tenant. The
+/// consumers of the backend are the remedy host's quarantine part, the ops signals and the admin;
+/// the consumer of the store is the edge intake (`sync_node_intake`), which holds back a record
+/// the apply path refuses.
+///
+/// `PgQuarantineStore::prepare` stays the creator of `spot_quarantine_item` and
+/// `spot_quarantine_payload` (the migrator does not own them): the site's database role needs DDL
+/// rights, and when `prepare` fails **both ports are absent** and the coded log says so.
+///
+/// The module is optional. A context with no site, a disabled module, or a store whose tables
+/// cannot be prepared provides nothing and says so in the log; it never stops the site. A reload
+/// provides the backend and the store built by the first build.
+///
+/// # Errors
+///
+/// A setting that does not decode, or a port provided twice.
+pub async fn register(ctx: &mut crate::services::SiteCtx<'_>) -> Result<()> {
+    let settings: Settings = ctx.settings_or_default(NAME)?;
+    let site = ctx.label().to_owned();
+    if !settings.enabled {
+        live::forget(&site);
+        tracing::debug!("quarantine: disabled by [services.quarantine]; no backend is provided");
+        return Ok(());
+    }
+    if !ctx.assembling() {
+        if let Some(existing) = live::recall(&site) {
+            let store = if settings.provide_store {
+                live::recall_store(&site)
+            } else {
+                None
+            };
+            provide_ports(ctx, existing, store)?;
+        }
+        return Ok(());
+    }
+    live::forget(&site);
+    let (tenant, pool, engine, principals) = match ctx.env() {
+        Ok(env) => (
+            env.site.site.clone(),
+            env.backend.pool(),
+            std::sync::Arc::clone(&env.permission.decision),
+            std::sync::Arc::clone(&env.permission.principals)
+                as std::sync::Arc<dyn spot_document::engine::PrincipalSource>,
+        ),
+        Err(_) => {
+            tracing::info!(
+                "quarantine: the site has no PostgreSQL backend; no backend is provided"
+            );
+            return Ok(());
+        }
+    };
+    let store = std::sync::Arc::new(spot_quarantine_pg::PgQuarantineStore::new(pool.clone()));
+    if store.prepare().await.is_err() {
+        tracing::warn!(
+            code = "quarantine_host.unavailable",
+            "quarantine: the store could not be prepared; no backend and no store are provided"
+        );
+        return Ok(());
+    }
+    let shared: std::sync::Arc<dyn spot_quarantine::QuarantineStore> = store;
+    let backend = live::backend_over(
+        &tenant,
+        std::sync::Arc::clone(&shared),
+        std::sync::Arc::new(live::PlatformAudit::new(
+            spot_audit_store::PgAuditStore::new(pool),
+            &tenant,
+        )),
+        engine,
+        std::sync::Arc::new(live::SitePrincipals::new(principals)),
+        std::sync::Arc::clone(ctx.clock()),
+    );
+    live::remember(&site, std::sync::Arc::clone(&backend));
+    let store_port = if settings.provide_store {
+        live::remember_store(&site, std::sync::Arc::clone(&shared));
+        Some(shared)
+    } else {
+        None
+    };
+    provide_ports(ctx, backend, store_port)
 }

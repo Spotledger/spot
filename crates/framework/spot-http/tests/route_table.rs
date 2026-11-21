@@ -41,7 +41,6 @@ const NOT_YET_ROUTED: &[(&str, &str)] = &[
     ("export_extract", UNREGISTERED),
     ("realtime_connect", REALTIME),
     ("connector_inbound", NO_HANDLER),
-    ("auth_step_up", NO_HANDLER),
     ("auth_totp_enrol", NO_HANDLER),
     ("auth_totp_confirm", NO_HANDLER),
     ("auth_totp_disable", NO_HANDLER),
@@ -467,4 +466,43 @@ fn the_table_agrees_with_the_contract() {
     for reason in pending.values() {
         assert!(!reason.is_empty());
     }
+}
+
+/// `auth_step_up` (WP-IAM-12.T7) is served by the registered `step_up` group: the table lists it
+/// for staff and partner behind the bearer layer, and the served set agrees.
+#[test]
+fn auth_step_up_is_a_table_entry_served_by_the_step_up_group() {
+    let entry = route_table()
+        .iter()
+        .find(|e| e.operation == "auth_step_up")
+        .expect("auth_step_up is in the table");
+    assert_eq!(entry.method, "POST");
+    assert_eq!(entry.path, "/api/v1/auth/step-up");
+    assert_eq!(entry.auth, RouteAuth::Required);
+    assert!(entry.audiences.contains(&Audience::Staff));
+    assert!(entry.audiences.contains(&Audience::Partner));
+    assert!(!entry.audiences.contains(&Audience::Consumer));
+    assert!(served_operations().contains("auth_step_up"));
+    assert!(registry_operations().contains("auth_step_up"));
+    assert!(!has_hand_wired_handler("auth_step_up"));
+}
+
+/// `resource_ai_timeline` (WP-AI-11.T11) is served by the registered `ai_timeline` group: the
+/// table lists it for staff and partner behind the bearer layer (never a consumer), and the
+/// served set agrees.
+#[test]
+fn resource_ai_timeline_is_a_table_entry_served_by_the_ai_timeline_group() {
+    let entry = route_table()
+        .iter()
+        .find(|e| e.operation == "resource_ai_timeline")
+        .expect("resource_ai_timeline is in the table");
+    assert_eq!(entry.method, "GET");
+    assert_eq!(entry.path, "/api/v1/resource/{doctype}/{id}/ai-timeline");
+    assert_eq!(entry.auth, RouteAuth::Required);
+    assert!(entry.audiences.contains(&Audience::Staff));
+    assert!(entry.audiences.contains(&Audience::Partner));
+    assert!(!entry.audiences.contains(&Audience::Consumer));
+    assert!(served_operations().contains("resource_ai_timeline"));
+    assert!(registry_operations().contains("resource_ai_timeline"));
+    assert!(!has_hand_wired_handler("resource_ai_timeline"));
 }

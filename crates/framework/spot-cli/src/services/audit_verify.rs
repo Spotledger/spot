@@ -37,11 +37,33 @@
 //! lane, index, kind, actor, subject DocType and time: never the payload, never a value. The
 //! export is a signed bundle (one entry per line, a trailer with the key id and the signature).
 //!
+//! # Extra chains (WP-SEC-06.T9)
+//!
+//! Two other tamper-evident chains live on the same store and were never watched: the AI trail
+//! (`ai:<site>`, `ai_audit::scope_of`) and the quarantine trail (`quarantine:<site>`,
+//! `quarantine::live::scope_of`). `[services.audit_verify] extra_chains` (default both; `[]` turns
+//! it off; an unknown name is refused by name) names them, and `audit_verify/extra.rs` verifies
+//! each one on the same schedule as the lanes: the incremental pass from its saved verified head,
+//! the full pass from entry 1 in slices of `full_slice_entries` with its own saved cursor
+//! (additive fields of [`Saved`]: an old state file reads as "not started"). The scope of each is
+//! computed by the module that owns the chain, never spelled a second time here. A chain with no
+//! entries is clean (a site that never used it). A mismatch degrades the service like a lane's, with the chain's name and
+//! the first bad entry index and kind (never content); the readiness text reads `degraded: <kind>
+//! in the <name> chain entry <i>`; the chain's verified head stops advancing; and only that
+//! chain's own whole clean full walk clears it.
+//!
+//! **What this does not do.** These chains have no signer, so there is **no anchor and no signed
+//! head** for them: they are verified for **internal consistency** only (each entry's hash, its
+//! link to the one before it and the sequence). Without an anchor outside the database, a wholesale
+//! rewrite of the tail of one of these chains (or a rollback to an earlier head that agrees with
+//! itself) is **not detectable by this service**. `verify_now`, the entry views and the export
+//! stay on the document lanes: the audit routes are unchanged.
+//!
 //! # Tenancy
 //!
 //! One service is one site: it reads only the lanes `<site>#<lane>` of its own site, so another
 //! tenant's entries are unreachable and a cursor naming a lane outside the configuration answers
-//! like an empty page.
+//! like an empty page. The extra chains are the scopes of this site only.
 //!
 //! # Failure behaviour
 //!
@@ -67,6 +89,11 @@ use tokio::sync::watch;
 
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
+
+#[path = "audit_verify/extra.rs"]
+pub mod extra;
+
+pub use extra::ExtraChain;
 
 /// Start order: after the capture invariant (1050).
 pub const ORDER: u32 = 1070;
@@ -111,6 +138,9 @@ pub struct Settings {
     pub anchor_path: Option<String>,
     /// The file the resumable pass state is kept in (defaults to `<anchor_path>.state`).
     pub state_path: Option<String>,
+    /// The extra chains verified besides the document lanes: `ai` and `quarantine`. `[]` turns
+    /// them off; an unknown name is refused.
+    pub extra_chains: Vec<String>,
 }
 
 impl Default for Settings {
@@ -125,6 +155,7 @@ impl Default for Settings {
             anchor_seconds: 3_600,
             anchor_path: None,
             state_path: None,
+            extra_chains: extra::default_names(),
         }
     }
 }
@@ -151,6 +182,7 @@ impl Settings {
                 return Err(bad(key));
             }
         }
+        extra::parse(&self.extra_chains)?;
         if self.enabled && self.anchor_path.as_deref().is_none_or(str::is_empty) {
             return Err(Error(
                 "services.audit_verify.anchor_path is required when the service is enabled"
@@ -227,6 +259,16 @@ pub struct Saved {
     pub cursor_seq: u64,
     /// Whether this full cycle has found anything.
     pub cycle_failed: bool,
+    /// The last verified head of each extra chain, by name (`ai`, `quarantine`). Absent in a state
+    /// file written before the extra chains: a chain with no entry here is "not started".
+    #[serde(default)]
+    pub extra_verified: BTreeMap<String, u64>,
+    /// The next entry of each extra chain's full walk (absent or 0 means 1).
+    #[serde(default)]
+    pub extra_cursor: BTreeMap<String, u64>,
+    /// Whether each extra chain's current full walk has found anything.
+    #[serde(default)]
+    pub extra_cycle_failed: BTreeMap<String, bool>,
 }
 
 /// Where [`Saved`] is kept.
@@ -359,6 +401,8 @@ struct Inner {
     saved: Saved,
     loaded: bool,
     degraded: Option<Mismatch>,
+    /// The extra chain the degraded state comes from (`None` for a document lane or an anchor).
+    degraded_chain: Option<ExtraChain>,
     failures: u32,
     last_anchor_at: Option<i64>,
 }
@@ -375,6 +419,7 @@ pub struct AuditVerifyService<S: AuditStore> {
     access: Arc<dyn AuditAccess>,
     log: Arc<dyn AccessLog>,
     clock: Arc<dyn Clock>,
+    extras: Vec<ExtraChain>,
     settings: Settings,
     inner: Mutex<Inner>,
 }
@@ -422,6 +467,7 @@ impl<S: AuditStore + 'static> AuditVerifyService<S> {
             access: wiring.access,
             log: wiring.log,
             clock: wiring.clock,
+            extras: extra::chains(&wiring.settings.extra_chains),
             settings: wiring.settings,
             inner: Mutex::new(Inner::default()),
         })
@@ -440,9 +486,16 @@ impl<S: AuditStore + 'static> AuditVerifyService<S> {
     /// `ok`, or `degraded` with the first mismatch (lane, entry index, kind: never content).
     #[must_use]
     pub fn readiness_text(&self) -> String {
-        match self.lock().degraded {
-            None => "ok".to_owned(),
-            Some(m) => format!(
+        let inner = self.lock();
+        match (inner.degraded, inner.degraded_chain) {
+            (None, _) => "ok".to_owned(),
+            (Some(m), Some(chain)) => format!(
+                "degraded: {} in the {} chain entry {}",
+                m.kind,
+                chain.name(),
+                m.seq
+            ),
+            (Some(m), None) => format!(
                 "degraded: {} at lane {} entry {}",
                 m.kind,
                 m.lane.map_or_else(|| "-".to_owned(), |l| l.to_string()),
@@ -548,6 +601,9 @@ impl<S: AuditStore + 'static> AuditVerifyService<S> {
                 }
             }
         }
+        // The extra chains (AI, quarantine): internal consistency only, no anchor.
+        let extra_checked = self.run_extra_incremental().await?;
+        report.checked = report.checked.saturating_add(extra_checked);
         self.check_anchor().await?;
         self.check_exactly_once().await?;
         report.mismatch = self.degraded().is_some();
@@ -588,7 +644,8 @@ impl<S: AuditStore + 'static> AuditVerifyService<S> {
                 inner.saved.cursor_lane = 0;
                 inner.saved.cursor_seq = 1;
                 // Only a whole clean cycle clears a degraded state, and it clears the cycle flag.
-                if !inner.saved.cycle_failed {
+                // A state that comes from an extra chain is that chain's own to clear.
+                if !inner.saved.cycle_failed && inner.degraded_chain.is_none() {
                     inner.degraded = None;
                 }
                 inner.saved.cycle_failed = false;
@@ -599,6 +656,10 @@ impl<S: AuditStore + 'static> AuditVerifyService<S> {
                 inner.saved.cursor_seq = to.saturating_add(1);
             }
         }
+        // One slice of each extra chain's own walk, with its own saved cursor.
+        let (extra_checked, extra_found) = self.run_extra_full_slice().await?;
+        report.checked = report.checked.saturating_add(extra_checked);
+        report.mismatch |= extra_found;
         self.persist()?;
         Ok(report)
     }
@@ -1058,7 +1119,16 @@ mod tests {
     }
 
     impl Damaged {
-        fn apply(&self, entries: Vec<ChainEntry>) -> Vec<ChainEntry> {
+        /// The damage is done to the document lanes only: the extra chains (the AI and the
+        /// quarantine trail, WP-SEC-06.T9) are read through the same store and are empty here,
+        /// and an edit written for the lane's five entries must not see them.
+        fn apply(&self, scope: &str, entries: Vec<ChainEntry>) -> Vec<ChainEntry> {
+            if super::extra::ExtraChain::ALL
+                .iter()
+                .any(|chain| chain.scope(SITE) == scope)
+            {
+                return entries;
+            }
             match &*self.edit.lock().unwrap() {
                 Some(edit) => edit(entries),
                 None => entries,
@@ -1070,7 +1140,7 @@ mod tests {
         fn head<'a>(&'a self, site: &'a str) -> StoreFuture<'a, Option<ChainEntry>> {
             Box::pin(async move {
                 let all = self.inner.range(site, 1, u64::MAX).await?;
-                Ok(self.apply(all).pop())
+                Ok(self.apply(site, all).pop())
             })
         }
         fn append_if_head<'a>(
@@ -1090,7 +1160,7 @@ mod tests {
             Box::pin(async move {
                 let all = self.inner.range(site, 1, u64::MAX).await?;
                 Ok(self
-                    .apply(all)
+                    .apply(site, all)
                     .into_iter()
                     .filter(|e| e.seq >= from && e.seq <= to)
                     .collect())

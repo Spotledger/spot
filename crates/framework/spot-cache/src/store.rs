@@ -122,6 +122,21 @@ pub trait CacheStore: Send + Sync {
     /// keys were removed (expired ones are cleaned up but not counted).
     fn delete_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64>;
 
+    /// The number of **live** (unexpired) keys of `site` that start with `prefix`: what
+    /// [`delete_prefix`](Self::delete_prefix) with the same arguments would remove and report.
+    ///
+    /// The prefix rules and the site isolation are `delete_prefix`'s: a prefix is matched
+    /// literally, the empty prefix matches every key of the site (so it equals the site's live
+    /// key count), and another site's keys are never counted. The call is read-only: it changes
+    /// no entry, no recency, no hit or miss counter and evicts nothing. A key of any type (value,
+    /// hash, list or set) counts once. A backend with a bounded scan (Redis) may answer a lower
+    /// bound for a site with more matching keys than its per-call work limit; it never answers
+    /// more than the live count.
+    ///
+    /// There is deliberately no default body: a default answer of 0 would be a silent wrong
+    /// answer, so every implementor states how it counts.
+    fn count_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64>;
+
     /// Removes every entry of the site, live or expired; its statistics survive.
     fn clear_site<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, ()>;
 
@@ -393,6 +408,10 @@ impl<C: CacheStore> CacheStore for RecordingCache<C> {
 
     fn delete_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
         self.inner.delete_prefix(site, prefix)
+    }
+
+    fn count_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
+        self.inner.count_prefix(site, prefix)
     }
 
     fn clear_site<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, ()> {

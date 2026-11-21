@@ -68,6 +68,8 @@ fn unknown_keys_are_refused_by_name() {
     assert!(error.message().starts_with("unknown field"));
 }
 
+// POSIX absolute paths in the fixtures: on Windows they are not absolute.
+#[cfg(unix)]
 #[test]
 fn a_relative_or_shared_path_is_refused() {
     let root = Path::new("/srv/spot");

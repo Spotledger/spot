@@ -35,7 +35,10 @@ and `spot-deep-access-pg` (the state, in six `spot_deep_access_*` tables, tenant
    actions taken in a session (`GET .../sessions/{id}/recording`: `at`, `action`, `target`), read
    from the tenant audit chain, never anything the operator could edit.
 
-Consent, revoke and recordings need a recent step-up. Every outcome, refusals included, writes an
+Consent, revoke and recordings need a recent step-up: the caller's session has `step_up_at` within
+`[services.identity_admin] step_up_window_secs` of now (written by `POST /api/v1/auth/step-up`, read
+through the shared `services::step_up::session_is_current`; see [step-up](step_up.md)). A session
+that never stepped up is not recent, however new it is (`403 auth.step_up_required`). Every outcome, refusals included, writes an
 audit record, and a decision whose record cannot be written is not carried out.
 
 ## Settings
@@ -47,7 +50,7 @@ audit record, and a decision whose record cannot be written is not carried out.
 ## Ports
 
 This module takes, from modules with a smaller `ORDER`: `dyn SupportCaller` (who the credential
-names, security administrator, step-up), `dyn SupportAudit` (the tenant audit chain),
+names, security administrator, step-up; provided by `support_access_wiring`), `dyn SupportAudit` (the tenant audit chain),
 `dyn SupportRecordings` (a session's actions from the chain) and, for issuance, the shared
 `spot_pg_bridge::Bridge`, `dyn EntropySource`, `dyn SessionLogOpener` and the vendor attestation
 verifier. It provides `dyn SupportAccessPort` (the routes) and `dyn SupportIntake`.

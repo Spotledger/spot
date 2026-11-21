@@ -4,8 +4,9 @@
 //!
 //! One case runs: the tools a site cannot serve are **absent** (not listed, and a call is the
 //! same unknown-tool refusal as any other name), and the agent-only tools are absent for a user
-//! principal. The cases that need an embedding provider, an agent principal or a remedy world stay
-//! **blocked**, each naming exactly what is missing and the task that provides it; the behaviour
+//! principal. The `retrieve` tool itself is exercised on a site that embeds in `retrieval.rs`
+//! (WP-AI-10.T4). The cases that need an agent principal or a remedy world stay **blocked**, each
+//! naming exactly what is missing and the task that provides it; the behaviour
 //! is proved in-process by `spot-cli/tests/agent_tools_mcp.rs` (the remedy tools over the real host),
 //! `retrieval_service.rs`, `agent_memory_service.rs` and `spot-mcp/tests/extension_tools.rs`.
 //!
@@ -54,8 +55,8 @@ pub fn cases() -> Vec<CaseDef> {
             "agent_tools: recall_memory_is_gated_by_the_agents_tier",
             SECTION,
             "a registered agent calls `recall_memory` and gets no entry learned above its tier, a user principal does not see the tool, and an entry carries no document field value",
-            "WP-AI-03.T7",
-            "the harness site configures no LLM tenant with an `embedding_model` (WP-AI-03.T7), so agent memory has no embedder, is degraded and `recall_memory` is not on tools/list; the in-process proof is `agent_memory_service.rs`",
+            "WP-AI-06.T4",
+            "the harness has no path that signs in as a registered agent: the agent directory (WP-AI-06.T4) resolves an agent only from a stored registration (`spot_agent_tier_registration`), and no admin route or library call the harness uses writes one; the embedding half is served since WP-AI-10.T4 (`Fixture::start_secondary_with_embedding`), so once an agent credential path exists the case needs `[services.agent_memory]` added to that site; the in-process proof is `agent_memory_service.rs`",
         ),
     ]
 }

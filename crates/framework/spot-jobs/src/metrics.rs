@@ -10,6 +10,9 @@
 pub const JOB_QUEUE_DEPTH: &str = "spot_job_queue_depth";
 /// Gauge: seconds the oldest waiting job has waited, labelled `queue` (0 when none waits).
 pub const JOB_OLDEST_AGE_SECONDS: &str = "spot_job_oldest_age_seconds";
+/// Counter: jobs moved from dead or retrying back to pending by `JobStore::requeue`, labelled
+/// `queue`. A refused requeue is not counted.
+pub const JOB_REQUEUED_TOTAL: &str = "spot_job_requeued_total";
 
 /// The queue labels, in the order they are published. `other` collects every other name.
 pub const QUEUE_LABELS: [&str; 4] = ["default", "short", "long", "other"];
@@ -49,6 +52,10 @@ pub trait JobMetricsSink: Send + Sync {
     fn queue_depth(&self, queue: &'static str, depth: u64);
     /// Sets the age of the oldest waiting job of the queue labelled `queue`.
     fn oldest_age_seconds(&self, queue: &'static str, seconds: u64);
+    /// Counts one requeued job of the queue labelled `queue` ([`JOB_REQUEUED_TOTAL`]). The
+    /// default does nothing, so a sink written before requeue existed keeps compiling; a store
+    /// built `with_metrics` calls it once per successful requeue.
+    fn requeued(&self, _queue: &'static str) {}
 }
 
 /// Publishes `snapshots` to `sink`: every label in [`QUEUE_LABELS`] gets a value on every call
@@ -143,6 +150,30 @@ mod tests {
         );
         assert_eq!(queue_label("tenant-42-secret"), "other");
         assert_eq!(queue_label("short"), "short");
+    }
+
+    #[test]
+    fn a_sink_without_requeued_ignores_it_and_one_with_it_counts() {
+        // The default body: a sink that never heard of requeue is a no-op, not a failure.
+        let plain = Recording::default();
+        plain.requeued("default");
+
+        #[derive(Default)]
+        struct Counting(Mutex<BTreeMap<&'static str, u64>>);
+        impl JobMetricsSink for Counting {
+            fn queue_depth(&self, _queue: &'static str, _depth: u64) {}
+            fn oldest_age_seconds(&self, _queue: &'static str, _seconds: u64) {}
+            fn requeued(&self, queue: &'static str) {
+                *self.0.lock().unwrap().entry(queue).or_insert(0) += 1;
+            }
+        }
+        let sink = Counting::default();
+        sink.requeued(queue_label("short"));
+        sink.requeued(queue_label("tenant-42-secret"));
+        sink.requeued(queue_label("tenant-43-secret"));
+        let counts = sink.0.lock().unwrap();
+        assert_eq!(counts["short"], 1);
+        assert_eq!(counts["other"], 2, "unknown queues share one label");
     }
 
     #[test]

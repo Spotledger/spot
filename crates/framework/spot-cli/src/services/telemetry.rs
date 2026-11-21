@@ -210,6 +210,18 @@ impl spot_jobs::metrics::JobMetricsSink for PrometheusSink {
         metrics::gauge!(spot_jobs::metrics::JOB_OLDEST_AGE_SECONDS, "queue" => queue)
             .set(seconds as f64);
     }
+
+    fn requeued(&self, queue: &'static str) {
+        metrics::counter!(spot_jobs::metrics::JOB_REQUEUED_TOTAL, "queue" => queue).increment(1);
+    }
+}
+
+/// The one sink every job store this host builds counts on (`PgJobStore::with_metrics`,
+/// `InMemoryJobStore::with_metrics`). The sink has no state and the series carry no per-site
+/// label, so the stores of all sites share it.
+pub fn job_metrics_sink() -> Arc<dyn spot_jobs::metrics::JobMetricsSink> {
+    static SHARED: OnceLock<Arc<dyn spot_jobs::metrics::JobMetricsSink>> = OnceLock::new();
+    Arc::clone(SHARED.get_or_init(|| Arc::new(PrometheusSink)))
 }
 
 impl spot_mail_queue::metrics::MailMetricsSink for PrometheusSink {
@@ -240,6 +252,18 @@ pub fn describe_all() {
     metrics::describe_gauge!(
         spot_jobs::metrics::JOB_OLDEST_AGE_SECONDS,
         "Seconds the oldest waiting job of the queue has waited"
+    );
+    metrics::describe_counter!(
+        "spot_schedule_fired_total",
+        "Schedule firings planned by the scheduler, by app and schedule name"
+    );
+    metrics::describe_gauge!(
+        "spot_schedule_last_fire_seconds",
+        "The instant (seconds since the epoch) the schedule last fired, by app and schedule name"
+    );
+    metrics::describe_counter!(
+        spot_jobs::metrics::JOB_REQUEUED_TOTAL,
+        "Jobs moved from dead or retrying back to the queue by a requeue, by queue"
     );
     metrics::describe_gauge!(
         spot_mail_queue::metrics::MAIL_QUEUE_DEPTH,
@@ -437,6 +461,7 @@ mod metric_tests {
         );
         spot_mail_queue::metrics::publish(&PrometheusSink, &[4]);
         spot_realtime::metrics::record_dropped(&PrometheusSink, DropReason::SlowConsumer, 2);
+        spot_jobs::metrics::JobMetricsSink::requeued(&PrometheusSink, "long");
         let text = spot_telemetry::render_prometheus();
         for needle in [
             "spot_readiness_state{state=\"degraded\"}",
@@ -444,6 +469,7 @@ mod metric_tests {
             "spot_job_oldest_age_seconds{queue=\"short\"}",
             "spot_mail_queue_depth",
             "spot_realtime_dropped_total{reason=\"slow_consumer\"}",
+            "spot_job_requeued_total{queue=\"long\"}",
         ] {
             assert!(text.contains(needle), "missing {needle} in the exposition");
         }

@@ -197,7 +197,7 @@ async fn twenty_edges_returning_at_once_all_converge() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs the proxy to cut after N bytes and to inject duplicated and reordered batches (src/proxy.rs is not an owned path); see sync_e2e docs"]
+#[ignore = "gap: needs the proxy to cut after N bytes and to inject duplicated and reordered batches (src/proxy.rs is not an owned path); see sync_e2e docs"]
 async fn duplicated_and_reordered_batches_apply_once() {
     let Some(_cluster) = hub_and_edges(1).await else {
         return;
@@ -205,7 +205,7 @@ async fn duplicated_and_reordered_batches_apply_once() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs a database backup helper and the NODE_AHEAD_OF_OWNER handling of the hosted stack"]
+#[ignore = "gap: needs a database backup helper and the NODE_AHEAD_OF_OWNER handling of the hosted stack"]
 async fn an_edge_restored_from_an_older_backup_is_detected_and_loses_nothing() {
     let Some(_cluster) = hub_and_edges(1).await else {
         return;
@@ -213,7 +213,7 @@ async fn an_edge_restored_from_an_older_backup_is_detected_and_loses_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs a settable node clock in the harness (CLOCK_SKEW at +/- 10 minutes)"]
+#[ignore = "gap: needs a settable node clock in the harness (CLOCK_SKEW at +/- 10 minutes)"]
 async fn a_skewed_node_clock_raises_clock_skew_and_nothing_is_lost() {
     let Some(_cluster) = hub_and_edges(1).await else {
         return;

@@ -5,6 +5,9 @@
 //! them through the typed ports map (`ctx.require_port::<dyn X>()`):
 //!
 //! - [`JobSubmit`]: create one job with an idempotency key. No list, cancel or read of jobs.
+//! - [`JobAdmin`] (WP-AI-07.T13): list, read, requeue and reap the site's jobs, as a summary
+//!   (never a job's arguments, context or error text). For operator tooling such as the
+//!   remedies' jobs part; it exists on both job profiles.
 //! - [`OutboxLease`]: hold a named consumer lease and read the outbox from a position.
 //! - [`SystemReader`]: read one document as the platform itself. No write, no list.
 //!
@@ -30,7 +33,8 @@ use spot_app_api::prelude::{Name, RecordId};
 use spot_coordinator::{Coordinator, Lease};
 use spot_core::{Clock, SiteId};
 use spot_jobs::JobStore;
-use spot_jobs::model::{InsertResult, NewJob};
+use spot_jobs::model::{CancelOutcome, InsertResult, Job, JobId, JobState, NewJob};
+use spot_jobs::store::JobFilter;
 use spot_storage_contract::{ChangeFeed, FeedPosition, OutboxRecord};
 use time::OffsetDateTime;
 use tokio::sync::watch;
@@ -224,6 +228,179 @@ impl JobSubmit for StoreJobSubmit {
     }
 }
 
+// --- JobAdmin -----------------------------------------------------------------------------
+
+/// The most jobs one [`JobAdmin::list`] returns.
+pub const MAX_ADMIN_LIST: u32 = 500;
+
+const NO_SUCH_JOB: &str = "this site has no such job";
+const REQUEUE_REFUSED: &str = "only a dead or retrying job can be requeued";
+const REQUEUE_KEY_HELD: &str = "another live job holds this job's idempotency key";
+const NOT_WAITING: &str = "the job is not waiting in the queue";
+
+/// A job as [`JobAdmin`] shows it: identity and state only. Never the arguments, the context, the
+/// idempotency key or the error text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JobSummary {
+    /// The job's id.
+    pub id: JobId,
+    /// The job name (`app:job`).
+    pub name: String,
+    /// The queue.
+    pub queue: String,
+    /// Where the job stands.
+    pub state: JobState,
+    /// The current attempt number (0 until the first claim).
+    pub attempt: u32,
+    /// The attempts allowed before the job is dead.
+    pub max_attempts: u32,
+    /// When the running claim's lease expires, if a worker holds the job.
+    pub lease_expires_at: Option<OffsetDateTime>,
+}
+
+fn summary(job: &Job) -> JobSummary {
+    JobSummary {
+        id: job.id,
+        name: job.name.clone(),
+        queue: job.queue.clone(),
+        state: job.state.clone(),
+        attempt: job.attempt,
+        max_attempts: job.max_attempts,
+        lease_expires_at: job.claim.as_ref().map(|claim| claim.expires_at),
+    }
+}
+
+/// Reads and moves this site's jobs for operator tooling. It cannot create jobs, change a job's
+/// arguments or read them.
+pub trait JobAdmin: Send + Sync {
+    /// Up to `limit` (at most [`MAX_ADMIN_LIST`], at least 1) of this site's jobs in `state`
+    /// (any state when `None`; a `Retrying` filter matches every retrying job).
+    fn list<'a>(&'a self, state: Option<JobState>, limit: u32) -> PortFuture<'a, Vec<JobSummary>>;
+    /// One job of this site; a job of another site is `None`.
+    fn get<'a>(&'a self, id: JobId) -> PortFuture<'a, Option<JobSummary>>;
+    /// Moves a dead or retrying job back to the queue (`JobStore::requeue`): pending, due now,
+    /// attempts reset. A job in any other state, a job another live job's key blocks, and a job
+    /// of another site are [`PortError::Invalid`] and nothing changes.
+    fn requeue<'a>(&'a self, id: JobId, now: OffsetDateTime) -> PortFuture<'a, JobSummary>;
+    /// Cancels a job that is pending or retrying and unclaimed (the undo of a requeue). A job in
+    /// any other state, or one a worker holds, is [`PortError::Invalid`] and nothing changes.
+    /// The state test and the cancel are one atomic store step (`JobStore::cancel_if_pending`),
+    /// so a worker that claims the job at the same moment either wins (the job keeps running and
+    /// this refuses) or loses (the job is cancelled); the running job is never cancelled.
+    fn cancel_unclaimed<'a>(&'a self, id: JobId) -> PortFuture<'a, JobSummary>;
+    /// Releases the jobs of this site whose lease lapsed at `now` (`JobStore::reap_expired`):
+    /// the ids of the site's jobs that were released. The store reaps every lapsed lease it
+    /// holds, as its own reaper does every two seconds; only this site's ids are reported.
+    fn reap_expired<'a>(&'a self, now: OffsetDateTime) -> PortFuture<'a, Vec<JobId>>;
+}
+
+/// [`JobAdmin`] over the site's store.
+pub struct StoreJobAdmin {
+    site: SiteId,
+    store: Arc<dyn JobStore>,
+    gate: Arc<StopGate>,
+}
+
+impl StoreJobAdmin {
+    /// An admin port for `site`.
+    pub fn new(site: SiteId, store: Arc<dyn JobStore>, gate: Arc<StopGate>) -> Self {
+        Self { site, store, gate }
+    }
+
+    /// One job of this site (`None` for a missing job or another site's).
+    async fn read(&self, id: JobId) -> Result<Option<Job>, PortError> {
+        match self.store.get(id).await {
+            Ok(job) => Ok(job.filter(|job| job.site == self.site)),
+            Err(_) => Err(PortError::Unavailable("the job store")),
+        }
+    }
+}
+
+impl JobAdmin for StoreJobAdmin {
+    fn list<'a>(&'a self, state: Option<JobState>, limit: u32) -> PortFuture<'a, Vec<JobSummary>> {
+        Box::pin(async move {
+            self.gate.check()?;
+            let filter = JobFilter {
+                site: Some(self.site.clone()),
+                state,
+                queue: None,
+                limit: Some(limit.clamp(1, MAX_ADMIN_LIST)),
+            };
+            match self.store.list(filter).await {
+                Ok(jobs) => Ok(jobs.iter().map(summary).collect()),
+                Err(_) => Err(PortError::Unavailable("the job store")),
+            }
+        })
+    }
+
+    fn get<'a>(&'a self, id: JobId) -> PortFuture<'a, Option<JobSummary>> {
+        Box::pin(async move {
+            self.gate.check()?;
+            Ok(self.read(id).await?.as_ref().map(summary))
+        })
+    }
+
+    fn requeue<'a>(&'a self, id: JobId, now: OffsetDateTime) -> PortFuture<'a, JobSummary> {
+        Box::pin(async move {
+            self.gate.check()?;
+            if self.read(id).await?.is_none() {
+                return Err(PortError::Invalid(NO_SUCH_JOB));
+            }
+            match self.store.requeue(id, now).await {
+                Ok(job) => Ok(summary(&job)),
+                Err(spot_jobs::Error::RequeueRefused) => Err(PortError::Invalid(REQUEUE_REFUSED)),
+                Err(spot_jobs::Error::RequeueKeyHeld) => Err(PortError::Invalid(REQUEUE_KEY_HELD)),
+                Err(spot_jobs::Error::Other(why)) if why == "job.requeue_unsupported" => {
+                    Err(PortError::Unavailable("requeue on this job store"))
+                }
+                Err(spot_jobs::Error::Other(why)) if why == "Job not found" => {
+                    Err(PortError::Invalid(NO_SUCH_JOB))
+                }
+                Err(_) => Err(PortError::Unavailable("the job store")),
+            }
+        })
+    }
+
+    fn cancel_unclaimed<'a>(&'a self, id: JobId) -> PortFuture<'a, JobSummary> {
+        Box::pin(async move {
+            self.gate.check()?;
+            // Ownership only: a job of another site reads as missing. The decision whether the
+            // job may be cancelled is not made from this read but by the store, atomically.
+            if self.read(id).await?.is_none() {
+                return Err(PortError::Invalid(NO_SUCH_JOB));
+            }
+            match self.store.cancel_if_pending(id).await {
+                Ok(CancelOutcome::Cancelled) => {}
+                Ok(CancelOutcome::NotCancellable) => return Err(PortError::Invalid(NOT_WAITING)),
+                Ok(CancelOutcome::NotFound) => return Err(PortError::Invalid(NO_SUCH_JOB)),
+                Err(_) => return Err(PortError::Unavailable("the job store")),
+            }
+            match self.read(id).await? {
+                Some(after) => Ok(summary(&after)),
+                None => Err(PortError::Invalid(NO_SUCH_JOB)),
+            }
+        })
+    }
+
+    fn reap_expired<'a>(&'a self, now: OffsetDateTime) -> PortFuture<'a, Vec<JobId>> {
+        Box::pin(async move {
+            self.gate.check()?;
+            let reaped = self
+                .store
+                .reap_expired(now)
+                .await
+                .map_err(|_| PortError::Unavailable("the job store"))?;
+            let mut ours = Vec::with_capacity(reaped.len());
+            for id in reaped {
+                if self.read(id).await?.is_some() {
+                    ours.push(id);
+                }
+            }
+            Ok(ours)
+        })
+    }
+}
+
 // --- OutboxLease --------------------------------------------------------------------------
 
 /// A held consumer lease. Only [`OutboxLease::acquire`] makes one.
@@ -255,11 +432,7 @@ pub trait OutboxLease: Send + Sync {
     /// Gives the lease up at once.
     fn release<'a>(&'a self, lease: &'a ConsumerLease) -> PortFuture<'a, ()>;
     /// Up to `limit` (at most [`MAX_OUTBOX_PAGE`]) published outbox events after `after`.
-    fn read<'a>(
-        &'a self,
-        after: FeedPosition,
-        limit: u32,
-    ) -> PortFuture<'a, Vec<OutboxRecord>>;
+    fn read<'a>(&'a self, after: FeedPosition, limit: u32) -> PortFuture<'a, Vec<OutboxRecord>>;
 }
 
 /// [`OutboxLease`] over the site's coordinator and change feed.
@@ -363,11 +536,7 @@ impl<F: ChangeFeed> OutboxLease for CoordinatedOutbox<F> {
         })
     }
 
-    fn read<'a>(
-        &'a self,
-        after: FeedPosition,
-        limit: u32,
-    ) -> PortFuture<'a, Vec<OutboxRecord>> {
+    fn read<'a>(&'a self, after: FeedPosition, limit: u32) -> PortFuture<'a, Vec<OutboxRecord>> {
         Box::pin(async move {
             self.gate.check()?;
             self.feed
@@ -492,7 +661,7 @@ pub struct PortParts<F: ChangeFeed + 'static> {
     pub loader: Arc<dyn DocumentLoader>,
 }
 
-/// Provides [`JobSubmit`], [`OutboxLease`] and [`SystemReader`] to the modules that start after
+/// Provides [`JobSubmit`], [`JobAdmin`], [`OutboxLease`] and [`SystemReader`] to the modules that start after
 /// the current one, and adds the service that closes them at the stop signal.
 ///
 /// Called on the assembling build only: a reload keeps the running services and has no store
@@ -503,6 +672,11 @@ pub fn provide<F: ChangeFeed + 'static>(
     parts: PortParts<F>,
 ) -> crate::Result<()> {
     let gate = StopGate::new();
+    let admin: Arc<dyn JobAdmin> = Arc::new(StoreJobAdmin::new(
+        parts.site.clone(),
+        Arc::clone(&parts.store),
+        Arc::clone(&gate),
+    ));
     let submit: Arc<dyn JobSubmit> = Arc::new(StoreJobSubmit::new(
         parts.site.clone(),
         parts.store,
@@ -525,6 +699,7 @@ pub fn provide<F: ChangeFeed + 'static>(
         Arc::clone(&gate),
     ));
     ctx.provide(submit)?;
+    ctx.provide(admin)?;
     ctx.provide(outbox)?;
     ctx.provide(reader)?;
     ctx.add(Arc::new(GateService(gate)));

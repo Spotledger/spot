@@ -35,6 +35,24 @@ Unknown keys and out-of-bounds values are refused at start (`support_access_wiri
 - The sealer waits for the vault on the site's multi-thread runtime. On any other runtime a recording is refused, never stored unsealed.
 - The audit store must be prepared (tables and rewrite guard installed) so its protection is complete.
 
+## The support-access caller (WP-IAM-12.T9)
+
+The wiring also provides `dyn SupportCaller` (read by `[services.support_access]`, which starts
+later), when the site has its sign-in service and the permission engine. For a request it names:
+
+- the **user** of the credential's own session (a person of the staff or partner audience with an
+  unrestricted password session; an API key, a restricted session and another site's request name
+  nobody), never a system principal;
+- `is_security_admin`: the `security_administrator` duty, decided by the permission engine for that
+  user (an engine error is "no caller");
+- `step_up_current`: the session's `step_up_at` marker within `[services.identity_admin]
+  step_up_window_secs`, read through the shared `services::step_up::session_is_current` (a marker
+  that cannot be read is "no caller"). A session that never stepped up is not recent, however new it
+  is, and another session's marker, even of the same user, does not count.
+
+Without a site context or a permission engine no caller is provided and every support-access
+operation is refused, as before.
+
 ## Not wired here
 
 The approval verifier (control plane), the agent dispatcher (control plane) and the account provider (host agent) run in their own processes with their own start-up; this host cannot reach them. They stay fail-closed in those processes until their own wiring tasks provide them.

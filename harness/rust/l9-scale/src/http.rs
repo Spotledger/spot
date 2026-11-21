@@ -464,8 +464,18 @@ mod tests {
             .unwrap_err();
         assert_eq!(err, HttpError::Timeout);
         drop(listener);
+        // A closed loopback port is refused at once on Linux and macOS but only after the TCP
+        // stack's retries (about 2 s) on Windows, so the bound is far above that: a shorter one
+        // would turn the refusal into a `Timeout` there.
         let err = conn
-            .request(&target(addr), "GET", "/", &[], None, Duration::from_secs(1))
+            .request(
+                &target(addr),
+                "GET",
+                "/",
+                &[],
+                None,
+                Duration::from_secs(10),
+            )
             .await
             .unwrap_err();
         assert_eq!(err, HttpError::Transport);

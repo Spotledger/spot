@@ -82,7 +82,7 @@ async fn hub_and_edge(extra_edge: bool) -> Option<Cluster> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs the hosted hub, node roles (WP-RTB-03.T1), the process publish and start-a-Case HTTP API, and an enrolment helper in the harness"]
+#[ignore = "gap: needs the hosted hub, node roles (WP-RTB-03.T1), the process publish and start-a-Case HTTP API, and an enrolment helper in the harness"]
 async fn a_published_process_reaches_the_edge_and_a_case_starts_on_its_version() {
     let Some(_cluster) = hub_and_edge(false).await else {
         return;
@@ -90,7 +90,7 @@ async fn a_published_process_reaches_the_edge_and_a_case_starts_on_its_version()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs the same plus a Case that stays open while v2 is published"]
+#[ignore = "gap: needs the same plus a Case that stays open while v2 is published"]
 async fn a_new_version_installs_beside_and_a_running_case_finishes_on_the_old_one() {
     let Some(_cluster) = hub_and_edge(false).await else {
         return;
@@ -98,7 +98,7 @@ async fn a_new_version_installs_beside_and_a_running_case_finishes_on_the_old_on
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs a settable engine version per node (services.sync_process.engine_version) in the harness"]
+#[ignore = "gap: needs a settable engine version per node (services.sync_process.engine_version) in the harness"]
 async fn an_edge_one_release_behind_holds_the_new_version_and_an_upgrade_releases_it() {
     let Some(_cluster) = hub_and_edge(false).await else {
         return;
@@ -106,7 +106,7 @@ async fn an_edge_one_release_behind_holds_the_new_version_and_an_upgrade_release
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs subscription scope configuration in the harness: an edge outside the process scope never receives it"]
+#[ignore = "gap: needs subscription scope configuration in the harness: an edge outside the process scope never receives it"]
 async fn an_out_of_scope_edge_never_receives_the_process() {
     let Some(_cluster) = hub_and_edge(true).await else {
         return;
@@ -114,7 +114,7 @@ async fn an_out_of_scope_edge_never_receives_the_process() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs an enrolled node client to push a hostile process:* record at the hub"]
+#[ignore = "gap: needs an enrolled node client to push a hostile process:* record at the hub"]
 async fn an_edge_authored_process_record_is_refused_and_audited() {
     let Some(_cluster) = hub_and_edge(false).await else {
         return;

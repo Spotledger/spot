@@ -1226,6 +1226,13 @@ impl CacheStore for ResetOnRecovery {
         })
     }
 
+    fn count_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
+        Box::pin(async move {
+            self.gate().await;
+            self.inner.count_prefix(site, prefix).await
+        })
+    }
+
     fn clear_site<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, ()> {
         Box::pin(async move {
             self.gate().await;

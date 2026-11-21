@@ -77,6 +77,8 @@ fn app_with_renewal() -> (App, String) {
         .with_port::<dyn spot_http::api::ports::session::SessionPort>(Arc::new(
             ConformanceSessions::new(),
         ))
+        .with_port::<dyn spot_http::api::ports::step_up::StepUpPort>(support::step_up::fake())
+        .with_port::<dyn spot_http::api::ports::ai_timeline::AiTimelinePort>(support::ai_timeline::fake())
         .with_port::<dyn ConsumerSessions>(sessions)
         .with_port::<dyn spot_http::api::idempotency::IdempotencyStore>(store.clone())
         .with_port::<dyn spot_http::api::ports::process::ProcessPort>(conformance_processes())
@@ -1396,6 +1398,8 @@ async fn case(app: &App, kit: &Kit, operation_id: &str, method: &str) -> harness
         ("GET", "notification_list") => harness::call(app, "GET", "/api/v1/notifications?limit=2", &[harness::bearer(TOKEN_ALICE)], None).await,
         ("GET", "auth_session_list") => harness::call(app, "GET", "/api/v1/auth/sessions", &[harness::bearer(&kit.token)], None).await,
         ("DELETE", "auth_session_end") => harness::call(app, "DELETE", &format!("/api/v1/auth/sessions/{CONFORMANCE_SESSION_OTHER}"), &[harness::bearer(&kit.token)], None).await,
+        ("POST", "auth_step_up") => harness::call(app, "POST", "/api/v1/auth/step-up", &[harness::bearer(&kit.token)], Some(json!({ "password": "battery staple" }))).await,
+        ("GET", "resource_ai_timeline") => harness::call(app, "GET", &format!("/api/v1/resource/customer/{}/ai-timeline?limit=2", kit.customer), &[harness::bearer(&kit.token)], None).await,
         ("GET", "report_list") => harness::call(app, "GET", "/api/v1/report", &[harness::bearer(&kit.token)], None).await,
         ("GET", "report_describe") => harness::call(app, "GET", &format!("/api/v1/report/{CONFORMANCE_REPORT}"), &[harness::bearer(&kit.token)], None).await,
         ("GET", "task_list") => harness::call(app, "GET", "/api/v1/task", &[harness::bearer(TOKEN_ALICE)], None).await,
@@ -1853,8 +1857,8 @@ fn component_validator(root: &Json, name: &str) -> jsonschema::Validator {
 #[test]
 fn the_0_6_0_properties_are_optional_bounded_and_additive() {
     let root = parse_root();
-    // The contract is at 0.27.0; the 0.6.0 properties must still hold unchanged.
-    assert_eq!(root["info"]["version"], "0.27.0");
+    // The contract is at 0.29.0; the 0.6.0 properties must still hold unchanged.
+    assert_eq!(root["info"]["version"], "0.29.0");
     let meta = component_validator(&root, "DocTypeMeta");
     let row = component_validator(&root, "LookupRow");
     let request = component_validator(&root, "LookupRequest");
@@ -1926,7 +1930,7 @@ fn the_0_6_0_properties_are_optional_bounded_and_additive() {
 #[test]
 fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
+    assert_eq!(root["info"]["version"], "0.29.0");
     assert_eq!(
         root["x-spot-error-codes"].as_object().must().len(),
         149,
@@ -2007,7 +2011,7 @@ fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
 #[test]
 fn the_0_9_0_properties_are_optional_and_additive() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
+    assert_eq!(root["info"]["version"], "0.29.0");
     let field = component_validator(&root, "FieldMeta");
     let kind = component_validator(&root, "FieldType");
 
@@ -2055,7 +2059,7 @@ fn the_0_9_0_properties_are_optional_and_additive() {
 #[test]
 fn the_0_10_0_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
+    assert_eq!(root["info"]["version"], "0.29.0");
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][0], 403);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][1], false);
@@ -2121,10 +2125,10 @@ fn the_0_10_0_additions_are_additive_and_pinned() {
 #[test]
 fn the_0_12_0_process_and_task_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
+    assert_eq!(root["info"]["version"], "0.29.0");
     assert_eq!(
         api_operations(&root).len(),
-        189,
+        190,
         "71 operations less the health probes and the realtime upgrade (0.12.0 had 57 of 60, 0.13.0 64 of 67, 0.14.0 66 of 69)"
     );
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
@@ -2217,8 +2221,8 @@ fn the_0_12_0_process_and_task_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_13_0_process_version_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
     let expected = [
@@ -2330,8 +2334,8 @@ fn the_0_13_0_process_version_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_14_0_graph_and_lineage_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
     for (id, path) in [
@@ -2448,8 +2452,8 @@ fn the_0_14_0_graph_and_lineage_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_15_0_webhook_signing_secret_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
     let path = "/api/v1/webhooks/{name}/signing-secret";
@@ -2844,6 +2848,8 @@ fn the_served_set_is_consistent_with_the_contract() {
         "sso_admin_provider_test",
         "sso_admin_policy_get",
         "sso_admin_policy_put",
+        "auth_step_up",
+        "resource_ai_timeline",
     ] {
         assert!(!gap.contains(id), "{id} was served and must stay served");
     }
@@ -2861,8 +2867,8 @@ fn the_served_set_is_consistent_with_the_contract() {
 #[test]
 fn the_0_16_0_journal_and_selector_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
     for (id, path) in [
@@ -3016,8 +3022,8 @@ fn pin_group(
 #[test]
 fn the_0_17_0_sso_and_step_up_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -3191,8 +3197,8 @@ fn the_0_17_0_sso_and_step_up_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_18_0_identity_administration_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -3538,8 +3544,8 @@ fn the_0_18_0_identity_administration_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_19_0_access_governance_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -3755,8 +3761,8 @@ fn the_0_19_0_access_governance_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_20_0_security_administration_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -3978,8 +3984,8 @@ fn the_0_20_0_security_administration_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_21_0_data_import_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -4044,8 +4050,8 @@ fn the_0_21_0_data_import_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_22_0_search_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -4065,8 +4071,8 @@ fn the_0_22_0_search_additions_are_additive_and_pinned() {
 #[test]
 fn the_0_23_0_booking_hold_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -4122,8 +4128,8 @@ fn the_0_23_0_booking_hold_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_24_0_mcp_contract_document_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(&root, &[], &[], &[]);
 }
@@ -4133,8 +4139,8 @@ fn the_0_24_0_mcp_contract_document_are_additive_and_pinned() {
 #[test]
 fn the_0_27_0_mcp_extension_tools_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     let tools: Vec<&str> = root["x-spot-mcp"]["extension_tools"]
         .as_array()
@@ -4177,8 +4183,8 @@ fn the_0_27_0_mcp_extension_tools_are_additive_and_pinned() {
 #[test]
 fn the_0_25_0_app_and_connector_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -4686,8 +4692,8 @@ mod sso_fake {
 #[test]
 fn the_0_26_0_link_inbound_operation_is_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.27.0");
-    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
         &root,
@@ -4713,6 +4719,161 @@ fn the_0_26_0_link_inbound_operation_is_additive_and_pinned() {
         root["x-spot-error-codes"]["api.rate_limited"].is_array(),
         "the 429 reuses api.rate_limited"
     );
+}
+
+/// Contract 0.28.0 (WP-AI-11.T10), additive: `resource_ai_timeline`, the AI entries of one document as the caller may see them. One operation, no error code (a `503` is the registered
+/// `server.unavailable`). No server yet (WP-AI-11.T11); this pins the shape the route must keep.
+#[test]
+fn the_0_28_0_ai_timeline_operation_is_additive_and_pinned() {
+    let root = parse_root();
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
+    assert_eq!(root["x-spot-error-codes"]["server.unavailable"][0], 503);
+    pin_group(
+        &root,
+        &[(
+            "resource_ai_timeline",
+            "get",
+            "/api/v1/resource/{doctype}/{id}/ai-timeline",
+            false,
+            false,
+        )],
+        &[],
+        &["AiTimelineEntry", "AiTimelineResponse"],
+    );
+    let op = &root["paths"]["/api/v1/resource/{doctype}/{id}/ai-timeline"]["get"];
+    let text = op["description"]
+        .as_str()
+        .must()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for word in [
+        "none of its own, and no role",
+        "empty `entries` list",
+        "must not be told apart from a missing one",
+        "never carries a count or a hint of hidden entries",
+        "`503 server.unavailable` with `Retry-After`",
+        "never an empty list that would read as \"no access\"",
+        "`Cache-Control: private, no-store`",
+    ] {
+        assert!(text.contains(word), "resource_ai_timeline states {word:?}");
+    }
+    let limit = op["parameters"]
+        .as_array()
+        .must()
+        .iter()
+        .find(|p| p["name"] == "limit")
+        .must();
+    assert_eq!(limit["schema"]["minimum"], 1);
+    assert_eq!(limit["schema"]["maximum"], 100);
+    assert_eq!(limit["schema"]["default"], 50);
+    assert!(op["responses"]["default"].is_object());
+
+    let entry = component_validator(&root, "AiTimelineEntry");
+    let good = json!({
+        "seq": 7, "at": "2026-11-21T09:30:00Z", "kind": "tool_call", "agent": "agent-1",
+        "acting_user": "u1", "tool": "remedy_apply", "outcome": "ok",
+        "arguments": [{"name": "amount", "value": "***"}]
+    });
+    assert!(entry.is_valid(&good));
+    let mut open_kind = good.clone();
+    open_kind["kind"] = json!("a_future_kind");
+    assert!(entry.is_valid(&open_kind), "kind is an open set");
+    let mut bad_outcome = good.clone();
+    bad_outcome["outcome"] = json!("pending");
+    assert!(!entry.is_valid(&bad_outcome), "outcome is closed");
+    let mut extra = good.clone();
+    extra["prompt"] = json!("x");
+    assert!(!entry.is_valid(&extra), "the entry is closed: no prompt");
+    let mut long_value = good.clone();
+    long_value["arguments"] = json!([{"name": "n", "value": "x".repeat(129)}]);
+    assert!(!entry.is_valid(&long_value), "a value is at most 128");
+    let mut many = good.clone();
+    many["arguments"] = json!(
+        (0..33)
+            .map(|i| json!({"name": format!("a{i}"), "value": "v"}))
+            .collect::<Vec<_>>()
+    );
+    assert!(!entry.is_valid(&many), "at most 32 arguments");
+    let response = component_validator(&root, "AiTimelineResponse");
+    assert!(response.is_valid(&json!({"data": {"entries": []}})));
+    assert!(response.is_valid(&json!({"data": {"entries": [good]}})));
+    assert!(!response.is_valid(&json!({"data": {"entries": [], "hidden": 2}})));
+    assert!(!response.is_valid(&json!({"data": {}})));
+}
+
+/// Contract 0.29.0 (WP-IAM-12.T10), additive: the single sign-on step-up. `auth_step_up` with `sso: true` answers a `redirect_url` for a forced re-authentication, a `null` `step_up_until`
+/// and the binding cookie; `sso_complete` then issues a new session that carries the marker. No operation and no error code changes; no server yet (the implementation brief follows).
+#[test]
+fn the_0_29_0_sso_step_up_is_additive_and_pinned() {
+    let root = parse_root();
+    assert_eq!(root["info"]["version"], "0.29.0");
+    assert_eq!(api_operations(&root).len(), 190);
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
+    pin_group(
+        &root,
+        &[("auth_step_up", "post", "/api/v1/auth/step-up", false, false)],
+        &[],
+        &["AuthStepUpRequest", "AuthStepUpResponse"],
+    );
+    let op = &root["paths"]["/api/v1/auth/step-up"]["post"];
+    let text = op["description"]
+        .as_str()
+        .must()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for word in [
+        "`prompt=login` and `max_age=0`",
+        "ForceAuthn=\"true\"",
+        "**sets the binding cookie**",
+        "**this session's own provider**",
+        "never upgrades a live token",
+        "new session of the same user",
+        "same user as the session that asked",
+        "`auth_time`",
+        "`AuthnInstant`",
+        "`401 sso.sign_in_failed`",
+        "`400 api.invalid_request`",
+    ] {
+        assert!(text.contains(word), "auth_step_up states {word:?}");
+    }
+    let cookie = op["responses"]["200"]["headers"]["Set-Cookie"]["description"]
+        .as_str()
+        .must();
+    for word in [
+        "Only for `sso: true`",
+        "`HttpOnly`",
+        "`Secure`",
+        "`SameSite=Lax`",
+    ] {
+        assert!(cookie.contains(word), "Set-Cookie states {word:?}");
+    }
+    let complete = root["paths"]["/api/v1/auth/sso/complete"]["post"]["description"]
+        .as_str()
+        .must()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        complete.contains("**new session**") && complete.contains("carries the step-up marker")
+    );
+
+    // The request is unchanged: no provider and no return_to (the server uses the session's own).
+    let request = component_validator(&root, "AuthStepUpRequest");
+    assert!(request.is_valid(&json!({"sso": true})));
+    assert!(request.is_valid(&json!({"password": "x"})));
+    assert!(!request.is_valid(&json!({"sso": true, "provider": "okta"})));
+    assert!(!request.is_valid(&json!({"sso": true, "return_to": "/x"})));
+    // The answer: a redirect with a null step_up_until, or a deadline with a null redirect.
+    let response = component_validator(&root, "AuthStepUpResponse");
+    assert!(response.is_valid(&json!({"data": {"step_up_until": null, "redirect_url": "https://idp.example/authorize?x=1"}})));
+    assert!(response.is_valid(
+        &json!({"data": {"step_up_until": "2026-11-21T10:00:00Z", "redirect_url": null}})
+    ));
+    assert!(!response.is_valid(&json!({"data": {"redirect_url": null}})));
 }
 
 const INVITATION_TOKEN: &str = "tok_0123456789abcdefghij";

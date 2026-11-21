@@ -7,7 +7,7 @@ per case; a **blocked** case names the work package that owns the missing surfac
 distance between the brief and the product is visible in every run instead of being deleted.
 The pass or fail state is not listed here: the run report carries it.
 
-290 cases, of which 188 are blocked by surfaces the host does not serve yet.
+290 cases, of which 184 are blocked by surfaces the host does not serve yet.
 
 ## Authentication and sessions
 
@@ -72,7 +72,7 @@ The pass or fail state is not listed here: the run report carries it.
 | `the_manager_holds_every_right` | Manager matrix over all five DocTypes | case |
 | `the_permission_summary_matches_enforcement` | `GET /auth/permissions` says no create → the request is denied | case |
 | `field_masking_hides_the_confidential_details` | `task.details` is hidden from a Viewer, readable by a Manager; the summary names it | case |
-| `a_reveal_without_the_group_right_is_refused` | `POST .../reveal` → 403 `permission.reveal_denied` | blocked: WP-PRD-01.T4: `spot serve` does not mount `field_reveal` (no `with_reveal`), so the route answers an empty 404 instead of `403 permission.reveal_denied` |
+| `a_reveal_without_the_group_right_is_refused` | `POST .../reveal` → 403 `permission.reveal_denied` | case |
 
 ## Metadata, idempotency, the HTTP edge
 
@@ -224,8 +224,8 @@ The pass or fail state is not listed here: the run report carries it.
 | --- | --- | --- |
 | `ai_audit: an_agent_tool_call_over_http_produces_a_chain_entry` | a tool call made by a test agent over HTTP is a verifiable chain entry with agent and acting user | blocked: WP-AI-04.T4: no HTTP route hands an agent action to the AI audit port yet; the MCP server is not mounted in `spot serve` |
 | `ai_audit: an_ai_action_is_chained_once_with_masked_arguments_and_the_chain_verifies` | an action appended through the hosted port is one chain entry per event id, a secret argument is not stored, a viewer with no access sees no timeline entry, and the chain verifies | case |
-| `ai_audit: tampering_with_an_ai_entry_is_found_by_the_audit_verifier` | the scheduled verifier of the audit chain flags an altered AI entry | blocked: WP-SEC-06.T8: the verifier service does not walk the `ai:<site>` scope until WP-SEC-06.T8 lists it |
-| `ai_audit: the_document_timeline_route_merges_ai_entries_for_readers_only` | the document timeline route lists AI entries only for a viewer who may read the document, masked as the document is | blocked: WP-AI-11.T8: no route serves the timeline, and no engine-backed ReadAccess provider exists (the host denies every viewer) |
+| `ai_audit: tampering_with_an_ai_entry_is_found_by_the_audit_verifier` | the scheduled verifier of the audit chain flags an altered AI entry | blocked: WP-SEC-06.T8: the verifier walks the `ai:<site>` scope since WP-SEC-06.T9 (`[services.audit_verify] extra_chains`, proven in-process over the real store by `spot-cli/tests/audit_verify_extra_chains.rs`), but no running host can turn `[services.audit_verify]` on: no module provides the `AuditKeys` and `AuditAccess` ports its `register` requires, and `l3-http` has no dependency on `spot-audit-chain` or `spot-audit-store` to build the verifier itself |
+| `ai_audit: the_document_timeline_route_merges_ai_entries_for_readers_only` | the document timeline route lists AI entries only for a viewer who may read the document, masked as the document is: a reader of everything sees the values, a reader without every field sees `***`, a viewer with no right and an unknown or malformed id see the same empty list | case |
 
 ## Webhook signing secrets
 
@@ -534,15 +534,15 @@ The pass or fail state is not listed here: the run report carries it.
 
 | Case | Pins | Kind |
 | --- | --- | --- |
-| `retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document` | an agent signed in as a restricted user calls the `retrieve` MCP tool and gets no hit for a document that user may not read, and the unreadable document's text is in no snippet | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (the LLM service provides the embedding port only then, WP-AI-03.T7), so retrieval is degraded on it, nothing is indexed and `retrieve` is not on tools/list; the tool and its extension-tool adapter are proved in-process by `retrieval_service.rs` |
-| `retrieval: a_revoked_share_applies_to_the_next_retrieve_call` | after the share that made a document readable is revoked over REST, the very next `retrieve` call returns no hit for it, with no re-index in between | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (WP-AI-03.T7), so it has no embedding port and cannot index; the in-process proof is `retrieval_service.rs` |
+| `retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document` | an agent signed in as a restricted user calls the `retrieve` MCP tool and gets no hit for a document that user may not read, and the unreadable document's text is in no snippet | case |
+| `retrieval: a_revoked_share_applies_to_the_next_retrieve_call` | after the share that made a document readable is revoked over REST, the very next `retrieve` call returns no hit for it, with no re-index in between | case |
 
 ## Agent tools
 
 | Case | Pins | Kind |
 | --- | --- | --- |
 | `agent_tools: a_t1_remedy_dry_runs_applies_and_undoes_through_the_tools` | a registered agent calls `remedy_list`, `remedy_dry_run`, `remedy_apply` and `remedy_undo` over `POST /mcp`: the answer carries the sealed plan, the `undo_token`, `route` and `undo_expires_at`, a tampered plan is refused, and the audit chain holds the intent record before the change | blocked: WP-AI-07.T5: the `dyn WorldAccess` the composer provides (WP-AI-07.T5) has no part the harness site's remedies can run on (the seeded remedies need jobs and cache parts that read ports the harness does not configure), so a dry-run is refused by its precondition; and the harness has no path that signs in as a registered agent (the agent directory of WP-AI-06.T4 resolves one only from a stored registration) |
-| `agent_tools: recall_memory_is_gated_by_the_agents_tier` | a registered agent calls `recall_memory` and gets no entry learned above its tier, a user principal does not see the tool, and an entry carries no document field value | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (WP-AI-03.T7), so agent memory has no embedder, is degraded and `recall_memory` is not on tools/list; the in-process proof is `agent_memory_service.rs` |
+| `agent_tools: recall_memory_is_gated_by_the_agents_tier` | a registered agent calls `recall_memory` and gets no entry learned above its tier, a user principal does not see the tool, and an entry carries no document field value | blocked: WP-AI-06.T4: the harness has no path that signs in as a registered agent: the agent directory (WP-AI-06.T4) resolves an agent only from a stored registration (`spot_agent_tier_registration`), and no admin route or library call the harness uses writes one; the embedding half is served since WP-AI-10.T4 (`Fixture::start_secondary_with_embedding`), so once an agent credential path exists the case needs `[services.agent_memory]` added to that site; the in-process proof is `agent_memory_service.rs` |
 | `agent_tools: the_agent_tools_are_absent_for_a_user_and_while_their_services_are_off` | a signed-in user's `tools/list` holds none of `retrieve`, `recall_memory` and the four `remedy_*` tools (retrieval and agent memory are off, the remedy tools are for agents), and `tools/call` of each is the same unknown-tool refusal as for any name nobody offers | case |
 
 ## Processes

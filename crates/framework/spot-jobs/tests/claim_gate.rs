@@ -217,6 +217,14 @@ impl JobStore for CountingStore {
         self.inner.cancel(id)
     }
 
+    fn cancel_if_pending(
+        &self,
+        id: JobId,
+    ) -> Pin<Box<dyn Future<Output = spot_jobs::Result<spot_jobs::CancelOutcome>> + Send + '_>>
+    {
+        self.inner.cancel_if_pending(id)
+    }
+
     fn merge_context(
         &self,
         id: JobId,

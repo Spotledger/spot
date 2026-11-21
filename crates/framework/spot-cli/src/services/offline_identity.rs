@@ -1003,6 +1003,8 @@ mod tests {
             "sso",
             "sso_identity",
             "sso_logout",
+            // Authenticated API route (bearer required): decided by the `Api` row.
+            "step_up",
             "telemetry",
             "totp",
             "webhook_secret",

@@ -8,8 +8,12 @@
 //!   API key without an owner, never a session that has not chosen its password) and must be an
 //!   **enabled Tenant Administrator** (read from the assignments on every call, not cached). Any
 //!   failure to decide is a refusal.
-//! - **Step-up.** [`SsoAdminPort::step_up_current`] is "the session was created within the last 15
-//!   minutes" (no step-up marker exists yet); the route layer asks it before every write.
+//! - **Step-up.** [`SsoAdminPort::step_up_current`] is "the session's step-up marker
+//!   (`session.step_up_at`, written by `POST /api/v1/auth/step-up`) is within
+//!   `[services.identity_admin] step_up_window_secs` of now", read through the shared
+//!   `services::step_up::session_is_current` (WP-IAM-12.T9). A session that never stepped up is not
+//!   recent, **including one that was just created** (it used to count when it was created within
+//!   15 minutes); the route layer asks before every write.
 //! - **Tenant.** Every store is the site's own; a provider of another tenant is exactly as missing
 //!   (`404 sso.provider_not_found`).
 //! - **The policy change is reviewed.** A change that would lock the tenant out (switching to
@@ -63,11 +67,11 @@ use spot_sso::{
     ClaimsMap, ClientAuth, Jwa, MetadataTrust, ProviderConfig, ProviderId, ProviderStore,
     ProviderStoreError, SignInMode, SignInPolicy, SsoError, UserOptions,
 };
-use spot_storage_contract::{Catalog, RecordId, RowLock};
+use spot_storage_contract::{Catalog, RecordId};
 
-use crate::live::SiteLive;
 use crate::audit::PathClass;
-use crate::services::scim_store::{at, nm};
+use crate::live::SiteLive;
+use crate::services::scim_store::nm;
 use crate::services::signin_policy::review_change;
 use crate::services::sso::{FetchError, Fetcher, SamlProvider};
 use crate::services::sso_identity::AUDIT;
@@ -76,8 +80,6 @@ use crate::services::sso_identity::port::SsoIdentityService;
 use crate::services::sso_policy::{PgPolicyStore, PolicyStoreError};
 use crate::services::sso_saml_store::{PgSamlStore, SamlStoreError};
 
-/// A session older than this is not a recent step-up.
-const STEP_UP_WINDOW_SECS: i64 = 900;
 /// The scopes a provider gets when the input names none.
 const DEFAULT_SCOPES: [&str; 3] = ["openid", "email", "profile"];
 
@@ -721,36 +723,18 @@ impl SsoAdminPort for SsoAdmin {
             else {
                 return Ok(false);
             };
+            // The one reader of the step-up marker (`services/step_up/marker.rs`): the session's
+            // `step_up_at` within the window of the injected clock. The session's age is never
+            // looked at, so a fresh sign-in is not a step-up here either.
             let engine = self.parts.live.engine().ok_or_else(Self::unavailable)?;
-            let options = spot_storage_contract::TxOptions::new(
-                nm("sso_admin_step_up").map_err(|_| Self::unavailable())?,
-                spot_storage_contract::Isolation::ReadCommitted,
-            )
-            .read_only();
-            let mut tx = spot_storage_contract::StorageBackend::begin(
+            crate::services::step_up::session_is_current(
                 engine.backend(),
-                Arc::clone(&self.parts.catalog),
-                options,
+                &self.parts.catalog,
+                session,
+                self.parts.clock.now_utc(),
+                crate::services::step_up::window_of(&self.parts.site),
             )
             .await
-            .map_err(|_| Self::unavailable())?;
-            let entity =
-                nm(spot_platform_app::doctype::SESSION).map_err(|_| Self::unavailable())?;
-            let loaded = spot_storage_contract::DocumentStore::load(
-                &mut tx,
-                &entity,
-                session,
-                RowLock::None,
-            )
-            .await;
-            let _ = spot_storage_contract::Transaction::rollback(tx).await;
-            let created = loaded.map_err(|_| Self::unavailable())?.and_then(|d| {
-                nm("created_at")
-                    .ok()
-                    .and_then(|n| d.data.fields.get(&n).and_then(at))
-            });
-            let now = self.parts.clock.now_utc();
-            Ok(created.is_some_and(|c| (now - c).whole_seconds() <= STEP_UP_WINDOW_SECS))
         })
     }
 

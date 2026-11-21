@@ -72,7 +72,7 @@ pub struct RouteMark {
 const STAFF_PARTNER: &[Audience] = &[Audience::Staff, Audience::Partner];
 
 /// Every route, sorted by path then method.
-static TABLE: [RouteEntry; 133] = [
+static TABLE: [RouteEntry; 135] = [
     RouteEntry {
         operation: "app_list",
         method: "GET",
@@ -198,6 +198,13 @@ static TABLE: [RouteEntry; 133] = [
         path: "/api/v1/auth/sso/{provider}/slo",
         audiences: STAFF_PARTNER,
         auth: RouteAuth::None,
+    },
+    RouteEntry {
+        operation: "auth_step_up",
+        method: "POST",
+        path: "/api/v1/auth/step-up",
+        audiences: STAFF_PARTNER,
+        auth: RouteAuth::Required,
     },
     RouteEntry {
         operation: "connector_list",
@@ -896,6 +903,13 @@ static TABLE: [RouteEntry; 133] = [
         operation: "resource_update",
         method: "PATCH",
         path: "/api/v1/resource/{doctype}/{id}",
+        audiences: STAFF_PARTNER,
+        auth: RouteAuth::Required,
+    },
+    RouteEntry {
+        operation: "resource_ai_timeline",
+        method: "GET",
+        path: "/api/v1/resource/{doctype}/{id}/ai-timeline",
         audiences: STAFF_PARTNER,
         auth: RouteAuth::Required,
     },

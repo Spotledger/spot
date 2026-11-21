@@ -16,11 +16,17 @@
 //!   backfill is in flight at a time: a rebuild while one is queued is **refused** ("a backfill is
 //!   already queued"), never queued twice (the job's idempotency key coalesces the duplicate, and
 //!   the part turns that into the refusal).
-//! - **Generation** is the part's own counter of rebuilds requested since the process started: it
-//!   starts at 0 and one rebuild bumps it by exactly 1. `restore` puts the previous generation back
-//!   only when nothing newer ran (otherwise it refuses: "a newer rebuild ran"). The queued backfill
-//!   itself cannot be withdrawn (the port cannot cancel); it is idempotent, so a restored record
-//!   with a replay still running is harmless.
+//! - **Generation** is the part's own counter of rebuilds requested: it starts at 0 and one rebuild
+//!   bumps it by exactly 1. On a site it is kept in a small file beside the retrieval cursor
+//!   (`sites/<site>/retrieval.generation`, one decimal, written to a temporary file and renamed, as
+//!   the cursor is), so it **survives a restart** and a restore after a restart still compares
+//!   against the counter it was made from. The file is node-local, like the cursor, and is not the
+//!   feed generation the cursor carries (a different notion). A rebuild writes `generation + 1`
+//!   **before** it enqueues the backfill, and puts the old value back if the queue refuses the job.
+//!   `restore` puts the previous generation back only when nothing newer ran (otherwise it
+//!   refuses: "a newer rebuild ran"). The queued backfill itself cannot be withdrawn (the port
+//!   cannot cancel); it is idempotent, so a restored record with a replay still running is
+//!   harmless. A part built without a [`GenerationStore`] keeps the counter in memory (tests).
 //! - **Health** is *stale* when the cursor is behind and no backfill of this part is in flight, and
 //!   *fresh* otherwise: a rebuild just requested reads fresh at the new generation (nothing more
 //!   for an operator to do), and it reads stale again if the cursor is still behind after
@@ -34,7 +40,9 @@
 //! (`Handle::block_on`, never `block_in_place`).
 
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use spot_core::Clock;
@@ -98,8 +106,72 @@ impl<F: ChangeFeed + 'static> IndexLag for FeedLag<F> {
     }
 }
 
+/// Where the index generation is kept.
+pub trait GenerationStore: Send + Sync {
+    /// The stored generation; 0 when none was ever stored or it cannot be read.
+    fn load(&self) -> u64;
+
+    /// Stores `generation` so a later [`load`](Self::load), also after a restart, returns it.
+    ///
+    /// # Errors
+    ///
+    /// `Err(())` when the value could not be stored; nothing was changed.
+    #[allow(clippy::result_unit_err)]
+    fn save(&self, generation: u64) -> Result<(), ()>;
+}
+
+/// A generation kept in memory only (lost at restart): what a part gets unless it is given a
+/// durable store.
+#[derive(Debug, Default)]
+pub struct MemoryGeneration(AtomicU64);
+
+impl GenerationStore for MemoryGeneration {
+    fn load(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    fn save(&self, generation: u64) -> Result<(), ()> {
+        self.0.store(generation, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+/// A generation kept in a small file: a single decimal, replaced through a temporary file and a
+/// rename, so a reader sees the old value or the new one, never half of one. Node-local.
+#[derive(Debug)]
+pub struct FileGeneration {
+    path: PathBuf,
+}
+
+impl FileGeneration {
+    /// A generation in `path`.
+    #[must_use]
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl GenerationStore for FileGeneration {
+    fn load(&self) -> u64 {
+        std::fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    }
+
+    fn save(&self, generation: u64) -> Result<(), ()> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| ())?;
+        }
+        let mut temporary = self.path.clone().into_os_string();
+        temporary.push(".tmp");
+        let temporary = PathBuf::from(temporary);
+        std::fs::write(&temporary, generation.to_string()).map_err(|_| ())?;
+        std::fs::rename(&temporary, &self.path).map_err(|_| ())
+    }
+}
+
 struct State {
-    generation: u64,
     requested_at: Option<i64>,
 }
 
@@ -110,6 +182,7 @@ pub struct RetrievalIndexPart {
     queue: String,
     clock: Arc<dyn Clock>,
     handle: Handle,
+    generations: Arc<dyn GenerationStore>,
     state: Mutex<State>,
 }
 
@@ -130,11 +203,16 @@ impl RetrievalIndexPart {
             queue,
             clock,
             handle,
-            state: Mutex::new(State {
-                generation: 0,
-                requested_at: None,
-            }),
+            generations: Arc::new(MemoryGeneration::default()),
+            state: Mutex::new(State { requested_at: None }),
         }
+    }
+
+    /// Keeps the generation in `generations` (a [`FileGeneration`] on a site) instead of in memory.
+    #[must_use]
+    pub fn with_generations(mut self, generations: Arc<dyn GenerationStore>) -> Self {
+        self.generations = generations;
+        self
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -166,7 +244,7 @@ impl RetrievalIndexPart {
             } else {
                 IndexHealth::Fresh
             },
-            generation: state.generation,
+            generation: self.generations.load(),
         }
     }
 }
@@ -186,8 +264,19 @@ pub fn from_parts(
     )))
 }
 
+/// The generation file of a site's index: `<root>/sites/<site>/retrieval.generation`, beside the
+/// retrieval cursor (`retrieval.cursor`).
+#[must_use]
+pub fn generation_path(root: &Path, site: &str) -> PathBuf {
+    root.join("sites")
+        .join(site)
+        .join("retrieval")
+        .with_extension("generation")
+}
+
 /// The retrieval-index part for this site, or `None` when the retrieval service is not provided
-/// (it is off by default, per tenant) or the job-submit port is missing.
+/// (it is off by default, per tenant) or the job-submit port is missing. Its generation lives in
+/// the site's generation file, so it survives a restart.
 pub(super) fn from_site(ctx: &SiteCtx<'_>) -> Option<Arc<dyn IndexPart>> {
     let env = *ctx.env().ok()?;
     // The retrieval module provides its tool only when it is on for this site and fully built.
@@ -199,13 +288,18 @@ pub(super) fn from_site(ctx: &SiteCtx<'_>) -> Option<Arc<dyn IndexPart>> {
             .join("retrieval.cursor"),
     );
     let lag: Arc<dyn IndexLag> = Arc::new(FeedLag::new(env.backend.clone(), cursor));
-    from_parts(
-        Some(lag),
-        ctx.port::<dyn JobSubmit>(),
-        env.loaded.common.services.jobs.queues.first().cloned(),
+    let part = RetrievalIndexPart::new(
+        lag,
+        ctx.port::<dyn JobSubmit>()?,
+        env.loaded.common.services.jobs.queues.first().cloned()?,
         Arc::clone(ctx.clock()),
-        capture_runtime(),
+        capture_runtime()?,
     )
+    .with_generations(Arc::new(FileGeneration::new(generation_path(
+        env.root,
+        &env.site.site,
+    ))));
+    Some(Arc::new(part))
 }
 
 impl IndexPart for RetrievalIndexPart {
@@ -257,24 +351,36 @@ impl IndexOps for RetrievalIndexOps<'_> {
             idempotency_key: BACKFILL_KEY.to_owned(),
             not_before: None,
         };
-        let is_new = self
-            .part
-            .handle
-            .block_on(self.part.submit.submit(spec))
-            .map_err(|_| OpError::new(op, "the job queue did not take the backfill"))?;
-        if !is_new {
-            return Err(OpError::new(op, "a backfill is already queued"));
-        }
+        // One lock from the read of the generation to the enqueue: two rebuilds in this process
+        // cannot both take the same `generation + 1`.
         let mut state = self.part.lock();
-        let before_generation = state.generation;
-        state.generation = state.generation.saturating_add(1);
+        let before_generation = self.part.generations.load();
+        let after_generation = before_generation.saturating_add(1);
+        // The new generation is written first. If the queue then refuses the job, the old value is
+        // put back, so a refused rebuild leaves the generation where it was.
+        self.part
+            .generations
+            .save(after_generation)
+            .map_err(|()| OpError::new(op, "the index generation could not be saved"))?;
+        let outcome = self.part.handle.block_on(self.part.submit.submit(spec));
+        match outcome {
+            Ok(true) => {}
+            Ok(false) => {
+                let _ = self.part.generations.save(before_generation);
+                return Err(OpError::new(op, "a backfill is already queued"));
+            }
+            Err(_) => {
+                let _ = self.part.generations.save(before_generation);
+                return Err(OpError::new(op, "the job queue did not take the backfill"));
+            }
+        }
         state.requested_at = Some(self.part.now());
         Ok(IndexChange {
             name: name.clone(),
             before: before.health,
             after: IndexHealth::Fresh,
             before_generation,
-            after_generation: state.generation,
+            after_generation,
         })
     }
 
@@ -284,10 +390,13 @@ impl IndexOps for RetrievalIndexOps<'_> {
             return Err(no_index(op, &change.name));
         }
         let mut state = self.part.lock();
-        if state.generation != change.after_generation {
+        if self.part.generations.load() != change.after_generation {
             return Err(OpError::new(op, "a newer rebuild ran"));
         }
-        state.generation = change.before_generation;
+        self.part
+            .generations
+            .save(change.before_generation)
+            .map_err(|()| OpError::new(op, "the index generation could not be saved"))?;
         state.requested_at = None;
         Ok(())
     }

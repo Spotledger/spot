@@ -81,6 +81,9 @@ use crate::services::ports::{JobSpec, JobSubmit, OutboxLease};
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result, error};
 
+#[path = "process/case_desk.rs"]
+pub mod case_desk;
+
 /// Start order: after the framework's own services and after every module 1000 to 1099. Node
 /// handler modules (Decision, Document, Integration, forms, messages) take 1110 to 1230, so
 /// their smaller-is-earlier `ORDER` than theirs lets them find this module's [`HandlerBuilder`]
@@ -202,8 +205,11 @@ pub type ProcessEngine = Engine<PgCaseStore, FencedTimerPort>;
 /// `at` as the scheduler's timestamp type.
 fn to_jiff(at: OffsetDateTime) -> Result<jiff::Timestamp> {
     let nanos = i32::try_from(at.nanosecond()).unwrap_or(0);
-    jiff::Timestamp::new(at.unix_timestamp(), nanos)
-        .map_err(|e| Error(format!("the instant does not convert to a lease timestamp: {e}")))
+    jiff::Timestamp::new(at.unix_timestamp(), nanos).map_err(|e| {
+        Error(format!(
+            "the instant does not convert to a lease timestamp: {e}"
+        ))
+    })
 }
 
 /// Builds the timer port over a fresh lease held on `leases`, named `name`.
@@ -459,7 +465,13 @@ impl ProcessHost {
             )));
         }
         let record = engine
-            .start_definition(&definition, case_id.clone(), business_key.to_owned(), initiator, now)
+            .start_definition(
+                &definition,
+                case_id.clone(),
+                business_key.to_owned(),
+                initiator,
+                now,
+            )
             .await
             .map_err(|e| Error(format!("starting the case failed: {}", e.code())))?;
         // `start_definition` persists the fresh Case with empty variables (`CaseRecord::new`'s
@@ -485,6 +497,18 @@ impl ProcessHost {
     /// Enqueues one case-step job. Logged and dropped on failure: never fatal to the caller,
     /// since the resume scan will find the Case regardless.
     async fn enqueue_step(&self, case: &CaseId, now: OffsetDateTime) {
+        if let Err(e) = self.try_enqueue_step(case, now).await {
+            tracing::debug!(site = %self.site, %e, "case-step enqueue did not land; the resume scan will catch it");
+        }
+    }
+
+    /// Enqueues one case-step job and reports how the job store answered: `true` when a job
+    /// was added, `false` when the engine's idempotency key matched one already queued.
+    async fn try_enqueue_step(
+        &self,
+        case: &CaseId,
+        now: OffsetDateTime,
+    ) -> std::result::Result<bool, crate::services::ports::PortError> {
         let job = CaseJob::new(case.clone(), self.site.clone(), now);
         let spec = JobSpec {
             name: CASE_JOB_NAME.to_owned(),
@@ -493,9 +517,34 @@ impl ProcessHost {
             idempotency_key: job.idempotency_key(),
             not_before: Some(now),
         };
-        if let Err(e) = self.submit.submit(spec).await {
-            tracing::debug!(site = %self.site, %e, "case-step enqueue did not land; the resume scan will catch it");
+        self.submit.submit(spec).await
+    }
+
+    /// Enqueues one step of a Case an operator unsticks, through the same idempotent enqueue the
+    /// resume scan uses (a second call while the first job is still queued is dropped by the
+    /// job store). The caller decides *whether* the Case is stuck (`case_desk` owns that rule,
+    /// pinned in one function); this method only refuses a Case that does not exist on this
+    /// site or has already finished, and reports a job store that could not take the step.
+    ///
+    /// Returns `true` when a job was added and `false` when one was already queued.
+    ///
+    /// # Errors
+    /// The engine is not ready, the store could not be read, no such Case exists on this site, the
+    /// Case has finished, or the job store did not take the job. The text names no Case data.
+    pub async fn unstick_step(&self, case: &CaseId, now: OffsetDateTime) -> Result<bool> {
+        let engine = self.engine()?;
+        let record = engine
+            .store()
+            .load(case)
+            .await
+            .map_err(|e| Error(format!("loading the case failed: {}", e.code())))?
+            .ok_or_else(|| Error("no such case on this site".into()))?;
+        if record.run.status != RunStatus::Running || record.run.is_finished() {
+            return Err(Error("the case has finished".into()));
         }
+        self.try_enqueue_step(case, now)
+            .await
+            .map_err(|_| Error("the case step could not be queued".into()))
     }
 
     /// Runs one case-step job: `Engine::step`, then re-enqueues once more when the turn made
@@ -639,9 +688,7 @@ impl Service for ProcessService {
                         }
                     }
                     Err(_) => {
-                        tracing::debug!(
-                            "the process resume lease is held elsewhere; standing by"
-                        );
+                        tracing::debug!("the process resume lease is held elsewhere; standing by");
                     }
                 }
                 tokio::select! {
@@ -754,11 +801,12 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         startup: OnceCell::new(),
     }));
 
-    ctx.finally(move |_ctx| {
+    ctx.finally(move |ctx| {
         let registry = builder.build_registry();
         let engine = Arc::new(Engine::new(case_store, timer_port, registry));
         host.set_engine(engine);
-        Ok(())
+        // Every module has registered, so the insight port (1190) is in place if there is one.
+        case_desk::provide(ctx, &host)
     });
     Ok(())
 }

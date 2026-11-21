@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde_json::json;
 use spot_core::SiteId;
 use spot_events_contract::{Actor, EventMeta, PayloadDocument};
-use spot_jobs::model::{Claim, InsertResult, Job, JobId, JobState, NewJob};
+use spot_jobs::model::{CancelOutcome, Claim, InsertResult, Job, JobId, JobState, NewJob};
 use spot_jobs::store::{ClaimedJob, JobFilter, JobStore};
 use spot_jobs::{Error, SYS_JOB_ENQUEUED_TOPIC, process_batch};
 use spot_jobs_pg::PgJobStore;
@@ -177,6 +177,9 @@ impl JobStore for DiesBeforeSavingPosition {
     }
     fn cancel(&self, id: JobId) -> Fut<'_, ()> {
         self.inner.cancel(id)
+    }
+    fn cancel_if_pending(&self, id: JobId) -> Fut<'_, CancelOutcome> {
+        self.inner.cancel_if_pending(id)
     }
     fn merge_context(
         &self,

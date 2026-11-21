@@ -34,7 +34,7 @@ use spot_jobs_pg::PgJobStore;
 use spot_postgres::testing::TestDb;
 
 /// `run_all` asks for a fresh store per check; a check takes the next prepared one.
-const CHECKS: usize = 21;
+const CHECKS: usize = 27;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_contract_suite_passes_on_postgres() {

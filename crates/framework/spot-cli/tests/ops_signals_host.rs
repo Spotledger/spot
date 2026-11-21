@@ -1,11 +1,12 @@
 //! The signals service in a real `spot serve` site (WP-OPS-01.T3). Real PostgreSQL through
 //! `SPOT_TEST_PG_URL` (skipped with a printed reason when unset, as the other host tests do).
 //!
-//! The site hosts the maintenance gate and no journal, sync hub or quarantine: after the gate is
+//! The site hosts the maintenance gate and the quarantine (the quarantine module provides its
+//! backend on a PostgreSQL site, WP-AI-07.T8), and no journal or sync hub: after the gate is
 //! closed, one collection later `/metrics` (with the administrator credential) shows
-//! `spot_migration_gate_closed 1`, and no `spot_journal_*`, `spot_sync_*` or `spot_quarantine_*`
-//! series exists, because no such source is hosted (a zero would read as "healthy"). Without the
-//! credential the route is still refused.
+//! `spot_migration_gate_closed 1` and an empty quarantine as `spot_quarantine_open 0`, and no
+//! `spot_journal_*` or `spot_sync_*` series exists, because no such source is hosted (a zero
+//! would read as "healthy"). Without the credential the route is still refused.
 //!
 //! The open-conditions series is covered by the module's unit tests: nothing a test can reach
 //! raises a condition on a started `spot serve` (the handle is a service port, not on `Running`).
@@ -107,12 +108,7 @@ async fn a_closed_gate_shows_on_metrics_and_unhosted_sources_stay_absent() {
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     assert!(!seen.is_empty(), "the gauge never showed the closed gate");
-    for absent in [
-        "spot_journal_",
-        "spot_sync_nodes",
-        "spot_sync_node_lag",
-        "spot_quarantine_",
-    ] {
+    for absent in ["spot_journal_", "spot_sync_nodes", "spot_sync_node_lag"] {
         assert!(
             !seen
                 .lines()
@@ -121,6 +117,13 @@ async fn a_closed_gate_shows_on_metrics_and_unhosted_sources_stay_absent() {
             "a series of an unhosted source exists: {absent}"
         );
     }
+
+    // The hosted quarantine holds nothing: its open count is a real zero.
+    assert!(
+        seen.lines()
+            .any(|l| l.starts_with("spot_quarantine_open ") && l.ends_with(" 0")),
+        "the hosted quarantine shows no open count: {seen}"
+    );
 
     // Opening the gate shows 0, not an absent series.
     gate.open(unix_micros()).await.unwrap();

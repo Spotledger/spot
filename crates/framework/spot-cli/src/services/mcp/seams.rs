@@ -421,7 +421,7 @@ pub async fn coordinator(
 /// read. On the in-memory profile the store is private to this service and nothing runs its jobs.
 pub async fn job_store(env: &SiteEnv<'_>) -> Result<(Arc<dyn JobStore>, bool), String> {
     if env.loaded.common.services.jobs.store == "postgres" {
-        let store = spot_jobs_pg::PgJobStore::new(env.backend.pool());
+        let store = crate::services::jobs::durable_store(env.backend);
         store
             .prepare()
             .await

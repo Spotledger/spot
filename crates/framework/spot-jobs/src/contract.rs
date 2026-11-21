@@ -255,6 +255,75 @@ where
         }
     }
 
+    // Test: job.requeue: dead and retrying go back to pending, attempt reset, claimable
+    report.total += 1;
+    match test_requeue_states(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report.failures.push(format!("test_requeue_states: {}", e));
+        }
+    }
+
+    // Test: job.requeue: every other state is refused and the job is unchanged
+    report.total += 1;
+    match test_requeue_refused(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report.failures.push(format!("test_requeue_refused: {}", e));
+        }
+    }
+
+    // Test: job.requeue: a live holder of the idempotency key refuses the requeue
+    report.total += 1;
+    match test_requeue_key_held(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report
+                .failures
+                .push(format!("test_requeue_key_held: {}", e));
+        }
+    }
+
+    // Test: job.requeue: two requeues have one winner; a requeue racing a claim never overwrites it
+    report.total += 1;
+    match test_requeue_concurrent(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report
+                .failures
+                .push(format!("test_requeue_concurrent: {}", e));
+        }
+    }
+
+    // Test: cancel_if_pending: only an unclaimed pending or retrying job is cancelled, the three
+    // answers are told apart, nothing else is touched
+    report.total += 1;
+    match test_cancel_if_pending_states(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report
+                .failures
+                .push(format!("test_cancel_if_pending_states: {}", e));
+        }
+    }
+
+    // Test: cancel_if_pending: racing a claim (and itself) has exactly one winner
+    report.total += 1;
+    match test_cancel_if_pending_race(&make_store()).await {
+        Ok(_) => report.passed += 1,
+        Err(e) => {
+            report.failed += 1;
+            report
+                .failures
+                .push(format!("test_cancel_if_pending_race: {}", e));
+        }
+    }
+
     Ok(report)
 }
 
@@ -1171,6 +1240,485 @@ async fn test_merge_context_fence_before_size(
     }
     if context_of(store, id).await? != json!({"seed": 1}) {
         return Err(fail("a refused merge wrote"));
+    }
+    Ok(())
+}
+
+// ---- requeue ----------------------------------------------------------------------------
+
+/// Inserts a job on `queue` (optionally with an idempotency key) and returns its id.
+async fn rq_insert(
+    store: &Arc<dyn crate::store::JobStore>,
+    queue: &str,
+    key: Option<&str>,
+) -> Result<crate::model::JobId> {
+    let mut new_job = crate::model::NewJob::new(
+        "app:requeue".to_string(),
+        json!({}),
+        queue.to_string(),
+        SiteId::new("test-site").unwrap(),
+        OffsetDateTime::now_utc(),
+    );
+    if let Some(key) = key {
+        new_job = new_job.with_idempotency_key(key.to_string());
+    }
+    match store.insert_if_new(new_job).await? {
+        crate::model::InsertResult::Inserted(id) => Ok(id),
+        _ => Err(fail("insert failed")),
+    }
+}
+
+/// Claims the one claimable job of `queue`, which must be `id`.
+async fn rq_claim(
+    store: &Arc<dyn crate::store::JobStore>,
+    queue: &str,
+    id: crate::model::JobId,
+) -> Result<crate::model::Claim> {
+    let claimed = store
+        .claim(
+            &[queue.to_string()],
+            "worker-1",
+            Duration::from_secs(30),
+            OffsetDateTime::now_utc(),
+            1,
+        )
+        .await?;
+    match claimed.into_iter().next() {
+        Some(c) if c.job.id == id => Ok(c.claim),
+        _ => Err(fail("the job was not claimed")),
+    }
+}
+
+/// Inserts a job on `queue` and runs it to `end` through a claim and a `complete`.
+async fn rq_finish(
+    store: &Arc<dyn crate::store::JobStore>,
+    queue: &str,
+    key: Option<&str>,
+    end: JobState,
+    error: Option<&str>,
+) -> Result<crate::model::JobId> {
+    let id = rq_insert(store, queue, key).await?;
+    let claim = rq_claim(store, queue, id).await?;
+    store
+        .complete(&claim, end, error.map(str::to_string))
+        .await?;
+    Ok(id)
+}
+
+async fn rq_get(
+    store: &Arc<dyn crate::store::JobStore>,
+    id: crate::model::JobId,
+) -> Result<crate::model::Job> {
+    store.get(id).await?.ok_or_else(|| fail("job vanished"))
+}
+
+async fn test_requeue_states(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    // Dead -> pending.
+    let dead = rq_finish(store, "default", None, JobState::Dead, Some("boom")).await?;
+    let before = rq_get(store, dead).await?;
+    if before.state != JobState::Dead {
+        return Err(fail("the fixture job is not dead"));
+    }
+    let now = OffsetDateTime::now_utc();
+    let job = store.requeue(dead, now).await?;
+    if job.state != JobState::Pending {
+        return Err(fail("a requeued dead job is not pending"));
+    }
+    if job.attempt != 0 || job.claim.is_some() {
+        return Err(fail("a requeue did not reset the attempt or the claim"));
+    }
+    if job.max_attempts != before.max_attempts {
+        return Err(fail("a requeue changed max_attempts"));
+    }
+    if job.not_before > now {
+        return Err(fail("a requeued job is not due now"));
+    }
+    if job.last_error.as_deref() != Some("boom") {
+        return Err(fail("a requeue dropped the last error"));
+    }
+    if job.args != before.args || job.queue != before.queue || job.site != before.site {
+        return Err(fail("a requeue changed the job's identity"));
+    }
+    if rq_get(store, dead).await? != job {
+        return Err(fail("the requeue's answer is not the stored job"));
+    }
+    // It is claimable again, at once.
+    rq_claim(store, "default", dead).await?;
+
+    // Retrying -> pending, even when its retry time is far away.
+    let retrying = rq_insert(store, "retry-q", None).await?;
+    let claim = rq_claim(store, "retry-q", retrying).await?;
+    store
+        .complete(
+            &claim,
+            JobState::Retrying {
+                at: OffsetDateTime::now_utc() + time::Duration::hours(1),
+            },
+            Some("flaky".to_string()),
+        )
+        .await?;
+    let now = OffsetDateTime::now_utc();
+    let job = store.requeue(retrying, now).await?;
+    if job.state != JobState::Pending || job.attempt != 0 || job.claim.is_some() {
+        return Err(fail("a requeued retrying job is not a fresh pending one"));
+    }
+    if job.not_before > now {
+        return Err(fail("a requeued retrying job is not due now"));
+    }
+    if job.last_error.as_deref() != Some("flaky") {
+        return Err(fail("a requeue dropped the last error of a retrying job"));
+    }
+    rq_claim(store, "retry-q", retrying).await?;
+    Ok(())
+}
+
+async fn test_requeue_refused(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    let now = OffsetDateTime::now_utc();
+
+    // Unknown id: the existing not-found error.
+    match store.requeue(crate::model::JobId(9_000_000_001), now).await {
+        Err(crate::error::Error::Other(m)) if m == "Job not found" => {}
+        _ => return Err(fail("an unknown id was not the not-found error")),
+    }
+
+    // Pending.
+    let pending = rq_insert(store, "q-pending", None).await?;
+    // Running (a live claim).
+    let running = rq_insert(store, "q-running", None).await?;
+    let _claim = rq_claim(store, "q-running", running).await?;
+    // Succeeded.
+    let succeeded = rq_finish(store, "q-done", None, JobState::Succeeded, None).await?;
+    // Cancelled.
+    let cancelled = rq_insert(store, "q-cancelled", None).await?;
+    store.cancel(cancelled).await?;
+
+    for (name, id) in [
+        ("pending", pending),
+        ("running", running),
+        ("succeeded", succeeded),
+        ("cancelled", cancelled),
+    ] {
+        let before = rq_get(store, id).await?;
+        match store.requeue(id, now).await {
+            Err(crate::error::Error::RequeueRefused) => {}
+            _ => return Err(fail(&format!("a {name} job was not refused"))),
+        }
+        if rq_get(store, id).await? != before {
+            return Err(fail(&format!("a refused requeue changed a {name} job")));
+        }
+    }
+    Ok(())
+}
+
+async fn test_requeue_key_held(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    let now = OffsetDateTime::now_utc();
+    let dead = rq_finish(store, "default", Some("k-1"), JobState::Dead, Some("boom")).await?;
+    // The key is free while its job is dead, so a second job takes it.
+    let holder = rq_insert(store, "default", Some("k-1")).await?;
+    if holder == dead {
+        return Err(fail("a dead job's key was not free"));
+    }
+    let before = rq_get(store, dead).await?;
+    match store.requeue(dead, now).await {
+        Err(crate::error::Error::RequeueKeyHeld) => {}
+        _ => return Err(fail("a live key holder did not refuse the requeue")),
+    }
+    if rq_get(store, dead).await? != before {
+        return Err(fail("a key-refused requeue changed the job"));
+    }
+    // Once the holder is finished the key is free again and the requeue goes through.
+    store.cancel(holder).await?;
+    let job = store.requeue(dead, now).await?;
+    if job.state != JobState::Pending || job.idempotency_key.as_deref() != Some("k-1") {
+        return Err(fail(
+            "the requeue after the key was freed did not keep the key",
+        ));
+    }
+    // And the requeued job now holds the key: an insert is a duplicate of it.
+    let again = crate::model::NewJob::new(
+        "app:requeue".to_string(),
+        json!({}),
+        "default".to_string(),
+        SiteId::new("test-site").unwrap(),
+        OffsetDateTime::now_utc(),
+    )
+    .with_idempotency_key("k-1".to_string());
+    match store.insert_if_new(again).await? {
+        crate::model::InsertResult::Duplicate(id) if id == dead => Ok(()),
+        _ => Err(fail("the requeued job does not hold its key")),
+    }
+}
+
+async fn test_requeue_concurrent(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    // Two (here eight) requeues of one dead job: exactly one wins, the rest are refused.
+    let dead = rq_finish(store, "default", None, JobState::Dead, Some("boom")).await?;
+    let mut tasks = Vec::new();
+    for _ in 0..8 {
+        let store = store.clone();
+        tasks.push(tokio::spawn(async move {
+            store.requeue(dead, OffsetDateTime::now_utc()).await
+        }));
+    }
+    let mut won = 0;
+    for t in tasks {
+        match t.await.map_err(|_| fail("requeue task panicked"))? {
+            Ok(_) => won += 1,
+            Err(crate::error::Error::RequeueRefused) => {}
+            Err(e) => return Err(fail(&format!("a racing requeue failed: {e}"))),
+        }
+    }
+    if won != 1 {
+        return Err(fail(
+            "concurrent requeues of one job had more or fewer than one winner",
+        ));
+    }
+    if rq_get(store, dead).await?.state != JobState::Pending {
+        return Err(fail("the requeued job is not pending"));
+    }
+
+    // A requeue racing a claim of the same retrying job: whichever wins, the job is whole.
+    for i in 0..8 {
+        let queue = format!("race-{i}");
+        let id = rq_insert(store, &queue, None).await?;
+        let claim = rq_claim(store, &queue, id).await?;
+        store
+            .complete(
+                &claim,
+                JobState::Retrying {
+                    at: OffsetDateTime::now_utc() - time::Duration::seconds(5),
+                },
+                Some("flaky".to_string()),
+            )
+            .await?;
+        let requeuer = {
+            let store = store.clone();
+            tokio::spawn(async move { store.requeue(id, OffsetDateTime::now_utc()).await })
+        };
+        let claimer = {
+            let store = store.clone();
+            let queue = queue.clone();
+            tokio::spawn(async move {
+                store
+                    .claim(
+                        &[queue],
+                        "worker-2",
+                        Duration::from_secs(30),
+                        OffsetDateTime::now_utc(),
+                        1,
+                    )
+                    .await
+            })
+        };
+        let requeued = requeuer.await.map_err(|_| fail("requeue task panicked"))?;
+        let claimed = claimer.await.map_err(|_| fail("claim task panicked"))??;
+        let stored = rq_get(store, id).await?;
+        match (requeued, claimed.len()) {
+            // The requeue went first and the claim ran after it: the job is running.
+            (Ok(_), 1) | (Err(crate::error::Error::RequeueRefused), 1) => {
+                if claimed[0].job.id != id
+                    || stored.state != JobState::Running
+                    || stored.claim.is_none()
+                {
+                    return Err(fail("a claim won the race but the job is not running"));
+                }
+            }
+            // The claim found nothing (the requeue held the row): the job is a fresh pending one.
+            (Ok(_), 0) => {
+                if stored.state != JobState::Pending
+                    || stored.attempt != 0
+                    || stored.claim.is_some()
+                {
+                    return Err(fail("a requeue won the race but the job is not pending"));
+                }
+            }
+            _ => {
+                return Err(fail(
+                    "a requeue racing a claim ended in an impossible outcome",
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---- cancel_if_pending ------------------------------------------------------------------
+
+async fn test_cancel_if_pending_states(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    use crate::model::CancelOutcome;
+
+    // Unknown id: its own answer, not an error.
+    match store
+        .cancel_if_pending(crate::model::JobId(9_000_000_002))
+        .await
+    {
+        Ok(CancelOutcome::NotFound) => {}
+        _ => return Err(fail("an unknown id was not NotFound")),
+    }
+
+    // Pending: cancelled.
+    let pending = rq_insert(store, "cip-pending", None).await?;
+    match store.cancel_if_pending(pending).await? {
+        CancelOutcome::Cancelled => {}
+        _ => return Err(fail("a pending job was not cancelled")),
+    }
+    if rq_get(store, pending).await?.state != JobState::Cancelled {
+        return Err(fail("a cancelled pending job is not stored as cancelled"));
+    }
+    // A cancelled job cannot be claimed.
+    let claimed = store
+        .claim(
+            &["cip-pending".to_string()],
+            "worker-1",
+            Duration::from_secs(30),
+            OffsetDateTime::now_utc(),
+            1,
+        )
+        .await?;
+    if !claimed.is_empty() {
+        return Err(fail("a worker claimed a job cancel_if_pending cancelled"));
+    }
+
+    // Retrying without a claim: cancelled, its history kept.
+    let retrying = rq_insert(store, "cip-retrying", None).await?;
+    let claim = rq_claim(store, "cip-retrying", retrying).await?;
+    store
+        .complete(
+            &claim,
+            JobState::Retrying {
+                at: OffsetDateTime::now_utc() + time::Duration::hours(1),
+            },
+            Some("flaky".to_string()),
+        )
+        .await?;
+    match store.cancel_if_pending(retrying).await? {
+        CancelOutcome::Cancelled => {}
+        _ => return Err(fail("an unclaimed retrying job was not cancelled")),
+    }
+    let stored = rq_get(store, retrying).await?;
+    if stored.state != JobState::Cancelled || stored.last_error.as_deref() != Some("flaky") {
+        return Err(fail("a cancelled retrying job lost its state or history"));
+    }
+
+    // Running (a live claim): not cancelled, nothing changed, and the worker still completes it.
+    let running = rq_insert(store, "cip-running", None).await?;
+    let running_claim = rq_claim(store, "cip-running", running).await?;
+    let before = rq_get(store, running).await?;
+    match store.cancel_if_pending(running).await? {
+        CancelOutcome::NotCancellable => {}
+        _ => return Err(fail("a running job was not refused")),
+    }
+    if rq_get(store, running).await? != before {
+        return Err(fail("a refused cancel_if_pending changed a running job"));
+    }
+    store
+        .complete(&running_claim, JobState::Succeeded, None)
+        .await?;
+    if rq_get(store, running).await?.state != JobState::Succeeded {
+        return Err(fail(
+            "the worker could not complete a job cancel_if_pending refused",
+        ));
+    }
+
+    // Finished jobs: refused and unchanged (a second call on a cancelled job reports it).
+    let dead = rq_finish(store, "cip-dead", None, JobState::Dead, Some("boom")).await?;
+    let succeeded = rq_finish(store, "cip-done", None, JobState::Succeeded, None).await?;
+    for (name, id) in [
+        ("dead", dead),
+        ("succeeded", succeeded),
+        ("cancelled", pending),
+    ] {
+        let before = rq_get(store, id).await?;
+        match store.cancel_if_pending(id).await? {
+            CancelOutcome::NotCancellable => {}
+            _ => return Err(fail(&format!("a {name} job was not refused"))),
+        }
+        if rq_get(store, id).await? != before {
+            return Err(fail(&format!(
+                "a refused cancel_if_pending changed a {name} job"
+            )));
+        }
+    }
+    Ok(())
+}
+
+async fn test_cancel_if_pending_race(store: &Arc<dyn crate::store::JobStore>) -> Result<()> {
+    use crate::model::CancelOutcome;
+
+    // One task claims while another calls cancel_if_pending: exactly one wins, and the stored
+    // job agrees with the winner.
+    for i in 0..8 {
+        let queue = format!("cip-race-{i}");
+        let id = rq_insert(store, &queue, None).await?;
+        let canceller = {
+            let store = store.clone();
+            tokio::spawn(async move { store.cancel_if_pending(id).await })
+        };
+        let claimer = {
+            let store = store.clone();
+            let queue = queue.clone();
+            tokio::spawn(async move {
+                store
+                    .claim(
+                        &[queue],
+                        "worker-2",
+                        Duration::from_secs(30),
+                        OffsetDateTime::now_utc(),
+                        1,
+                    )
+                    .await
+            })
+        };
+        let outcome = canceller
+            .await
+            .map_err(|_| fail("cancel task panicked"))??;
+        let claimed = claimer.await.map_err(|_| fail("claim task panicked"))??;
+        let stored = rq_get(store, id).await?;
+        match (outcome, claimed.len()) {
+            (CancelOutcome::Cancelled, 0) => {
+                if stored.state != JobState::Cancelled || stored.claim.is_some() {
+                    return Err(fail("a cancel won the race but the job is not cancelled"));
+                }
+            }
+            (CancelOutcome::NotCancellable, 1) => {
+                if claimed[0].job.id != id
+                    || stored.state != JobState::Running
+                    || stored.claim.is_none()
+                {
+                    return Err(fail("a claim won the race but the job is not running"));
+                }
+            }
+            (CancelOutcome::Cancelled, _) => {
+                return Err(fail("a job was both cancelled and claimed"));
+            }
+            _ => {
+                return Err(fail(
+                    "a cancel racing a claim ended in an impossible outcome",
+                ));
+            }
+        }
+    }
+
+    // Eight concurrent calls on one pending job: exactly one cancels it.
+    let id = rq_insert(store, "cip-many", None).await?;
+    let mut tasks = Vec::new();
+    for _ in 0..8 {
+        let store = store.clone();
+        tasks.push(tokio::spawn(
+            async move { store.cancel_if_pending(id).await },
+        ));
+    }
+    let mut won = 0;
+    for t in tasks {
+        match t.await.map_err(|_| fail("cancel task panicked"))?? {
+            CancelOutcome::Cancelled => won += 1,
+            CancelOutcome::NotCancellable => {}
+            CancelOutcome::NotFound => return Err(fail("a racing cancel did not find the job")),
+        }
+    }
+    if won != 1 {
+        return Err(fail(
+            "concurrent cancel_if_pending calls had more or fewer than one winner",
+        ));
     }
     Ok(())
 }

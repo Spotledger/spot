@@ -122,10 +122,17 @@ pub(super) async fn field_reveal(
     let ctx = build_ctx(&site, &headers, None);
     let body = take_body(request, true, &site.request_id).await?;
     let (field, reason) = decode_request(&body.unwrap_or(Json::Null), &site.request_id)?;
-    let value = service
-        .reveal(&ctx, &doctype, id, &field, &reason)
-        .await
-        .map_err(|e| fail(normalise_refusal(e), &site.request_id))?;
+    let value = match service.reveal(&ctx, &doctype, id, &field, &reason).await {
+        Ok(value) => value,
+        Err(error) => {
+            // A refusal is never cached either: it says whether a field can be revealed.
+            let mut response = fail(normalise_refusal(error), &site.request_id).into_response();
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            return Ok(response);
+        }
+    };
     let mut data = serde_json::Map::new();
     data.insert("value".to_owned(), value);
     let mut response = json_response(StatusCode::OK, envelope(Json::Object(data), &[]));

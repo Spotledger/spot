@@ -566,6 +566,7 @@ fn extra_file_in_permissions_is_layout() {
 /// author's machine points, so the walk must refuse it, never follow it. This is the one
 /// escape the OS's own path normalisation cannot show (`..` never survives a directory
 /// listing); the symlink does.
+#[cfg(unix)]
 #[test]
 fn symlinked_file_is_path_escape() {
     let (_keep, root) = sandbox();
@@ -579,6 +580,7 @@ fn symlinked_file_is_path_escape() {
 }
 
 /// A symlinked directory must not be walked into either: `pack.path_escape` at the link.
+#[cfg(unix)]
 #[test]
 fn symlinked_directory_is_path_escape() {
     let (_keep, root) = sandbox();

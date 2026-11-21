@@ -55,6 +55,25 @@ value over the limit) is counted but never reported to the step.
   turns `get` into a miss and `set` into a no-op (counted as `reason="error"`); on recovery the
   plugin clears the site's namespace so nothing cached before the outage is read.
 
+## What an operator can ask of the store
+
+The store offers, besides the per-key commands a step uses, three site-wide operations for
+operators and remedies. All are per site and never touch another site:
+
+- `delete_prefix(prefix)`: removes every key starting with the prefix and returns how many live
+  keys it removed. The `step:` namespace flush of the remedies uses it (never the whole site).
+- `count_prefix(prefix)`: the number of **live** keys starting with the prefix, exactly what
+  `delete_prefix` with the same prefix would remove. An expired key that has not been swept yet is
+  not counted. It only reads: it changes no entry, no recency, no hit or miss counter and evicts
+  nothing, so asking is free of side effects. The prefix is matched literally (glob characters in
+  it are ordinary characters); the empty prefix counts every key of the site. A string, a hash, a
+  list and a set count once each. The in-process store counts under its state lock; the Redis
+  store scans its own site's keys in bounded batches and stops after at most a million keys
+  examined, so a site with an extreme number of matching keys may read a lower bound there. The
+  remedies' cache part uses it to report the exact number of `step:` entries before and after a
+  flush (3 step keys among 8 report 3, then 0, and the other 5 stay).
+- `clear_site`: removes every entry of the site.
+
 ## Metrics
 
 On `/metrics` when the metrics service is on, read from the store every 15 seconds:

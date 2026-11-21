@@ -7219,6 +7219,7 @@ dependencies = [
  "deadpool-postgres",
  "ed25519-dalek",
  "futures-core",
+ "hmac 0.12.1",
  "http",
  "http-body-util",
  "jiff",
@@ -7232,6 +7233,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.9",
  "spot-access-review",
  "spot-activity",
@@ -12232,6 +12234,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml 0.9.12+spec-1.1.0",
+ "windows-sys 0.61.2",
  "zip",
 ]
 

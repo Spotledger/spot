@@ -54,9 +54,9 @@ writes data does so through the engine for that user, so the caller's rights app
 3. A guest on a verb that changes things (`POST`, `PUT`, `PATCH`, `DELETE`): `401 auth.required`.
 4. The rate limit: `429 api.rate_limited` with `details.retry_after` and the `Retry-After` header
    (whole seconds). The bucket is per function and caller; every guest shares one bucket.
-5. The argument schema (`type`, `required`, `properties`, `items`): `400 api.invalid_request`; the
-   explanation names the problem and the path, never an argument value. On a `GET` each query value
-   is read by the schema first (`integer`, `number`, `boolean`).
+5. The argument schema: `400 api.invalid_request`; the explanation names the problem and the path,
+   never an argument value. On a `GET` each query value is read by the schema first (`integer`,
+   `number`, `boolean`). The keywords are listed under "Argument schema keywords" below.
 6. The handler. Its own errors pass through as they are (a field error is `422`, a refusal is
    `403 permission.denied`), and a handler returning an error is never reported as a success.
 
@@ -150,3 +150,40 @@ permit per call; the gate answers or refuses with a `retry_after`, and a refusal
 - **What a limit is.** A fairness and abuse bound, not a security boundary: it slows a flood and
   shares capacity, it does not authenticate or authorise anyone, and a function that must be
   protected still checks permissions itself.
+
+## Argument schema keywords
+
+The same check serves registered functions, server scripts of the `api` kind and the MCP tools
+(a tool call is checked against the tool's `inputSchema` before it runs). It understands these
+keywords and no others; any other keyword in a schema node (`description`, `format`, `default`,
+`pattern`, `oneOf`, `anyOf`, `exclusiveMinimum`, `multipleOf`, ...) is documented, not enforced:
+it is ignored and never a reason to refuse a call:
+
+| Keyword | Meaning |
+|---|---|
+| `type` | `object`, `array`, `string`, `integer`, `number`, `boolean` or `null`; an unknown name is a schema error |
+| `required` | property names that must be present |
+| `properties` | property name to subschema, checked when the property is present |
+| `additionalProperties` | `false` refuses every argument property not in `properties` (`unexpected property`, the path names it); a subschema validates every unlisted property; `true` or absent keeps them; anything else is a schema error |
+| `items` | the subschema each array element must satisfy |
+| `enum` | a non-empty list of `null`, boolean, string or integer values; the argument must equal one |
+| `minLength`, `maxLength` | bounds on a string, in Unicode scalar values |
+| `minimum`, `maximum` | inclusive integer bounds; a fractional bound is a schema error and a fractional number under a bounded schema is refused (no float arithmetic) |
+| `minItems`, `maxItems` | bounds on an array's length |
+| `uniqueItems` | a boolean (anything else is a schema error); `true` refuses an array in which an item equals an earlier one (JSON equality: object key order does not matter, numbers compare as parsed numbers), with the dotted path of the later item and the message `duplicate item`, never the value; `false` or absent changes nothing. The comparison is quadratic, so an array of more than 1,024 items (`spot_functions::MAX_UNIQUE_ITEMS`) under `uniqueItems: true` is refused as a whole; `maxItems` is checked first |
+
+The first problem wins and its path is dotted (`lines.2.extra`). An error names the keyword's
+fact (a bound, a property name cut at 64 characters), never an argument value.
+
+**Behaviour change (WP-AI-04.T9).** `uniqueItems: true` used to be ignored (the `recall_memory`
+tool declares it for `kinds`); a repeated item is now refused as invalid arguments.
+
+**Behaviour change (WP-AI-04.T8).** `additionalProperties: false` used to be ignored, so a call
+with an extra argument (for example `retrieve` with `tier: 3`) was accepted and the extra field
+dropped. It is now refused as invalid arguments, and the tool or function does not run. A caller
+that sent extra fields to a schema saying `false` must stop sending them.
+
+`spot_functions::check_schema(schema)` checks a schema's own shape with the same keyword readers
+(a bound that is not an integer, `minLength` above `maxLength`, `additionalProperties` that is
+neither a boolean nor a schema, a non-object node). Server scripts call it when an API script is
+saved, so a schema that cannot work is refused at authoring time instead of at the first call.

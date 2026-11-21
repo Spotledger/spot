@@ -50,7 +50,8 @@ async fn post(admin: &Client, path: &str, body: &serde_json::Value) -> crate::cl
 }
 
 async fn lifecycle(fixture: &Fixture) -> CaseResult {
-    let admin = fixture.admin();
+    // A fresh sign-in is not a step-up: the administration below needs a recent one.
+    let admin = fixture.admin_step_up().await?;
     let users = format!("{BASE}/users");
 
     // Create: staff, no invitation (none can be sent on this host), no roles.

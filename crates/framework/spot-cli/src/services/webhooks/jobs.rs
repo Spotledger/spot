@@ -79,6 +79,18 @@ impl JobStore for SubmitOnlyJobs {
     {
         refused()
     }
+    fn cancel_if_pending(
+        &self,
+        _: JobId,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = spot_jobs::Result<spot_jobs::CancelOutcome>>
+                + Send
+                + '_,
+        >,
+    > {
+        refused()
+    }
     fn merge_context(
         &self,
         _: JobId,

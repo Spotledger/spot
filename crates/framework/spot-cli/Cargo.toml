@@ -562,5 +562,10 @@ spot-tenancy = { path = "../spot-tenancy" }
 # tests/types.rs: the generated declarations are run through the script tier's parser.
 spot-ts-transpile = { path = "../spot-ts-transpile" }
 
+# tests/step_up_host.rs: the RFC 6238 code of an enrolled secret (HMAC-SHA1), the same crates and
+# versions `spot-auth` already uses for the check itself.
+hmac = "0.12"
+sha1 = "0.10"
+
 [lints]
 workspace = true

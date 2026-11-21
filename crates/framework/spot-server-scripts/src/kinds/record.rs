@@ -405,37 +405,12 @@ fn timeout(doc: &Document, limits: &ScriptLimits, problems: &mut Problems) -> u6
     }
 }
 
-/// Checks that a schema is in the subset `spot_functions::validate_arguments` understands:
-/// objects with `type` (a known name), `required` (names) and `properties` (schemas).
+/// Checks that a schema is in the subset `spot_functions::validate_arguments` understands, by
+/// asking `spot_functions::check_schema` itself so the authoring-time and the call-time checks
+/// cannot drift.
 fn schema_shape(schema: &Json) -> Result<(), String> {
-    let Some(object) = schema.as_object() else {
-        return Err("A schema node must be a JSON object.".to_owned());
-    };
-    if let Some(kind) = object.get("type") {
-        let known = [
-            "object", "array", "string", "integer", "number", "boolean", "null",
-        ];
-        match kind.as_str() {
-            Some(name) if known.contains(&name) => {}
-            _ => return Err("A schema `type` must be one of the known type names.".to_owned()),
-        }
-    }
-    if let Some(required) = object.get("required")
-        && !required
-            .as_array()
-            .is_some_and(|names| names.iter().all(Json::is_string))
-    {
-        return Err("A schema `required` must be a list of property names.".to_owned());
-    }
-    if let Some(properties) = object.get("properties") {
-        let Some(properties) = properties.as_object() else {
-            return Err("A schema `properties` must be an object.".to_owned());
-        };
-        for node in properties.values() {
-            schema_shape(node)?;
-        }
-    }
-    Ok(())
+    spot_functions::check_schema(schema)
+        .map_err(|error| format!("The argument schema is not valid ({error})."))
 }
 
 fn non_empty(value: Option<&str>) -> Option<&str> {
@@ -631,5 +606,84 @@ mod tests {
         let doc = doc_with(SCHEDULED_SCRIPT_DOCTYPE, &[(FIELD_NAME, t(""))]);
         let error = ScheduledScript::from_document(&doc).expect_err("invalid");
         assert!(error.fields.len() >= 3);
+    }
+
+    fn api_fields_with_schema(schema: &str) -> Vec<(&'static str, Value)> {
+        with(api_fields(), FIELD_ARGUMENTS_SCHEMA, t(schema))
+    }
+
+    #[test]
+    fn schema_shape_accepts_the_keywords_the_call_check_implements() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["n"],
+            "additionalProperties": false,
+            "properties": {
+                "n": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "kind": { "type": "string", "enum": ["a", "b"], "minLength": 1, "maxLength": 4 },
+                "tags": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string" } },
+                "extra": { "type": "object", "additionalProperties": { "type": "integer" } }
+            }
+        });
+        assert!(schema_shape(&schema).is_ok());
+        // A keyword the check does not implement passes through.
+        assert!(schema_shape(&serde_json::json!({ "type": "string", "format": "date" })).is_ok());
+    }
+
+    #[test]
+    fn schema_shape_refuses_what_the_call_check_could_not_run() {
+        let bad = [
+            serde_json::json!([]),
+            serde_json::json!({ "type": "decimal" }),
+            serde_json::json!({ "required": "n" }),
+            serde_json::json!({ "properties": { "n": { "type": 5 } } }),
+            serde_json::json!({ "additionalProperties": "no" }),
+            serde_json::json!({ "additionalProperties": { "type": "nope" } }),
+            serde_json::json!({ "enum": [] }),
+            serde_json::json!({ "enum": [[1]] }),
+            serde_json::json!({ "minimum": 1.5 }),
+            serde_json::json!({ "minLength": -1 }),
+            serde_json::json!({ "minItems": 3, "maxItems": 1 }),
+            serde_json::json!({ "items": 7 }),
+        ];
+        for schema in bad {
+            let why = schema_shape(&schema).expect_err("refused");
+            assert!(
+                why.starts_with("The argument schema is not valid"),
+                "{schema}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_api_record_with_a_bad_schema_names_the_schema_field() {
+        let ok = api_fields_with_schema(r#"{"type":"object","additionalProperties":false}"#);
+        let script = ApiScript::from_document(&doc_with(API_SCRIPT_DOCTYPE, &ok)).expect("valid");
+        assert!(script.arguments_schema.is_some());
+
+        let bad = api_fields_with_schema(r#"{"additionalProperties":"nope"}"#);
+        let error = ApiScript::from_document(&doc_with(API_SCRIPT_DOCTYPE, &bad))
+            .expect_err("a schema error");
+        assert_eq!(error.fields.len(), 1);
+        assert_eq!(error.fields[0].field.to_string(), FIELD_ARGUMENTS_SCHEMA);
+    }
+
+    #[test]
+    fn a_schema_with_additional_properties_false_refuses_an_extra_argument() {
+        // The call-time check an API script runs is `validate_arguments` over the saved schema.
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["n"],
+            "additionalProperties": false,
+            "properties": { "n": { "type": "integer" } }
+        });
+        assert!(schema_shape(&schema).is_ok());
+        assert!(
+            spot_functions::validate_arguments(&schema, &serde_json::json!({ "n": 1 })).is_ok()
+        );
+        let error =
+            spot_functions::validate_arguments(&schema, &serde_json::json!({ "n": 1, "m": 2 }))
+                .expect_err("extra argument");
+        assert_eq!(error.path, "m");
     }
 }

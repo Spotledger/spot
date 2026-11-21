@@ -227,7 +227,7 @@ async fn a_pull_naming_another_nodes_destination_is_refused() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs an enrolment helper in the harness (an enrolled node's certificate) to revoke or suspend mid-connection"]
+#[ignore = "gap: needs an enrolment helper in the harness (an enrolled node's certificate) to revoke or suspend mid-connection"]
 async fn a_revoked_or_suspended_node_is_refused_mid_connection() {
     let Some(_cluster) = hubs().await else {
         return;
@@ -235,7 +235,7 @@ async fn a_revoked_or_suspended_node_is_refused_mid_connection() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs an enrolled node and a bundle builder: a non-owned record inside a valid bundle applies nothing"]
+#[ignore = "gap: needs an enrolled node and a bundle builder: a non-owned record inside a valid bundle applies nothing"]
 async fn a_bundle_with_one_non_owned_record_applies_nothing() {
     let Some(_cluster) = hubs().await else {
         return;
@@ -243,7 +243,7 @@ async fn a_bundle_with_one_non_owned_record_applies_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs an enrolled node: a replay of an old valid batch is stale and never regresses a version"]
+#[ignore = "gap: needs an enrolled node: a replay of an old valid batch is stale and never regresses a version"]
 async fn a_replay_of_an_old_valid_batch_is_stale() {
     let Some(_cluster) = hubs().await else {
         return;
@@ -251,7 +251,7 @@ async fn a_replay_of_an_old_valid_batch_is_stale() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs a TLS-capable proxy and an edge with pinning: a CA-valid but unpinned hub certificate is refused by the edge"]
+#[ignore = "gap: needs a TLS-capable proxy and an edge with pinning: a CA-valid but unpinned hub certificate is refused by the edge"]
 async fn an_unpinned_hub_certificate_is_refused_by_the_edge() {
     let Some(_cluster) = hubs().await else {
         return;
@@ -259,7 +259,7 @@ async fn an_unpinned_hub_certificate_is_refused_by_the_edge() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "needs a hostile hub stub: a record outside the edge's catalogue is quarantined and a forged acknowledgement position is not believed"]
+#[ignore = "gap: needs a hostile hub stub: a record outside the edge's catalogue is quarantined and a forged acknowledgement position is not believed"]
 async fn a_hostile_hub_cannot_make_an_edge_apply_or_trust_a_position() {
     let Some(_cluster) = hubs().await else {
         return;

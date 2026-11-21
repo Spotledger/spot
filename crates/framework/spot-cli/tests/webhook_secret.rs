@@ -6,7 +6,7 @@
 //! routes and is never in an answer, a document or the database in the clear; a caller without
 //! the right is refused the same way whether or not the webhook exists and changes nothing; the
 //! delivery handler's port opens the current value, and answers an error (never an empty key)
-//! for an unset secret, an unknown webhook, another site and a site with no vault; the engine's
+//! for an unset secret, an unknown webhook, another site and a site with no vault (a site without a vault cannot serve: unit-level only); the engine's
 //! audit journal names the caller `webhooks` and holds no value.
 #![allow(
     missing_docs,
@@ -42,7 +42,6 @@ struct Rig {
     started: Option<Started>,
     admin: String,
     plain: String,
-    vault: bool,
 }
 
 impl Drop for Rig {
@@ -82,7 +81,6 @@ impl Rig {
             started: Some(started),
             admin,
             plain,
-            vault,
         })
     }
 
@@ -455,39 +453,5 @@ async fn the_signing_key_is_an_error_for_an_unknown_webhook_another_site_and_a_b
             .expose(),
         SUPPLIED
     );
-    rig.finish().await;
-}
-
-// A site with no vault cannot exist any more: the sign-in stores seal their credentials through
-// it (`login_stores` is required), so such a site is unavailable and never reaches this module.
-// The module's own fail-closed answer is exercised by its unit tests.
-#[ignore = "a site without [services.secrets] does not serve (login_stores is required)"]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_site_with_no_vault_fails_closed_and_cannot_sign() {
-    let Some(rig) = Rig::new(false).await else {
-        return;
-    };
-    assert!(!rig.vault);
-    rig.webhook("orders").await;
-    for reply in [
-        rig.put(&rig.admin, "orders", json!({ "generate": true }))
-            .await,
-        rig.get(&rig.admin, "orders").await,
-    ] {
-        common::expect(&reply, 501);
-        assert_eq!(reply.body["error"]["code"], "service.not_configured");
-    }
-    // The service is degraded, and the delivery handler's port is an error, not an empty key.
-    let service = rig.service().await;
-    assert_eq!(
-        service
-            .signing_key(&rig.env.site, "orders")
-            .await
-            .unwrap_err(),
-        SigningKeyError::NotConfigured
-    );
-    let ready = rig.call(None, "GET", "/api/health/ready", None).await;
-    let text = String::from_utf8_lossy(&ready.bytes).into_owned();
-    assert!(text.contains("webhook_secret"), "{text}");
     rig.finish().await;
 }

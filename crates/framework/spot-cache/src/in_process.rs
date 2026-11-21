@@ -1189,6 +1189,23 @@ impl InProcessCache {
         removed
     }
 
+    /// The live keys of `site` starting with `prefix`. Read-only: it takes the state lock, reads
+    /// each entry's expiry against the clock and changes nothing (no recency, no counter, no
+    /// removal of an expired entry; the sweep and the next access do that).
+    fn count_prefix_sync(&self, site: &SiteId, prefix: &str) -> u64 {
+        let state = self.lock_state();
+        let now = self.now_ms();
+        let Some(site_state) = state.sites.get(site) else {
+            return 0;
+        };
+        let live = site_state
+            .entries
+            .iter()
+            .filter(|(key, entry)| key.starts_with(prefix) && is_live(entry, now))
+            .count();
+        u64::try_from(live).unwrap_or(u64::MAX)
+    }
+
     fn clear_site_sync(&self, site: &SiteId) {
         let mut state = self.lock_state();
         let State {
@@ -1488,6 +1505,10 @@ impl CacheStore for InProcessCache {
 
     fn delete_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
         Box::pin(async move { self.delete_prefix_sync(site, prefix) })
+    }
+
+    fn count_prefix<'a>(&'a self, site: &'a SiteId, prefix: &'a str) -> CacheFuture<'a, u64> {
+        Box::pin(async move { self.count_prefix_sync(site, prefix) })
     }
 
     fn clear_site<'a>(&'a self, site: &'a SiteId) -> CacheFuture<'a, ()> {

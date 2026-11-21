@@ -39,7 +39,8 @@ fn offline(policy: Option<&str>) -> Root {
     let root = Root(std::env::temp_dir().join(format!("spot_bi_t2_{}", RecordId::new_v7())));
     copy_dir(&repo().join("apps/sample"), &root.0.join("sample"));
     let task = root.0.join("sample/doctypes/task.toml");
-    let patched = std::fs::read_to_string(&task).unwrap().replace(
+    // `\r\n` checkouts (Windows): the multi-line patterns below need `\n`.
+    let patched = std::fs::read_to_string(&task).unwrap().replace("\r\n", "\n").replace(
         "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"",
         "name = \"details\"\nlabel = \"Details\"\ntype = \"long_text\"\nprotection_group = \"confidential\"",
     );

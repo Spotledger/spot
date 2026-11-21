@@ -10,6 +10,8 @@ explains the host and its services; the pages below go deeper into one thing eac
 - [Adding a `spot` command](commands.md): how a subcommand is added to the binary, and the two kinds there are.
 - [`spot console`](console.md): an interactive or scripted session over one site's documents, as a named user, for inspecting and repairing a site from the server.
 - [Your own sessions](session.md): how a signed-in user lists and ends the sessions they hold.
+- [Step-up](step_up.md): `POST /api/v1/auth/step-up`, how a signed-in person re-authenticates for the operations that need a recent step-up.
+- [Field reveal](field_reveal.md): `POST /api/v1/resource/{doctype}/{id}/reveal`, reading one masked or protected field with a reason, audited, never cached.
 - [Service ports of the jobs module](service-ports.md): the narrow ports the `jobs` module gives to modules registered after it.
 - [The node role model](node_role.md): the `[services.node_role]` settings that make a process standalone, a hub or an edge node.
 - [Workload routing](workload_routing.md): hosting the policy that decides where a request runs and where its reads go.
@@ -57,6 +59,7 @@ explains the host and its services; the pages below go deeper into one thing eac
 
 - [The LLM service](llm.md): models under the tenant's policy: bring-your-own keys, the allowed-endpoint list, budgets and the send record.
 - [Remedies](remedies.md): the catalogue an agent repairs a site with, dry run and undo as audited operations.
+- [The document lifecycle port](document_lifecycle.md): view, cancel, amend, recompute and repost a document as the remedy's actor, for the `document.*` remedies.
 - [The fix pipeline](fix-pipeline.md): the one path by which an agent changes a site: rehearse, apply, verify, roll back.
 - [Retrieval](retrieval.md): the permission-aware vector index and the `retrieve` tool, per tenant and off by default.
 - [Agent memory](agent-memory.md): the separate per-tenant memory database, its write filter and its retention.

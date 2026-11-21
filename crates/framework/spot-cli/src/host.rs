@@ -1114,6 +1114,10 @@ async fn build_site(
     // `auth_session_list` and `auth_session_end` once, behind the router's bearer layer. Absent
     // stays absent, and a site with `services.session.enabled = false` provides none.
     let session_port = ctx.port::<dyn spot_http::api::ports::session::SessionPort>();
+    // The reveal service a hosting module provided (WP-SEC-10.T8): `field_reveal` is mounted
+    // when `ApiServices::with_reveal` is given one. Absent stays absent, and a site with
+    // `services.field_reveal.enabled = false` provides none.
+    let reveal_port = ctx.port::<dyn spot_http::api::RevealService>();
     // One services bundle per audience router: a router consumes its bundle, and the two share
     // every service behind it.
     let make_services = || {
@@ -1137,6 +1141,10 @@ async fn build_site(
         let services = match &session_port {
             Some(sessions) => services
                 .with_port::<dyn spot_http::api::ports::session::SessionPort>(sessions.clone()),
+            None => services,
+        };
+        let services = match &reveal_port {
+            Some(reveal) => services.with_reveal(reveal.clone()),
             None => services,
         };
         match &printing {
@@ -1198,6 +1206,8 @@ enum GroupServing {
 
 /// The audit table: the registry group, and how its port reaches the site.
 const GROUPS: &[(&str, GroupServing)] = &[
+    // Mounted by services/ai_audit/timeline_port.rs.
+    ("ai_timeline", GroupServing::Service),
     // Mounted by services/apps.rs.
     ("apps", GroupServing::Service),
     // Mounted by services/connectors.rs.
@@ -1236,6 +1246,8 @@ const GROUPS: &[(&str, GroupServing)] = &[
     ("sso", GroupServing::Service),
     // Mounted by services/sso_admin.rs.
     ("sso_admin", GroupServing::Service),
+    // Mounted by services/step_up.rs.
+    ("step_up", GroupServing::Service),
     // `dyn TaskPort`: no service provides it yet.
     ("task", GroupServing::NoProvider),
     // `dyn WebhookPort`: services/process_triggers.rs.

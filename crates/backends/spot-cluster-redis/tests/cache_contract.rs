@@ -272,6 +272,98 @@ async fn delete_prefix_and_clear_site_are_site_scoped() {
 }
 
 #[tokio::test]
+async fn count_prefix_counts_live_keys_per_site_and_prefix() {
+    let Some((cache, site)) = cache().await else {
+        return common::skip();
+    };
+    let other = common::sid("other.example");
+    for key in ["step:a", "step:b", "step:c", "other:x", "stepper"] {
+        got(cache.set(&site, key, bytes("v"), None).await);
+    }
+    got(cache.hset(&site, "step:h", "f", bytes("v")).await);
+    got(cache.set(&other, "step:a", bytes("v"), None).await);
+    // Strings and structures count once each; the other site's key is not counted.
+    assert_eq!(cache.count_prefix(&site, "step:").await, 4);
+    assert_eq!(cache.count_prefix(&other, "step:").await, 1);
+    assert_eq!(cache.count_prefix(&site, "step").await, 5);
+    assert_eq!(cache.count_prefix(&site, "nothing:").await, 0);
+    // The empty prefix is every key of the site, the same keys `delete_prefix` removes.
+    assert_eq!(cache.count_prefix(&site, "").await, 6);
+    assert_eq!(
+        cache
+            .count_prefix(&common::sid("never.seen"), "step:")
+            .await,
+        0
+    );
+    // What is counted is what is removed.
+    assert_eq!(cache.delete_prefix(&site, "step:").await, 4);
+    assert_eq!(cache.count_prefix(&site, "step:").await, 0);
+    assert_eq!(cache.count_prefix(&site, "").await, 2);
+}
+
+#[tokio::test]
+async fn count_prefix_does_not_count_expired_keys_and_matches_globs_literally() {
+    let Some((cache, site)) = cache().await else {
+        return common::skip();
+    };
+    got(cache.set(&site, "step:eternal", bytes("v"), None).await);
+    got(cache
+        .set(
+            &site,
+            "step:fleeting",
+            bytes("v"),
+            Some(Duration::from_millis(80)),
+        )
+        .await);
+    got(cache.set(&site, "a*b[1]?x", bytes("v"), None).await);
+    got(cache.set(&site, "aXb1Zx", bytes("v"), None).await);
+    assert_eq!(cache.count_prefix(&site, "step:").await, 2);
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    assert_eq!(cache.count_prefix(&site, "step:").await, 1);
+    // Glob characters in the prefix match themselves, not other keys.
+    assert_eq!(cache.count_prefix(&site, "a*b[1]?").await, 1);
+    assert_eq!(cache.count_prefix(&site, "a*").await, 1);
+}
+
+#[tokio::test]
+async fn count_prefix_is_read_only() {
+    let Some((cache, site)) = cache().await else {
+        return common::skip();
+    };
+    got(cache.set(&site, "step:a", bytes("v"), None).await);
+    let _ = got(cache.get(&site, "step:a").await);
+    let _ = got(cache.get(&site, "missing").await);
+    let before = cache.stats(&site).await;
+    let generation = cache.generation(&site).await.expect("generation");
+    for _ in 0..5 {
+        assert_eq!(cache.count_prefix(&site, "step:").await, 1);
+    }
+    let after = cache.stats(&site).await;
+    assert_eq!(
+        (
+            before.hits,
+            before.misses,
+            before.loads,
+            before.entries,
+            before.bytes
+        ),
+        (
+            after.hits,
+            after.misses,
+            after.loads,
+            after.entries,
+            after.bytes
+        )
+    );
+    assert_eq!(
+        cache.generation(&site).await.expect("generation"),
+        generation,
+        "counting is not an invalidation"
+    );
+    assert_eq!(got(cache.get(&site, "step:a").await), Some(bytes("v")));
+}
+
+#[tokio::test]
 async fn stats_count_hits_misses_and_bytes() {
     let Some((cache, site)) = cache().await else {
         return common::skip();

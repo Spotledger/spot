@@ -4,9 +4,11 @@
 //! Each suite declares `mod support;` privately; `dead_code` is allowed at the declaration
 //! because a suite uses only the part of the support tree its name implies.
 
+pub mod ai_timeline;
 pub mod fake;
 pub mod harness;
 pub mod permissions;
+pub mod step_up;
 
 /// Test-only unwrapping that names the failure. The workspace denies `unwrap_used` and, under
 /// `-D warnings`, rejects `expect_used` too; the in-crate `Must` trait is `pub(crate)` +

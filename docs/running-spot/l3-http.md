@@ -55,6 +55,21 @@ same file (same name, so the history reads as one case). `export.rs` and `events
 hold the two blocked entries that map to registry groups. The other blocked entries are still in
 the hand-written block of `cases/mod.rs`, with their owner and reason in `LEGACY_BLOCKED`.
 
+## A site that embeds text
+
+A case that needs the product to index and retrieve by meaning starts its fixture with
+`Fixture::start_secondary_with_embedding(&fake, index_policy)` and an `EmbedFake`
+(`src/embed_fake.rs`, a deterministic `POST /v1/embeddings` on `127.0.0.1:0`). The fixture writes an
+LLM tenant of kind `ollama` (no key) pointing at the fake, the egress policy entry that opens that one
+loopback port for the `llm` purpose (the operator's `allow_private`, which the product requires for
+a loopback endpoint), and `[services.retrieval]` for the site. The `retrieval:` cases use it: the
+administrator creates a Project and a Role through REST, a restricted user (a Viewer, who may read
+Projects and no Roles) calls `tools/call retrieve` and never gets the Role, and when the user's
+role assignment is deleted the next call has no hit and the fake saw no document text again.
+Retrieval needs the `vector` extension in the server; without it the cases fail with the site's
+readiness text. The `recall_memory` case stays blocked on the agent credential path (a registered
+agent), which is the one thing the embedding site does not give it. See the crate's README.
+
 ## CASES.md is generated
 
 `harness/rust/l3-http/CASES.md` lists every case with the columns Case, Pins and Kind (`case` or

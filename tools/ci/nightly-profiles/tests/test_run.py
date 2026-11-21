@@ -61,6 +61,19 @@ class Plan(unittest.TestCase):
         self.assertIn("seed=5", buf.getvalue())
         self.assertIn("spot-l7-engine", buf.getvalue())
 
+    def test_report_dirs_are_absolute(self):
+        # cargo test runs test binaries from the crate directory: a relative report dir would be
+        # written there while the runner looks for it under the repository root.
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            np.main(["--run-id", "5", "--dry-run", "--seeds", "1", "--out", "rel/out"], {})
+        self.assertIn(str(Path("rel/out").resolve()), buf.getvalue())
+        steps = np.build_steps(5, Path("rel/out").resolve(), 1)
+        for step in steps:
+            for key, value in step.env.items():
+                if key.endswith(("_DIR", "_OUT")):
+                    self.assertTrue(Path(value).is_absolute(), (step.name, key, value))
+
 
 class Reports(unittest.TestCase):
     def write(self, d, name, obj):

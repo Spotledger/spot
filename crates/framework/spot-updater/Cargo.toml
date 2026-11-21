@@ -29,14 +29,30 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # The `Clock` trait (time is an argument to the engine; adapters read a clock and pass it in).
 spot-core = { path = "../spot-core" }
 
+# Windows only: the volume's free space (`GetDiskFreeSpaceExW`, see `src/fs/win.rs`). The same
+# version as spot-pg-supervisor; only the one feature it needs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 # Property tests: `decide` never applies an older version and never panics on arbitrary input.
 proptest = "1"
 # A real temporary directory for the `StdFileSystem` test.
 tempfile = "3"
 
-[lints]
-workspace = true
+# The workspace forbids `unsafe`; this crate needs exactly one small Windows block
+# (`GetDiskFreeSpaceExW`, `src/fs/win.rs`, the only module that allows it). Cargo cannot
+# merge a `workspace = true` list with an override, so the lints are spelled out with the same
+# values as [workspace.lints] in the root Cargo.toml, `unsafe_code` being `deny` (not
+# `forbid`) so that module can opt in.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"
 
 [features]
 # The in-memory `FileSystem`, `ServiceControl` and `DataHooks` fakes with failure and power-cut

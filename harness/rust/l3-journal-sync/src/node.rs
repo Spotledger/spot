@@ -88,7 +88,6 @@ pub fn drop_secrets_table(text: &str) -> String {
 #[allow(clippy::expect_used)]
 pub fn write_hub_tls(root: &std::path::Path) -> String {
     use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
-    use std::os::unix::fs::PermissionsExt as _;
     let mut ca_params = CertificateParams::new(Vec::<String>::new()).expect("ca params");
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     ca_params
@@ -106,8 +105,12 @@ pub fn write_hub_tls(root: &std::path::Path) -> String {
     std::fs::write(root.join("ca.pem"), ca.pem()).expect("write ca.pem");
     let key_path = root.join("hub.key");
     std::fs::write(&key_path, key.serialize_pem()).expect("write hub.key");
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
-        .expect("chmod hub.key");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod hub.key");
+    }
     "\n[services.sync_hub.tls]\ncert = \"hub.pem\"\nkey = \"hub.key\"\nclient_ca = \"ca.pem\"\n"
         .to_owned()
 }

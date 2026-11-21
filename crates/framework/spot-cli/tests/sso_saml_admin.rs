@@ -247,3 +247,21 @@ async fn an_entity_id_that_disagrees_with_the_document_is_refused_and_no_origin_
         "server.unavailable"
     );
 }
+
+/// WP-IAM-12.T9: the administration's `step_up_current` asks the shared reader of the session's
+/// step-up marker (`services::step_up`), with the `[services.identity_admin]` window, and never
+/// the age of the session. The window logic it relies on, without a database.
+#[test]
+fn the_administration_judges_a_step_up_by_the_marker_window_not_by_the_age_of_a_session() {
+    use spot_cli::services::step_up::{DEFAULT_WINDOW_SECS, window_of, within_window};
+    let now = time::OffsetDateTime::from_unix_timestamp(NOW).unwrap();
+    // A session that never stepped up has no marker, however young it is.
+    assert!(!within_window(None, now, DEFAULT_WINDOW_SECS));
+    // A marker written a minute ago is recent for a 15 minute window and not for a 30 second one.
+    let marked = now - time::Duration::seconds(60);
+    assert!(within_window(Some(marked), now, DEFAULT_WINDOW_SECS));
+    assert!(!within_window(Some(marked), now, 30));
+    // The administration's window is the site's setting; a site that registered none gets the
+    // setting's default (900 s, what the old constant of this module was).
+    assert_eq!(window_of("no-such-site-sso-admin-test"), 900);
+}
