@@ -1,0 +1,74 @@
+# links codes (WP-DOC-06.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "links.referenced"
+class = "Linked"
+summary = "Other documents still refer to this one: {count} in all."
+explanation_key = "error.links.referenced"
+params = ["count"]
+remedy = "Open the referencing documents, then remove or repoint their links before deleting or cancelling this one."
+since = "0.1.0"
+
+[[entry]]
+code = "links.name_taken"
+class = "Duplicate"
+summary = "Another document already uses the name {name}."
+explanation_key = "error.links.name_taken"
+params = ["name"]
+remedy = "Choose a different name, or open the document that already holds it."
+since = "0.1.0"
+
+[[entry]]
+code = "links.target_not_found"
+class = "Validation"
+summary = "A link points at a document that does not exist: {field}."
+explanation_key = "error.links.target_not_found"
+params = ["field"]
+remedy = "Pick an existing document for the field, or create the document it should point at."
+since = "0.1.0"
+
+[[entry]]
+code = "links.wrong_doctype"
+class = "Validation"
+summary = "A link points at a document of the wrong kind: {field}."
+explanation_key = "error.links.wrong_doctype"
+params = ["field"]
+remedy = "Point the field at a document of the DocType it expects."
+since = "0.1.0"
+
+[[entry]]
+code = "links.dynamic_type_unknown"
+class = "Validation"
+summary = "A dynamic link's type field names no DocType: {field}."
+explanation_key = "error.links.dynamic_type_unknown"
+params = ["field"]
+remedy = "Set the type field to the name of a DocType the link may point at."
+since = "0.1.0"
+
+[[entry]]
+code = "links.dynamic_type_not_allowed"
+class = "Validation"
+summary = "A dynamic link's type names a document kind that cannot be linked: {field}."
+explanation_key = "error.links.dynamic_type_not_allowed"
+params = ["field"]
+remedy = "Point the link at a top-level document, not a child row or a reserved kind."
+since = "0.1.0"
+
+[[entry]]
+code = "links.cancelled_target"
+class = "Validation"
+summary = "A link points at a cancelled document: {field}."
+explanation_key = "error.links.cancelled_target"
+params = ["field"]
+remedy = "Point the field at a document that is still active, or correct the cancelled one."
+since = "0.1.0"
+
+[[entry]]
+code = "links.draft_target"
+class = "Validation"
+summary = "A posted document points at a draft one: {field}."
+explanation_key = "error.links.draft_target"
+params = ["field"]
+remedy = "Post the linked draft first, or point the field at a posted document."
+since = "0.1.0"

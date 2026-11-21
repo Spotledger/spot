@@ -1,0 +1,10 @@
+{
+  "authorised": true,
+  "channel": "api",
+  "doctype": "example",
+  "field": "bank_account_number",
+  "group": "example",
+  "reason": "Customer asked us to confirm the account on ticket 4521.",
+  "right": "reveal",
+  "user": "0192f1c0-0000-7000-8000-000000000001"
+}

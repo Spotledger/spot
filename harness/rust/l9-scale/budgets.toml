@@ -1,0 +1,32 @@
+# Budgets per profile and operation (WP-TST-15.T1 ships the schema and the smoke budgets;
+# the tier S and tier M budgets are set in WP-TST-15.T2 and T3).
+#
+#   profile         the profile's name
+#   operation       "all" (every operation together) or one of: sign_in open_form list
+#                   create_submit update report_run stale_update
+#   p95_ms, p99_ms  latency limits in milliseconds, measured from each operation's intended
+#                   start (coordinated-omission corrected) over the steady phase
+#   max_error_rate  a fraction of operations that may fail: 0.01 is 1 %. An expected refusal
+#                   (the stale update, the report the engine does not serve yet) is not a failure
+#   min_throughput  completed operations per second over the steady phase
+#
+# Every limit is optional; at least one is required. A profile with no entry cannot run.
+
+# The smoke profile is generous on purpose: it must pass on a loaded CI runner and still
+# catch a hung server, a broken sign-in or a stack that answers 5xx.
+[[budget]]
+profile = "smoke"
+operation = "all"
+p95_ms = 3000
+p99_ms = 8000
+# 10 %: with 5 sessions the platform's `post` answers a spurious 412 `document.stale_version`
+# on about one `create_submit` in ten (reported in the PR, WP-TST-15.T1 review), and a smoke run
+# must not go red on a platform fault the tier budgets will measure. A hung server, a broken
+# sign-in or a stack that answers 5xx fails far above this.
+max_error_rate = 0.10
+min_throughput = 2
+
+[[budget]]
+profile = "smoke"
+operation = "create_submit"
+p95_ms = 5000

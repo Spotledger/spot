@@ -1,0 +1,8 @@
+# The sample app's protection groups (WP-DX-05.T1).
+#
+# `Task.details` sits in `confidential`, which is closed by default: no role
+# holds a right in it unless a field grant names it. Reads and reveals of the
+# group's fields are traced (ADR-070 §12; the trace itself is WP-SEC-04).
+[[entries]]
+name = "confidential"
+trace = true

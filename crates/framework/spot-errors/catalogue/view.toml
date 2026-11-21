@@ -1,0 +1,100 @@
+# view codes: view definitions and their layers in spot-views (WP-UI-10). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "view.parse"
+class = "none"
+summary = "The view definition could not be read."
+explanation_key = "error.view.parse"
+params = []
+remedy = "Fix the syntax of the view definition."
+since = "0.1.0"
+
+[[entry]]
+code = "view.bad_id"
+class = "none"
+summary = "A view, section, tab, group or action id is not a valid name."
+explanation_key = "error.view.bad_id"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "view.unknown_field"
+class = "none"
+summary = "The view names a field the DocType does not have."
+explanation_key = "error.view.unknown_field"
+params = []
+remedy = "Name a field that exists on the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "view.unknown_control"
+class = "none"
+summary = "The view names a control the platform does not offer."
+explanation_key = "error.view.unknown_control"
+params = []
+remedy = "Choose a control from the control list for the field's type."
+since = "0.1.0"
+
+[[entry]]
+code = "view.unknown_section"
+class = "none"
+summary = "The view names a section it does not declare."
+explanation_key = "error.view.unknown_section"
+params = []
+remedy = "Declare the section or fix its name."
+since = "0.1.0"
+
+[[entry]]
+code = "view.unknown_tab"
+class = "none"
+summary = "The view names a tab it does not declare."
+explanation_key = "error.view.unknown_tab"
+params = []
+remedy = "Declare the tab or fix its name."
+since = "0.1.0"
+
+[[entry]]
+code = "view.unknown_anchor"
+class = "none"
+summary = "A move anchors to a field that is not in the target section or tab."
+explanation_key = "error.view.unknown_anchor"
+params = []
+remedy = "Anchor to a field that is in the target section or tab."
+since = "0.1.0"
+
+[[entry]]
+code = "view.duplicate"
+class = "none"
+summary = "Two entries share a name: a section, tab, group or action."
+explanation_key = "error.view.duplicate"
+params = []
+remedy = "Give each section, tab, group and action a unique name."
+since = "0.1.0"
+
+[[entry]]
+code = "view.bad_shape"
+class = "none"
+summary = "The view's parts do not fit its kind, for example columns on a form."
+explanation_key = "error.view.bad_shape"
+params = []
+remedy = "Keep to the parts the view kind allows."
+since = "0.1.0"
+
+[[entry]]
+code = "view.bad_op"
+class = "none"
+summary = "The layer operation is not valid for the view kind it applies to."
+explanation_key = "error.view.bad_op"
+params = []
+remedy = "Use an operation that suits the view kind."
+since = "0.1.0"
+
+[[entry]]
+code = "view.hidden_required"
+class = "none"
+summary = "The view hides a required field that has no default."
+explanation_key = "error.view.hidden_required"
+params = []
+remedy = "Show the field, give it a default, or make it optional in the view's layer."
+since = "0.1.0"

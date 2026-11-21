@@ -1,0 +1,505 @@
+# Compile lane (wip/* branches): fast compile feedback, not the full CI.
+#
+# tools/opensource/push_wip.py publishes an exported private branch as ONE commit on
+# `wip/<name>` of this repository. This workflow runs on that push (and on a manual run) and
+# answers one question: does the tree compile? It never runs on main, a pull request or a
+# schedule, and it replaces none of ci.yml.
+#
+#   cargo check --workspace --all-targets --locked, in 8 shards (every eighth crate by sorted name)
+#   cargo fmt --all -- --check
+#   clippy (-D warnings): manual run with the `clippy` input only
+#   tests: manual run with `test_crates` ("spot-a spot-b" or "-p spot-a -p spot-b") only
+#   dotnet repeat runs: manual run with `dotnet_tests` (a test project name under
+#   clients/avalonia/tests, e.g. Spotledger.Client.Shell.Tests) only: one build, then the
+#   project (narrowed by `dotnet_filter`) is run `dotnet_repeat` times and the job fails if any
+#   iteration fails. It proves a flaky test fixed or not on a real hosted runner. The default lane
+#   stays Rust-only.
+#   ui screenshots: manual run with the `ui_screenshots` input only: one build, then the
+#   GalleryShots generators (Forms.Tests, Lists.Tests) render a Sales Order form and list with the
+#   real Avalonia views, headless Skia, into SPOT_SCREENSHOT_DIR; the PNGs are the artifact
+#   `ui-screenshots`. They are never compared with a baseline.
+#
+# Every cargo job writes its whole output (`--message-format short`) to a text file and uploads it
+# as the artifact `compile-<job>`; the job log ends with the first 40 errors. To read them:
+#   gh run view <id> -R Spotledger/spot --log-failed
+#   gh run download <id> -R Spotledger/spot -p 'compile-*'
+#
+# Cargo.lock is never fixed here: every cargo command uses --locked, and a lock file that is out of
+# date for the branch fails the `lock` job with a message. Regenerate it in the private repository
+# and push the branch again.
+name: compile
+on:
+  push:
+    branches: ["wip/**"]
+  workflow_dispatch:
+    inputs:
+      clippy:
+        description: "Also run cargo clippy --workspace --all-targets -D warnings"
+        type: boolean
+        default: false
+      test_crates:
+        description: "Run the tests of these crates (names separated by spaces, or -p a -p b); empty: no tests"
+        type: string
+        default: ""
+      dotnet_tests:
+        description: "Run a .NET test project repeatedly (project name under clients/avalonia/tests, e.g. Spotledger.Client.Shell.Tests); empty: no .NET job"
+        type: string
+        default: ""
+      dotnet_filter:
+        description: "dotnet test --filter expression for the repeat runs (e.g. FullyQualifiedName~ReSignInRaceTests); empty: the whole project"
+        type: string
+        default: ""
+      dotnet_repeat:
+        description: "How many times the repeat run executes the project (1 to 200)"
+        type: string
+        default: "30"
+      ui_screenshots:
+        description: "Render the generated form and list pages (PNG) and upload them as the artifact ui-screenshots"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: compile-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+jobs:
+  lock:
+    # lint-allow: no-postgres this job only reads the manifests and the lock file; it runs no test.
+    name: Cargo.lock is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - name: cargo metadata --locked
+        shell: bash
+        run: |
+          if ! cargo metadata --locked --format-version 1 >/dev/null 2>"$RUNNER_TEMP/lock.txt"; then
+            cat "$RUNNER_TEMP/lock.txt"
+            msg="Cargo.lock is out of date for this branch (or a manifest is broken). The compile lane never rewrites it: regenerate Cargo.lock in the private repository and push the branch again."
+            echo "::error::$msg"
+            { echo "### Cargo.lock check failed"; echo; echo "$msg"; echo; echo '```'; head -20 "$RUNNER_TEMP/lock.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Cargo.lock is current"
+
+  fmt:
+    # lint-allow: no-postgres rustfmt reads source files; it runs no test.
+    name: cargo fmt --check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - name: cargo fmt --all -- --check
+        shell: bash
+        run: |
+          set +e
+          cargo fmt --all -- --check 2>&1 | tee fmt-output.txt
+          rc=${PIPESTATUS[0]}
+          { echo "### cargo fmt --check: exit $rc"; echo '```'; grep -E '^Diff in ' fmt-output.txt | head -40; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-fmt
+          path: fmt-output.txt
+          if-no-files-found: ignore
+
+  check:
+    # lint-allow: no-postgres cargo check compiles only; it runs no test and needs no database.
+    name: cargo check (shard ${{ matrix.shard }}/8)
+    needs: lock
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+          # /mnt is a directory on the same disk as /, not a second disk (see ci.yml); the target
+          # directory lives there only by habit.
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false } # restoring a cache from main is enough; this lane never saves one
+      - name: cargo check this shard (every eighth crate by sorted name, all targets, --locked)
+        id: check
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          PY=$(command -v python3 || command -v python)
+          NAMES=$(cargo metadata --locked --no-deps --format-version 1 | "$PY" -c '
+          import json, sys
+          m = json.load(sys.stdin)
+          members = set(m["workspace_members"])
+          names = sorted(p["name"] for p in m["packages"] if p["id"] in members)
+          print(" ".join(names[int(sys.argv[1]) - 1::8]))
+          ' "$SHARD")
+          echo "shard $SHARD/8: $(echo "$NAMES" | wc -w | tr -d ' ') crates"
+          args=()
+          for n in $NAMES; do args+=(-p "$n"); done
+          OUT="$GITHUB_WORKSPACE/cargo-check-shard-$SHARD.txt"
+          echo "$NAMES" | tr ' ' '\n' > "$GITHUB_WORKSPACE/crates-shard-$SHARD.txt"
+          set +e
+          cargo check --locked --all-targets --keep-going --message-format short "${args[@]}" 2>&1 | tee "$OUT"
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # The first 40 errors, at the end of the log and in the run summary.
+          errs=$(grep -E '(^|: )error(\[E[0-9]+\])?:' "$OUT" | grep -v 'could not compile' || true)
+          count=$(printf '%s' "$errs" | grep -c . || true)
+          {
+            echo "### cargo check shard $SHARD/8: exit $rc, $count error line(s)"
+            if [ "$rc" != 0 ]; then echo '```'; printf '%s\n' "$errs" | head -40; echo '```'; fi
+            if [ "$rc" != 0 ] && [ "$count" = 0 ]; then echo; echo 'No error line was matched; the tail of the output follows.'; echo '```'; tail -40 "$OUT"; echo '```'; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        name: disk report
+        shell: bash
+        run: df -h / /mnt || true
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-check-shard-${{ matrix.shard }}
+          path: |
+            cargo-check-shard-${{ matrix.shard }}.txt
+            crates-shard-${{ matrix.shard }}.txt
+          if-no-files-found: ignore
+
+  clippy:
+    # lint-allow: no-postgres clippy compiles and lints only; it runs no test.
+    name: cargo clippy (manual, -D warnings)
+    if: github.event_name == 'workflow_dispatch' && inputs.clippy
+    needs: lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false }
+      - name: cargo clippy --workspace --all-targets -D warnings
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --locked --workspace --all-targets --keep-going --message-format short -- -D warnings 2>&1 | tee cargo-clippy.txt
+          rc=${PIPESTATUS[0]}
+          errs=$(grep -E '(^|: )(error|warning)(\[[A-Za-z0-9_:]+\])?:' cargo-clippy.txt | grep -v 'could not compile' || true)
+          { echo "### cargo clippy: exit $rc"; echo '```'; printf '%s\n' "$errs" | head -40; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-clippy
+          path: cargo-clippy.txt
+          if-no-files-found: ignore
+
+  test:
+    name: cargo test (manual, chosen crates)
+    if: github.event_name == 'workflow_dispatch' && inputs.test_crates != ''
+    needs: lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TEST_CRATES: ${{ inputs.test_crates }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false }
+      - name: start PostgreSQL 18 with its extensions
+        shell: bash
+        run: bash tools/ci/start-postgres.sh
+      - name: install the PostgreSQL 18 client tools
+        shell: bash
+        run: bash tools/ci/install-pg-client.sh
+      # The L3 mail-intake case needs the fake IMAP server's certificate to be one the process
+      # trusts (harness/rust/l3-http/src/cases/mail_intake.rs): a throwaway self-signed one, added
+      # to a copy of the system roots so nothing else loses its trust store.
+      - name: certificate for the L3 mail-intake case
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/l3-imap"
+          mkdir -p "$d"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=127.0.0.1 \
+            -addext subjectAltName=IP:127.0.0.1 -addext basicConstraints=critical,CA:FALSE \
+            -keyout "$d/key.pem" -out "$d/cert.pem"
+          cat /etc/ssl/certs/ca-certificates.crt "$d/cert.pem" > "$d/trusted.pem"
+          {
+            echo "L3_IMAP_CERT=$d/cert.pem"
+            echo "L3_IMAP_KEY=$d/key.pem"
+            echo "SSL_CERT_FILE=$d/trusted.pem"
+          } >> "$GITHUB_ENV"
+      - name: cargo test the chosen crates (ten crates at a time)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          # The input is data, not shell: keep only crate-name tokens, drop "-p".
+          NAMES=""
+          for t in $TEST_CRATES; do
+            [ "$t" = "-p" ] && continue
+            if ! [[ "$t" =~ ^[A-Za-z0-9_-]+$ ]]; then echo "::error::not a crate name: $t"; exit 2; fi
+            NAMES="$NAMES $t"
+          done
+          echo "crates:$NAMES"
+          OUT="$GITHUB_WORKSPACE/cargo-test.txt"
+          : > "$OUT"
+          # One chunk must not be able to eat the job: a hung test binary fails its chunk after
+          # CHUNK_SECONDS, with the crate names printed, and the loop goes on. (The log of a job
+          # cancelled by timeout-minutes is deleted by GitHub, so a hang used to leave nothing to read.)
+          # Every output line carries the time it arrived, so the slow test binary shows in the log.
+          CHUNK_SECONDS=${CHUNK_SECONDS:-2400}
+          run_timed() { # run_timed <label> <command...>
+            local label=$1; shift
+            local t0=$SECONDS s
+            echo "[$(date +%T)] start: $label"
+            if timeout --version >/dev/null 2>&1; then
+              timeout --kill-after=60 "$CHUNK_SECONDS" "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            else
+              "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            fi
+            s=${PIPESTATUS[0]}
+            echo "[$(date +%T)] end after $((SECONDS - t0)) s, exit $s: $label"
+            if [ "$s" = 124 ] || [ "$s" = 137 ]; then
+              echo "::error::chunk timed out after ${CHUNK_SECONDS} s (a hung test?): $label"
+            fi
+            return "$s"
+          }
+          rc=0
+          run_chunk() { # run_chunk <build|grouped|doc>: the chunk is in $chunk
+            if [ "$1" = doc ]; then
+              : > "$RUNNER_TEMP/test-exes.json"  # doc-tests build nothing ahead of the run
+            else
+              cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" 2> >(tee -a "$OUT" >&2) </dev/null || rc=1
+            fi
+            # A failing chunk must not end the job (the shell runs with -e and pipefail): later
+            # chunks still run, and the failure is kept in rc.
+            set +e
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" </dev/null | tee -a "$OUT"
+            [ "${PIPESTATUS[0]}" = 0 ] || rc=1
+            set -e
+            "$PY" -c '
+          import json, os, sys
+          for line in open(sys.argv[1]):
+              try:
+                  m = json.loads(line)
+              except ValueError:
+                  continue
+              exe = m.get("executable")
+              if m.get("reason") == "compiler-artifact" and exe and m.get("profile", {}).get("test"):
+                  try:
+                      os.remove(exe)
+                  except OSError:
+                      pass
+          ' "$RUNNER_TEMP/test-exes.json"
+          }
+          # A crate with many test targets (spot-cli has 248, each a large statically linked executable)
+          # is run in groups of about 40 targets: one `cargo test -p spot-cli` keeps every executable on
+          # disk at once (v0.1.15: 114 GB, "No space left on device" while linking). big-crates.txt has one
+          # line per group: the crate, then its cargo target arguments: `--lib --bins --examples` first,
+          # one `--doc` line (doc-tests run once per crate, not once per group), then `--test a --test b ...`.
+          BIG_FILE="$RUNNER_TEMP/big-crates.txt"
+          "$PY" -c '
+          import json, subprocess, sys
+          LIMIT, GROUP = 60, 40
+          m = json.loads(subprocess.run(["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                                        check=True, capture_output=True, text=True).stdout)
+          members = set(m["workspace_members"])
+          want = set(sys.argv[1:])
+          for p in sorted((p for p in m["packages"] if p["id"] in members and p["name"] in want), key=lambda p: p["name"]):
+              tests = sorted(t["name"] for t in p["targets"] if "test" in t["kind"])
+              if len(tests) < LIMIT:
+                  continue
+              k = -(-len(tests) // GROUP)
+              size = -(-len(tests) // k)
+              print(p["name"], "--lib --bins --examples")
+              if any(set(t["kind"]) & {"lib", "rlib", "proc-macro"} for t in p["targets"]):
+                  print(p["name"], "--doc")
+              for i in range(0, len(tests), size):
+                  print(p["name"], " ".join("--test " + t for t in tests[i:i + size]))
+          ' $NAMES > "$BIG_FILE"
+          cut -d" " -f1 "$BIG_FILE" | sort | uniq -c | while read -r c n; do echo "grouped: $n in $c groups"; done
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0; big=""
+            while [ $# -gt 0 ] && [ $n -lt 10 ]; do
+              if grep -q "^$1 " "$BIG_FILE"; then
+                [ $n -gt 0 ] && break
+                big=$1; shift; break
+              fi
+              chunk+=(-p "$1"); shift; n=$((n+1))
+            done
+            if [ -n "$big" ]; then
+              while IFS= read -r line <&3; do
+                read -r -a g <<< "$line"
+                chunk=(-p "${g[0]}" "${g[@]:1}")
+                mode=grouped; [ "${g[1]}" = --doc ] && mode=doc
+                run_chunk "$mode"
+              done 3< <(grep "^$big " "$BIG_FILE")
+              continue
+            fi
+            run_chunk build
+          done
+          errs=$(grep -E '(^|: )error(\[E[0-9]+\])?:|^test .* FAILED|^failures:|panicked at' "$OUT" | head -40 || true)
+          { echo "### cargo test: exit $rc"; echo '```'; printf '%s\n' "$errs"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      # The l3-http case index is a generated file (CASES.md); a stale one fails its test. When the
+      # chosen crates include l3-http, regenerate it and offer the result as the artifact
+      # `compile-cases` (commit it in the private repository).
+      - if: always() && contains(inputs.test_crates, 'l3-http')
+        name: regenerate harness/rust/l3-http/CASES.md
+        shell: bash
+        run: |
+          cargo run --locked --quiet -p l3-http -- --write-cases
+          mkdir -p "$RUNNER_TEMP/cases"
+          cp harness/rust/l3-http/CASES.md "$RUNNER_TEMP/cases/CASES.md"
+          head -12 harness/rust/l3-http/CASES.md
+      - if: always() && contains(inputs.test_crates, 'l3-http')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-cases
+          path: ${{ runner.temp }}/cases/CASES.md
+          if-no-files-found: ignore
+      - if: failure()
+        name: explain a PostgreSQL failure
+        shell: bash
+        run: bash tools/ci/pg-diagnose.sh
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-test
+          path: cargo-test.txt
+          if-no-files-found: ignore
+      - if: always() && env.SPOT_PG_DIR != ''
+        name: stop the throwaway PostgreSQL
+        shell: bash
+        run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true
+
+  dotnet:
+    # lint-allow: no-postgres the .NET build and its tests use no database.
+    name: dotnet repeat runs (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.dotnet_tests != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DOTNET_TESTS: ${{ inputs.dotnet_tests }}
+      DOTNET_FILTER: ${{ inputs.dotnet_filter }}
+      DOTNET_REPEAT: ${{ inputs.dotnet_repeat }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - name: build the solution once (the same build as ci.yml)
+        shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" tools/ci/dotnet_build.py "$(ls clients/avalonia/*.sln | head -1)"
+      - name: run the project repeatedly; fail if any iteration fails
+        shell: bash
+        run: |
+          # The inputs are data, not shell: validate the project name and the count; the filter
+          # is passed as one quoted argument and never interpreted by the shell.
+          if ! [[ "$DOTNET_TESTS" =~ ^[A-Za-z0-9_.]+$ ]]; then echo "::error::not a project name: $DOTNET_TESTS"; exit 2; fi
+          if ! [[ "$DOTNET_REPEAT" =~ ^[0-9]+$ ]] || [ "$DOTNET_REPEAT" -lt 1 ] || [ "$DOTNET_REPEAT" -gt 200 ]; then echo "::error::dotnet_repeat must be 1 to 200"; exit 2; fi
+          proj="clients/avalonia/tests/$DOTNET_TESTS"
+          [ -d "$proj" ] || { echo "::error::no such test project: $proj"; exit 2; }
+          args=(-c Release --no-build)
+          if [ -n "$DOTNET_FILTER" ]; then args+=(--filter "$DOTNET_FILTER"); fi
+          failed=0
+          for i in $(seq 1 "$DOTNET_REPEAT"); do
+            if dotnet test "$proj" "${args[@]}" > "$RUNNER_TEMP/iter-$i.txt" 2>&1; then
+              echo "iteration $i/$DOTNET_REPEAT: pass ($(grep -E '^(Passed|Failed)!' "$RUNNER_TEMP/iter-$i.txt" | tail -1))"
+            else
+              failed=$((failed + 1))
+              echo "::group::iteration $i/$DOTNET_REPEAT: FAILED"
+              grep -vE '^\s*$' "$RUNNER_TEMP/iter-$i.txt" | tail -80
+              echo "::endgroup::"
+              echo "iteration $i/$DOTNET_REPEAT: FAILED"
+            fi
+          done
+          { echo "### dotnet repeat run: $DOTNET_TESTS ${DOTNET_FILTER:+filter $DOTNET_FILTER}"; echo; echo "$((DOTNET_REPEAT - failed)) of $DOTNET_REPEAT iterations passed"; } | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$failed" = 0 ]
+
+  ui-screenshots:
+    # lint-allow: no-postgres the .NET build and the screenshot generators use no database.
+    name: ui screenshots (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.ui_screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - name: build the solution once (the same build as ci.yml)
+        shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" tools/ci/dotnet_build.py "$(ls clients/avalonia/*.sln | head -1)"
+      - name: render the pages into SPOT_SCREENSHOT_DIR
+        shell: bash
+        env:
+          SPOT_SCREENSHOT_DIR: ${{ github.workspace }}/ui-screenshots
+        run: |
+          mkdir -p "$SPOT_SCREENSHOT_DIR"
+          for proj in Spotledger.Client.Forms.Tests Spotledger.Client.Lists.Tests; do
+            dotnet test "clients/avalonia/tests/$proj" -c Release --no-build --filter "FullyQualifiedName~GalleryShots"
+          done
+          ls -l "$SPOT_SCREENSHOT_DIR"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui-screenshots
+          path: ui-screenshots
+          if-no-files-found: error

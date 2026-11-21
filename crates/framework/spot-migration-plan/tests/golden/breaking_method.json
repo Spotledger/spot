@@ -1,0 +1,78 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "behaviour/party/method_signature/make_payment",
+      "area": "behaviour",
+      "kind": "method_signature_changed",
+      "rule": "behaviour/method_signature_changed",
+      "target": "party.make_payment",
+      "description": "Method `party.make_payment` changes its argument schema.",
+      "before": "amount: int",
+      "after": "amount: text",
+      "risk": "destructive",
+      "reason": "the change removes, retypes or newly requires an argument",
+      "alternative": "add the new argument as optional, or keep the old one",
+      "blocking": "online"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 2,
+    "expected": 5,
+    "high": 10,
+    "per_change": [
+      {
+        "change_id": "behaviour/party/method_signature/make_payment",
+        "low": 2,
+        "expected": 5,
+        "high": 10,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "online",
+    "unknown": false
+  },
+  "plan_digest": "6f80b931bf3aad518caebcd78f3e9bc68f600f4d1ce16c62bcd0ecf074c27037",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [
+      {
+        "doctype": "party",
+        "name": "make_payment",
+        "mutates": true,
+        "args": [
+          {
+            "name": "amount",
+            "ty": "text",
+            "required": true
+          }
+        ]
+      }
+    ],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

@@ -1,0 +1,44 @@
+# Help for the app error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "app.capability_denied"
+what_happened = "The app imports or used a capability the administrator did not approve for it."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Approve the capability at install, or use an app version that does not need it.", "If it keeps happening, tell your administrator and quote the code app.capability_denied."]
+audience = "operator"
+
+[[help]]
+code = "app.disabled"
+what_happened = "The app was killed too many times inside the breaker window and is disabled."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the app, then reload the apps service or restart the site.", "If it keeps happening, tell your administrator and quote the code app.disabled."]
+audience = "operator"
+
+[[help]]
+code = "app.failed"
+what_happened = "The app trapped or the host could not complete the call."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the app; the host and other apps are unaffected.", "If it keeps happening, tell your administrator and quote the code app.failed."]
+audience = "operator"
+
+[[help]]
+code = "app.limit_exceeded"
+what_happened = "An app call used more fuel, time, memory, host calls or output than its limit and was stopped."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Make the app do less per call, or raise its limit in services.apps.limits within the site maximum.", "If it keeps happening, tell your administrator and quote the code app.limit_exceeded."]
+audience = "admin"
+
+[[help]]
+code = "app.not_loaded"
+what_happened = "No loaded app has this name."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Install the app, or look at the app list for why it failed to load.", "If it keeps happening, tell your administrator and quote the code app.not_loaded."]
+audience = "operator"
+
+[[help]]
+code = "app.rejected"
+what_happened = "The app refused the operation with its own error message."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Correct the input as the message says.", "If it keeps happening, tell your administrator and quote the code app.rejected."]
+audience = "operator"

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The sample app guest in C# (componentize-dotnet), WP-STR-07.T1. The SDK wraps
+       NativeAOT-LLVM, wit-bindgen, wasm-tools and WASI SDK; `dotnet build` produces
+       bin/Release/net10.0/wasi-wasm/native/App.component.wasm. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>App</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+    <UseAppHost>false</UseAppHost>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SelfContained>true</SelfContained>
+    <WitGeneratedFilesRoot>generated/wit</WitGeneratedFilesRoot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BytecodeAlliance.Componentize.DotNet.Wasm.SDK" Version="0.8.0-preview*" />
+    <!-- NativeAOT-LLVM cross-compiles to wasm; the runtime pack must match the SDK. -->
+    <PackageReference Include="runtime.linux-x64.Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-rc.1.26306.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- wit/world.wit is a copy of crates/framework/spot-wasm/wit/test-world.wit. -->
+    <Wit Update="wit/world.wit" World="test-world" />
+  </ItemGroup>
+
+</Project>

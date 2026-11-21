@@ -1,0 +1,6 @@
+{
+  "case": "optional_chain",
+  "entry": "name",
+  "args": {},
+  "expect": ""
+}

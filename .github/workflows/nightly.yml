@@ -1,0 +1,406 @@
+# The full, slow verification for the exported tree (WP-OSS-03.T2, the project process notes).
+# Ported from the private nightly.yml: GitHub-hosted runners, one run a night on main, never
+# blocks anything (the public repository takes no pull requests). Triggers are the daily
+# schedule (as in the private workflow) and a manual run; no secrets, read-only token.
+#
+# Dropped from the private file: the `report` job (it opened a `nightly-red` issue with
+# `issues: write`; the public repository starts with Issues off, and the red-main loop is
+# plan section 4.7: the sync bot opens the issue in the private repository), the
+# `tools/plan/validate.py` step (the plan is private), and every SPOT_RUNNER / self-hosted /
+# SPOT_INTEGRATION_BRANCH expression. The branch is main.
+name: nightly
+on:
+  schedule:
+    - cron: "0 21 * * *" # as the private nightly.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+env:
+  CARGO_TERM_COLOR: always
+  # No debug info in CI test builds: the workspace test target otherwise outgrew the hosted
+  # runner's disk ("No space left on device" while compiling spot-cli tests). Backtraces keep
+  # function names; only line tables and variable info are dropped.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  # No incremental state either: a CI build runs once, and the incremental directories double
+  # the size of every crate's output (shard 3 of the first public run filled the 145 GB disk).
+  CARGO_INCREMENTAL: "0"
+jobs:
+  rust:
+    name: rust full (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # As in ci.yml: the workspace's test binaries do not fit on one hosted runner (the first
+        # whole-workspace nightly died with 'No space left on device' and a linker bus error), so
+        # each shard builds and tests a quarter of the crates (balanced by test binaries) on its own runner.
+        shard: [1, 2, 3, 4]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 330
+    steps:
+      # Golden files and fixtures are compared byte for byte: keep their LF line endings on Windows.
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { ref: main }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+          # /mnt is a directory on the root disk, as ci.yml explains.
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /mnt
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false } # the test target is far over the 10 GB cache limit; restoring is enough
+      - if: runner.os == 'Linux'
+        name: start PostgreSQL 18 with its extensions
+        shell: bash
+        run: bash tools/ci/start-postgres.sh
+      - if: runner.os == 'Linux'
+        name: install the PostgreSQL 18 client tools
+        shell: bash
+        run: bash tools/ci/install-pg-client.sh
+      # The L3 mail-intake case needs the fake IMAP server's certificate to be one the process
+      # trusts (harness/rust/l3-http/src/cases/mail_intake.rs): a throwaway self-signed one, added
+      # to a copy of the system roots so nothing else loses its trust store.
+      - if: runner.os == 'Linux'
+        name: certificate for the L3 mail-intake case
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/l3-imap"
+          mkdir -p "$d"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=127.0.0.1 \
+            -addext subjectAltName=IP:127.0.0.1 -addext basicConstraints=critical,CA:FALSE \
+            -keyout "$d/key.pem" -out "$d/cert.pem"
+          cat /etc/ssl/certs/ca-certificates.crt "$d/cert.pem" > "$d/trusted.pem"
+          {
+            echo "L3_IMAP_CERT=$d/cert.pem"
+            echo "L3_IMAP_KEY=$d/key.pem"
+            echo "SSL_CERT_FILE=$d/trusted.pem"
+          } >> "$GITHUB_ENV"
+      # Linux only: `cargo fmt --all` hands rustfmt every source file on one command line, which
+      # Windows refuses (os error 206), and formatting does not depend on the platform.
+      - if: matrix.shard == 1 && runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+      - if: matrix.shard == 1
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: the crates of this shard (crates balanced by test binaries)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          names=$(cargo metadata --no-deps --format-version 1 | "$PY" -c '
+          import json, sys
+          m = json.load(sys.stdin)
+          members = set(m["workspace_members"])
+          pk = [p for p in m["packages"] if p["id"] in members]
+          # Balanced by test binaries (each one is a link of its own): spot-cli alone has 240, so
+          # taking every fourth crate by name left shard 3 with 650 binaries and the others 360 to
+          # 420. Greedy by weight; shard 1 starts heavier because it also runs fmt and clippy.
+          # The 248 test binaries of spot-cli are four times the cost of any other (v0.1.13 run: 18 min to
+          # build and 31 min to run, against 33 min for a whole shard of 560 ordinary binaries), so a
+          # crate with 100 or more of them counts four times each and ends up on a shard of its own.
+          def weight(p):
+              n = sum(1 for t in p["targets"] if "test" in t["kind"])
+              return 1 + n * (4 if n >= 100 else 1)
+          load = [60, 0, 0, 0]
+          shards = [[], [], [], []]
+          for p in sorted(pk, key=lambda p: (-weight(p), p["name"])):
+              i = load.index(min(load))
+              shards[i].append(p["name"])
+              load[i] += weight(p)
+          print(" ".join(sorted(shards[int(sys.argv[1]) - 1])))
+          ' "${{ matrix.shard }}")
+          echo "shard ${{ matrix.shard }}/4: $names"
+          echo "SHARD_CRATES=$names" >> "$GITHUB_ENV"
+      - name: tests and ignored tests (four crates at a time)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          NAMES="$SHARD_CRATES"
+          # spot-idle-connections' ignored test has its own step below (it needs a raised descriptor limit).
+          # Build, run and delete in chunks of four crates: one `cargo test` over the whole shard
+          # keeps every test binary on disk at once (105 GB for shard 3, a full disk and a linker
+          # bus error). Dependencies stay cached between chunks; only the test executables go.
+          # harness/rust/l9-scale is the scale and fault harness (tier M load, a 3-node cluster, a
+          # soak, a volume seed). Its budget tests need dedicated hardware and take over an hour on a
+          # hosted runner (the volume test alone 41 minutes); they run in the nightly L9 profiles
+          # (tools/ci/nightly-profiles/l9). Every other l9-scale test runs here, alone in its chunk.
+          L9_SKIP=(--skip a_metadata_change_on_node_a_is_visible_on_b_and_c_and_there_is_one_leader
+            --skip a_node_cut_off_from_postgres_refuses_writes_and_recovers
+            --skip a_rolling_restart_under_5_writes_per_second_loses_no_acknowledged_write
+            --skip killing_the_leader_moves_the_lease_within_two_ttls_and_a_session_survives_the_loss
+            --skip pool_exhaustion_queues_and_the_connections_return_to_the_baseline
+            --skip postgres_connections_killed_under_load_are_absorbed_without_losing_a_write
+            --skip the_soak_runs_with_its_events_and_the_series_stay_within_the_leak_budgets
+            --skip tier_m_under_load_with_a_second_site_loaded_beside_it
+            --skip the_volume_profile_seeds_100k_rows_and_meets_its_operation_budgets)
+          # A test marked #[ignore = "gap: ..."] documents behaviour that does not exist yet and can
+          # never pass: the --ignored pass skips it. The list is read from the sources, not named here.
+          mapfile -t GAP_SKIP < <("$PY" tools/ci/ignored_gap_skips.py | tr -d '\r')
+          echo "gap tests skipped in the ignored pass: $((${#GAP_SKIP[@]} / 2))"
+          # spot-sync-chaos soak_30_days is 30 simulated days of 100 nodes per seed and is meant for a
+          # release build (its own doc says so): in this debug pass 20 seeds ran past the 3000 s chunk
+          # limit on the first public nightly. One seed here (plus the determinism re-run the test
+          # does) keeps the full-size run in the pass; the many-seed soak belongs to a release run.
+          export SPOT_SOAK_SEEDS=${SPOT_SOAK_SEEDS:-1}
+          # spot-pg-supervisor real_postgres needs the PostgreSQL bin directory (start-postgres.sh installs 18).
+          if [ "$RUNNER_OS" = Linux ]; then export SPOT_PG_BIN=${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}; fi
+          # One chunk must not be able to eat the job: a hung test binary fails its chunk after
+          # CHUNK_SECONDS, with the crate names printed, and the loop goes on. (The log of a job
+          # cancelled by timeout-minutes is deleted by GitHub, so a hang used to leave nothing to read.)
+          # Every output line carries the time it arrived, so the slow test binary shows in the log.
+          CHUNK_SECONDS=${CHUNK_SECONDS:-3000}
+          run_timed() { # run_timed <label> <command...>
+            local label=$1; shift
+            local t0=$SECONDS s
+            echo "[$(date +%T)] start: $label"
+            if timeout --version >/dev/null 2>&1; then
+              timeout --kill-after=60 "$CHUNK_SECONDS" "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            else
+              "$@" 2>&1 | while IFS= read -r l; do printf '[%(%T)T] %s\n' -1 "$l"; done
+            fi
+            s=${PIPESTATUS[0]}
+            echo "[$(date +%T)] end after $((SECONDS - t0)) s, exit $s: $label"
+            if [ "$s" = 124 ] || [ "$s" = 137 ]; then
+              echo "::error::chunk timed out after ${CHUNK_SECONDS} s (a hung test?): $label"
+            fi
+            return "$s"
+          }
+          failed_chunks=""
+          rc=0
+          run_chunk() { # run_chunk <build|grouped|doc>: the chunk is in $chunk, trailing test arguments in $extra
+            if [ "$1" = doc ]; then
+              : > "$RUNNER_TEMP/test-exes.json"  # doc-tests build nothing ahead of the run
+            else
+              cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" </dev/null || rc=1
+            fi
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast "${chunk[@]}" "${extra[@]}" </dev/null || { rc=1; failed_chunks="$failed_chunks [${chunk[*]}]"; }
+            ignored=()
+            if [ "$1" = build ]; then
+              for a in "${chunk[@]}"; do
+                if [ "$a" != -p ] && [ "$RUNNER_OS" = Linux ] && [ "$a" = spot-idle-connections ]; then continue; fi
+                [ "$a" = -p ] || ignored+=(-p "$a")
+              done
+            else
+              ignored=("${chunk[@]}")
+            fi
+            if [ ${#ignored[@]} -gt 0 ]; then run_timed "cargo test --ignored ${ignored[*]}" cargo test --locked --no-fail-fast "${ignored[@]}" -- --ignored "${GAP_SKIP[@]}" </dev/null || { rc=1; failed_chunks="$failed_chunks [ignored ${ignored[*]}]"; }; fi
+            "$PY" -c '
+          import json, os, sys
+          for line in open(sys.argv[1]):
+              try:
+                  m = json.loads(line)
+              except ValueError:
+                  continue
+              exe = m.get("executable")
+              if m.get("reason") == "compiler-artifact" and exe and m.get("profile", {}).get("test"):
+                  try:
+                      os.remove(exe)
+                  except OSError:
+                      pass
+          ' "$RUNNER_TEMP/test-exes.json"
+          }
+          # A crate with many test targets (spot-cli has 248, each a large statically linked executable)
+          # is run in groups of about 40 targets: one `cargo test -p spot-cli` keeps every executable on
+          # disk at once (v0.1.15: 114 GB, "No space left on device" while linking). big-crates.txt has one
+          # line per group: the crate, then its cargo target arguments: `--lib --bins --examples` first,
+          # one `--doc` line (doc-tests run once per crate, not once per group), then `--test a --test b ...`.
+          BIG_FILE="$RUNNER_TEMP/big-crates.txt"
+          "$PY" -c '
+          import json, subprocess, sys
+          LIMIT, GROUP = 60, 40
+          m = json.loads(subprocess.run(["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                                        check=True, capture_output=True, text=True).stdout)
+          members = set(m["workspace_members"])
+          want = set(sys.argv[1:])
+          for p in sorted((p for p in m["packages"] if p["id"] in members and p["name"] in want), key=lambda p: p["name"]):
+              tests = sorted(t["name"] for t in p["targets"] if "test" in t["kind"])
+              if len(tests) < LIMIT:
+                  continue
+              k = -(-len(tests) // GROUP)
+              size = -(-len(tests) // k)
+              print(p["name"], "--lib --bins --examples")
+              if any(set(t["kind"]) & {"lib", "rlib", "proc-macro"} for t in p["targets"]):
+                  print(p["name"], "--doc")
+              for i in range(0, len(tests), size):
+                  print(p["name"], " ".join("--test " + t for t in tests[i:i + size]))
+          ' $NAMES > "$BIG_FILE"
+          cut -d" " -f1 "$BIG_FILE" | sort | uniq -c | while read -r c n; do echo "grouped: $n in $c groups"; done
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0; extra=(); big=""
+            while [ $# -gt 0 ] && [ $n -lt 4 ]; do
+              if [ "$1" = l9-scale ]; then
+                [ $n -gt 0 ] && break
+                chunk+=(-p l9-scale); extra=(-- "${L9_SKIP[@]}"); shift; break
+              fi
+              if grep -q "^$1 " "$BIG_FILE"; then
+                [ $n -gt 0 ] && break
+                big=$1; shift; break
+              fi
+              chunk+=(-p "$1"); shift; n=$((n+1))
+            done
+            if [ -n "$big" ]; then
+              while IFS= read -r line <&3; do
+                read -r -a g <<< "$line"
+                chunk=(-p "${g[0]}" "${g[@]:1}"); extra=()
+                mode=grouped; [ "${g[1]}" = --doc ] && mode=doc
+                run_chunk "$mode"
+              done 3< <(grep "^$big " "$BIG_FILE")
+              continue
+            fi
+            run_chunk build
+          done
+          [ -z "$failed_chunks" ] || echo "::error::failing chunks:$failed_chunks"
+          exit $rc
+      # The 10,000-connection run needs 20,612 descriptors; a skipped run is a red nightly.
+      - if: runner.os == 'Linux'
+        name: 10,000 idle connections
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          case " $SHARD_CRATES " in *" spot-idle-connections "*) ;; *) echo "not in this shard"; exit 0;; esac
+          ulimit -n 65536 || { echo "cannot raise the descriptor limit to 65536 (hard limit: $(ulimit -Hn)); see docs/process/idle-connections.md" >&2; exit 1; }
+          SPOT_IDLE_REQUIRE=1 cargo test --locked -p spot-idle-connections --test idle_10k -- --ignored --nocapture
+      - if: failure() && runner.os == 'Linux'
+        name: explain a PostgreSQL failure
+        shell: bash
+        run: bash tools/ci/pg-diagnose.sh
+      - if: always() && runner.os == 'Linux'
+        name: disk report (where the space went)
+        shell: bash
+        run: |
+          df -h / /mnt || true
+          du -sh "${CARGO_TARGET_DIR:-target}" 2>/dev/null || true
+      - if: always() && runner.os == 'Linux' && env.SPOT_PG_DIR != ''
+        name: stop the throwaway PostgreSQL
+        shell: bash
+        run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true
+
+  python:
+    name: python suites and gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { ref: main, fetch-depth: 0 }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: install the pinned Python packages the checks import
+        run: python -m pip install PyYAML==6.0.3
+      - name: start PostgreSQL 18 with its extensions
+        shell: bash
+        run: bash tools/ci/start-postgres.sh
+      - run: python tools/ci/run_python_suites.py
+      - name: lint gates
+        shell: bash
+        run: |
+          for g in tools/lints/*/run.sh; do
+            [ -f "$g" ] || continue
+            # G6 diffs HEAD against HEAD~1 on main; the first commit of the repository has none.
+            if [ "$g" = tools/lints/contracts/run.sh ] && ! git rev-parse --verify --quiet HEAD~1 >/dev/null; then echo "skip $g: no parent commit"; continue; fi
+            echo "::group::$g"; bash "$g"; echo "::endgroup::"
+          done
+
+  dotnet:
+    # lint-allow: no-postgres the .NET build and its tests use no database.
+    name: dotnet (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { ref: main }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" tools/ci/dotnet_build.py clients/avalonia/Spotledger.Client.sln
+      - if: runner.os != 'Windows'
+        run: dotnet test clients/avalonia/Spotledger.Client.sln -c Release --no-build
+      # Windows: the golden files and the screenshot and accessibility baselines are recorded on
+      # Linux (font rasterization differs per OS, ScreenshotAssert.PlatformName), and the
+      # hostile-file-name refusal tests write names Windows cannot create. Those suites run on
+      # Linux; every other test runs here. core.autocrlf is turned off for the checkout so the
+      # golden files keep their LF line endings.
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          dotnet test clients/avalonia/Spotledger.Client.sln -c Release --no-build \
+            --filter "FullyQualifiedName!~ScreenshotTests&FullyQualifiedName!~ShellRtlMatrixTests&FullyQualifiedName!~UrduScreenMatrixTests&FullyQualifiedName!~GalleryAccessibilityTests&FullyQualifiedName!~RefusalTextHardeningTests"
+
+  l7-l8-profiles:
+    name: L7 nightly and L8 profiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { ref: main }
+      - if: runner.os == 'Linux'
+        name: free disk space on the hosted runner (the full builds need more than the 14 GB it starts with)
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: start PostgreSQL 18 with its extensions
+        shell: bash
+        run: bash tools/ci/start-postgres.sh
+      - name: run the L7 nightly and L8 profiles
+        shell: bash
+        # 25,000 transactions per isolation run: a list-append history grows with the square of the
+        # count and the checker used 19 GB at the profile's 100,000, so the hosted runner was killed
+        # ('received a shutdown signal') three nights running. The self-hosted nightly keeps 100,000.
+        run: bash tools/ci/nightly-profiles/run.sh --l8-txns 25000
+      # The first red L7 run on a hosted runner ended with `storage.unavailable` from the
+      # post-run checks and no server log to explain it: keep the log with the reports.
+      - if: failure()
+        name: explain a PostgreSQL failure
+        shell: bash
+        run: |
+          bash tools/ci/pg-diagnose.sh
+          mkdir -p target/nightly-profiles
+          if [ -n "${SPOT_PG_DIR:-}" ] && [ -f "$SPOT_PG_DIR/log" ]; then cp "$SPOT_PG_DIR/log" target/nightly-profiles/postgres.log; fi
+          df -h / /mnt 2>&1 || true
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-profiles
+          path: target/nightly-profiles/
+          if-no-files-found: warn
+          retention-days: 14

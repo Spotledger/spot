@@ -1,0 +1,783 @@
+# Exceptional source files require a narrow path, a regex matching the G5 finding,
+# and a reason. Prefer removing the backend-specific code over adding an exception.
+# [[allow]]
+# path = "crates/apps/example/src/legacy.rs"
+# pattern = "SQL SELECT"
+# reason = "Temporary compatibility bridge; remove after migration"
+[[allow]]
+path = "crates/framework/spot-document/tests/secrets/raw_rows.rs"
+pattern = "SQL SELECT"
+reason = "WP-SEC-03.T3: the secret-field tests read every stored row back as raw text to prove no plaintext credential reaches storage; this one helper file is the only place such SQL lives, in tests only"
+
+[[allow]]
+path = "crates/framework/spot-migration-apply/tests/traversal_index_pg.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "WP-STO-07.T3: the test proves with EXPLAIN on a real PostgreSQL that the planned traversal index serves a recursive traversal; the plan text exists only in a database, so this one test file reads it through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/identity_chain.rs"
+pattern = "SQL (SELECT|UPDATE|DELETE|ALTER|DROP)"
+reason = "WP-PRD-01.T16: the identity-chain tests prove the audit table's guard and the chain's verification by reading the stored row, tampering with it as the table owner under the documented maintenance switch, and breaking the store on purpose; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/audit_verify_cmd.rs"
+pattern = "SQL (UPDATE|DELETE|DROP)"
+reason = "WP-PRD-01.T50: the `spot audit verify` command tests prove the verifier detects a broken chain by tampering with stored audit entries as the table owner (update, delete) and by dropping the table, in a throwaway test database; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/secrets_host.rs"
+pattern = "SQL SELECT"
+reason = "WP-SEC-03.T9: the secrets-host test reads the stored sealed column of a throwaway test database back as raw bytes to prove the credential value is not in the database in the clear; such a read exists only in a database, so this one test file issues the single SELECT through the pool. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/console.rs"
+pattern = "SQL (SELECT|DROP)"
+reason = "WP-PRD-01.T30: the console tests read the audit chain rows back through the pool to prove each command was audited with the right actor, and one refused-input case feeds the text 'drop table ...' to the console parser (it is a rejected command, not executed SQL); such reads exist only in a database. Tests only."
+# ---- integ/cat: bundle additions (one entry per file; first the false positives, then tests, then host-side stores) ----
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/update.rs"
+pattern = "SQL UPDATE"
+reason = "False positive: the UPDATE..SET pattern matches the error text 'no update source: set services.updater.url ...'; no SQL in this file."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/updater.rs"
+pattern = "SQL NOTIFY"
+reason = "False positive: the NOTIFY pattern matches the error text 'must be off, notify or auto'; no SQL in this file."
+
+[[allow]]
+path = "crates/framework/spot-mgmt-sync/src/catalogue.rs"
+pattern = "SQL NOTIFY"
+reason = "False positive: the NOTIFY pattern matches the operation title 'Notify a node's contact'; no SQL in this crate."
+
+[[allow]]
+path = "crates/framework/spot-store-server/src/bootstrap.rs"
+pattern = "SQL LISTEN"
+reason = "False positive: the LISTEN pattern matches the error text 'the listen address cannot be bound'; no SQL in this file."
+
+[[allow]]
+path = "crates/framework/spot-store-server/src/config.rs"
+pattern = "SQL LISTEN"
+reason = "False positive: the LISTEN pattern matches the error text 'listen is not an ip:port address'; no SQL in this file."
+
+# Tests: statements issued through the raw driver against a throwaway test database (schema set-up, reading rows back, tampering on purpose); they exist only in a database. Tests only.
+[[allow]]
+path = "crates/framework/spot-cli/tests/agent_tiers_service.rs"
+pattern = "SQL (INSERT|SELECT)"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/ai_isolation_service.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/backup.rs"
+pattern = "SQL SELECT"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/backup_schedule.rs"
+pattern = "SQL SELECT"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/bi.rs"
+pattern = "SQL (CREATE|DELETE|SELECT)|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/graph.rs"
+pattern = "SQL DELETE|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/links.rs"
+pattern = "database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/mgmt_api.rs"
+pattern = "database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_effects.rs"
+pattern = "SQL (DELETE|SELECT|UPDATE)|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_governance.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_insight.rs"
+pattern = "SQL DELETE"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_tasks.rs"
+pattern = "database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_versions.rs"
+pattern = "SQL (SELECT|UPDATE)|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/restore.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE)"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/webhook_secret.rs"
+pattern = "SQL SELECT"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/links.rs"
+pattern = "SQL (DELETE|INSERT)|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/skeleton.rs"
+pattern = "database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/usage.rs"
+pattern = "SQL INSERT|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-sync-enrol/tests/pg.rs"
+pattern = "SQL (CREATE|SELECT)"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+# Host-side PostgreSQL stores (not tests). DEBT: the lint wants these in a crates/backends/ crate; each file is a self-contained store module with every statement tenant-scoped. Listed here so the bundle is green; a later wave moves them behind a storage port.
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/bi.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/migrate_rehearse.rs"
+pattern = "SQL SELECT"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/restore.rs"
+pattern = "SQL SELECT"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/restore/server.rs"
+pattern = "SQL SELECT"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/restore/site.rs"
+pattern = "SQL (DELETE|SELECT)"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/agent_tiers/store.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/backup_schedule/executor.rs"
+pattern = "SQL SELECT"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/connectors/defs.rs"
+pattern = "SQL (CREATE|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/connectors/runs.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/connectors/vault.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/graph.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/mgmt_api.rs"
+pattern = "SQL (CREATE|DELETE|INSERT|LISTEN|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module for the management command log (its LISTEN hits are the error text 'listen is not an address'). DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_effects/host.rs"
+pattern = "database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_effects/ledger.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_governance.rs"
+pattern = "database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_governance/drafts.rs"
+pattern = "SQL (INSERT|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_governance/ledger.rs"
+pattern = "SQL (CREATE|DELETE|INSERT|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_versions.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/rule_graph.rs"
+pattern = "SQL SELECT|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/webhooks/intake.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "Host-side PostgreSQL store module: its statements are tenant-scoped and live in this one file. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/lib.rs"
+pattern = "SQL (CREATE|INSERT)|database driver crate path"
+reason = "The control plane owns its own PostgreSQL schema (spot_control): this module holds its statements. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/links.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "The control plane owns its own PostgreSQL schema (spot_control): this module holds its statements. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/usage.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "The control plane owns its own PostgreSQL schema (spot_control): this module holds its statements. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-sync-enrol/src/pg.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE)|database driver crate path"
+reason = "The PostgreSQL enrolment store of spot-sync-enrol (the crate is the enrolment backend; ADR-082): every statement is a named const carrying the tenant predicate, one file. DEBT: move under crates/backends/ when the crate is split."
+
+
+# --- bundle2: host-side stores and tests of the 160 added tasks (WP ids in each reason) ---
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/migrate_rescue.rs"
+pattern = "SQL"
+reason = "WP-MIG-10.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/promote/clone.rs"
+pattern = "SQL"
+reason = "WP-ALM-04.T5 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/sandbox.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-ALM-05.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/durability.rs"
+pattern = "SQL"
+reason = "WP-RTB-01.T4 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/link_ports/nonce_pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-10.T10 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/metering.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-05.T6 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/process_triggers/host.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-BPM-03.T4 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sync_hub.rs"
+pattern = "SQL"
+reason = "WP-RTB-02.T4 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sync_process.rs"
+pattern = "SQL"
+reason = "WP-SYN-12.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/backup_full_verify.rs"
+pattern = "SQL"
+reason = "WP-PRD-04.T12: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/backup_schema_version.rs"
+pattern = "SQL"
+reason = "WP-PRD-04.T10: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/command_ledger_host.rs"
+pattern = "SQL"
+reason = "WP-PLT-05.T9: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/doc_audit_pg.rs"
+pattern = "SQL"
+reason = "WP-PRD-01.T22: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/durability_host.rs"
+pattern = "SQL"
+reason = "WP-RTB-01.T4: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/edi_connector.rs"
+pattern = "SQL"
+reason = "WP-INT-06.T2: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/idempotency_durable.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-PLT-05.T8: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/journal_access_host.rs"
+pattern = "SQL"
+reason = "WP-JRN-09.T4: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/login_unavailable.rs"
+pattern = "SQL"
+reason = "WP-PRD-01.T43: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/mail_bounce_pg.rs"
+pattern = "database driver crate path"
+reason = "WP-PLT-11.T11: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/metering.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-05.T6: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/migrate_seed.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-IAM-02.T3: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_triggers.rs"
+pattern = "database driver crate path"
+reason = "WP-BPM-03.T4: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/quarantine_pg.rs"
+pattern = "database driver crate path"
+reason = "WP-RTB-03.T9: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sandbox.rs"
+pattern = "SQL"
+reason = "WP-ALM-05.T3: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sync_hub_e2e.rs"
+pattern = "SQL"
+reason = "WP-RTB-02.T13: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/break_glass.rs"
+pattern = "SQL"
+reason = "WP-ADM-11.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/cloud_backup.rs"
+pattern = "SQL"
+reason = "WP-CTL-08.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/deploy.rs"
+pattern = "SQL"
+reason = "WP-ADM-13.T4 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/desired_state.rs"
+pattern = "SQL"
+reason = "WP-ADM-08.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/health.rs"
+pattern = "SQL"
+reason = "WP-CTL-03.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/licensing.rs"
+pattern = "SQL"
+reason = "WP-CTL-04.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/moves.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-02.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/support.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-07.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/tenants.rs"
+pattern = "SQL"
+reason = "WP-CTL-01.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/tenants_kv.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-CTL-01.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/src/modules/tenants_prod.rs"
+pattern = "database driver crate path"
+reason = "WP-CTL-01.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/cloud_backup.rs"
+pattern = "SQL"
+reason = "WP-CTL-08.T2: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/deploy.rs"
+pattern = "SQL"
+reason = "WP-ADM-13.T4: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/desired_state.rs"
+pattern = "SQL"
+reason = "WP-ADM-08.T3: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/health.rs"
+pattern = "SQL"
+reason = "WP-CTL-03.T2: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/moves.rs"
+pattern = "SQL"
+reason = "WP-CTL-02.T3: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/rollouts.rs"
+pattern = "SQL"
+reason = "WP-MIG-12.T2: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-control-plane/tests/tenants.rs"
+pattern = "SQL"
+reason = "WP-CTL-01.T7: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-edge-offline-host/src/blocking.rs"
+pattern = "database driver crate path"
+reason = "WP-RTB-03.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-edge-offline-host/src/identity_pg.rs"
+pattern = "SQL"
+reason = "WP-RTB-03.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-edge-offline-host/src/store_pg.rs"
+pattern = "SQL"
+reason = "WP-RTB-03.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-edge-offline-host/tests/pg.rs"
+pattern = "SQL"
+reason = "WP-RTB-03.T7: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-journal-access/src/pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-JRN-09.T4 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-journal-rebuild-host/src/checkpoint.rs"
+pattern = "SQL"
+reason = "WP-RTB-01.T6 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-journal-ship/src/pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-RTB-01.T3 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-settings-store-pg/src/pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-ADM-07.T2 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-settings-store-pg/tests/store.rs"
+pattern = "database driver crate path"
+reason = "WP-ADM-07.T2: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-sync-catchup-host/src/pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-RTB-02.T7 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-sync-hub-host/src/grants.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-RTB-03.T8 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-sync-hub-host/tests/grants.rs"
+pattern = "SQL"
+reason = "WP-RTB-03.T8: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+[[allow]]
+path = "crates/framework/spot-sync-loops/src/obligations.rs"
+pattern = "SQL"
+reason = "WP-RTB-02.T6 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-sync-node-host/src/intake.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-RTB-02.T12 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-sync-node-host/src/pg.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-RTB-02.T5 DEBT: the host-side store of this module keeps its own PostgreSQL tables and runs its statements through the driver; move behind a storage port. Accepted for the bundle by the lead, with the other DEBT entries."
+
+[[allow]]
+path = "crates/framework/spot-sync-node-host/tests/pg.rs"
+pattern = "SQL"
+reason = "WP-RTB-02.T5: tests only: the file seeds, reads or tears down rows of a throwaway test database through the raw driver, which the storage contract cannot express (tamper, raw read-back, scratch schema)."
+
+# --- bundle3: host-side stores and tests added by the bundle 3 tasks ---
+
+[[allow]]
+path = "crates/framework/spot-cli/src/commands/extension.rs"
+pattern = "SQL SELECT"
+reason = "WP-STO-12.T4: `spot extension list` reads the installed extension names and versions from the PostgreSQL catalogue (pg_extension), a server-level view no tenant table or storage-contract operation covers; one read-only statement. DEBT: move behind the extension port of a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/devtools.rs"
+pattern = "SQL LISTEN"
+reason = "False positive: the LISTEN pattern matches the warning text 'may listen on a non-loopback address'; no SQL in this file."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/emergency_access/store.rs"
+pattern = "SQL|database driver crate path"
+reason = "WP-IAM-08.T14 DEBT: the host-side store of the emergency-access grants keeps its own PostgreSQL table and runs its tenant-scoped statements through the driver in this one file; move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/maintenance_gate.rs"
+pattern = "database driver crate path"
+reason = "WP-MIG-07.T5: the shared gate state holds a deadpool pool type next to the PostgreSQL admission gate; no statement is issued in this file. DEBT: hold the pool behind a port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/occupancy/sweeper.rs"
+pattern = "SQL SELECT"
+reason = "WP-STO-14.T3: the sweeper checks that the btree_gist extension is installed (pg_extension) before the first sweep, a server-level read the occupancy storage contract does not express; one read-only statement. DEBT: move behind the occupancy store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sandbox_reaper.rs"
+pattern = "SQL SELECT"
+reason = "WP-ALM-05.T5: the reaper asks the server catalogue (pg_database) whether a sandbox database still exists before dropping its entry; a server-level read, not a tenant table. DEBT: move behind the sandbox store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/support_access_wiring.rs"
+pattern = "database driver crate path"
+reason = "WP-ADM-11.T4: the wiring holds an optional deadpool pool type to find the site's components; no statement is issued in this file. DEBT: hold the pool behind a port."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/sync_rebuild_wiring.rs"
+pattern = "SQL SELECT"
+reason = "WP-RTB-01.T10: the pin source counts running process cases by DAG key and version (tenant-scoped) so a sync or rebuild keeps the versions in use; one read-only statement. DEBT: move behind the process store port of spot-bpm-pg."
+
+[[allow]]
+path = "crates/framework/spot-journal-rebuild-host/src/invariants.rs"
+pattern = "SQL SELECT"
+reason = "WP-RTB-01.T14: the rebuild invariants count rows and digest the content of the validated table names (identifiers checked at construction) to compare a rebuilt database with its journal; such a whole-table digest exists only as a query. DEBT: move behind the rebuild store port."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/extension_command.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/fleet_loop.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/fleet_loop/rig.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/mail_intake.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/maintenance_gate_serve.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/occupancy_service.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/ops_signals_host.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_api_idempotency.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_effects_governance.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_governance_undo.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_run_directory.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_throughput.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/process_trigger_fields.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sandbox_reaper.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/sandbox_tables.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/secret_canary_sweep.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-reports/tests/run_errors.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-sandbox/tests/tables_complete.rs"
+pattern = "SQL|database driver crate path"
+reason = "Integration test: reads, seeds or breaks stored rows of a throwaway test database through the raw driver to prove behaviour that exists only in a database. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/src/services/ai_isolation/role.rs"
+pattern = "database driver crate path"
+reason = "Public CI fix: provisioning the cluster-wide ai role must recognise PostgreSQL's 'tuple concurrently updated' catalog race (SQLSTATE XX000) and release a session advisory lock on a pooled connection; both exist only in the driver's error type and pool object, so this one host-side file names them. The statements themselves stay in the statement builder."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/cluster_three_hosts.rs"
+pattern = "SQL (SELECT|UPDATE)|database driver crate path"
+reason = "WP-PLT-18.T3: the three-host cluster test reads the job and lease rows of one shared PostgreSQL back (who holds the lease, which job ran how often) and expires the leader's lease to force a failover; such state exists only in a database, so this one test file issues the statements through the pool. Tests only."
+
+# WP-AI-03.T5 (reviewed in bundle4-ai): the LLM service's host-side store. Statements are scoped by site and tenant, keys are stored sealed (a ciphertext column, never plaintext), and the usage and send record tables hold digests and counts only.
+[[allow]]
+path = "crates/framework/spot-cli/src/services/llm/store.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE|DELETE)|database driver crate path"
+reason = "Host-side PostgreSQL store module of the LLM service: its statements are site-scoped and live in this one file, like agent_tiers/store.rs. DEBT: move behind a storage port in a backend crate."
+
+# WP-AI-09.T3: the isolation proof needs a business table in a throwaway database and a raw read as the memory role.
+[[allow]]
+path = "crates/framework/spot-cli/tests/agent_memory_service.rs"
+pattern = "SQL (INSERT|SELECT)"
+reason = "Integration test: seeds a business row in a throwaway database and reads it as the memory role to prove PostgreSQL refuses (SQLSTATE 42501), a fact that exists only in a database. Tests only."
+
+# WP-PLT-07.T4 (found by the bundle4-ai run of the lint): the scheduler mark table.
+[[allow]]
+path = "crates/framework/spot-cli/src/services/schedule_marks.rs"
+pattern = "SQL (CREATE|INSERT|SELECT)|database driver crate path"
+reason = "Host-side PostgreSQL store of the scheduler marks: one tenant-scoped table, statements live in this one file. DEBT: move behind a storage port in a backend crate."
+
+# WP-DAG-04.T7 tests (found by the bundle4-ai run of the lint).
+[[allow]]
+path = "crates/framework/spot-cli/tests/edge_integrity.rs"
+pattern = "SQL (DELETE|UPDATE)|database driver crate path"
+reason = "Integration test: tampers with stored rows of a throwaway test database through the raw driver to prove the integrity scan finds it. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/edge_integrity_more.rs"
+pattern = "SQL (INSERT|UPDATE|SELECT)|database driver crate path"
+reason = "Integration test: seeds and tampers with stored rows of a throwaway test database through the raw driver to prove the integrity scan finds it. Tests only."
+
+# WP-AI-07.T4: the remedy host's durable undo store. One table of the site's own database, one row per undo token; the record column is the serde form of the framework's UndoRecord (fingerprints of typed ports, no cell values).
+[[allow]]
+path = "crates/framework/spot-cli/src/services/remedies/undo_store.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE|DELETE)|database driver crate path"
+reason = "Host-side PostgreSQL store module of the remedy host: its statements are in this one file, like llm/store.rs, and it holds only the framework's undo records. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/remedies_undo_store.rs"
+pattern = "database driver crate path"
+reason = "Integration test: opens a pool on a throwaway test database to round-trip the undo store through PostgreSQL (skipped without SPOT_TEST_PG_URL). Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/quarantine_wiring.rs"
+pattern = "database driver crate path"
+reason = "WP-AI-07.T8: the quarantine wiring tests build the platform audit chain and the quarantine store over the throwaway test database; their constructors take a deadpool pool, which the TestDb helper does not hand out, so this one test file builds the pool from the test database's own settings. Tests only."
+
+# Bundle 8 additions (tests only).
+[[allow]]
+path = "crates/framework/spot-cli/tests/audit_verify_extra_chains.rs"
+pattern = "SQL (UPDATE|DELETE)"
+reason = "WP-SEC-06.T9: the extra-chain verifier tests prove that an altered, swapped or removed entry of the AI and quarantine chains is found, by tampering with stored audit entries as the table owner in a throwaway test database; such statements exist only in a database, so this one test file issues them through the raw driver. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/quarantine_store_port.rs"
+pattern = "database driver crate path"
+reason = "WP-AI-07.T17: the quarantine store-port tests build the platform audit chain and the quarantine store over the throwaway test database; their constructors take a deadpool pool, which the TestDb helper does not hand out, so this one test file builds the pool from the test database's own settings. Tests only."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/step_up_audit.rs"
+pattern = "SQL SELECT"
+reason = "WP-IAM-12.T9: the step-up audit test reads the identity audit chain's stored records back from a throwaway test database to prove no secret reaches a record; such a read exists only in a database. Tests only."

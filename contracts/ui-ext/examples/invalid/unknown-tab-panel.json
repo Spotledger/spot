@@ -1,0 +1,17 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "tabs": [
+    {
+      "id": "sample.task_time",
+      "origin": "app:sample",
+      "label": "Time",
+      "slot": "doc.tab",
+      "doctype": "task",
+      "panel": "sample.task_overview",
+      "order": 1
+    }
+  ],
+  "$comment": "expect: uiext.unknown_panel. The tab's panel is not contributed by this app."
+}

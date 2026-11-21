@@ -1,0 +1,28 @@
+# durability_gate codes: the durability gate of spot-durability-gate and its host service (WP-RTB-01.T4, ADR-061 s4): policy changes and start-up refusals. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "durability_gate.no_standby"
+class = "none"
+summary = "replica-sync was asked for but the site has no standby configured, so it would silently behave as local; the host refuses to start with it."
+explanation_key = "error.durability_gate.no_standby"
+params = []
+remedy = "Use remote-sync or local, or configure a synchronous standby when this build supports one."
+since = "0.1.0"
+
+[[entry]]
+code = "durability_gate.shipper_unhealthy"
+class = "none"
+summary = "An upgrade of the durability policy needs the journal shipper healthy, and it is not (failing, stopped or not the writer), so the policy was not raised."
+explanation_key = "error.durability_gate.shipper_unhealthy"
+params = []
+remedy = "Fix the journal (see journal hosting) and repeat the change."
+since = "0.1.0"
+
+[[entry]]
+code = "durability_gate.permission_denied"
+class = "none"
+summary = "Only the tenant administrator may lower the durability policy; nothing was changed."
+explanation_key = "error.durability_gate.permission_denied"
+params = []
+remedy = "Ask the tenant administrator to make the change."
+since = "0.1.0"

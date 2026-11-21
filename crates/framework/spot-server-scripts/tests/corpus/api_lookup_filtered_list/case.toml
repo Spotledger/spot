@@ -1,0 +1,8 @@
+kind = "api"
+pattern = "filtered lookup endpoint"
+unsupported = "host.query is not available to API and scheduled scripts (the document engine has no permission-filtered query for an invocation yet); the call fails with serverscript.store_failed inside the script"
+[input.args]
+customer = "c"
+[expect]
+ok = false
+error_code = "script.thrown"

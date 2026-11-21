@@ -1,0 +1,29 @@
+[package]
+name = "spot-site-masker"
+description = "The host's FieldMasker for the audit participant (WP-PRD-01.T20): a GuardMasker over the field protection facts of the effective metadata a site serves, one immutable instance per metadata generation, failing closed on an unknown DocType"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Clock`, the time source of the field guard's records.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `FieldMasker`, `GuardMasker`, `AuditMask` and `DocAuditError`.
+spot-doc-audit = { path = "../spot-doc-audit" }
+# `FieldGuard`, `MetaProtection`, the sinks and `RedactedDiff`.
+spot-field-guard = { path = "../spot-field-guard" }
+# `EffectiveMeta`, the metadata generation the masker is built from.
+spot-meta = { path = "../spot-meta" }
+# `PermissionEngine`, `Principal`, `DocFacts`.
+spot-permissions = { path = "../spot-permissions" }
+# `FieldChange`, the diff shape.
+spot-activity = { path = "../spot-activity" }
+
+[dev-dependencies]
+spot-core = { path = "../spot-core" }
+serde_json = "1"
+
+[lints]
+workspace = true

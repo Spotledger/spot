@@ -1,0 +1,118 @@
+# script codes: the embedded JavaScript engine of spot-ts (WP-EXT-08). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "script.memory_limit"
+class = "none"
+summary = "The script used more memory than its limit."
+explanation_key = "error.script.memory_limit"
+params = []
+remedy = "Reduce the memory the script uses or raise the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "script.timeout"
+class = "none"
+summary = "The script ran past its wall-clock deadline."
+explanation_key = "error.script.timeout"
+params = []
+remedy = "Make the script faster or raise the deadline."
+since = "0.1.0"
+
+[[entry]]
+code = "script.out_of_budget"
+class = "none"
+summary = "The script used up its instruction budget."
+explanation_key = "error.script.out_of_budget"
+params = []
+remedy = "Reduce the work the script does or raise the budget."
+since = "0.1.0"
+
+[[entry]]
+code = "script.stack_overflow"
+class = "none"
+summary = "The script overflowed its stack."
+explanation_key = "error.script.stack_overflow"
+params = []
+remedy = "Remove deep recursion from the script."
+since = "0.1.0"
+
+[[entry]]
+code = "script.too_many_host_calls"
+class = "none"
+summary = "The script made more host calls than its limit."
+explanation_key = "error.script.too_many_host_calls"
+params = []
+remedy = "Reduce the host calls the script makes or raise the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "script.output_too_large"
+class = "none"
+summary = "The script's result is larger than the output limit."
+explanation_key = "error.script.output_too_large"
+params = []
+remedy = "Return less data from the script."
+since = "0.1.0"
+
+[[entry]]
+code = "script.compile"
+class = "none"
+summary = "The script source does not compile."
+explanation_key = "error.script.compile"
+params = []
+remedy = "Fix the syntax error in the script."
+since = "0.1.0"
+
+[[entry]]
+code = "script.missing_entry"
+class = "none"
+summary = "The script has no such exported function."
+explanation_key = "error.script.missing_entry"
+params = []
+remedy = "Export the function the caller names."
+since = "0.1.0"
+
+[[entry]]
+code = "script.bad_arguments"
+class = "none"
+summary = "The arguments cannot be passed to the script."
+explanation_key = "error.script.bad_arguments"
+params = []
+remedy = "Pass arguments that serialise to JSON."
+since = "0.1.0"
+
+[[entry]]
+code = "script.host_panic"
+class = "none"
+summary = "A host function panicked and the execution was stopped."
+explanation_key = "error.script.host_panic"
+params = []
+remedy = "Report the failure; the engine and other executions are unaffected."
+since = "0.1.0"
+
+[[entry]]
+code = "script.thrown"
+class = "none"
+summary = "The script threw an exception it did not handle."
+explanation_key = "error.script.thrown"
+params = []
+remedy = "Fix the script or handle the exception in it."
+since = "0.1.0"
+
+[[entry]]
+code = "script.validation"
+class = "none"
+summary = "The script threw a typed validation error."
+explanation_key = "error.script.validation"
+params = []
+remedy = "Fix the named fields the error lists."
+since = "0.1.0"
+
+[[entry]]
+code = "script.internal"
+class = "none"
+summary = "Something inside the engine failed that no script caused."
+explanation_key = "error.script.internal"
+params = []
+remedy = "Report the failure with the request details."
+since = "0.1.0"

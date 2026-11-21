@@ -1,0 +1,5 @@
+error: `type` is a Rust keyword and cannot be a method name; pick another name
+  --> tests/ui/keyword_name.rs:20:24
+   |
+20 |     #[whitelist(name = "type")]
+   |                        ^^^^^^

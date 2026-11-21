@@ -1,0 +1,36 @@
+[package]
+name = "spot-llm-router"
+description = "Task routing across model providers with fallback and health (circuit breaker), usage accounting per tenant, task, provider, model and day, integer-priced cost, and enforced per-scope budgets (WP-AI-03.T4)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The provider interface the router sits behind: the router *is* a `Provider` to its callers
+# and forwards to the providers its routing table names.
+spot-llm = { path = "../spot-llm" }
+# The routing table loads from a TOML document.
+toml = "0.8"
+# `RouterStream` is an `futures_core::Stream` over the box stream `spot-llm` hands back.
+futures-core = "0.3"
+# `serde` on every public type; the routing document is `serde`-shaped.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `router.*` codes.
+thiserror = "2"
+# Reservations (the budget guard) and the cooldown wait park on tokio synchronisation.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+
+[dev-dependencies]
+# `#[tokio::test]`, the current-thread runtime, and `test-util` for the paused clock that
+# makes backoff waits and cooldowns instant under test.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "sync", "time", "test-util"] }
+# Tool specs in the router tests carry a JSON Schema value, and the sums' wire shapes are
+# asserted as JSON with the field names stable.
+serde_json = "1"
+# Property tests: cost() is round-half-up exact for arbitrary inputs, ledger sums always agree.
+proptest = "1"
+
+[lints]
+workspace = true

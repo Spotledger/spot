@@ -1,0 +1,237 @@
+# uiext codes: tier A UI extensions (WP-UI-13.T2, ADR-069 amendment A1).
+# One [[entry]] per code of contracts/ui-ext/errors.md, plus the codes resolution and the size cap need
+# (uiext.extension_without_dependency, named by the task brief, uiext.dependency_cycle and
+# uiext.document_too_large, the input size cap).
+# See crates/framework/spot-errors/README.md for the file's rules.
+[[entry]]
+code = "uiext.schema"
+class = "none"
+summary = "The UI document does not fit the extension schema."
+explanation_key = "error.uiext.schema"
+params = []
+remedy = "Fix the named property; the contract's objects are closed, so nothing may be added."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_slot"
+class = "none"
+summary = "The slot is not in the closed slot list of the contract."
+explanation_key = "error.uiext.unknown_slot"
+params = []
+remedy = "Use a slot from the contract's slot schema; a new slot needs a contract version bump."
+since = "0.1.0"
+[[entry]]
+code = "uiext.slot_kind_mismatch"
+class = "none"
+summary = "The slot does not accept the kind of item placed in it."
+explanation_key = "error.uiext.slot_kind_mismatch"
+params = []
+remedy = "Put the item in a slot that accepts its kind."
+since = "0.1.0"
+[[entry]]
+code = "uiext.doctype_required"
+class = "none"
+summary = "An item in a document or list slot names no DocType."
+explanation_key = "error.uiext.doctype_required"
+params = []
+remedy = "Add the doctype the item applies to."
+since = "0.1.0"
+[[entry]]
+code = "uiext.slot_limit"
+class = "none"
+summary = "The app puts more items in a slot and DocType than the slot allows."
+explanation_key = "error.uiext.slot_limit"
+params = []
+remedy = "Remove items or group them in a panel."
+since = "0.1.0"
+[[entry]]
+code = "uiext.label_too_long"
+class = "none"
+summary = "A literal label is longer than the slot allows."
+explanation_key = "error.uiext.label_too_long"
+params = []
+remedy = "Shorten the label or use a key: translation key."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_icon"
+class = "none"
+summary = "The icon is not a token of the closed icon set."
+explanation_key = "error.uiext.unknown_icon"
+params = []
+remedy = "Use a token from the contract's icon list; an icon is never a URL or a file."
+since = "0.1.0"
+[[entry]]
+code = "uiext.effect_invalid"
+class = "none"
+summary = "An action does not have exactly one effect."
+explanation_key = "error.uiext.effect_invalid"
+params = []
+remedy = "Keep exactly one of call, open or navigate_url."
+since = "0.1.0"
+[[entry]]
+code = "uiext.external_url"
+class = "none"
+summary = "The navigation URL leaves the app."
+explanation_key = "error.uiext.external_url"
+params = []
+remedy = "Use an absolute path under one of the app's declared routes, or open a destination."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_route"
+class = "none"
+summary = "The navigation URL is not under a route the manifest declares."
+explanation_key = "error.uiext.unknown_route"
+params = []
+remedy = "Declare the route in the manifest, or use open with a destination."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_method"
+class = "none"
+summary = "The call does not name a method the manifest declares with that doctype and arguments."
+explanation_key = "error.uiext.unknown_method"
+params = []
+remedy = "Declare the method and its arguments in the manifest."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_destination"
+class = "none"
+summary = "A destination the document names is not in the registry."
+explanation_key = "error.uiext.unknown_destination"
+params = []
+remedy = "Declare the destination or fix its id."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_permission"
+class = "none"
+summary = "The permission reference does not name an existing doctype and right."
+explanation_key = "error.uiext.unknown_permission"
+params = []
+remedy = "Use an existing permission reference; display never grants access."
+since = "0.1.0"
+[[entry]]
+code = "uiext.expression_invalid"
+class = "none"
+summary = "An expression does not parse, or reads a field its scope does not have."
+explanation_key = "error.uiext.expression_invalid"
+params = []
+remedy = "Fix the expression with the shared expression language's grammar and fields."
+since = "0.1.0"
+[[entry]]
+code = "uiext.raw_html"
+class = "none"
+summary = "A text block is outside the restricted markdown subset."
+explanation_key = "error.uiext.raw_html"
+params = []
+remedy = "Use paragraphs, emphasis, lists, inline code and dest: links only."
+since = "0.1.0"
+[[entry]]
+code = "uiext.query_missing"
+class = "none"
+summary = "A data block does not name a server query."
+explanation_key = "error.uiext.query_missing"
+params = []
+remedy = "Declare a server query and name it in the block."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_query"
+class = "none"
+summary = "A query reference names a query the manifest does not declare."
+explanation_key = "error.uiext.unknown_query"
+params = []
+remedy = "Declare the query in the manifest, or fix its id."
+since = "0.1.0"
+[[entry]]
+code = "uiext.query_kind"
+class = "none"
+summary = "A block names a query of the wrong kind."
+explanation_key = "error.uiext.query_kind"
+params = []
+remedy = "Name a rows query for a table and an aggregate query for a stat."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_panel"
+class = "none"
+summary = "A tab names a panel the app does not contribute."
+explanation_key = "error.uiext.unknown_panel"
+params = []
+remedy = "Contribute the panel in the same app."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_component"
+class = "none"
+summary = "A tile or use node names a component no installed app contributes."
+explanation_key = "error.uiext.unknown_component"
+params = []
+remedy = "Contribute the component, or declare the dependency on the app that does."
+since = "0.1.0"
+[[entry]]
+code = "uiext.unknown_action"
+class = "none"
+summary = "A control's click handler names an action the app does not contribute."
+explanation_key = "error.uiext.unknown_action"
+params = []
+remedy = "Contribute the action in the same app."
+since = "0.1.0"
+[[entry]]
+code = "uiext.origin_mismatch"
+class = "none"
+summary = "An item's origin or id namespace is not the contributing app."
+explanation_key = "error.uiext.origin_mismatch"
+params = []
+remedy = "Namespace every id by the app that contributes it."
+since = "0.1.0"
+[[entry]]
+code = "uiext.duplicate_id"
+class = "none"
+summary = "Two items share an id."
+explanation_key = "error.uiext.duplicate_id"
+params = []
+remedy = "Make every item id unique."
+since = "0.1.0"
+[[entry]]
+code = "uiext.component_cycle"
+class = "none"
+summary = "Composite components reference each other in a cycle."
+explanation_key = "error.uiext.component_cycle"
+params = []
+remedy = "Remove the cycle from the component references."
+since = "0.1.0"
+[[entry]]
+code = "uiext.component_too_deep"
+class = "none"
+summary = "A component expansion nests deeper than the contract allows."
+explanation_key = "error.uiext.component_too_deep"
+params = []
+remedy = "Flatten the component body or split it."
+since = "0.1.0"
+[[entry]]
+code = "uiext.component_too_large"
+class = "none"
+summary = "A component expansion has more nodes than the contract allows."
+explanation_key = "error.uiext.component_too_large"
+params = []
+remedy = "Split the component or lower the repeat maximum."
+since = "0.1.0"
+[[entry]]
+code = "uiext.extension_without_dependency"
+class = "none"
+summary = "An app refers to another app's item without declaring the dependency."
+explanation_key = "error.uiext.extension_without_dependency"
+params = []
+remedy = "Declare the dependency on the app whose item is used."
+since = "0.1.0"
+[[entry]]
+code = "uiext.dependency_cycle"
+class = "none"
+summary = "The declared app dependencies form a cycle, so no dependency order exists."
+explanation_key = "error.uiext.dependency_cycle"
+params = []
+remedy = "Remove the cycle from the apps' declared dependencies."
+since = "0.1.0"
+[[entry]]
+code = "uiext.document_too_large"
+class = "none"
+summary = "The UI document is larger than the size cap and was not parsed."
+explanation_key = "error.uiext.document_too_large"
+params = []
+remedy = "Split the document into several files of at most 1 MiB each."
+since = "0.1.0"

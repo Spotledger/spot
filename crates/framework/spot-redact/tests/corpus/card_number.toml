@@ -1,0 +1,81 @@
+# Card numbers kept only when they pass the Luhn check; separators survive in input only.
+
+[[case]]
+input = 'card 4111111111111111 charged'
+expected = 'card [redacted:card_number] charged'
+class = 'card_number'
+
+[[case]]
+input = 'card 378282246310005'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'card 4222222222222'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'card 4111 1111 1111 1111'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'card 4111-1111-1111-1111'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'card 5555555555554444'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'card 6011111111111117'
+expected = 'card [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'two cards: 4111111111111111 and 5555555555554444'
+expected = 'two cards: [redacted:card_number] and [redacted:card_number]'
+class = 'card_number'
+
+[[case]]
+input = 'order 4111111111111121 shipped'
+expected = 'order 4111111111111121 shipped'
+class = 'card_number'
+
+[[case]]
+input = 'order 1234567890123456 rejected'
+expected = 'order 1234567890123456 rejected'
+class = 'card_number'
+
+[[case]]
+input = 'order 2026100512345678 printed'
+expected = 'order 2026100512345678 printed'
+class = 'card_number'
+
+[[case]]
+input = 'digits 12345678901 short'
+expected = 'digits 12345678901 short'
+class = 'card_number'
+
+[[case]]
+input = 'amount EUR 1.234,56'
+expected = 'amount EUR 1.234,56'
+class = 'card_number'
+
+[[case]]
+input = 'date 2026-10-05 12:34'
+expected = 'date 2026-10-05 12:34'
+class = 'card_number'
+
+[[case]]
+input = 'json {"card_number": "4111111111111111"}'
+expected = 'json {"card_number": "[redacted:card_number]"}'
+class = 'card_number'
+
+[[case]]
+input = 'partial 411111111111111'
+expected = 'partial 411111111111111'
+class = 'card_number'

@@ -1,0 +1,9 @@
+# Perf budgets for WP-UI-08.T2 (read by PerfBudgetTests; WP-UI-16 reads this file).
+# Measured on the reference runner: Fedora 44, 6 slow cores, .NET 10.
+
+max_frame_ms = 8.0
+max_alloc_bytes_per_frame = 4096
+first_paint_50_rows_ms = 50.0
+rows = 100000
+columns = 12
+scroll_steps = 300

@@ -1,0 +1,133 @@
+# serverscript codes: the document-event Server Script tier (WP-EXT-06.T1). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "serverscript.compile_failed"
+class = "Validation"
+summary = "A Server Script's TypeScript source did not compile."
+explanation_key = "error.serverscript.compile_failed"
+params = []
+remedy = "Fix the reported syntax error on the source field; the diagnostic names the line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.limit_exceeded"
+class = "Internal"
+summary = "A Server Script exceeded one of its limits."
+explanation_key = "error.serverscript.limit_exceeded"
+params = []
+remedy = "Make the script faster and lighter, or raise its timeout; the operation was not saved."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.phase_violation"
+class = "Internal"
+summary = "A Server Script did something its lifecycle phase does not allow."
+explanation_key = "error.serverscript.phase_violation"
+params = []
+remedy = "Move the work to an event whose phase allows it: derive in before_*, check in validate, act in after_*."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.record_invalid"
+class = "Validation"
+summary = "A Server Script record is missing or malformed."
+explanation_key = "error.serverscript.record_invalid"
+params = []
+remedy = "Give the script a name and a DocType scripts may be attached to (not a credential, session, role, webhook or Server Script DocType). Choose one of the document events and add TypeScript source."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.store_failed"
+class = "Internal"
+summary = "The script store could not load or record what it was asked to."
+explanation_key = "error.serverscript.store_failed"
+params = []
+remedy = "If it appears on a write during start-up, wait until the site is ready; otherwise report the failure with the request details: the script store is unavailable or misconfigured."
+since = "0.1.0"
+
+# Script kinds (WP-EXT-06.T7): HTTP statuses follow the class: a guest refusal is 401, a
+# function conflict and an unavailable run-as user are 409, an unusable schedule is 422.
+
+[[entry]]
+code = "serverscript.guest_refused"
+class = "PermissionDenied"
+summary = "An API script runs as the signed-in caller, so a guest or a caller with no identity is refused before the script starts."
+explanation_key = "error.serverscript.guest_refused"
+params = []
+remedy = "Sign in and call the function again; an API script can never be called by a guest."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.run_as_unavailable"
+class = "InvalidState"
+summary = "The user a scheduled script runs as is missing or disabled, so the run was refused; it never falls back to a system principal."
+explanation_key = "error.serverscript.run_as_unavailable"
+params = []
+remedy = "Enable the user named in the script's run_as field, or name another user, then let the next scheduled run proceed."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.function_conflict"
+class = "Duplicate"
+summary = "Two API scripts claim the same function key, so neither is served."
+explanation_key = "error.serverscript.function_conflict"
+params = []
+remedy = "Give one of the two scripts a different module or function name; the message names both scripts."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.schedule_invalid"
+class = "Validation"
+summary = "A scheduled script's cron expression or time zone cannot be scheduled."
+explanation_key = "error.serverscript.schedule_invalid"
+params = []
+remedy = "Use six cron fields (seconds first) and an IANA zone name such as Asia/Karachi or UTC."
+since = "0.1.0"
+
+# Script elevation (WP-EXT-06.T8).
+
+[[entry]]
+code = "serverscript.elevation_forbidden"
+class = "PermissionDenied"
+summary = "Only a holder of the scripts.elevate permission may elevate a script or edit an elevated one."
+explanation_key = "error.serverscript.elevation_forbidden"
+params = []
+remedy = "Ask a holder of the scripts.elevate permission (the Tenant Administrator by default) to make the change."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.elevation_reason_required"
+class = "Validation"
+summary = "An elevated script needs a reason of 20 to 500 characters."
+explanation_key = "error.serverscript.elevation_reason_required"
+params = []
+remedy = "State why the script needs to act as the platform, in 20 to 500 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.elevation_not_allowed"
+class = "Validation"
+summary = "A scheduled script runs as its run_as user and can never be elevated."
+explanation_key = "error.serverscript.elevation_not_allowed"
+params = []
+remedy = "Clear the elevated flag; give the run_as user the rights the script needs instead."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.elevation_audit_failed"
+class = "Internal"
+summary = "An elevated run could not be audited, so it was refused or failed; no elevated write happens without an audit entry."
+explanation_key = "error.serverscript.elevation_audit_failed"
+params = []
+remedy = "Check the site's audit chain; the script can be run again once the audit works."
+since = "0.1.0"
+
+[[entry]]
+code = "serverscript.elevation_reset"
+class = "none"
+summary = "The source of an elevated script changed, so the script is no longer elevated."
+explanation_key = "error.serverscript.elevation_reset"
+params = []
+remedy = "Ask a holder of the scripts.elevate permission to elevate the script again."
+since = "0.1.0"

@@ -1,0 +1,33 @@
+[package]
+name = "spot-environments-pg"
+description = "The PostgreSQL EnvironmentStore (WP-ALM-02.T2, ADR-082 class C): environment sets in the control schema, reached through the shared blocking spot-pg-bridge, with unique names, a compare-and-swap replace and a bounded list"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `EnvironmentStore` trait this crate implements, the model and the stable `environments.*` errors.
+spot-environments = { path = "../../framework/spot-environments" }
+# `Region` and `TenantId`: the parts of a set the stored document carries.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The pool the bridge borrows; the constructor checks the bridge configuration against its size.
+deadpool-postgres = "0.14"
+# The driver: statements run on the connection the bridge hands to the closure.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+# The constructor refuses a current-thread runtime; no runtime is created here.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# The set is stored as a validated jsonb document.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

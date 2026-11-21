@@ -1,0 +1,17 @@
+[package]
+name = "spot-sync-adoption"
+description = "The handover adoption exchange as a pure state machine (WP-SYN-01.T3, ADR-063 section 5 and amendment 1): hub side and node side, the request, the node stopping ownership, the acknowledgement with the final version, the hub taking ownership, the process-step trigger and the adopt setting; no edit is ever lost"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `AdoptMode` (manual, auto, never): the DocType default for when the hub requests adoption.
+spot-sync-policy = { path = "../spot-sync-policy" }
+# The one error type, with stable codes.
+thiserror = "2"
+
+[lints]
+workspace = true

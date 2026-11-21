@@ -1,0 +1,91 @@
+# egress_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "egress_host.settings_invalid"
+class = "none"
+summary = "The [services.egress] table has an unknown key, a value of the wrong type or a value out of range, so the egress service cannot start."
+explanation_key = "error.egress_host.settings_invalid"
+params = []
+remedy = "Fix the table: only policy_file, denial_log, denial_log_max_bytes and denials_per_minute exist."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.path_refused"
+class = "none"
+summary = "A path in [services.egress] contains .., is relative where the host has no root, or names one denial log for several sites, so the egress service refuses it."
+explanation_key = "error.egress_host.path_refused"
+params = []
+remedy = "Use a path without .., and put {site} in denial_log when the host has several sites."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.policy_unreadable"
+class = "none"
+summary = "The egress policy file is missing, is not a regular file or cannot be read, so the site refuses to start rather than run without the policy the operator named."
+explanation_key = "error.egress_host.policy_unreadable"
+params = []
+remedy = "Create the file or fix services.egress.policy_file, and check that the running user can read it."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.policy_unsafe"
+class = "none"
+summary = "The egress policy file is writable by everyone, so the egress service refuses it: anyone on the machine could widen what tenants may reach."
+explanation_key = "error.egress_host.policy_unsafe"
+params = []
+remedy = "Run chmod o-w on the policy file."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.policy_invalid"
+class = "none"
+summary = "The egress policy file does not parse or holds an entry that is not valid, so the egress service refuses it and lists every problem."
+explanation_key = "error.egress_host.policy_invalid"
+params = []
+remedy = "Fix every listed problem, then run spot egress reload to check the file again."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.reload_failed"
+class = "none"
+summary = "The last egress policy reload failed, so the previous policy stays in force and the site reports itself degraded."
+explanation_key = "error.egress_host.reload_failed"
+params = []
+remedy = "Run spot egress reload to see every problem, fix the policy file and reload again."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.denial_log_unwritable"
+class = "none"
+summary = "The egress denial log cannot be written, so denials are still refused and counted but not recorded, and the site reports itself degraded."
+explanation_key = "error.egress_host.denial_log_unwritable"
+params = []
+remedy = "Check the directory and disk of services.egress.denial_log and that the running user can write there."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.url_invalid"
+class = "none"
+summary = "spot egress check was given something that is not an http or https URL with a host, so it answered nothing."
+explanation_key = "error.egress_host.url_invalid"
+params = []
+remedy = "Pass a full URL such as https://api.example.com/hook."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.purpose_unknown"
+class = "none"
+summary = "A purpose given to spot egress is not one of the closed set, so it answered nothing."
+explanation_key = "error.egress_host.purpose_unknown"
+params = []
+remedy = "Use webhook, script, connector, mail, llm, template, pdf or app."
+since = "0.1.0"
+
+[[entry]]
+code = "egress_host.query_invalid"
+class = "none"
+summary = "spot egress denials was given a duration it cannot read, so it answered nothing."
+explanation_key = "error.egress_host.query_invalid"
+params = []
+remedy = "Use a number and a unit, such as 30m, 1h or 7d."
+since = "0.1.0"

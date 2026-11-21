@@ -1,0 +1,5 @@
+error: a whitelisted method takes at most one arguments parameter; put the arguments in one struct
+  --> tests/ui/two_argument_params.rs:21:62
+   |
+21 |     async fn go(&self, _ctx: &mut dyn MethodContext, _a: In, _b: In) -> AppResult<()> { Ok(()) }
+   |                                                              ^^^^^^

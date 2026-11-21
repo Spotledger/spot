@@ -1,0 +1,86 @@
+# Fixture catalogue for `run.sh --self-test` (never a project budget).
+#
+# The driver measures the built-in fixture page, which is a page shaped like the
+# shell, not the shell: its numbers say nothing about the product. The maxima
+# here are deliberately loose so the self-test exercises the machinery
+# (plan -> measure -> aggregate -> schema check) without asserting anything
+# about performance. Breach detection is proven separately with
+# breach-budgets.toml. The real budgets are ../budgets.toml.
+
+[reference]
+hardware = "the machine running --self-test; not reference hardware"
+network = "localhost with the 50 Mbit/s DevTools profile for the startup measures"
+browser = "Chromium as pinned by package-lock.json"
+
+[runner.reference]
+multiplier = 1.0
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.download.compressed"
+metric = "max"
+max = 67108864
+unit = "bytes"
+quick = true
+runner = "reference"
+profile = "fifty"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.startup.cold"
+metric = "p95"
+max = 60000
+unit = "ms"
+quick = true
+runner = "reference"
+profile = "fifty"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.startup.warm"
+metric = "p95"
+max = 60000
+unit = "ms"
+quick = true
+runner = "reference"
+profile = "fifty"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.form.open"
+metric = "p95"
+max = 60000
+unit = "ms"
+quick = true
+runner = "reference"
+profile = "local"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.list.scroll.frame"
+metric = "p95"
+max = 5000
+unit = "ms"
+quick = true
+runner = "reference"
+profile = "local"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.child-edit.key"
+metric = "p95"
+max = 5000
+unit = "ms"
+quick = true
+runner = "reference"
+profile = "local"
+
+[[budget]]
+# reference: any machine running the self-test; the fixture page is not the product
+id = "browser.tabs.memory"
+metric = "max"
+max = 34359738368
+unit = "bytes"
+quick = true
+runner = "reference"
+profile = "local"

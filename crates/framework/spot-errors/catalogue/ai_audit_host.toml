@@ -1,0 +1,46 @@
+# ai_audit_host codes: the hosted AI audit trail (WP-AI-11.T8). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "ai_audit_host.append_failed"
+class = "none"
+summary = "An AI audit entry could not be made durable, so the action was refused."
+explanation_key = "error.ai_audit_host.append_failed"
+params = []
+remedy = "Check the site's database and the audit chain's guard (`spot audit verify`); the agent runtime refuses the action and may retry it with the same event id."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_audit_host.record_invalid"
+class = "none"
+summary = "An AI action was malformed: an empty or oversized id, a decision made by an agent, or a record the chain does not accept."
+explanation_key = "error.ai_audit_host.record_invalid"
+params = []
+remedy = "Fix the caller: ids are 1 to 128 printable characters, and only a person approves or rejects."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_audit_host.timeline_refused"
+class = "none"
+summary = "The viewer's access to the document could not be decided, so the AI timeline was refused."
+explanation_key = "error.ai_audit_host.timeline_refused"
+params = []
+remedy = "Check the permission engine; the timeline fails closed and the next request decides again."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_audit_host.chain_unavailable"
+class = "none"
+summary = "The AI audit chain could not be read."
+explanation_key = "error.ai_audit_host.chain_unavailable"
+params = []
+remedy = "Check the site's database; the service reports degraded and tries again."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_audit_host.digest_failed"
+class = "none"
+summary = "The AI review digest could not be built or recorded."
+explanation_key = "error.ai_audit_host.digest_failed"
+params = []
+remedy = "Check the AI audit chain; the next scheduled pass tries again and the site keeps serving."
+since = "0.1.0"

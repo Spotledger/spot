@@ -1,0 +1,56 @@
+# Platform API keys: `spk_<12 lower-case Base32 key id>_<43 Base64url secret>` (spot-auth).
+
+[[case]]
+input = 'spk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7'
+expected = '[redacted:api_key]'
+class = 'platform_api_key'
+
+[[case]]
+input = 'rejected key spk_zzzzyyyy2467_6UMFxFkM_R5Kjp1vRt-1fjORS_6ilI8ihN5KXSc7Tvo'
+expected = 'rejected key [redacted:api_key]'
+class = 'platform_api_key'
+
+[[case]]
+input = 'spk_abcdefgh2348_6UMFxFkM_R5Kjp1vRt-1fjORS_6ilI8ihN5KXSc7Tvo'
+expected = 'spk_abcdefgh2348_6UMFxFkM_R5Kjp1vRt-1fjORS_6ilI8ihN5KXSc7Tvo'
+class = 'platform_api_key'
+
+[[case]]
+input = 'key=spk_mnopqrst2345__hBKqFYY_kv5ZJr3J1TWDtkwtDDb-xHKas1VOqg6YYZ logged'
+expected = 'key=[redacted:api_key] logged'
+class = 'platform_api_key'
+
+[[case]]
+input = 'the id part stays public: spk_... is documented in spot-auth'
+expected = 'the id part stays public: spk_... is documented in spot-auth'
+class = 'platform_api_key'
+
+[[case]]
+input = 'spk_ABCDEFGH2345_6UMFxFkM_R5Kjp1vRt-1fjORS_6ilI8ihN5KXSc7Tvo'
+expected = 'spk_ABCDEFGH2345_6UMFxFkM_R5Kjp1vRt-1fjORS_6ilI8ihN5KXSc7Tvo'
+class = 'platform_api_key'
+
+[[case]]
+input = 'spk_abcdefgh1245_Yn9ZhyiA4uoRgnatmUdjAWtGSU8po-799NksnRH9ucA'
+expected = 'spk_abcdefgh1245_Yn9ZhyiA4uoRgnatmUdjAWtGSU8po-799NksnRH9ucA'
+class = 'platform_api_key'
+
+[[case]]
+input = 'spk_abcdefgh2345_short'
+expected = 'spk_abcdefgh2345_short'
+class = 'platform_api_key'
+
+[[case]]
+input = 'no key here: spnk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7'
+expected = 'no key here: spnk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7'
+class = 'platform_api_key'
+
+[[case]]
+input = 'spk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7Xtra'
+expected = 'spk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7Xtra'
+class = 'platform_api_key'
+
+[[case]]
+input = 'Authorization: spk_abcdefgh2345_PtYgjmUhBel31iEl2hpChYgCfrL1spNxnyVmihA_2O7'
+expected = 'Authorization: [redacted:header]'
+class = 'platform_api_key'

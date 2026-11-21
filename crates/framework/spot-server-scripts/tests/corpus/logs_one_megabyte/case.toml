@@ -1,0 +1,8 @@
+kind = "api"
+negative = true
+pattern = "a script that logs 1 MB does not take the host down"
+[input.args]
+[expect]
+ok = true
+[expect.result]
+done = true

@@ -1,0 +1,31 @@
+[package]
+name = "spot-bundle-signing"
+description = "Spotledger app bundle signing (WS11, WP-STR-02.T1, ADR-21): publisher certificates under a rotating store root, detached Ed25519 signatures over the canonical bundle digest bound to app id and version, a signed revocation list, and the one verification the installer and the startup check both call"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The canonical bundle digest the signature covers.
+spot-bundle = { path = "../spot-bundle" }
+# The one cryptographic dependency (same version and features as spot-license): Ed25519.
+# `std` only; keys are always supplied by the caller.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# SHA-256 for key ids (first 16 bytes, hex) and the revocation of digests.
+sha2 = "0.10"
+# Canonical, domain-separated JSON bytes and the JSON file forms.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Base64 for keys and signatures in the JSON forms (as spot-license).
+base64 = "0.22"
+# Typed errors with stable `signing.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Explicit host version for opening bundles in the tests (spot-bundle's HostInfo takes one).
+semver = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "spot-journal-privacy"
+description = "Personal-field protection and erasure, hosted (WP-RTB-01.T8, ADR-061 sections 3 and 6): the personal fields declared per entity with a subject, a purpose and a retention class (CatalogueFields, rebuilt on a metadata swap), the protect transform handed to the journal shipper, and erase_subject: a permission check, the retention classes that forbid erasing, the key destroyed, an audit record that carries a salted hash and never the subject"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# FieldSpec, PersonalFields, SubjectKeys, erase: the mechanism this crate wires in.
+spot-journal-pii = { path = "../spot-journal-pii" }
+# ProtectTransform, ProtectedParts, PersonalFieldsSource, StaticFields and the shared aliases.
+spot-journal-protect = { path = "../spot-journal-protect" }
+# The shipper's Protector seam (implemented for ProtectTransform) and ShipFault.
+spot-journal-ship = { path = "../spot-journal-ship" }
+# Field declarations are read from the host's configuration.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `journal_privacy.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

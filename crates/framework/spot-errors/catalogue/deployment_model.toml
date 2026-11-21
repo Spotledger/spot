@@ -1,0 +1,57 @@
+# deployment_model codes: the deployment model's fact, event and serialisation errors. One
+# [[entry]] per code; see crates/framework/spot-errors/README.md. These are a library-internal
+# vocabulary (the agent host maps them), so no entry names an AppError class.
+
+[[entry]]
+code = "deployment_model.invalid"
+class = "none"
+summary = "The deployment fact {field} is not valid: {reason}."
+explanation_key = "error.deployment_model.invalid"
+params = ["field", "reason"]
+remedy = "Give the fact a non-empty value the model's type accepts and refresh from its source."
+since = "0.1.0"
+
+[[entry]]
+code = "deployment_model.facts_incomplete"
+class = "none"
+summary = "The deployment ground truth carries no {field}."
+explanation_key = "error.deployment_model.facts_incomplete"
+params = ["field"]
+remedy = "Add a fact source for the missing fact, or fix the source that should have supplied it."
+since = "0.1.0"
+
+[[entry]]
+code = "deployment_model.facts_conflict"
+class = "none"
+summary = "Two deployment fact sources disagree about {field}."
+explanation_key = "error.deployment_model.facts_conflict"
+params = ["field"]
+remedy = "Make the sources read the same deployment fact, or remove the source that is stale."
+since = "0.1.0"
+
+[[entry]]
+code = "deployment_model.facts_unreadable"
+class = "none"
+summary = "The deployment fact source {source} could not be read: {reason}."
+explanation_key = "error.deployment_model.facts_unreadable"
+params = ["reason", "source"]
+remedy = "Restore the source's adapter or its data, then run the self-check again."
+since = "0.1.0"
+
+[[entry]]
+code = "deployment_model.event_invalid"
+class = "none"
+summary = "The deployment event cannot apply: {reason}."
+explanation_key = "error.deployment_model.event_invalid"
+params = ["reason"]
+remedy = "Apply the events in epoch order, or refresh from the fact sources instead."
+since = "0.1.0"
+
+[[entry]]
+code = "deployment_model.serialise"
+class = "none"
+summary = "The deployment model could not be serialised: {reason}."
+explanation_key = "error.deployment_model.serialise"
+params = ["reason"]
+remedy = "Report the value that could not be serialised; the model's own facts are printable."
+since = "0.1.0"

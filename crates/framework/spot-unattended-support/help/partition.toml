@@ -1,0 +1,79 @@
+# Help for the partition error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "partition.invalid_argument"
+what_happened = "An argument to a partition operation is invalid."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Pass the argument the operation requires.", "If it keeps happening, tell your administrator and quote the code partition.invalid_argument."]
+audience = "user"
+
+[[help]]
+code = "partition.invalid_range"
+what_happened = "A number range lease is malformed or its high-water mark is outside it."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Lease a range whose start is at least one and whose end is at or above its start.", "If it keeps happening, tell your administrator and quote the code partition.invalid_range."]
+audience = "user"
+
+[[help]]
+code = "partition.invalid_scope"
+what_happened = "A scope key is malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use a non-empty printable key type and value.", "If it keeps happening, tell your administrator and quote the code partition.invalid_scope."]
+audience = "user"
+
+[[help]]
+code = "partition.lease_not_above_stored"
+what_happened = "A number range offered for a numbering series is not above the range this node already holds, so it was refused and nothing changed."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Ask the hub for a range that starts above the one already held, or carry on with the range already held.", "If it keeps happening, tell your administrator and quote the code partition.lease_not_above_stored."]
+audience = "user"
+
+[[help]]
+code = "partition.no_lease"
+what_happened = "No number range is installed for the branch naming series."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Lease a range from the hub and install it before allocating.", "If it keeps happening, tell your administrator and quote the code partition.no_lease."]
+audience = "user"
+
+[[help]]
+code = "partition.not_owner"
+what_happened = "A node tried to change or forward a record it does not own."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Send the change from the node the partition map names as the owner.", "If it keeps happening, tell your administrator and quote the code partition.not_owner."]
+audience = "user"
+
+[[help]]
+code = "partition.ownership_conflict"
+what_happened = "Two nodes would own the same scope key at the same time."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["End the current owner's effective interval before assigning the key to another node.", "If it keeps happening, tell your administrator and quote the code partition.ownership_conflict."]
+audience = "user"
+
+[[help]]
+code = "partition.range_exhausted"
+what_happened = "A branch naming series ran out of its leased number range."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Lease another range from the hub; never allocate outside a lease.", "If it keeps happening, tell your administrator and quote the code partition.range_exhausted."]
+audience = "admin"
+
+[[help]]
+code = "partition.store"
+what_happened = "The branch series high-water store failed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the store and retry before handing out another number.", "If it keeps happening, tell your administrator and quote the code partition.store."]
+audience = "admin"
+
+[[help]]
+code = "partition.scope_uncovered"
+what_happened = "A partitioned kind of record has no scope field entry, so writes to it were refused."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Ask your administrator to add a scope field entry for every partitioned kind of record before starting the node.", "If it keeps happening, tell your administrator and quote the code partition.scope_uncovered."]
+audience = "user"
+
+[[help]]
+code = "partition.range_low_not_recorded"
+what_happened = "The notice that this branch is running low on invoice numbers could not be saved, so it was not sent."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the outbox and ask the hub for another number range before the current one runs out.", "If it keeps happening, tell your administrator and quote the code partition.range_low_not_recorded."]
+audience = "admin"

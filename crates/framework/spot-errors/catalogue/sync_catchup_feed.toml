@@ -1,0 +1,19 @@
+# sync_catchup_feed codes: the hub's catch-up feed (WP-AI-07.T16). One [[entry]] per code.
+
+[[entry]]
+code = "sync_catchup_feed.store_unavailable"
+class = "none"
+summary = "A store the hub's catch-up feed reads could not answer, so the returning node is not planned now."
+explanation_key = "error.sync_catchup_feed.store_unavailable"
+params = []
+remedy = "Check the database the hub runs on; the node asks again and is planned once the store answers."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_feed.no_scope"
+class = "none"
+summary = "The hub has no scope for the returning node (no sync policy generation is loaded), so nothing is planned for it."
+explanation_key = "error.sync_catchup_feed.no_scope"
+params = []
+remedy = "Load a sync policy generation on the hub; nothing leaves the hub without one."
+since = "0.1.0"

@@ -1,0 +1,114 @@
+# Help for the effects error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "effects.duplicate_step"
+what_happened = "The effects of step are declared twice."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare each step's effects once.", "If it keeps happening, tell your administrator and quote the code effects.duplicate_step."]
+audience = "operator"
+
+[[help]]
+code = "effects.internal_not_reversible"
+what_happened = "Internal effect must be reversible by a lifecycle operation."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare the effect as reversible by the operation that reverses the step's own operation.", "If it keeps happening, tell your administrator and quote the code effects.internal_not_reversible."]
+audience = "operator"
+
+[[help]]
+code = "effects.internal_writes_nothing"
+what_happened = "Internal effect names no store it writes."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Name the stores the effect writes.", "If it keeps happening, tell your administrator and quote the code effects.internal_writes_nothing."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid"
+what_happened = "An effect declaration is refused by the contract."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the declaration named in the message.", "If it keeps happening, tell your administrator and quote the code effects.invalid."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid_action"
+what_happened = "An action reference is <app>:<action>."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Write the reference as <app>:<action>, both storage-style names.", "If it keeps happening, tell your administrator and quote the code effects.invalid_action."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid_class"
+what_happened = "An effect class must be a storage-style name."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Use lowercase letters, digits and underscores, starting with a letter, at most 63 bytes.", "If it keeps happening, tell your administrator and quote the code effects.invalid_class."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid_digest"
+what_happened = "A digest is 64 lowercase hexadecimal characters."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Give the SHA-256 digest as 64 lowercase hex characters.", "If it keeps happening, tell your administrator and quote the code effects.invalid_digest."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid_ref"
+what_happened = "An opaque reference is 1 to 128 bytes with no control characters."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Shorten the reference and remove control characters.", "If it keeps happening, tell your administrator and quote the code effects.invalid_ref."]
+audience = "operator"
+
+[[help]]
+code = "effects.invalid_store"
+what_happened = "A store name must be a storage-style name."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Use lowercase letters, digits and underscores, starting with a letter, at most 63 bytes.", "If it keeps happening, tell your administrator and quote the code effects.invalid_store."]
+audience = "operator"
+
+[[help]]
+code = "effects.irreversible_reason"
+what_happened = "Irreversible effect needs a reason."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["State why nothing can undo the effect.", "If it keeps happening, tell your administrator and quote the code effects.irreversible_reason."]
+audience = "operator"
+
+[[help]]
+code = "effects.no_paired_reversal"
+what_happened = "An internal effect that cancel reverses has no step writing the same store in the cancel pipeline."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Add a step to the after-cancel pipeline whose internal effect writes the same store, or declare the forward effect irreversible with a reason.", "If it keeps happening, tell your administrator and quote the code effects.no_paired_reversal."]
+audience = "operator"
+
+[[help]]
+code = "effects.override_drops_reversal"
+what_happened = "An override removes the step that reverses an internal effect while the forward step stays."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Keep the reversing step when overriding, or replace it with a step declaring the same reversal.", "If it keeps happening, tell your administrator and quote the code effects.override_drops_reversal."]
+audience = "operator"
+
+[[help]]
+code = "effects.unknown_class"
+what_happened = "A step declares an effect class that is not a known effect class."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare one of the known effect classes.", "If it keeps happening, tell your administrator and quote the code effects.unknown_class."]
+audience = "operator"
+
+[[help]]
+code = "effects.unknown_step"
+what_happened = "Effects are declared for, which is not a step of the controller."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare effects only for steps the controller declares.", "If it keeps happening, tell your administrator and quote the code effects.unknown_step."]
+audience = "operator"
+
+[[help]]
+code = "effects.wrong_phase"
+what_happened = "Effect runs in the wrong phase for its kind:."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Run internal effects in an after hook and external effects in a committed hook.", "If it keeps happening, tell your administrator and quote the code effects.wrong_phase."]
+audience = "operator"
+
+[[help]]
+code = "effects.wrong_reversal"
+what_happened = "Internal effect at must be reversible by."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare the reversal as the operation that reverses the step's own operation.", "If it keeps happening, tell your administrator and quote the code effects.wrong_reversal."]
+audience = "operator"

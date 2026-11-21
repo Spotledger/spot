@@ -1,0 +1,36 @@
+[package]
+name = "spot-bpm-commit"
+description = "Commit points of the Business Process engine (WS8, WP-BPM-15.T2, ADR-080 section 6.7): the region a commit point ends, the Commit node handler, release of the request's held external effects at the commit point in their original order, discard when the request ends first, and the design-time findings (a commit point with nothing to hold, a point of no return)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `HoldService::{admit_request, release_request, discard_request}`, `EffectClass`, `PolicyTable`:
+# the request-scoped hold this crate drives.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# `CompiledDag`, `NodeId`: the region a commit point ends is computed on the compiled graph.
+spot-dag = { path = "../spot-dag" }
+# `NodeHandler`, `NodeCtx`, `NodeOutcome`, `NodeKind`: the Commit node handler.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The node config the handler validates and the marker output it returns.
+serde_json = "1"
+# Typed errors with stable `bpm_commit.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The compiled graph and the recording transports the tests drive.
+spot-core = { path = "../spot-core" }
+# `OffsetDateTime` for the handler's context.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `#[tokio::test]` for the async hold service.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+# `BoxFuture` for the counting dispatcher of the concurrency tests.
+futures = "0.3"
+
+[lints]
+workspace = true

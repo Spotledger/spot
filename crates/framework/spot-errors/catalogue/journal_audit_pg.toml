@@ -1,0 +1,96 @@
+# journal_audit_pg codes: the refusals of the PostgreSQL sides of the journal audit
+# (WP-JRN-07.T6, ADR-061 s8 and s9). A library-internal vocabulary — the audit runner sees a side's
+# failure as its own error and the scheduled job records only codes — so no entry names an
+# `AppError` class. No message carries a record value, a parameter, a personal field or a driver's
+# own text: only SQLSTATEs, entity names, schema names and bridge codes. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_audit_pg.tenant_mismatch"
+class = "none"
+summary = "A side of the journal audit was asked for a tenant it does not belong to, or was opened for a name that is not a storage name."
+explanation_key = "error.journal_audit_pg.tenant_mismatch"
+params = []
+remedy = "Open the side for the tenant whose database it reads; one database holds one tenant, so a call for another tenant is always a wiring mistake."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.options_invalid"
+class = "none"
+summary = "The options a side was opened with cannot hold: the catalogue declares no document entity to read, the page size is zero, or a fingerprint declaration is unusable."
+explanation_key = "error.journal_audit_pg.options_invalid"
+params = []
+remedy = "Give the side a catalogue with at least one document entity, a page size of at least one row, and fingerprint declarations that name an entity, one or more key columns and an amount column."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.session_failed"
+class = "none"
+summary = "The held session of a side ended, so the side can no longer reach its database: the bridge refused or timed out, the connection was lost, or the worker stopped."
+explanation_key = "error.journal_audit_pg.session_failed"
+params = []
+remedy = "Check the bridge code in the message and the size of the bridge's maximum deadline against the length of the audit, then open the side again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.query_failed"
+class = "none"
+summary = "A statement of a side failed, so its answer is unknown; the message carries the SQLSTATE and never a statement's parameters."
+explanation_key = "error.journal_audit_pg.query_failed"
+params = []
+remedy = "Read the SQLSTATE in the message, check that the catalogue's tables exist in the database the bridge reaches, and run the audit again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.feed_missing"
+class = "none"
+summary = "The change feed's head cannot be read: the feed is not installed in the tenant database, or its generation or state row is missing."
+explanation_key = "error.journal_audit_pg.feed_missing"
+params = []
+remedy = "Install the change feed in the tenant database by preparing the catalogue with the backend, then open the live side again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.as_of_not_head"
+class = "none"
+summary = "The call asked for a position other than the one recorded when the live side was opened, and the live database cannot be read in the past."
+explanation_key = "error.journal_audit_pg.as_of_not_head"
+params = []
+remedy = "Ask the live side for the position it reports as its head; a run pinned to an older position needs a snapshot of the journal, not the live database."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.read_only"
+class = "none"
+summary = "A statement tried to write through the live side's connection, whose transaction is read-only, so the database refused it."
+explanation_key = "error.journal_audit_pg.read_only"
+params = []
+remedy = "Nothing is wrong with the data: send writes to the tenant's storage backend, and leave the live side to read its snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.image_invalid"
+class = "none"
+summary = "An image the rebuild handed the scratch side cannot be stored: it names an unknown entity or a child table, a child row carries no id, or a value's shape contradicts its declared field type."
+explanation_key = "error.journal_audit_pg.image_invalid"
+params = []
+remedy = "Store the image as the journal captured it, with every declared field and every child row carrying its id, and check that the catalogue in use matches the image's schema version."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.scratch_invalid"
+class = "none"
+summary = "The scratch schema cannot be created: the run id or the tenant is not a storage name, the schema's name is longer than PostgreSQL's identifier limit, or the schema already exists."
+explanation_key = "error.journal_audit_pg.scratch_invalid"
+params = []
+remedy = "Pass a run id of lowercase letters, digits and underscores that no earlier run of this tenant used, and sweep the leftovers of crashed runs before starting a new one."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_audit_pg.sweep_failed"
+class = "none"
+summary = "The sweep could not list or drop a leftover scratch schema of the tenant, so a crashed run's schema stays in the database."
+explanation_key = "error.journal_audit_pg.sweep_failed"
+params = []
+remedy = "Check the database and the bridge code in the message, drop the leftover schema by hand if it blocks a run, and let the next sweep remove the rest."
+since = "0.1.0"

@@ -1,0 +1,80 @@
+[[entry]]
+code = "edge_offline.series_exhausted"
+class = "none"
+summary = "The numbers leased for this series are used up while the node is offline."
+explanation_key = "error.edge_offline.series_exhausted"
+params = []
+remedy = "Reconnect to the hub; a new range is granted and the document can be created. A number is never reused."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.balance_online_only"
+class = "none"
+summary = "This balance can only be spent while the node is connected to the hub."
+explanation_key = "error.edge_offline.balance_online_only"
+params = []
+remedy = "Reconnect to the hub, or ask the administrator to allocate a quota for offline spending."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.range_refused"
+class = "none"
+summary = "A leased number range was refused on the edge: the series is not configured, the range is invalid, or it does not lie above the range already held."
+explanation_key = "error.edge_offline.range_refused"
+params = []
+remedy = "Nothing was installed and the held range is untouched; the next lease request is asked again after a wait. If it repeats, check the hub's grants for this node and series."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.range_store"
+class = "none"
+summary = "The edge could not store a leased number range, so nothing was installed."
+explanation_key = "error.edge_offline.range_store"
+params = []
+remedy = "Check that the database is reachable and that `spot migrate` has created spot_leased_range; the same range is installed when the request is repeated."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.clock_moved_back"
+class = "none"
+summary = "A message from the hub was not accepted because the node's clock moved back."
+explanation_key = "error.edge_offline.clock_moved_back"
+params = []
+remedy = "Let the clock run forward again (check the time source); nothing was accepted and no lease was extended."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.lease_answer_timeout"
+class = "none"
+summary = "A lease request got no answer in time."
+explanation_key = "error.edge_offline.lease_answer_timeout"
+params = []
+remedy = "The edge asks again with the same request id after a wait; check the connection to the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.snapshot_answer_timeout"
+class = "none"
+summary = "A permission snapshot request got no answer in time."
+explanation_key = "error.edge_offline.snapshot_answer_timeout"
+params = []
+remedy = "The edge asks again after a wait; check the connection to the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.unexpected_record"
+class = "none"
+summary = "A record of a kind an edge does not take arrived on the carrier."
+explanation_key = "error.edge_offline.unexpected_record"
+params = []
+remedy = "None needed: it was ignored. If it repeats, check the hub's version."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_offline.bad_message"
+class = "none"
+summary = "A carrier message did not parse."
+explanation_key = "error.edge_offline.bad_message"
+params = []
+remedy = "None needed: it was ignored. If it repeats, check that the hub and the edge run compatible versions."
+since = "0.1.0"

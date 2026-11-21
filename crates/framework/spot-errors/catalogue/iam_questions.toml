@@ -1,0 +1,120 @@
+# iam_questions codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The emergency-access and answerable-questions core (spot-iam-questions) raises these; the
+# API layer maps them.
+
+[[entry]]
+code = "iam_questions.request_invalid"
+class = "none"
+summary = "An emergency request, a question, a document reference or an id is malformed: a blank value where the model needs one."
+explanation_key = "error.iam_questions.request_invalid"
+params = []
+remedy = "Give the named field a non-blank value."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.escalation_target_invalid"
+class = "none"
+summary = "An emergency request's escalation target is not usable: empty, blank, carrying a control character, or longer than the 254-byte bound."
+explanation_key = "error.iam_questions.escalation_target_invalid"
+params = []
+remedy = "Name the actor id or `role:<name>` the approval escalates to, with no control characters and at most 254 bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.not_permitted"
+class = "none"
+summary = "The asker may not ask about another user: only a holder of the access-governance duty may ask about someone else."
+explanation_key = "error.iam_questions.not_permitted"
+params = []
+remedy = "Ask about your own access, or have an administrator holding the access-governance duty run the question."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.unknown_doctype"
+class = "none"
+summary = "A question names a DocType the read model does not know."
+explanation_key = "error.iam_questions.unknown_doctype"
+params = []
+remedy = "Name a DocType that exists in the tenant's metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.unknown_permission"
+class = "none"
+summary = "A question names a permission or action the model does not recognise."
+explanation_key = "error.iam_questions.unknown_permission"
+params = []
+remedy = "Write the permission as `doctype.action`, with a lifecycle action such as read, update or post."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.model_invalid"
+class = "none"
+summary = "The access read model is internally inconsistent: a broken role registry, an invalid assignment, a grant on an unknown field or an undeclared protection group."
+explanation_key = "error.iam_questions.model_invalid"
+params = []
+remedy = "Fix the model the error names, then rebuild the snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.page_invalid"
+class = "none"
+summary = "A page request is out of range: a zero limit or one above the maximum page size."
+explanation_key = "error.iam_questions.page_invalid"
+params = []
+remedy = "Ask for a limit between one and the maximum page size."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.emergency_state"
+class = "none"
+summary = "An emergency grant was asked to move to a state its current state does not allow, or an action arrived after the session ended."
+explanation_key = "error.iam_questions.emergency_state"
+params = []
+remedy = "Perform the step the grant's current state allows, in order."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.emergency_duration"
+class = "none"
+summary = "An emergency grant asks for a duration its policy does not allow, or a zero one."
+explanation_key = "error.iam_questions.emergency_duration"
+params = []
+remedy = "Request a positive duration no longer than the tenant's maximum."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.review_self"
+class = "none"
+summary = "The person asked to review an emergency session is the session's own user."
+explanation_key = "error.iam_questions.review_self"
+params = []
+remedy = "Assign a controller who is not the session's user."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.review_wrong_person"
+class = "none"
+summary = "The person asked to record a review decision is not the review's controller, or not the distinct second checker the policy requires."
+explanation_key = "error.iam_questions.review_wrong_person"
+params = []
+remedy = "Record the decision from the assigned controller, and a distinct person for a second check."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.recording"
+class = "none"
+summary = "The emergency session recorder refused a frame, or an action is not tagged with the session's grant id."
+explanation_key = "error.iam_questions.recording"
+params = []
+remedy = "Record the action with the session's own context, and check the recorder has room left."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_questions.approval"
+class = "none"
+summary = "The BPM launcher or the approval state machine refused the emergency approval Process."
+explanation_key = "error.iam_questions.approval"
+params = []
+remedy = "Check the approval is pending and the approver is not the grantee, then retry."
+since = "0.1.0"

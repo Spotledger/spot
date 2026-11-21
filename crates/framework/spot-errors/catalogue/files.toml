@@ -1,0 +1,46 @@
+# files codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "files.not_found"
+class = "none"
+summary = "No file with this key exists in the store: {key}."
+explanation_key = "error.files.not_found"
+params = ["key"]
+remedy = "Check the key, or store the file first."
+since = "0.1.0"
+
+[[entry]]
+code = "files.already_exists"
+class = "none"
+summary = "A file with this key already exists and overwrite was refused: {key}."
+explanation_key = "error.files.already_exists"
+params = ["key"]
+remedy = "Pass overwrite=true or choose another key."
+since = "0.1.0"
+
+[[entry]]
+code = "files.too_large"
+class = "none"
+summary = "The file exceeds the configured maximum size ({limit} bytes) and nothing was stored."
+explanation_key = "error.files.too_large"
+params = ["limit"]
+remedy = "Store a smaller file or raise the store's max_bytes."
+since = "0.1.0"
+
+[[entry]]
+code = "files.invalid_key"
+class = "none"
+summary = "The file key is not a valid storage key: {reason}."
+explanation_key = "error.files.invalid_key"
+params = ["reason"]
+remedy = "Use a key matching the store's key rules."
+since = "0.1.0"
+
+[[entry]]
+code = "files.io"
+class = "none"
+summary = "The file store failed underneath the request (disk, lock or corrupt metadata)."
+explanation_key = "error.files.io"
+params = []
+remedy = "Check the backend's storage; retry once the backend is healthy."
+since = "0.1.0"

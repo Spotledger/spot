@@ -1,0 +1,24 @@
+[package]
+name = "spot-sync-health"
+description = "The sync health surface as a model (WP-SYN-10.T1, ADR-067 section 6): a calm-by-default status, the short 'needs you' list grouped by remedy, and per-node rows with lag and as-of time, in a stable size-bounded JSON form for the Admin Center"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Open conditions, severities, thresholds and milliseconds: the input of the view.
+spot-conditions = { path = "../spot-conditions" }
+# The catalogue: which conditions name an operator command and so need a person.
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+# The hub's as-of node row, which a caller turns into node facts.
+spot-sync-acks = { path = "../spot-sync-acks" }
+# The view and its stable JSON form.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The one error type, with a stable code.
+thiserror = "2"
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+# The sample connector. Its own workspace so it builds outside the platform workspace.
+[workspace]
+
+[package]
+name = "echo-http"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57"

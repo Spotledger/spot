@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/slot.json",
+  "title": "Slots",
+  "description": "The closed, versioned slot list (ADR-069 section 1.2, made normative here). `x-slots` is the machine-readable table check.py reads.",
+  "$defs": {
+    "slot": {
+      "type": "string",
+      "enum": [
+        "shell.sidebar",
+        "shell.menubar",
+        "shell.statusbar",
+        "shell.user-menu",
+        "home.tiles",
+        "doc.toolbar",
+        "doc.sidepanel",
+        "doc.tab",
+        "list.toolbar",
+        "list.sidepanel"
+      ],
+      "x-error": "uiext.unknown_slot"
+    }
+  },
+  "x-ordering": "dependency order of the contributing apps, then `order` ascending, then app name, then id",
+  "x-slots": {
+    "shell.sidebar": {
+      "accepts": "action",
+      "max_per_app": 10,
+      "label_max": 32
+    },
+    "shell.menubar": {
+      "accepts": "action",
+      "max_per_app": 10,
+      "label_max": 32
+    },
+    "shell.statusbar": {
+      "accepts": "action",
+      "max_per_app": 3,
+      "label_max": 24
+    },
+    "shell.user-menu": {
+      "accepts": "action",
+      "max_per_app": 5,
+      "label_max": 32
+    },
+    "home.tiles": {
+      "accepts": "tile",
+      "max_per_app": 8,
+      "label_max": 40
+    },
+    "doc.toolbar": {
+      "accepts": "action",
+      "max_per_app": 6,
+      "label_max": 24
+    },
+    "doc.sidepanel": {
+      "accepts": "panel",
+      "max_per_app": 3,
+      "label_max": 32
+    },
+    "doc.tab": {
+      "accepts": "tab",
+      "max_per_app": 3,
+      "label_max": 24
+    },
+    "list.toolbar": {
+      "accepts": "action",
+      "max_per_app": 4,
+      "label_max": 24
+    },
+    "list.sidepanel": {
+      "accepts": "panel",
+      "max_per_app": 3,
+      "label_max": 32
+    }
+  }
+}

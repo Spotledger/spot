@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Avalonia.Headless.XUnit 12 brings xunit v3; do not also reference xunit 2. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Skia + HarfBuzz so real text measures: the Urdu and star glyph checks need it. -->
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Component.TestKit/Spotledger.Component.TestKit.csproj" />
+    <ProjectReference Include="../../samples/Acme.RatingComponent/Acme.RatingComponent.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The deliberately broken variants' styles live here, so they never ship in a package. -->
+    <AvaloniaResource Include="Themes/**/*.axaml" />
+    <EmbeddedResource Include="Themes/BrokenColourRating.axaml" LogicalName="Spotledger.Component.Tests.Themes.BrokenColourRating.axaml" />
+    <EmbeddedResource Include="Themes/BrokenRating.axaml" LogicalName="Spotledger.Component.Tests.Themes.BrokenRating.axaml" />
+  </ItemGroup>
+</Project>

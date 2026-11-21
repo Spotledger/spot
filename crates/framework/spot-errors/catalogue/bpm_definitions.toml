@@ -1,0 +1,57 @@
+# bpm_definitions codes: the durable process definition store (WP-BPM-09.T2). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md. These errors never ride an AppError, so every
+# class is "none".
+
+[[entry]]
+code = "bpm_definitions.version_conflict"
+class = "none"
+summary = "Another publish took the version number this publish expected to create."
+explanation_key = "error.bpm_definitions.version_conflict"
+params = []
+remedy = "Read the latest version again, check whether the change is still wanted, and publish with the new latest as the expected previous version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_definitions.not_found"
+class = "none"
+summary = "The process version does not exist."
+explanation_key = "error.bpm_definitions.not_found"
+params = []
+remedy = "List the process's versions and name one that exists."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_definitions.too_large"
+class = "none"
+summary = "A process text, publisher or note is over the size cap of the store."
+explanation_key = "error.bpm_definitions.too_large"
+params = []
+remedy = "Split the process into smaller processes, or shorten the publisher or note; a process text may be at most 256 KiB."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_definitions.name_invalid"
+class = "none"
+summary = "A process name breaks the name grammar."
+explanation_key = "error.bpm_definitions.name_invalid"
+params = []
+remedy = "Use a name that starts with a lower-case letter and has only lower-case letters, digits and underscores, at most 64 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_definitions.input_invalid"
+class = "none"
+summary = "The process text does not parse as a process of the named name, or the publisher or note is not acceptable."
+explanation_key = "error.bpm_definitions.input_invalid"
+params = []
+remedy = "Check the process text parses, that its name field equals the name published, and that the publisher is not empty."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_definitions.store_failed"
+class = "none"
+summary = "The definition store's backend failed or a stored row cannot be read back."
+explanation_key = "error.bpm_definitions.store_failed"
+params = []
+remedy = "Check that the database is reachable and its schema is prepared; a corrupt row needs the operator, and nothing was written."
+since = "0.1.0"

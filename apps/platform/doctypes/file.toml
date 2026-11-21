@@ -1,0 +1,120 @@
+# The `file` DocType (WP-PLT-10.T3): one stored file's record.
+#
+# The bytes live behind spot-files' FileStore under a **server-generated** key that is derived
+# from this record (its id, `private` and `created_at`), never from a client-supplied name, so
+# the record needs no key column and no response can name a storage path. The `state` column is
+# the attachment lifecycle; `quarantined` is set by the `file.scan` seam.
+name = "file"
+label = "File"
+app = "platform"
+module = "files"
+title_field = "name"
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+required = true
+max_chars = 255
+in_list_view = true
+description = "The display name, sanitised for display from the client's file name."
+
+[[fields]]
+name = "original_name"
+label = "Original Name"
+type = "text"
+max_chars = 255
+description = "The file name the client sent, kept for audit."
+
+[[fields]]
+name = "content_type"
+label = "Content Type"
+type = "text"
+required = true
+max_chars = 255
+in_list_view = true
+description = "The stored media type."
+
+[[fields]]
+name = "size"
+label = "Size"
+type = "int"
+required = true
+read_only = true
+in_list_view = true
+description = "The size in bytes."
+
+[[fields]]
+name = "digest"
+label = "Digest"
+type = "text"
+required = true
+read_only = true
+max_chars = 64
+description = "SHA-256 of the stored bytes, hex, lower-case; the download ETag."
+
+[[fields]]
+name = "private"
+label = "Private"
+type = "bool"
+required = true
+default = "true"
+in_standard_filter = true
+description = "True while unattached and only its uploader may read it; false once attached to a document whose readers see it."
+
+[[fields]]
+name = "attached_doctype"
+label = "Attached DocType"
+type = "text"
+max_chars = 63
+description = "The owning document's DocType, when attached."
+
+[[fields]]
+name = "attached_id"
+label = "Attached Id"
+type = "text"
+max_chars = 36
+description = "The owning document's record id, when attached."
+
+[[fields]]
+name = "attached_field"
+label = "Attached Field"
+type = "text"
+max_chars = 63
+description = "The `attach` field it hangs off, when attached through a protected field."
+
+[[fields]]
+name = "uploaded_by"
+label = "Uploaded By"
+type = "link"
+options = "user"
+required = true
+index = true
+description = "The uploader; may read the file while it is unattached."
+
+[[fields]]
+name = "created_at"
+label = "Created At"
+type = "datetime"
+required = true
+read_only = true
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\nattached\norphaned"
+required = true
+default = "pending"
+in_list_view = true
+in_standard_filter = true
+description = "The attachment lifecycle: uploaded, attached to a document, or no longer attached."
+
+[[fields]]
+name = "quarantined"
+label = "Quarantined"
+type = "bool"
+required = true
+default = "false"
+in_standard_filter = true
+description = "Set by the file.scan seam; a quarantined file cannot be downloaded."

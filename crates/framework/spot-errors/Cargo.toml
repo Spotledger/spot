@@ -1,0 +1,22 @@
+[package]
+name = "spot-errors"
+description = "The error and message catalogue (WP-DOC-08.T1): every stable code the platform can raise, its class, summary, explanation key, params and remedy, compiled in with include_str! and validated at test time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `AppError` and `ErrorClass`: the catalogue explains those errors.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Catalogue files are TOML, parsed and validated at load.
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+
+[dev-dependencies]
+# `explain` never panics on arbitrary error contents.
+proptest = "1"
+
+[lints]
+workspace = true

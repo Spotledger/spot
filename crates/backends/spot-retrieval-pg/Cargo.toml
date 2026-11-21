@@ -1,0 +1,34 @@
+[package]
+name = "spot-retrieval-pg"
+description = "PostgreSQL + pgvector VectorStore for spot-retrieval (WP-AI-10.T2): one table keyed by tenant, DocType, record id and chunk number, an HNSW (or IVFFlat) cosine index, a fixed vector width, atomic replace and delete per document, and a conformance suite shared with the in-memory store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `VectorStore` trait, `Chunk`, `ScoredChunk`, `RetrievalError` and the in-memory store the
+# conformance suite compares against.
+spot-retrieval = { path = "../../framework/spot-retrieval" }
+# `SiteId`: the tenant a store is bound to, exactly as the indexer is bound to one site.
+spot-core = { path = "../../framework/spot-core" }
+# `RecordId` and `Version`, the key and the version of a chunk.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `PgConfig` and `Tls`: the connection settings `connect` builds its pool from.
+spot-postgres = { path = "../spot-postgres" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# The runtime the synchronous `VectorStore` methods block on.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread"] }
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The permission decision type and `Principal` the retriever tests ask about.
+spot-permissions = { path = "../../framework/spot-permissions" }
+# The metadata registry the indexer test builds its `IndexPolicy` snapshot from.
+spot-meta = { path = "../../framework/spot-meta" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

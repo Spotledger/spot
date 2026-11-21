@@ -1,0 +1,43 @@
+[package]
+name = "spot-nocode-model"
+description = "The no-code DocType and form designer's server model (WP-DX-06.T1): a draft workspace for DocTypes, fields and form layouts, business-friendly validation, preview, safe publish through the customisation and migration path, and undo history"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId`: the tenant a draft belongs to.
+spot-core = { path = "../spot-core" }
+# Definitions, fields, custom fields, property overrides and the registry the draft compiles to.
+spot-meta = { path = "../spot-meta" }
+# The view model (tabs, sections, items, columns), the layer merge and the save-time checks.
+spot-views = { path = "../spot-views" }
+# The records a publish writes (Custom DocType, Custom Field, Property Setter) and the pipeline.
+spot-customise = { path = "../spot-customise" }
+# The shared expression language a friendly condition compiles to.
+spot-expr = { path = "../spot-expr" }
+# The additive schema plan and its risk class.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The message catalogue the plain-language issues are rendered from.
+spot-errors = { path = "../spot-errors" }
+# The storage `Catalog`, the system column names a field may not take.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Drafts, ops, layouts and issues are plain serde values the client can carry.
+serde = { version = "1", features = ["derive"] }
+# The record text (a definition's TOML, a field spec) and the message files.
+toml = "0.8"
+# Typed errors with stable `nocode_model.*` codes.
+thiserror = "2"
+# SHA-256 over a publish plan's provenance.
+sha2 = "0.10"
+
+[dev-dependencies]
+# The round-trip proof: publish, capture into a bundle, compare.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# The undo/redo property test.
+proptest = "1"
+
+[lints]
+workspace = true

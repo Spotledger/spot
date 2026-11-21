@@ -1,0 +1,43 @@
+[package]
+name = "spot-auth"
+description = "Credential primitives: Argon2id password hashing, the password policy, TOTP 2FA, recovery codes, opaque tokens and API keys (WP-PLT-02.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Argon2id in PHC string format, the OWASP-recommended password hash (also re-exports
+# password-hash); the direct password-hash dep only turns on its `getrandom` feature,
+# which gives the salt generator its OsRng, shared with argon2 by feature unification.
+argon2 = "0.5"
+password-hash = { version = "0.5", features = ["getrandom"] }
+# HMAC drives the TOTP construction (RFC 6238) over the three RFC digests.
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+# Constant-time comparison of secret material (digests, codes).
+subtle = "2"
+# Secret material is wiped on drop.
+zeroize = { version = "1", features = ["derive"] }
+# Secret bytes come from the OS CSPRNG.
+rand = { version = "0.9", features = ["os_rng"] }
+# Base64url encoding of opaque tokens and API-key secrets.
+base64 = "0.22"
+# Password strength estimation, 0-4 score.
+zxcvbn = "3"
+# otpauth:// provisioning URI label escaping.
+percent-encoding = "2"
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+# The Clock contract: the only way this crate reads the time.
+spot-core = { path = "../spot-core" }
+
+[dev-dependencies]
+# Explicit instants for the ManualClock the TOTP test vectors need.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

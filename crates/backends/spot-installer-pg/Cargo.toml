@@ -1,0 +1,37 @@
+[package]
+name = "spot-installer-pg"
+description = "PostgreSQL AppRegistryStore for the installer (WP-STR-04.T3, ADR-21): the installed apps of each site, the lifecycle flag and the install journal, each registry commit atomic with its journal row, version-checked upgrades"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The AppRegistryStore trait, the journal and registry model, and the contract suite this store must pass.
+spot-installer = { path = "../../framework/spot-installer" }
+# The manifest types stored in a registry row (endpoints, doctype access, file access, dependencies).
+spot-manifest = { path = "../../framework/spot-manifest" }
+# `Digest`, stored as hex text.
+spot-bundle = { path = "../../framework/spot-bundle" }
+# `SiteId` keys every row.
+spot-core = { path = "../../framework/spot-core" }
+# `Name` for a stored dependency's app name.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+semver = "1"
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+# Capabilities, patches, dependencies and undo data are stored as jsonb.
+serde_json = "1"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+spot-installer = { path = "../../framework/spot-installer", features = ["testing"] }
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

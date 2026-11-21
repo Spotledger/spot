@@ -1,0 +1,46 @@
+[package]
+name = "spot-journal-relay"
+description = "The journal relay (WP-JRN-03.T4, ADR-061 s5 and s10): a library over traits that takes batches of event-envelope lines for one tenant and source, makes them durable in the journal store in order (remote-sync tail chunk first, then sealed segments, then the signed manifest, then tail-chunk clean-up), repairs a crash between any two steps without losing or duplicating an entry, and stops on a split brain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The feed position (generation, seq) carried by every entry.
+spot-events-contract = { path = "../../../contracts/events" }
+# Sealed segment format, hash chain and sealing policy.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The signed manifest and its append-only growth rule.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The object-store seam and the per-tenant key layout.
+spot-journal-store = { path = "../spot-journal-store" }
+# The names-only projection (WP-SEC-04.T9): Channel::Journal never carries a value.
+spot-field-guard = { path = "../spot-field-guard" }
+# The principal a view is built for, and the document facts the guard is asked with.
+spot-permissions = { path = "../spot-permissions" }
+# The tail chunk's AEAD and key derivation (ADR-061 A.2.2): the tenant journal key.
+spot-secrets = { path = "../spot-secrets" }
+# The per-batch MAC of a version 2 tail chunk (same version as spot-secrets).
+hmac = "0.12"
+# The image of a doc_state event is JSON; only its key names are read.
+serde_json = "1"
+# SHA-256 for the tail chunk checksum and the hex form of a segment hash (the store's etag).
+sha2 = "0.10"
+# Typed errors with stable `journal_relay.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Drives the relay's futures in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# The fixed-key signer test double and the verifying key set (same version as spot-journal-manifest).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+proptest = "1"
+# The view tests build a real field guard over real metadata (WP-SEC-04.T9).
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+spot-app-api = { path = "../../../contracts/app-api" }
+
+[lints]
+workspace = true

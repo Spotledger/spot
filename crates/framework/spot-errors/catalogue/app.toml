@@ -1,0 +1,82 @@
+# app codes: the app runtime service of spot-cli (WP-EXT-05.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "app.bundle_invalid"
+class = "none"
+summary = "The installed bundle is missing, does not open, has another digest than the one it was installed with, or its signature does not verify at start-up."
+explanation_key = "error.app.bundle_invalid"
+params = []
+remedy = "Reinstall the app from a signed bundle; check the bundle store and the site's trust roots."
+since = "0.1.0"
+
+[[entry]]
+code = "app.publisher_revoked"
+class = "none"
+summary = "The publisher, the signing key or the bundle of an installed app was revoked, so the app is not loaded."
+explanation_key = "error.app.publisher_revoked"
+params = []
+remedy = "Remove the app or install a version signed by a trusted publisher."
+since = "0.1.0"
+
+[[entry]]
+code = "app.limit_exceeded"
+class = "Unavailable"
+summary = "An app call used more fuel, time, memory, host calls or output than its limit and was stopped."
+explanation_key = "error.app.limit_exceeded"
+params = []
+remedy = "Make the app do less per call, or raise its limit in services.apps.limits within the site maximum."
+since = "0.1.0"
+
+[[entry]]
+code = "app.disabled"
+class = "Internal"
+summary = "The app was killed too many times inside the breaker window and is disabled."
+explanation_key = "error.app.disabled"
+params = []
+remedy = "Fix the app, then reload the apps service or restart the site."
+since = "0.1.0"
+
+[[entry]]
+code = "app.not_loaded"
+class = "Internal"
+summary = "No loaded app has this name."
+explanation_key = "error.app.not_loaded"
+params = []
+remedy = "Install the app, or look at the app list for why it failed to load."
+since = "0.1.0"
+
+[[entry]]
+code = "app.capability_denied"
+class = "Internal"
+summary = "The app imports or used a capability the administrator did not approve for it."
+explanation_key = "error.app.capability_denied"
+params = []
+remedy = "Approve the capability at install, or use an app version that does not need it."
+since = "0.1.0"
+
+[[entry]]
+code = "app.failed"
+class = "Internal"
+summary = "The app trapped or the host could not complete the call."
+explanation_key = "error.app.failed"
+params = []
+remedy = "Fix the app; the host and other apps are unaffected."
+since = "0.1.0"
+
+[[entry]]
+code = "app.rejected"
+class = "Internal"
+summary = "The app refused the operation with its own error message."
+explanation_key = "error.app.rejected"
+params = []
+remedy = "Correct the input as the message says."
+since = "0.1.0"
+
+[[entry]]
+code = "app.egress_denied"
+class = "none"
+summary = "An outbound call of an app is not allowed by its approved hosts and the site's egress policy."
+explanation_key = "error.app.egress_denied"
+params = []
+remedy = "Approve the host for the app and list it in services.apps.egress_allow."
+since = "0.1.0"

@@ -1,0 +1,192 @@
+# The database and runtime operation modules' error codes (WP-ADM-06.T1, blueprint WS22,
+# ADR-44). Library-internal vocabulary: the host agent bridges these onto the wire result; none
+# of them is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_runtime.unsupported"
+class = "none"
+summary = "The host's PostgreSQL build, service or operation is not one this module can drive."
+explanation_key = "error.agent_runtime.unsupported"
+params = []
+remedy = "Use a supported PostgreSQL build and a catalogued operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.unavailable"
+class = "none"
+summary = "A tool, service, port or file the operation needs is not present on the host."
+explanation_key = "error.agent_runtime.unavailable"
+params = []
+remedy = "Start the missing service or install the missing tool, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.invalid_argument"
+class = "none"
+summary = "An argument failed the module's own validation after the catalogue's schema check."
+explanation_key = "error.agent_runtime.invalid_argument"
+params = []
+remedy = "Correct the named parameter and resubmit the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.unknown_parameter"
+class = "none"
+summary = "The requested PostgreSQL parameter is not on the typed allow-list."
+explanation_key = "error.agent_runtime.unknown_parameter"
+params = []
+remedy = "Choose an allow-listed parameter; a new one must be added to the allow-list by review."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.value_out_of_range"
+class = "none"
+summary = "A parameter value is outside the allow-listed range or shape."
+explanation_key = "error.agent_runtime.value_out_of_range"
+params = []
+remedy = "Choose a value within the parameter's documented unit and bounds."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.reload_failed"
+class = "none"
+summary = "PostgreSQL did not accept the configuration reload."
+explanation_key = "error.agent_runtime.reload_failed"
+params = []
+remedy = "Read the PostgreSQL log on the host for the configuration error and correct the value."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.restart_failed"
+class = "none"
+summary = "PostgreSQL did not restart to apply a restart-only parameter."
+explanation_key = "error.agent_runtime.restart_failed"
+params = []
+remedy = "Check the service manager and the PostgreSQL log on the host, then retry the restart."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.promote_primary_reachable"
+class = "none"
+summary = "A standby promotion was refused because the old primary is still reachable."
+explanation_key = "error.agent_runtime.promote_primary_reachable"
+params = []
+remedy = "Confirm the old primary is down, or resubmit with the critical flag to force a split-brain risk knowingly."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.role_combination"
+class = "none"
+summary = "A node's role set is not a valid combination."
+explanation_key = "error.agent_runtime.role_combination"
+params = []
+remedy = "Choose at least one role and do not combine database with branch-edge on one node."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.unknown_role"
+class = "none"
+summary = "The named role is not one of the Spotledger node roles."
+explanation_key = "error.agent_runtime.unknown_role"
+params = []
+remedy = "Use web, jobs, realtime, database or branch-edge."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.unknown_profile"
+class = "none"
+summary = "The named profile is not one of the Spotledger runtime profiles."
+explanation_key = "error.agent_runtime.unknown_profile"
+params = []
+remedy = "Use standalone, cluster-basic or cluster-redis."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.settings"
+class = "none"
+summary = "The settings diff for a role or profile change could not be validated or written."
+explanation_key = "error.agent_runtime.settings"
+params = []
+remedy = "Correct the setting value named in the detail and resubmit the change."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.upgrade_rejected"
+class = "none"
+summary = "An approver rejected the release plan, so the upgrade was not applied."
+explanation_key = "error.agent_runtime.upgrade_rejected"
+params = []
+remedy = "Read the rejection on the release plan, adjust the plan or the upgrade, and resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.upgrade_not_approved"
+class = "none"
+summary = "The release plan was submitted but has not collected the approvals it needs."
+explanation_key = "error.agent_runtime.upgrade_not_approved"
+params = []
+remedy = "Wait for the required approvers, or check the approval policy for this risk class."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.upgrade_failed"
+class = "none"
+summary = "The apply engine failed before it could report a usable outcome."
+explanation_key = "error.agent_runtime.upgrade_failed"
+params = []
+remedy = "Read the apply engine's journal and error on the host, then resume or restore."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.upgrade_rolled_back"
+class = "none"
+summary = "Verification failed and the apply engine restored the old version."
+explanation_key = "error.agent_runtime.upgrade_rolled_back"
+params = []
+remedy = "Read the verification failure, correct the plan, and submit a new upgrade."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.replica_failed"
+class = "none"
+summary = "A replica status, lag, standby or promotion step failed."
+explanation_key = "error.agent_runtime.replica_failed"
+params = []
+remedy = "Check replication connectivity and the PostgreSQL log on the host, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.backup_failed"
+class = "none"
+summary = "A backup could not be started or listed."
+explanation_key = "error.agent_runtime.backup_failed"
+params = []
+remedy = "Check the backup destination's free space and permissions, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.backup_verify_failed"
+class = "none"
+summary = "A backup's manifest or file checksum did not verify."
+explanation_key = "error.agent_runtime.backup_verify_failed"
+params = []
+remedy = "Treat the backup as unusable, take a new one, and investigate the storage."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.drain_timeout"
+class = "none"
+summary = "The runtime did not drain its in-flight work within the requested window."
+explanation_key = "error.agent_runtime.drain_timeout"
+params = []
+remedy = "Wait for the running work to finish or increase the drain window, then retry the stop."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_runtime.service_failed"
+class = "none"
+summary = "The runtime service could not be started or stopped."
+explanation_key = "error.agent_runtime.service_failed"
+params = []
+remedy = "Check the service manager and the runtime log on the host, then retry."
+since = "0.1.0"

@@ -1,0 +1,43 @@
+[package]
+name = "spot-break-glass"
+description = "Break-glass access for platform support (WP-ADM-11.T1, blueprint WS22, ADR-44, ADR-070 s9): a just-in-time session state machine with two-person vendor approval and customer consent, composed from spot-deep-access and spot-support-session; a hash-chained, append-only, redacting interactive-session recorder with a customer-side replay; and the customer view of who, why, when and what was recorded"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The real PTY implementation. It is not part of acceptance and ships disabled: the
+# default build is pure (a `Pty` trait and its fake). Enable it to compile the
+# dependency-free std-io stand-in for a platform PTY (see `src/pty/real.rs`).
+real-pty = []
+
+[dependencies]
+# The customer-signed, hardware-bound grant. Composed, never re-implemented.
+spot-deep-access = { path = "../spot-deep-access" }
+# The scoped, time-boxed session model and its tier ladder.
+spot-support-session = { path = "../spot-support-session" }
+# The tamper-evident chain the customer view reads and the session log writes.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Stable, derive-based serde on the wire types (grants, events, manifests).
+serde = { version = "1", features = ["derive"] }
+# The manifest is JSON; the audit payload carries the event as JSON text.
+serde_json = "1"
+# SHA-256 for the frame hash chain and the genesis hash.
+sha2 = "0.10"
+# Typed errors with stable `break_glass.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Signing the customer consent receipt and the hardware attestation in the composition test.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The customer authentication method on a consent receipt.
+spot-iam-access = { path = "../spot-iam-access" }
+# Key identifiers for the trusted customer approver keys.
+spot-signed-command = { path = "../spot-signed-command" }
+# Property tests: a recording round-trips through encode/decode; the hash chain is stable.
+proptest = "1"
+
+[lints]
+workspace = true

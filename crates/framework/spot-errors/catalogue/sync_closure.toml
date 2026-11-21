@@ -1,0 +1,56 @@
+# sync_closure codes: the sender-side dependency closure of spot-sync-closure (WP-SYN-03.T1, ADR-064). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto conditions (CLOSURE_TOO_LARGE, ADR-067), so `class = "none"`.
+
+[[entry]]
+code = "sync_closure.invalid_limits"
+class = "none"
+summary = "A closure limit is zero, or the hard limit is below the per-bundle record cap."
+explanation_key = "error.sync_closure.invalid_limits"
+params = []
+remedy = "Set every limit above zero and keep the hard limit at or above the per-bundle record cap."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_closure.target_missing"
+class = "none"
+summary = "A record that a bundled record references is neither known to the destination nor present at the source: {entity} {id}."
+explanation_key = "error.sync_closure.target_missing"
+params = ["entity", "id"]
+remedy = "Treat it as an integrity problem at the source: restore the missing record or fix the reference before the bundle is sent."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_closure.reference_unreadable"
+class = "none"
+summary = "A link in a {entity} record cannot be resolved from the metadata: {field}."
+explanation_key = "error.sync_closure.reference_unreadable"
+params = ["entity", "field"]
+remedy = "Declare the entity in the dynamic link's allowed targets, or fix the record's type field."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_closure.source_failed"
+class = "none"
+summary = "The image source could not return a record: {reason}."
+explanation_key = "error.sync_closure.source_failed"
+params = ["reason"]
+remedy = "Fix the source adapter or the store it reads, then build the bundle again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_closure.too_large"
+class = "none"
+summary = "The dependency closure of a bundle passed the hard record limit (the CLOSURE_TOO_LARGE condition)."
+explanation_key = "error.sync_closure.too_large"
+params = []
+remedy = "Review the metadata for a master that references most of the database; the bundle is refused until the references are narrowed."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_closure.held_dependency"
+class = "none"
+summary = "A {dependent} record needs a {held} record the destination cannot decode yet, so it is withheld with it instead of being sent."
+explanation_key = "error.sync_closure.held_dependency"
+params = ["dependent", "held"]
+remedy = "Nothing to do: the dependent is queued together with the held record once the node upgrades and the hold is released."
+since = "0.1.0"

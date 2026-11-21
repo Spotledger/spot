@@ -1,0 +1,118 @@
+# migrate codes: online schema migration for the PostgreSQL backend (spot-pg-migrate, WP-STO-11). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "migrate.refused"
+class = "none"
+summary = "The schema change is destructive or lossy and is not applied online: {reason}."
+explanation_key = "error.migrate.refused"
+params = ["reason"]
+remedy = "Use the expand and contract path of the migration lifecycle, or change the metadata back."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.drift"
+class = "none"
+summary = "After the migration the live schema still differs from the catalogue: {what}."
+explanation_key = "error.migrate.drift"
+params = ["what"]
+remedy = "Plan again and apply; if the difference remains, report it as a defect."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.lock_timeout"
+class = "none"
+summary = "A table stayed locked by other work for longer than the lock timeout."
+explanation_key = "error.migrate.lock_timeout"
+params = []
+remedy = "Run the migration again when the long transaction has ended; nothing was lost."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.interrupted"
+class = "none"
+summary = "The migration stopped after step {step} before the end."
+explanation_key = "error.migrate.interrupted"
+params = ["step"]
+remedy = "Plan and apply again; only the remaining steps run."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.database"
+class = "none"
+summary = "The database refused a migration statement."
+explanation_key = "error.migrate.database"
+params = []
+remedy = "Read the database log for the statement, fix the cause and apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.no_backfill_default"
+class = "none"
+summary = "A new required field holds records but has no default to fill them with: {field}."
+explanation_key = "error.migrate.no_backfill_default"
+params = ["field"]
+remedy = "Give the field a default in the migration options, or add it as optional first."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.duplicate_values"
+class = "none"
+summary = "The unique index {index} cannot be built on {table}: existing rows already hold duplicate values in {columns}."
+explanation_key = "error.migrate.duplicate_values"
+params = ["columns", "index", "table"]
+remedy = "Remove or merge the rows that share those column values, then plan and apply the migration again."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extension_unavailable"
+class = "none"
+summary = "The catalogue needs the database extension {extension}, which is not installed in this database: {reason}."
+explanation_key = "error.migrate.extension_unavailable"
+params = ["extension", "reason"]
+remedy = "Run the audited extension.install operation from the Admin Center database manager (or the CLI) with a role that holds the privilege, or have the DBA create the extension, then plan the migration again. A migration never creates an extension."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extension_version"
+class = "none"
+summary = "The database extension {extension} is older than the catalogue needs: {reason}."
+explanation_key = "error.migrate.extension_version"
+params = ["extension", "reason"]
+remedy = "Install or update the extension to the required version with the audited extension.install operation (a newer server package may be needed first), then plan the migration again."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extension_not_allowed"
+class = "none"
+summary = "The database extension {extension} is not on the closed list of extensions the platform installs."
+explanation_key = "error.migrate.extension_not_allowed"
+params = ["extension"]
+remedy = "Ask for one of the listed extensions (postgis, btree_gist, pg_trgm, unaccent). The list is fixed by the platform; a tenant, an app or a request cannot widen it."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extension_privilege_missing"
+class = "none"
+summary = "The connecting role cannot create the database extension {extension}; nothing was changed. An administrator can run: {statement}"
+explanation_key = "error.migrate.extension_privilege_missing"
+params = ["extension", "statement"]
+remedy = "Run extension.install again with a role that holds the privilege (a superuser for postgis, CREATE on the database for the trusted extensions), or have the database administrator run the statement shown."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extension_plan_stale"
+class = "none"
+summary = "The database changed since the extension.install dry run for {extension}; nothing was changed."
+explanation_key = "error.migrate.extension_plan_stale"
+params = ["extension"]
+remedy = "Run the dry run again, review it, and install with the new plan hash."
+since = "0.1.0"
+
+[[entry]]
+code = "migrate.extra_table_invalid"
+class = "none"
+summary = "The extra table {table} handed to the migrator breaks the rules of the extra-table hook; nothing was changed."
+explanation_key = "error.migrate.extra_table_invalid"
+params = ["table"]
+remedy = "Give the hook only idempotent CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS and CREATE UNIQUE INDEX IF NOT EXISTS statements, one per entry, with every table and index name starting with spot_, one statement creating the object named by the table, and no name of a document table of the catalogue."
+since = "0.1.0"

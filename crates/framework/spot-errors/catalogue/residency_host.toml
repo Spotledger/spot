@@ -1,0 +1,37 @@
+# residency_host codes: residency enforced where data is placed (WP-SEC-05.T5). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "residency_host.refused"
+class = "none"
+summary = "A residency policy clause refused the placement, backup target, egress or move."
+explanation_key = "error.residency_host.refused"
+params = []
+remedy = "Place the data in a region the tenant's residency policy allows, or change the policy through its owner; the audit entry names the clause and the destination."
+since = "0.1.0"
+
+[[entry]]
+code = "residency_host.undeclared"
+class = "none"
+summary = "The destination has no declared region and the tenant has a residency policy, so it was refused."
+explanation_key = "error.residency_host.undeclared"
+params = []
+remedy = "Declare the destination in `[[services.residency.resource]]` with its region; an unknown region is never assumed."
+since = "0.1.0"
+
+[[entry]]
+code = "residency_host.self_approval"
+class = "none"
+summary = "The owner approval of a cross-region move came from the person who requested it."
+explanation_key = "error.residency_host.self_approval"
+params = []
+remedy = "Ask the owner (a different person) to approve the move."
+since = "0.1.0"
+
+[[entry]]
+code = "residency_host.policy_invalid"
+class = "none"
+summary = "The residency policy file could not be read or is invalid."
+explanation_key = "error.residency_host.policy_invalid"
+params = []
+remedy = "Fix the file named by `[services.residency] policy_file`; the previous valid policy stays in force, and a site with none refuses to start."
+since = "0.1.0"

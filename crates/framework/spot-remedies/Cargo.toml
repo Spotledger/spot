@@ -1,0 +1,27 @@
+[package]
+name = "spot-remedies"
+description = "The remedy catalogue framework (WP-AI-07.T1, ADR-26, WS13): typed remedies with preconditions, dry-run, undo and self-tests, a registry with tier gating through spot-agent-tiers, the first generic remedies seeded from a support-case corpus format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The tier ladder, the agent identity and the authoriser every remedy runs behind (WP-AI-06.T1):
+# a remedy runs only when the agent's tier, domain and the hard floor allow its action.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# Remedy metadata, corpus cases and the catalogue are TOML-loadable, hand-editable records.
+serde = { version = "1", features = ["derive"] }
+# Parameters are validated against a JSON Schema subset and plans hash their canonical JSON.
+serde_json = "1"
+toml = "0.8"
+# The one error type, with stable machine-readable `remedies.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: a sealed plan always verifies, and schema validation never accepts a float.
+proptest = "1"
+
+[lints]
+workspace = true

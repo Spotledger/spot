@@ -1,0 +1,5 @@
+error: a whitelisted method takes `&self` (a controller is shared between requests; keep its state behind the context or interior mutability)
+  --> tests/ui/by_value_self.rs:21:17
+   |
+21 |     async fn go(self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |                 ^^^^

@@ -1,0 +1,1 @@
+<table>{% for l in lines %}<tr><td>{{ l.desc }}</td><td>{{ l.amount | money('PKR') }}</td></tr>{% endfor %}</table><p>Total: {{ total | money('PKR') }}</p>

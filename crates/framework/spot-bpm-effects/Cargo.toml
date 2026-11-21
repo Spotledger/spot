@@ -1,0 +1,30 @@
+[package]
+name = "spot-bpm-effects"
+description = "The request record file and the undo machinery of the Business Process engine (WS8, WP-BPM-15.T1, ADR-080 sections 6.4 to 6.6 and 6.9): every operation receipt a request produced, rewind versus undo, and the compensation sequence that reverses effects in dependency order through the lifecycle and stops with blockers and alternatives when a reversal is refused"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Operation`, `OperationReceipt`, `EffectReceipt`, `EffectKind`, `Reversal`, `ActionRef`,
+# `Version` and `OffsetDateTime`: the contract vocabulary the file and the plan speak.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `CaseId`: a request is a Case of the process engine.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# `NodeId`: the node an entry came from and a rewind or undo targets.
+spot-dag = { path = "../spot-dag" }
+# `Registry::effects`: the declarations a receipt's reversals are derived from.
+spot-seams = { path = "../spot-seams" }
+# Typed errors with stable `bpm_effects.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The probes the tests use to assert the append-only stores only grow and net to zero.
+spot-effect-kit = { path = "../spot-effect-kit" }
+
+[lints]
+workspace = true

@@ -1,0 +1,39 @@
+name = "linked_identity"
+label = "Linked Identity"
+app = "platform"
+module = "identity"
+title_field = "subject"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+
+[[fields]]
+name = "provider"
+label = "Provider"
+type = "text"
+required = true
+max_chars = 2048
+description = "The OIDC issuer or the SAML entity id."
+
+[[fields]]
+name = "subject"
+label = "Subject"
+type = "text"
+required = true
+max_chars = 2048
+description = "The provider's stable subject for the person."
+
+[[fields]]
+name = "last_seen"
+label = "Last Seen"
+type = "datetime"
+read_only = true
+
+[[indexes]]
+fields = ["provider", "subject"]
+unique = true

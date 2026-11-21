@@ -1,0 +1,11 @@
+# sync_loops_host codes: the hosted sync loops (WP-RTB-02.T11). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. Names only: no value, no subject content.
+
+[[entry]]
+code = "sync_loops_host.step_not_wired"
+class = "none"
+summary = "A sync loop step was left out because no module provides its source."
+explanation_key = "error.sync_loops_host.step_not_wired"
+params = []
+remedy = "Enable the module that owns the store the step reads (the ledger, the registry, the repair list, the freshness tracker); the health view lists the steps that are not wired."
+since = "0.1.0"

@@ -1,0 +1,52 @@
+# The `tier_m` profile (WP-TST-15.T2): README section 4, tier M (a single cloud server).
+# Targets: 50 to 300 concurrent users, 10 tx/s, form open under 300 ms, posting p95 under
+# 1 s. The platform gate uses 200 sessions (the same figure the milestone text puts on the
+# STO-04 row-lock tests).
+#
+# Reference hardware: the large self-hosted runner. Results from a smaller runner are never
+# compared against `budgets/tier_m.toml`: `tests/tier_m.rs` enforces the budgets only when
+# the environment variable L9_RUNNER_LABEL is `large`, and prints (without failing) the
+# verdicts otherwise. The runner label is therefore part of how this profile is run, not a
+# key in this file (the profile schema rejects unknown keys). The report header of a baseline
+# run records CPU, RAM and storage (the project process notes).
+#
+# Rate. `target_tps` is the open-loop arrival rate of ALL operations, and `create_submit`
+# (create a draft and post it: one transaction) is 5 of every 100 arrivals. 200 arrivals/s
+# times 5 percent is 10 tx/s of posting, the README figure; the other 190 arrivals/s are the
+# read mix. Reads to writes is therefore 19:1, which is "about 20:1" (README: a form is opened
+# and a list is read many times for each document that is posted). `update` and
+# `stale_update` are weighted 0 so the write count is exactly the posting count the
+# throughput budget (>= 9.5 tx/s) is measured against.
+#
+# Contention. Every `create_submit` posts a `time_entry`, and posting adds its hours to the
+# linked `task.logged_hours` in the same transaction (the sample app's roll-up). All 200
+# sessions draw their task from the same first page of tasks, so those task rows are the
+# stock-style hot rows of the STO-04 concurrency policy, and the `time_entry.entry_no`
+# series (TE-.YYYY.-.#####) is the number series every session posts into. The post-run
+# invariant in `tests/tier_m.rs` checks that no number or id was issued twice.
+#
+# Reports and lists run at the 25-row page the session code uses; the 1 000-row page size
+# is exercised once after the run by `tests/tier_m.rs` (the operation code in
+# `src/session.rs` is not owned by this task; see the report's open questions).
+name = "tier_m"
+tier = "M"
+sessions = 200
+ramp_seconds = 120
+steady_seconds = 1800
+seed = 20261113
+target_tps = 200
+request_timeout_ms = 10000
+sample_every_seconds = 10
+report = "task_summary"
+
+[think]
+kind = "uniform"
+min_ms = 100
+max_ms = 500
+
+[mix]
+sign_in = 3
+open_form = 50
+list = 37
+report_run = 5
+create_submit = 5

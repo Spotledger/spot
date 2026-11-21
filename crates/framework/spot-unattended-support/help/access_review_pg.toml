@@ -1,0 +1,100 @@
+# Help for the access_review_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "access_review_pg.migration_failed"
+what_happened = "The access review and separation of duties tables could not be created in the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database user may create tables, triggers and indexes and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code access_review_pg.migration_failed."]
+audience = "operator"
+
+[[help]]
+code = "access_review_pg.not_found"
+what_happened = "The access review campaign could not be found."
+why = "No campaign with that id exists in this tenant. A campaign of another tenant is reported exactly like a missing one."
+what_to_do = ["Check the campaign id and that you are working in the right tenant.", "If you believe the campaign exists, ask your administrator."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.already_exists"
+what_happened = "A campaign with that id already exists."
+why = "Campaign ids are unique within a tenant and an existing campaign is never overwritten."
+what_to_do = ["Start the campaign again under a new id.", "Open the existing campaign if you meant to continue it."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.version_conflict"
+what_happened = "The review item was changed by someone else before your decision was saved."
+why = "Another reviewer or process decided or changed the item after you opened it."
+what_to_do = ["Reload the campaign and look at the item as it is now.", "Decide again if the decision is still needed."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.input_invalid"
+what_happened = "Part of the access review request is too large or too small."
+why = "An id, text, item count or page size is outside the documented limits. Nothing was saved."
+what_to_do = ["Shorten the text or reduce the number of items or the page size.", "Submit the request again."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.corrupt_state"
+what_happened = "A stored access review campaign contradicts itself and was refused."
+why = "The saved campaign data no longer passes its own consistency checks."
+what_to_do = ["Do not edit the tables by hand.", "Restore the campaign from backup, tell your administrator and quote the code access_review_pg.corrupt_state."]
+audience = "operator"
+
+[[help]]
+code = "access_review_pg.unavailable"
+what_happened = "The access review store could not answer and nothing was changed."
+why = "The database was not reachable at that moment."
+what_to_do = ["Wait a moment and try again.", "A decision that failed with this message was not recorded, so repeat it."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_not_found"
+what_happened = "The separation of duties override could not be found."
+why = "No override at that position exists in this tenant. An override of another tenant is reported exactly like a missing one."
+what_to_do = ["Check the override and that you are working in the right tenant.", "If you believe it exists, ask your administrator."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_version_conflict"
+what_happened = "The separation of duties rule set was changed by someone else."
+why = "Another administrator saved a new version after you opened it."
+what_to_do = ["Reload the rule set to see the current version.", "Submit your change again against that version."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_override_active"
+what_happened = "An active override already covers this rule, user and scope."
+why = "Only one active override may cover the same rule, user and scope at a time."
+what_to_do = ["Revoke the active override or wait for it to expire.", "Then record the new override."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_override_revoked"
+what_happened = "The override was already revoked."
+why = "A revocation is final and the override stays as evidence."
+what_to_do = ["Nothing needs to be done.", "Record a new override if access is still needed."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_input_invalid"
+what_happened = "The separation of duties request was refused."
+why = "A field is blank or too long, the rule is unknown, the override grants its own requester, or the expiry is not in the future."
+what_to_do = ["Correct the field named in the message.", "Submit the request again; nothing was saved."]
+audience = "admin"
+
+[[help]]
+code = "access_review_pg.sod_corrupt_rules"
+what_happened = "The stored separation of duties rule set no longer validates and was refused."
+why = "The saved rule set fails its own checks, so it is never served."
+what_to_do = ["Store a corrected rule set as a new version.", "Tell your administrator and quote the code access_review_pg.sod_corrupt_rules."]
+audience = "operator"
+
+[[help]]
+code = "access_review_pg.sod_unavailable"
+what_happened = "The separation of duties store could not answer and nothing was changed."
+why = "The database was not reachable at that moment."
+what_to_do = ["Wait a moment and try again.", "An override that failed with this message was not recorded, so repeat it."]
+audience = "admin"

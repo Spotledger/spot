@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE ((CAST("p"."visits" AS numeric) < $1) AND ("p"."credit_limit" >= CAST($2 AS numeric)) AND (CAST("p"."visits" AS numeric) <= "p"."credit_limit") AND ("p"."credit_limit" <> CAST("p"."visits" AS numeric))) ORDER BY "p"."id" ASC OFFSET $3
+$1 = Numeric(2.5)
+$2 = Int8(100)
+$3 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

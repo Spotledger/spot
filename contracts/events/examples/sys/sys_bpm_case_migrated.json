@@ -1,0 +1,11 @@
+{
+  "actor": "user_1",
+  "at": 1793608157957000,
+  "case": "case_0042",
+  "from": {"hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "purchase_approval", "version": 3},
+  "nodes_changed": 2,
+  "plan_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "store_version": 7,
+  "to": {"hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "name": "purchase_approval", "version": 4},
+  "variables_defaulted": 1
+}

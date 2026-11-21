@@ -1,0 +1,35 @@
+# The `soak` profile (WP-TST-15.T5): 50 percent of tier M for two hours, the scaled stand-in for
+# the 24 hour soak. Leaks and slow growth show only over time: file descriptors, PostgreSQL
+# connections, resident memory, unbounded caches, job and outbox backlogs, log and WAL growth.
+#
+# 100 sessions and 100 arrivals/s, of which 5 percent (5 tx/s) post: half of `tier_m`.
+#
+# The periodic events of the run are driven by `tests/soak.rs`, not by this schema (the
+# profile has no event keys). Their cadence is fixed there and listed in the report:
+#   every 10 minutes  a metadata change (a custom field is added) and a cross-site check
+#   every 15 minutes  a sign-out and sign-in wave
+#   every 30 minutes  a backup (`spot backup run`) and a report run
+#   every 30 minutes  a `spot reload`
+# The cadence is scaled with the run (a 3 minute test runs every event at least once).
+name = "soak"
+tier = "M"
+sessions = 100
+ramp_seconds = 60
+steady_seconds = 7200
+seed = 20261114
+target_tps = 100
+request_timeout_ms = 10000
+sample_every_seconds = 15
+report = "task_summary"
+
+[think]
+kind = "uniform"
+min_ms = 100
+max_ms = 500
+
+[mix]
+sign_in = 3
+open_form = 50
+list = 37
+report_run = 5
+create_submit = 5

@@ -1,0 +1,60 @@
+[package]
+name = "spot-store-server"
+description = "The Spotledger app store as a service (WP-STR-03.T3, ADR-21): the store API contract served over the registry core and its PostgreSQL index, publisher key authentication, publish with signature checks and review hand-off, listing that fails closed, search, bundle download with ETag and range, yank, the signed revocation list, rate limits, an audit log, /health and /metrics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "spot_store_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-store-server"
+path = "src/main.rs"
+
+[dependencies]
+# The registry core: `Registry`, the `IndexStore` and `BlobStore` ports, `AppName`, `Release`.
+spot-registry = { path = "../spot-registry" }
+# The PostgreSQL index, over the shared blocking bridge (ADR-082 class C).
+spot-registry-pg = { path = "../../backends/spot-registry-pg" }
+# The store's own durable state port (hashed keys, reviews, the listing, idempotency, revocations, audit).
+spot-store-state = { path = "../spot-store-state" }
+# Its PostgreSQL implementation.
+spot-store-state-pg = { path = "../../backends/spot-store-state-pg" }
+# `Bundle::open`, `Limits`, `HostInfo`: the early name and manifest checks before the registry publishes.
+spot-bundle = { path = "../spot-bundle" }
+# The fresh revocation list, its signer port, the V1 list the registry trusts, and the publisher documents.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# `review`: the CPU-bound review that runs on the server's own review threads.
+spot-app-review = { path = "../spot-app-review" }
+# `StoreSigner` and the offline site licence check for paid apps (public key only here).
+spot-store-commerce = { path = "../spot-store-commerce" }
+# The one shared blocking bridge and the PostgreSQL backend it runs on.
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+spot-postgres = { path = "../../backends/spot-postgres" }
+# The HTTP server. `multipart` (it pulls `multer`) is the one new feature of this task (decision 4).
+axum = { version = "0.8.9", features = ["multipart"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "signal", "sync", "time", "fs", "io-util", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+sha2 = "0.10"
+base64 = "0.22"
+# Request ids, review ids and publisher key material come from the operating system's random source.
+uuid = { version = "1.26", default-features = false, features = ["std", "v4"] }
+
+[dev-dependencies]
+# Drives the router without a socket (`oneshot`).
+tower = { version = "0.5", features = ["util"] }
+# A scratch blob and upload directory per test.
+tempfile = "3"
+# The signed site licence for the paid-app download test (`Kind`).
+spot-license = { path = "../spot-license" }
+# A scratch database for the PostgreSQL round trip.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+
+[lints]
+workspace = true

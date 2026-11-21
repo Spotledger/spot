@@ -1,0 +1,155 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Spotledger.Client.Controls"
+             x:Class="Spotledger.Client.Controls.ControlGallery"
+             Name="GalleryRoot">
+  <!-- Every control in every state, both densities, LTR and RTL. The tests render this in
+       Light and Dark and fail on any binding error; the Desktop wiring comes in a later WP. -->
+  <StackPanel Spacing="{DynamicResource Space.6}" Margin="{controls:ThicknessToken Space.4}"
+              Background="{DynamicResource Color.Surface.Canvas}">
+    <TextBlock Text="Control gallery"
+               FontSize="{DynamicResource Font.Size.Title}"
+               FontWeight="{DynamicResource Font.Weight.Semibold}"
+               Foreground="{DynamicResource Color.Text.Primary}" />
+
+    <!-- Comfortable density, LTR -->
+    <StackPanel x:Name="ComfortableLtrSection" Spacing="{DynamicResource Space.4}">
+      <TextBlock Text="Comfortable — LTR"
+                 FontSize="{DynamicResource Font.Size.Heading}"
+                 FontWeight="{DynamicResource Font.Weight.Medium}"
+                 Foreground="{DynamicResource Color.Text.Primary}" />
+      <WrapPanel>
+        <StackPanel Spacing="{DynamicResource Space.2}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotButton Content="Primary" Variant="Primary" />
+          <controls:SpotButton Content="Secondary" Variant="Secondary" />
+          <controls:SpotButton Content="Danger" Variant="Danger" />
+          <controls:SpotButton Content="Subtle" Variant="Subtle" />
+          <controls:SpotButton Content="Disabled" IsEnabled="False" />
+          <controls:SpotButton Content="Busy" IsBusy="True" />
+          <controls:SpotButton Content="With icon" Icon="&#x2714;" />
+        </StackPanel>
+        <StackPanel Spacing="{DynamicResource Space.2}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotField Label="Customer" IsRequired="True">
+            <controls:SpotTextInput Placeholder="Type a name" />
+          </controls:SpotField>
+          <controls:SpotField Label="Name" HelpText="At most 16 characters." IsRequired="True">
+            <controls:SpotTextInput Placeholder="Customer name" Text="Acme Textiles" MaxLength="16" />
+          </controls:SpotField>
+          <controls:SpotField Label="Reference" ErrorText="This field is required.">
+            <controls:SpotTextInput ErrorText="This field is required." />
+          </controls:SpotField>
+          <controls:SpotField Label="Legacy note">
+            <controls:SpotTextInput Text="Read only" IsReadOnly="True" />
+          </controls:SpotField>
+          <controls:SpotField Label="Amount" IsRequired="True">
+            <controls:SpotDecimalInput Value="1234.5" Scale="2" />
+          </controls:SpotField>
+          <controls:SpotField Label="Qty">
+            <controls:SpotDecimalInput Scale="0" Min="-99999" Max="99999" />
+          </controls:SpotField>
+          <controls:SpotField Label="Rate" ErrorText="At most 2 decimal places are allowed here.">
+            <controls:SpotDecimalInput ErrorText="At most 2 decimal places are allowed here." Scale="2" />
+          </controls:SpotField>
+          <controls:SpotField Label="Date">
+            <controls:SpotDateInput Value="2026-09-30" />
+          </controls:SpotField>
+          <controls:SpotField Label="Due date" ErrorText="Not a valid date — expected dd-MM-yyyy.">
+            <controls:SpotDateInput ErrorText="Not a valid date — expected dd-MM-yyyy." />
+          </controls:SpotField>
+          <controls:SpotCheckBox Content="Include tax" IsChecked="True" />
+          <controls:SpotCheckBox Content="Tri-state" IsThreeState="True" IsChecked="{x:Null}" />
+          <controls:SpotField Label="Customer" IsRequired="True">
+            <controls:SpotSelect ErrorText="Pick a customer." Options="{x:Static controls:ControlGallery.CustomerOptions}" />
+          </controls:SpotField>
+          <controls:SpotField Label="Category">
+            <controls:SpotSelect PlaceholderText="Pick one" Options="{x:Static controls:ControlGallery.CustomerOptions}" SelectedIndex="0" />
+          </controls:SpotField>
+        </StackPanel>
+      </WrapPanel>
+    </StackPanel>
+
+    <!-- Compact density, LTR -->
+    <StackPanel x:Name="CompactLtrSection" Spacing="{DynamicResource Space.4}"
+                controls:Density.Mode="Compact">
+      <TextBlock Text="Compact — LTR"
+                 FontSize="{DynamicResource Font.Size.Heading}"
+                 FontWeight="{DynamicResource Font.Weight.Medium}"
+                 Foreground="{DynamicResource Color.Text.Primary}" />
+      <WrapPanel>
+        <StackPanel Spacing="{DynamicResource Space.1}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotButton Content="Primary" Variant="Primary" />
+          <controls:SpotButton Content="Subtle" Variant="Subtle" />
+          <controls:SpotButton Content="Busy" IsBusy="True" />
+        </StackPanel>
+        <StackPanel Spacing="{DynamicResource Space.1}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotField Label="Name">
+            <controls:SpotTextInput Placeholder="Compact name" />
+          </controls:SpotField>
+          <controls:SpotField Label="Amount">
+            <controls:SpotDecimalInput Value="1234.5" Scale="2" />
+          </controls:SpotField>
+          <controls:SpotField Label="Date">
+            <controls:SpotDateInput />
+          </controls:SpotField>
+          <controls:SpotCheckBox Content="Include tax" />
+          <controls:SpotField Label="Customer">
+            <controls:SpotSelect Options="{x:Static controls:ControlGallery.CustomerOptions}" SelectedIndex="1" />
+          </controls:SpotField>
+        </StackPanel>
+      </WrapPanel>
+    </StackPanel>
+
+    <!-- Comfortable density, RTL with Urdu labels -->
+    <StackPanel x:Name="ComfortableRtlSection" Spacing="{DynamicResource Space.4}"
+                FlowDirection="RightToLeft">
+      <TextBlock Text="Comfortable — RTL (اردو)"
+                 FontFamily="{DynamicResource Font.Family.Urdu}"
+                 FontSize="{DynamicResource Font.Size.Heading}"
+                 FontWeight="{DynamicResource Font.Weight.Medium}"
+                 Foreground="{DynamicResource Color.Text.Primary}" />
+      <WrapPanel>
+        <StackPanel Spacing="{DynamicResource Space.2}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotButton Content="محفوظ کریں" Variant="Primary" />
+          <controls:SpotButton Content="منسوخ" Variant="Secondary" />
+          <controls:SpotButton Content="حذف" Variant="Danger" />
+          <controls:SpotButton Content="تفصیل" Variant="Subtle" />
+          <controls:SpotButton Content="مصروف" IsBusy="True" />
+        </StackPanel>
+        <StackPanel Spacing="{DynamicResource Space.2}" Margin="{controls:ThicknessToken Space.2}">
+          <controls:SpotField Label="رقم" IsRequired="True" HelpText="کل رقم، روپے میں۔">
+            <controls:SpotTextInput Placeholder="رقم لکھیں" />
+          </controls:SpotField>
+          <controls:SpotField Label="رقم" IsRequired="True">
+            <controls:SpotDecimalInput Value="1234.5" Scale="2" />
+          </controls:SpotField>
+          <controls:SpotField Label="تاریخ">
+            <controls:SpotDateInput Value="2026-09-30" />
+          </controls:SpotField>
+          <controls:SpotField Label="گاہک" IsRequired="True" ErrorText="یہ خانہ ضروری ہے۔">
+            <controls:SpotSelect ErrorText="یہ خانہ ضروری ہے۔" Options="{x:Static controls:ControlGallery.CustomerOptions}" />
+          </controls:SpotField>
+          <controls:SpotField Label="ٹیکس شامل">
+            <controls:SpotCheckBox Content="ٹیکس شامل کریں" IsChecked="True" />
+          </controls:SpotField>
+        </StackPanel>
+      </WrapPanel>
+    </StackPanel>
+
+    <!-- Compact density, RTL -->
+    <StackPanel x:Name="CompactRtlSection" Spacing="{DynamicResource Space.4}"
+                FlowDirection="RightToLeft"
+                controls:Density.Mode="Compact">
+      <TextBlock Text="Compact — RTL"
+                 FontFamily="{DynamicResource Font.Family.Urdu}"
+                 FontSize="{DynamicResource Font.Size.Heading}"
+                 FontWeight="{DynamicResource Font.Weight.Medium}"
+                 Foreground="{DynamicResource Color.Text.Primary}" />
+      <controls:SpotField Label="گاہک">
+        <controls:SpotTextInput Placeholder="تلاش" />
+      </controls:SpotField>
+      <controls:SpotField Label="رقم">
+        <controls:SpotDecimalInput Value="9876.54" Scale="2" />
+      </controls:SpotField>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

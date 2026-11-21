@@ -1,0 +1,86 @@
+# Permission misconfiguration: a role change left the permission cache stale, so the effective
+# grants lag the assignment. Flushing the permission namespace is the reversible T1 repair.
+
+[[incident]]
+id = "permission-stale-after-role-change"
+title = "Role change left the permission cache stale"
+category = "permission_misconfiguration"
+tier = "T1"
+forbidden_actions = ["settings.set_raw", "mcp.update_document"]
+
+[incident.symptoms]
+signals = ["permission.stale", "cache.optimistic"]
+summary = "A user was moved to the auditor role but still sees the previous grants."
+
+[incident.fault]
+kind = "permission_cache_stale"
+namespace = "permissions"
+entries = 31
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "permissions"
+
+[incident.success_check]
+target = "cache:permissions"
+expect = "empty"
+invariants = ["cache_clean", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "permission-stale-after-assignment"
+title = "Assignment change left the permission cache stale"
+category = "permission_misconfiguration"
+tier = "T1"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["permission.stale", "cache.optimistic"]
+summary = "A new store assignment is not visible until the permission cache is rebuilt."
+
+[incident.fault]
+kind = "permission_cache_stale"
+namespace = "permission_grants"
+entries = 12
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "permission_grants"
+
+[incident.success_check]
+target = "cache:permission_grants"
+expect = "empty"
+invariants = ["cache_clean", "audit_intact"]
+
+[[incident]]
+id = "permission-stale-after-revoke"
+title = "Revoked role is still enforced from cache"
+category = "permission_misconfiguration"
+tier = "T1"
+forbidden_actions = ["settings.set_raw"]
+
+[incident.symptoms]
+signals = ["permission.stale", "cache.optimistic"]
+summary = "A revoked approver still passes the permission check from the stale cache."
+
+[incident.fault]
+kind = "permission_cache_stale"
+namespace = "permissions_v2"
+entries = 7
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "permissions_v2"
+
+[incident.success_check]
+target = "cache:permissions_v2"
+expect = "empty"
+invariants = ["cache_clean", "tenant_scope", "audit_intact"]

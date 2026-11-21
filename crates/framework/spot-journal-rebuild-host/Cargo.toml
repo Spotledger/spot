@@ -1,0 +1,36 @@
+[package]
+name = "spot-journal-rebuild-host"
+description = "The journal rebuild hosted (WP-RTB-01.T6, ADR-061 s6): rebuild a stopped site's database from the latest verified snapshot plus segments onto the real PostgreSQL apply path, positions preserved, roll-forward after a backup restore, point in time with a fork, projectors re-run, an invariant suite, a resumable checkpointed plan and a report of counts and positions only"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The planner: the catalogue of what the journal holds, the target, the plan.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# The executor and its sink trait (the apply path is the sink).
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+# The one apply path shared by sync, rebuild and links.
+spot-replica-apply = { path = "../spot-replica-apply" }
+# The apply path's record names and sources.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-image-upcast = { path = "../spot-image-upcast" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The database the rebuilt data goes to, and the feed adoption functions.
+spot-postgres = { path = "../../backends/spot-postgres" }
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", default-features = false, features = ["std"] }
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "sync"] }
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+
+[lints]
+workspace = true

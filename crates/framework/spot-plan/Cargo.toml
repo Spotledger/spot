@@ -1,0 +1,31 @@
+[package]
+name = "spot-plan"
+description = "Compiled DocType execution plans (WP-MET-02.T1): dense field index, value validation, link, table and dynamic-link maps, a stable plan hash, and a version-keyed plan cache"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The effective metadata (`EffectiveMeta`, `Definition`, `FieldSpec`) the plans compile from.
+spot-meta = { path = "../spot-meta" }
+# The app API view (`DocTypeDef`, `FieldKind`) and the prelude types (`Name`, `Value`, `Decimal`).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The shared expression language for rules (WP-UI-11).
+spot-expr = { path = "../spot-expr" }
+# Canonical serialisation of the plan for hashing.
+serde_json = "1"
+# SHA-256 of the canonical form (WP-MET-02.T1).
+sha2 = "0.10"
+# Lock-free reads of the current plan set for `PlanCache`.
+arc-swap = "1"
+# Typed errors with stable `plan.*` codes.
+thiserror = "1"
+
+[dev-dependencies]
+# Property tests: `check_value` agrees with `FieldKind::accepts`.
+proptest = "1"
+
+[lints]
+workspace = true

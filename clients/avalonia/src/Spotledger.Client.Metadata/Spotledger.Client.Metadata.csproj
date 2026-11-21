@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-07.T1: the renderer-neutral metadata runtime core (ADR-27's two-layer
+       client): DocType/field models built from the generated contract metadata, the
+       versioned meta cache, the typed document draft with dirty tracking and merge-patch
+       output, per-kind value parsing and validation, and server error mapping. It knows
+       what a DocType is and what an edit means — nothing about pixels: no Avalonia
+       reference, no reflection serialisation, no floating point (ADR-12), AOT and trim
+       safe. The only dependency is the hand-written Spotledger.Client.Api layer, which
+       brings in the Kiota-generated native API client. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
+    <!-- WP-UI-07.T2: the field rules (depends_on, mandatory_depends_on,
+         read_only_depends_on, default_expr) run through the shared expression language
+         (WP-UI-11.T2), so the client and the server agree. No package, no floating point. -->
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+  </ItemGroup>
+</Project>

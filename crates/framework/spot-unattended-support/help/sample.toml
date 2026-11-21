@@ -1,0 +1,23 @@
+# Help for the sample error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sample.hours_out_of_range"
+what_happened = "The hours on this time entry are outside the range the app accepts."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Book between a quarter hour and a full day, or split the work into two entries.", "If it keeps happening, tell your administrator and quote the code sample.hours_out_of_range."]
+audience = "user"
+
+[[help]]
+code = "sample.invalid_name"
+what_happened = "A compiled-in sample constant is not a valid storage name."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this: the app's constants are checked in and validated by its tests, so a failure here is a build bug.", "If it keeps happening, tell your administrator and quote the code sample.invalid_name."]
+audience = "operator"
+
+[[help]]
+code = "sample.roll_up_no_version"
+what_happened = "The linked task has no stored version for the hours roll-up to update against."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this: a saved task always carries a version, so the roll-up never sees one missing.", "If it keeps happening, tell your administrator and quote the code sample.roll_up_no_version."]
+audience = "operator"

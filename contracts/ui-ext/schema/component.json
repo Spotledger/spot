@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/component.json",
+  "title": "Composite component",
+  "description": "A composite component built only from catalog controls and layout primitives. Inside a component, expressions read its props as `doc.<prop>`.",
+  "x-limits": {
+    "max_depth": 8,
+    "max_nodes": 500,
+    "max_repeat": 50
+  },
+  "$defs": {
+    "node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "children"
+          ],
+          "properties": {
+            "node": {
+              "enum": [
+                "row",
+                "column",
+                "grid",
+                "group"
+              ]
+            },
+            "children": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            },
+            "title": {
+              "$ref": "common.json#/$defs/label"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "over",
+            "max",
+            "body"
+          ],
+          "properties": {
+            "node": {
+              "const": "repeat"
+            },
+            "over": {
+              "$ref": "common.json#/$defs/name"
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "body": {
+              "$ref": "#/$defs/node"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "test",
+            "then"
+          ],
+          "properties": {
+            "node": {
+              "const": "when"
+            },
+            "test": {
+              "$ref": "common.json#/$defs/expression"
+            },
+            "then": {
+              "$ref": "#/$defs/node"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "control"
+          ],
+          "properties": {
+            "node": {
+              "const": "control"
+            },
+            "control": {
+              "enum": [
+                "label",
+                "heading",
+                "separator",
+                "badge",
+                "progress",
+                "number",
+                "currency",
+                "date",
+                "button"
+              ]
+            },
+            "text": {
+              "$ref": "common.json#/$defs/label"
+            },
+            "value": {
+              "$ref": "common.json#/$defs/expression"
+            },
+            "on_click": {
+              "$ref": "common.json#/$defs/id",
+              "description": "The id of an action of this app; its `call` is the only event a composite may fire."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "component"
+          ],
+          "properties": {
+            "node": {
+              "const": "use"
+            },
+            "component": {
+              "$ref": "common.json#/$defs/id"
+            },
+            "props": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "$ref": "common.json#/$defs/name"
+              },
+              "additionalProperties": {
+                "$ref": "common.json#/$defs/expression"
+              }
+            },
+            "fill": {
+              "type": "object",
+              "maxProperties": 8,
+              "propertyNames": {
+                "$ref": "common.json#/$defs/name"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "name"
+          ],
+          "properties": {
+            "node": {
+              "const": "slot"
+            },
+            "name": {
+              "$ref": "common.json#/$defs/name"
+            }
+          }
+        }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "origin",
+        "props",
+        "body"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.json#/$defs/id"
+        },
+        "origin": {
+          "$ref": "common.json#/$defs/origin"
+        },
+        "props": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "common.json#/$defs/name"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "int",
+                  "decimal",
+                  "bool",
+                  "date",
+                  "datetime",
+                  "list"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "slots": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "common.json#/$defs/name"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/node"
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/component"
+}

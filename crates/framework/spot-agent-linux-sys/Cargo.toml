@@ -1,0 +1,56 @@
+# The host agent's Linux system modules, part 2 (WP-ADM-04.T2, blueprint WS22, ADR-44):
+# storage and snapshots (btrfs, LVM, ZFS, XFS/ext4 facts), network configuration through
+# NetworkManager or systemd-networkd with a connectivity revert guard, the system trust
+# store, chrony time sync, kernel parameters (sysctl) and SELinux/AppArmor.
+#
+# Every module follows the same shape as part 1: `plan` reads and previews without side
+# effects, `apply` changes the machine, `verify` re-reads it. All machine access goes
+# through the `CommandRunner` and `FileSystem` traits (argv vectors, never a shell).
+[package]
+name = "spot-agent-linux-sys"
+description = "The host agent's Linux system modules, part 2 (WP-ADM-04.T2): block-device and mount facts, btrfs/LVM/ZFS snapshots through the spot-snapshot provider contract, network configuration with a connectivity revert guard, certificates, chrony, sysctl and SELinux/AppArmor, each as plan/apply/verify over argv-only command and filesystem seams"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: the operation ids, their parameters and their risk
+# levels, which the module registers and the handlers are keyed by.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The handler trait and the plan the privileged executor dispatches. A module that does
+# not plug into this is not part of the agent.
+spot-agent-core = { path = "../spot-agent-core" }
+# The injected clock: the network revert timer measures its window on a `Clock`, never on
+# a wall-clock read, so tests drive it with a manual clock.
+spot-core = { path = "../spot-core" }
+# The snapshot provider contract the storage adapter implements for a btrfs, LVM or ZFS
+# filesystem snapshot, so the migration layer can use one through the same trait.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Tool output is JSON for `lsblk -J`, `findmnt -J` and `ip -j`; the typed facts parse it.
+serde = { version = "1", default-features = false, features = ["std", "derive"] }
+serde_json = "1"
+# Typed errors with stable `agent_linux_sys.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The crate itself with the `testing` feature, so the integration tests can use the
+# recording fakes and the transcript parser.
+spot-agent-linux-sys = { path = ".", features = ["testing"] }
+# The instance layout a `SnapshotTarget::Instance` names, for the provider adapter test.
+spot-pg-supervisor = { path = "../spot-pg-supervisor" }
+# A real temporary directory for the snapshot provider adapter's round trip.
+tempfile = "3"
+# The instants the manual clock is seeded with (the same version the workspace pins).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# A runtime for the provider adapter's async round trip (the same version as `spot-snapshot`).
+tokio = { version = "1.47", default-features = false, features = ["rt", "macros"] }
+
+[features]
+# The in-memory `CommandRunner` and `FileSystem` fakes with call recording and scripted
+# responses, for this crate's tests and any caller that wants to rehearse a change.
+testing = []
+
+[lints]
+workspace = true

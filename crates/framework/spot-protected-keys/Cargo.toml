@@ -1,0 +1,42 @@
+[package]
+name = "spot-protected-keys"
+description = "The protected-group key hierarchy (WP-SEC-10.T1, ADR-070 rule 12.13 e): a tenant root key, one data key per protection group and epoch, a per-node wrapping key, lease-bound release to a node, rotation on revocation, and field encryption with associated-data binding; key material lives only in locked, zeroised memory and never in the database, logs or backups"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The envelope primitives already vetted in WP-SEC-03.T1: `KeyRef`/`WrappedKey` for a
+# wrapped key and the zeroising `SecretBytes` for unwrapped material.
+spot-secrets = { path = "../spot-secrets" }
+# The same AEAD family `spot-secrets` uses (XChaCha20-Poly1305); never a hand-rolled cipher.
+chacha20poly1305 = "0.10"
+# Fresh keys and nonces come from the operating system CSPRNG.
+rand = "0.9"
+# Key material is wiped on drop.
+zeroize = "1"
+# The blind index is HMAC-SHA-256 under its own key, never the data key.
+hmac = "0.12"
+sha2 = "0.10"
+# Blind indexes are compared in constant time.
+subtle = "2"
+# The release, the backup and the re-encryption plan are stable serde; key material is not.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `protected_keys.*` codes.
+thiserror = "2"
+# Rotation, release and revocation log ids and epochs only, never key material.
+tracing = "0.1"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# Property tests for the revocation, rotation and associated-data rules.
+proptest = "1"
+# Capture tracing output so the hygiene test can prove no key material leaks.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "registry", "ansi"] }
+serde_json = "1"
+
+[lints]
+workspace = true

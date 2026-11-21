@@ -1,0 +1,8 @@
+usr/bin/spot
+usr/lib/systemd/system/spot.service
+usr/lib/sysusers.d/spot.conf
+usr/lib/tmpfiles.d/spot.conf
+etc/spot/spot.toml
+etc/spot/environment
+usr/share/doc/spot/README.install
+usr/share/doc/spot/copyright

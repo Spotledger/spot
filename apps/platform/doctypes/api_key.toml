@@ -1,0 +1,71 @@
+name = "api_key"
+label = "API Key"
+app = "platform"
+module = "identity"
+title_field = "key_id"
+
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[fields]]
+name = "key_id"
+label = "Key Id"
+type = "text"
+required = true
+unique = true
+max_chars = 64
+in_list_view = true
+
+[[fields]]
+name = "owner"
+label = "Owner"
+type = "link"
+options = "user"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "label"
+label = "Label"
+type = "text"
+max_chars = 140
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "active\nrevoked\nexpired"
+required = true
+default = "active"
+in_standard_filter = true
+
+[[fields]]
+name = "expires_at"
+label = "Expires At"
+type = "datetime"
+
+[[fields]]
+name = "last_used_at"
+label = "Last Used At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "digest"
+label = "Digest"
+type = "secret"
+lookup = true
+unique = true
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true
+
+[[fields]]
+name = "scopes"
+label = "Scopes"
+type = "table"
+options = "api_key_scope"

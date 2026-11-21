@@ -1,0 +1,29 @@
+# roles_host codes: the host of roles on a running site (spot-cli services/roles.rs,
+# WP-IAM-03.T2). They appear in readiness reasons and logs only, never in an API answer.
+
+[[entry]]
+code = "roles_host.no_source"
+class = "none"
+summary = "No module of this site provides the stored roles, so roles are not hosted."
+explanation_key = "error.roles_host.no_source"
+params = []
+remedy = "Enable the module that provides the RoleSource port for this site, or set services.roles.enabled to false."
+since = "0.1.0"
+
+[[entry]]
+code = "roles_host.snapshot_build_failed"
+class = "none"
+summary = "The role snapshot was refused; the previous snapshot stays in force."
+explanation_key = "error.roles_host.snapshot_build_failed"
+params = []
+remedy = "Fix the role or assignment records named by the listed iam codes; the next refresh publishes the new snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "roles_host.source_unavailable"
+class = "none"
+summary = "The stored roles or assignments could not be read; the previous snapshot stays in force."
+explanation_key = "error.roles_host.source_unavailable"
+params = []
+remedy = "Check the site's database; the node recovers at the next refresh."
+since = "0.1.0"

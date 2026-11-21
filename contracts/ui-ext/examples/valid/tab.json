@@ -1,0 +1,65 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "panels": [
+    {
+      "id": "sample.task_overview",
+      "origin": "app:sample",
+      "label": "Overview",
+      "slot": "doc.sidepanel",
+      "doctype": "project",
+      "order": 0,
+      "permission": "project:read",
+      "blocks": [
+        {
+          "type": "field_list",
+          "fields": [
+            "status",
+            "owner",
+            "budget"
+          ]
+        },
+        {
+          "type": "stat",
+          "query": "sample.open_tasks",
+          "label": "Open tasks",
+          "format": "int"
+        },
+        {
+          "type": "table",
+          "query": "sample.recent_time_entries",
+          "columns": [
+            {
+              "field": "work_date"
+            },
+            {
+              "field": "person"
+            },
+            {
+              "field": "hours",
+              "label": "Hours"
+            }
+          ],
+          "max_rows": 5,
+          "open": true
+        },
+        {
+          "type": "text",
+          "markdown": "Open the [task list](dest:sample.tasks) to see more."
+        }
+      ]
+    }
+  ],
+  "tabs": [
+    {
+      "id": "sample.task_time",
+      "origin": "app:sample",
+      "label": "Time",
+      "slot": "doc.tab",
+      "doctype": "task",
+      "panel": "sample.task_overview",
+      "order": 1
+    }
+  ]
+}

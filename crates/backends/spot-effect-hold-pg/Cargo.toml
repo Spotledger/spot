@@ -1,0 +1,34 @@
+[package]
+name = "spot-effect-hold-pg"
+description = "PostgreSQL LedgerStore for the side-effect hold (WP-MIG-08.T2, ADR-22): effects deduplicated on (site, key) in their original order, a compare-and-set hold state, release checkpoints, and a fail-closed ledger that outlives a crash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `LedgerStore` trait, the ledger records and the contract suite this store must pass.
+spot-effect-hold = { path = "../../framework/spot-effect-hold" }
+# `SiteId`: the tenant an effect or hold belongs to.
+spot-core = { path = "../../framework/spot-core" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its four tables.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# `EffectClass`, `PayloadRef` and `HoldState` are persisted as `jsonb`, so one stored row keeps
+# exactly the shape the in-memory ledger holds.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The backend-independent ledger contract suite (`contract::run_all`).
+spot-effect-hold = { path = "../../framework/spot-effect-hold", features = ["testing"] }
+# `#[tokio::test]` and the multi-thread runtime for the restart and racing cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

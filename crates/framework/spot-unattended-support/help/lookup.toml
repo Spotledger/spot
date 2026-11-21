@@ -1,0 +1,16 @@
+# Help for the lookup error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "lookup.page_encoding"
+what_happened = "A page of lookup results could not be prepared for sending."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the seam provider's page shape; this is a provider bug.", "If it keeps happening, tell your administrator and quote the code lookup.page_encoding."]
+audience = "operator"
+
+[[help]]
+code = "lookup.seam_failed"
+what_happened = "The provider of lookup results failed to produce a page."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the seam provider; retry the lookup.", "If it keeps happening, tell your administrator and quote the code lookup.seam_failed."]
+audience = "admin"

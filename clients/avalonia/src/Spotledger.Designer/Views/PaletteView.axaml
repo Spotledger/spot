@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.PaletteView">
+  <!-- The field-type palette: every type the client's controls can render, grouped the way the
+       palette shows them. A click picks the type (for Ctrl+I and the Insert button), a drag
+       carries it to a section, a field or the "not on the form" tray. -->
+  <Border Background="{DynamicResource Color.Surface.Raised}"
+          BorderBrush="{DynamicResource Color.Border.Default}"
+          BorderThickness="0,0,1,0"
+          Padding="10">
+    <ScrollViewer>
+      <StackPanel Spacing="10">
+        <TextBlock Text="Fields"
+                   FontSize="{DynamicResource Font.Size.Heading}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBlock Text="Drag a type onto the form, or pick one and press Ctrl+I."
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <ItemsControl ItemsSource="{Binding Canvas.Palette}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Spacing="4" Margin="0,4,0,8">
+                <TextBlock Text="{Binding Title}"
+                           FontSize="{DynamicResource Font.Size.Caption}"
+                           Foreground="{DynamicResource Color.Text.Secondary}" />
+                <ItemsControl ItemsSource="{Binding Fields}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Name="PaletteEntry"
+                              Margin="0,2"
+                              Padding="8,6"
+                              CornerRadius="4"
+                              Background="{DynamicResource Color.Surface.Sunken}"
+                              PointerPressed="OnEntryPressed"
+                              ToolTip.Tip="{Binding Description}">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Color.Text.Primary}" />
+                          <TextBlock Text="{Binding Description}"
+                                     FontSize="{DynamicResource Font.Size.Caption}"
+                                     TextWrapping="Wrap"
+                                     Foreground="{DynamicResource Color.Text.Secondary}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>

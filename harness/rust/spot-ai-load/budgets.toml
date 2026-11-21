@@ -1,0 +1,23 @@
+# The budgets WP-AI-05.T2 judges a run against (see the AI load-test notes for the reasoning).
+# All integers: ratios are permille (1250 = 1.25x), times are milliseconds.
+
+[human]
+# Human p95 with agents running may be at most baseline p95 x ratio + slack.
+p95_ratio_permille = 1250
+p95_slack_ms = 10
+# Human p99 with agents running may be at most baseline p99 x ratio + slack.
+p99_ratio_permille = 1500
+p99_slack_ms = 25
+# Human operations that failed, in any phase.
+max_errors = 0
+
+[ai]
+# Backends running a statement for the `ai` role in any one-second sample, above the pool size.
+max_backends_over_cap = 0
+# Connections or permits still held after the agents stopped.
+max_leaked_connections = 0
+max_leaked_permits = 0
+# Statements of the `ai` role still running five seconds after the last agent stopped.
+max_running_after_cancel = 0
+# After the overload ends, AI admission must be back at its configured level within this long.
+recovery_within_ms = 10000

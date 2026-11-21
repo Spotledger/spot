@@ -1,0 +1,16 @@
+{
+  "changed": "lines[1].qty",
+  "doc": {
+    "hidden_note": "client text",
+    "lines": [
+      {
+        "id": "01970000-0000-7000-8000-0000000000f1",
+        "item": "01970000-0000-7000-8000-0000000000e1",
+        "qty": "2",
+        "rate": "3.00"
+      }
+    ],
+    "number": "INV-25",
+    "secret": "SEC-INV-25"
+  }
+}

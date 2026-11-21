@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+# Debian source-package build. tools/packaging/build.py also produces a
+# binary .deb directly from the same release artefacts without debhelper.
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+# Install the unit, sysusers and tmpfiles data. --no-start keeps the promise
+# that the package never starts the service; the administrator does that after
+# provisioning a site. Enabling is left to the administrator too.
+override_dh_installsystemd:
+	dh_installsystemd --no-start --no-enable
+
+override_dh_installsysusers:
+	dh_installsysusers
+
+override_dh_installtmpfiles:
+	dh_installtmpfiles

@@ -1,0 +1,55 @@
+# security codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "security.consent_invalid"
+class = "none"
+summary = "The operation was refused: consent invalid."
+explanation_key = "error.security.consent_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "security.invalid"
+class = "none"
+summary = "The operation was refused: invalid."
+explanation_key = "error.security.invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "security.not_found"
+class = "none"
+summary = "The operation was refused: not found."
+explanation_key = "error.security.not_found"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "security.plan_changed"
+class = "none"
+summary = "The operation was refused: plan changed."
+explanation_key = "error.security.plan_changed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "security.plan_required"
+class = "none"
+summary = "The operation was refused: plan required."
+explanation_key = "error.security.plan_required"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "security.request_not_pending"
+class = "none"
+summary = "The operation was refused: request not pending."
+explanation_key = "error.security.request_not_pending"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

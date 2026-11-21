@@ -1,0 +1,26 @@
+[package]
+name = "spot-environments"
+description = "Environments (WP-ALM-02, WS19, ADR-22): development, test and production as linked tenants, a signed transport package between them, environment-specific variables kept outside the content digest, and promotion records that prove one bundle traversed every environment with identical results"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The bundle format: capture, plan, apply and the FakeSite the tests drive.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# The signed envelope: Ed25519 publisher certificates and the one verification path.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The tenant registry and the validated tenant region every member is linked to.
+spot-tenancy = { path = "../spot-tenancy" }
+# Typed errors with stable `environment.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# FakeSite takes an app version, and fixtures are JSON documents.
+semver = "1"
+serde_json = "1"
+
+[lints]
+workspace = true

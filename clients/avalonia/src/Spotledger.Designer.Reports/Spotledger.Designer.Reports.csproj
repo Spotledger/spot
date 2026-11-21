@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-DX-07.T2: the no-code report builder, dashboard builder and simple approval wizard.
+       The client edits server-side drafts (spot-nocode-builders) one op at a time through the
+       typed IBuilderServer surface. It never builds a query, never validates a report and never
+       decides who may see a column: the server does, and a masked column stays masked here. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Designer/Spotledger.Designer.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Designer.Reports.Tests" />
+  </ItemGroup>
+</Project>

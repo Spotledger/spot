@@ -1,0 +1,79 @@
+name = "custom_doctype"
+label = "Custom DocType"
+app = "platform"
+module = "customisation"
+title_field = "doctype_name"
+
+# A DocType a site created while it runs (WP-PLT-16.T1). The record is written as `pending`
+# before the schema is touched and becomes `applied` once the table exists and the new metadata
+# is live, so a crash between the two is found and finished (or rolled back) on start. Only a
+# role holding the platform Customise right reaches this DocType; the service is the writer.
+
+[[fields]]
+name = "doctype_name"
+label = "DocType"
+type = "text"
+required = true
+unique = true
+max_chars = 63
+in_list_view = true
+description = "The storage name of the DocType the site created."
+
+[[fields]]
+name = "module"
+label = "Module"
+type = "text"
+required = true
+max_chars = 63
+default = "custom"
+in_list_view = true
+in_standard_filter = true
+description = "The module it lives in: custom, unless a platform administrator chose another."
+
+[[fields]]
+name = "definition"
+label = "Definition"
+type = "long_text"
+required = true
+description = "The DocType's definition, as the TOML text spot-meta reads."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\napplied\nfailed\nremoving\nremoved"
+required = true
+default = "pending"
+in_list_view = true
+in_standard_filter = true
+description = "pending: saved, schema not yet applied. applied: live. failed: could not be applied, see the reason. removing: marked for removal. removed: a custom field that was removed; the column stays."
+
+[[fields]]
+name = "reason"
+label = "Reason"
+type = "long_text"
+description = "Why the change failed, or why its last attempt was rolled back."
+
+[[fields]]
+name = "intent"
+label = "Intent"
+type = "int"
+required = true
+read_only = true
+description = "The number of the change that last wrote this record."
+
+[[fields]]
+name = "actor"
+label = "Actor"
+type = "text"
+required = true
+max_chars = 140
+read_only = true
+description = "Who made the change."
+
+[[fields]]
+name = "prior"
+label = "Prior definition"
+type = "long_text"
+read_only = true
+description = "The definition before an update that is still pending; restored if the update fails."

@@ -1,0 +1,127 @@
+# journal_rebuild_plan codes: the refusals of the journal rebuild planner (WP-JRN-05.T1, ADR-061 s6), which decides which base a rebuild restores and which segments it applies. A planner refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_rebuild_plan.no_segments"
+class = "none"
+summary = "The catalogue holds no segment range for any generation, so there is no journal to rebuild from."
+explanation_key = "error.journal_rebuild_plan.no_segments"
+params = []
+remedy = "Describe the journal's sealed segments before planning a rebuild, or restore the manifest the catalogue was read from."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.no_base"
+class = "none"
+summary = "No verified snapshot at or before the target, no usable backup and no segments from the first position leave the rebuild with nothing to start from."
+explanation_key = "error.journal_rebuild_plan.no_base"
+params = []
+remedy = "Take and verify a snapshot at or before the target, supply the database backup to roll forward, or include the segments from the first position."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.gap_at"
+class = "none"
+summary = "The journal holds no entry for position {position} of generation {generation}, the first position missing between the base and the target."
+explanation_key = "error.journal_rebuild_plan.gap_at"
+params = ["generation", "position"]
+remedy = "Fetch the missing segments from the object store or another copy, or choose a base at or after the hole and a target before it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.target_inside_abandoned_generation"
+class = "none"
+summary = "Position {position} lies in the part of generation {generation} that a fork abandoned, which the live history does not continue."
+explanation_key = "error.journal_rebuild_plan.target_inside_abandoned_generation"
+params = ["generation", "position"]
+remedy = "Choose a target in the live history: at or below the fork point, or inside the generation the fork created."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.target_beyond_end"
+class = "none"
+summary = "The target position {position} of generation {generation} is after the end of the journal, which stands at {end} of generation {end_generation}."
+explanation_key = "error.journal_rebuild_plan.target_beyond_end"
+params = ["end", "end_generation", "generation", "position"]
+remedy = "Rebuild to the end of the journal, or to a position the journal already holds."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.segment_range_invalid"
+class = "none"
+summary = "The segment range {first_seq} to {last_seq} of generation {generation} is reversed, so it holds no position."
+explanation_key = "error.journal_rebuild_plan.segment_range_invalid"
+params = ["first_seq", "generation", "last_seq"]
+remedy = "Read the segment header again: its first sequence number must not be after its last, otherwise the manifest entry is damaged."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.segments_inconsistent"
+class = "none"
+summary = "The segment ranges of generation {generation} disagree at position {position}: they overlap, or a fork point falls inside one of them."
+explanation_key = "error.journal_rebuild_plan.segments_inconsistent"
+params = ["generation", "position"]
+remedy = "Remove the duplicated segment, fetch the missing one, or record the fork at a segment boundary instead of inside a sealed segment."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.unrecorded_fork"
+class = "none"
+summary = "Applying the segments would enter generation {generation} at position {position} with no fork record at the position it is entered at."
+explanation_key = "error.journal_rebuild_plan.unrecorded_fork"
+params = ["generation", "position"]
+remedy = "Record the fork point in the manifest, or correct the base's generation, before planning the rebuild."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.target_before_fork"
+class = "none"
+summary = "Position {position} of generation {generation} lies before the fork into generation {current_generation}, so a point-in-time rebuild cannot target it: the manifest chain cannot record a fork from inside an older generation."
+explanation_key = "error.journal_rebuild_plan.target_before_fork"
+params = ["current_generation", "generation", "position"]
+remedy = "Choose a position of the current generation, rebuild to the end of the journal, or restore a backup taken before the earlier fork."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.backup_ambiguous"
+class = "none"
+summary = "The backup at position {position} names no generation and more than one generation holds that position, because positions start again in every generation."
+explanation_key = "error.journal_rebuild_plan.backup_ambiguous"
+params = ["position"]
+remedy = "Record the generation the backup was taken in and plan again with it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.unsealed_damaged"
+class = "none"
+summary = "An unsealed tail chunk of the journal is damaged: it failed one of the chunk integrity rules."
+explanation_key = "error.journal_rebuild_plan.unsealed_damaged"
+params = []
+remedy = "Restore the damaged chunk from another copy of the journal; the rebuild stops at this generation and nothing is skipped or repaired."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.unsealed_gap"
+class = "none"
+summary = "The unsealed tail of the journal has a gap: a chunk does not continue the sequence of the one before it."
+explanation_key = "error.journal_rebuild_plan.unsealed_gap"
+params = []
+remedy = "Fetch the missing chunk from the object store or another copy, or plan the rebuild up to the manifest only."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.unsealed_tampered"
+class = "none"
+summary = "An unsealed tail chunk straddles the manifest or breaks the batch order, which the writer never produces, so the objects were edited."
+explanation_key = "error.journal_rebuild_plan.unsealed_tampered"
+params = []
+remedy = "Treat the object store as altered: restore the journal from a copy you trust and investigate who wrote to it."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_plan.unsealed_store_failed"
+class = "none"
+summary = "The journal's object store failed or refused while the unsealed tail was being read."
+explanation_key = "error.journal_rebuild_plan.unsealed_store_failed"
+params = []
+remedy = "Check that the object store is reachable and that the reader may list and read the journal's objects, then retry the plan."
+since = "0.1.0"

@@ -1,0 +1,27 @@
+[package]
+name = "spot-edi"
+description = "The EDI adapter (WP-INT-06.T1): our own X12 and EDIFACT tokenizers, parsers and canonical writers, a typed segment/element model, envelope validation, a lightweight data-driven schema layer, mapping to documents through the shared mapping spec, 997/CONTRL acknowledgements and a connector operation set"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The shared mapping spec and the connector vocabulary (`MappingSpec`, `ConnectorInfo`,
+# `ConnectorCall`, `ConnectorOutput`): the adapter is a connector operation set and maps
+# messages to documents through the same spec the BPM integration node uses.
+spot-connectors = { path = "../spot-connectors" }
+# Message definitions as data (`schemas/x12/*.toml`, `schemas/edifact/*.toml`).
+toml = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `edi.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: random bytes never panic, random valid messages round-trip.
+proptest = "1"
+
+[lints]
+workspace = true

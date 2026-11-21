@@ -1,0 +1,6 @@
+{
+  "case": "union_param",
+  "entry": "size",
+  "args": "hello",
+  "expect": 5
+}

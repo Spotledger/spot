@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "static_members_run",
+  "args": null,
+  "expect": 42
+}

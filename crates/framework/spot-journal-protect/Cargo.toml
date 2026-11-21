@@ -1,0 +1,41 @@
+[package]
+name = "spot-journal-protect"
+description = "The entry transforms that apply personal-field protection to the journal (WP-JRN-08.T4, ADR-061 s3 and s6): a relay-side transform that seals the personal fields of every state image before it is written, a snapshot-side transform for image records, and a rebuild sink wrapper that reveals each image before it reaches the inner sink, with erasure proved end to end"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# protect / reveal, PersonalFields, SubjectKeys, NonceSource: the mechanism this crate wires in.
+spot-journal-pii = { path = "../spot-journal-pii" }
+# `Batch`, `Appended`, `Relay` and `RelayError`: the transform produces a relay batch and can drive
+# one append, so a failed protect stops the batch before the relay sees it.
+spot-journal-relay = { path = "../spot-journal-relay" }
+# `ImageRecord`: the snapshot's image record, protected before `write_part` and revealed after read.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# `ApplySink` and the applied-image types the reveal wrapper sits on, and `classify` for the class
+# of a topic (state, audit, domain), so the class rule is the rebuild executor's own.
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+# The object-store seam the relay append is generic over.
+spot-journal-store = { path = "../spot-journal-store" }
+# `EventEnvelope` and `Position`: a relay line is one envelope.
+spot-events-contract = { path = "../../../contracts/events" }
+# `Image`: the type of `AppliedImage::image`, which the reveal wrapper rebuilds.
+spot-image-upcast = { path = "../spot-image-upcast" }
+# The image is JSON.
+serde_json = "1"
+# Typed errors with stable `journal_protect.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The end-to-end test builds a real journal: a signed manifest, sealed segments, a snapshot.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+spot-journal-segment = { path = "../spot-journal-segment" }
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# Signs the test manifests (the manifest crate takes an Ed25519 signing key and re-exports none).
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

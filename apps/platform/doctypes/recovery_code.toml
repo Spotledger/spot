@@ -1,0 +1,50 @@
+name = "recovery_code"
+label = "Recovery Code"
+app = "platform"
+module = "identity"
+
+# One single-use second-factor recovery code of one user (WP-PLT-02.T10). A top-level record,
+# not a child row, because the secret path refuses child DocTypes: the digest is a lookup secret
+# (sealed, with a blind index), so it is the same kind of value as a session token digest. Only
+# the sign-in service (the system principal) writes it: issue a batch, consume one exactly once,
+# delete the batch on regenerate or when the second factor is removed. No role reads the digest.
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+read_only = true
+in_list_view = true
+
+[[fields]]
+name = "digest"
+label = "Digest"
+type = "secret"
+lookup = true
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true
+
+[[fields]]
+name = "created_at"
+label = "Created At"
+type = "datetime"
+required = true
+read_only = true
+in_list_view = true
+
+[[fields]]
+name = "used_at"
+label = "Used At"
+type = "datetime"
+read_only = true
+in_list_view = true
+description = "When the code was spent; empty while it is unused. Set once, by a compare-and-set under the row lock, so two concurrent uses of one code succeed once."

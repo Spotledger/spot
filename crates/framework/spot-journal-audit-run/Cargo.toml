@@ -1,0 +1,40 @@
+[package]
+name = "spot-journal-audit-run"
+description = "The scheduled journal audit runner (WP-JRN-07.T2, ADR-061 s8): rebuild the latest trusted snapshot plus the journal into a scratch sink as of one recorded position, summarize it, compare it with the live side's summary and fingerprints, measure the rebuild against the tier target and return the audit result and the verified position"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The comparison, the result model, the fingerprints, the RTO check and the verified position.
+spot-journal-audit = { path = "../spot-journal-audit" }
+# The rebuild executor and the sink it applies to.
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+# The planner: the catalogue, the plan and its errors.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# Listing the snapshots and marking one verified.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The object-store seam and the tenant id.
+spot-journal-store = { path = "../spot-journal-store" }
+# The upcaster registry the rebuild takes (also the document image the in-memory scratch digests).
+spot-image-upcast = { path = "../spot-image-upcast" }
+# The feed position the apply sink receives.
+spot-events-contract = { path = "../../../contracts/events" }
+# The in-memory scratch digests a record as canonical JSON.
+serde_json = "1"
+# Typed errors with stable `journal_audit_run.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property: a run over any script equals a model.
+proptest = "1"
+# Signs the test manifests.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The test journal: signed manifest and sealed segments in a memory store.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+spot-journal-segment = { path = "../spot-journal-segment" }
+
+[lints]
+workspace = true

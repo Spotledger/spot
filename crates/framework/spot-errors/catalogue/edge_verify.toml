@@ -1,0 +1,11 @@
+# edge_verify codes: the edge integrity scan job. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "edge_verify.no_metadata"
+class = "none"
+summary = "The edge verify job has no metadata snapshot to check against yet, so it asks to be retried."
+explanation_key = "error.edge_verify.no_metadata"
+params = []
+remedy = "Wait until the site has loaded its metadata; the job retries on its own."
+since = "0.1.0"

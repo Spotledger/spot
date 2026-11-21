@@ -1,0 +1,42 @@
+# tiny: CI and developer smoke runs. Generates 90 invoices + 27 payments
+# (30 per mille paid), 20 journal entries, 30 transfers and 40 adjustments
+# over one quarter in well under 2 s on any laptop.
+
+[period]
+start = "2026-01-01"
+end = "2026-03-31"
+
+[counts]
+companies = 2
+warehouses_per_company = 2
+items = 40
+customers = 30
+suppliers = 15
+sales_invoices = 60
+purchase_invoices = 30
+payments = 27
+journal_entries = 20
+stock_transfers = 30
+stock_adjustments = 40
+
+[distributions]
+item_popularity_skew = 3
+customer_activity_skew = 2
+paid_share_per_mille = 300
+sales_return_per_mille = 100
+purchase_return_per_mille = 150
+opening_stock_coverage_per_mille = 700
+opening_stock_min_milli = 50
+opening_stock_max_milli = 10000
+opening_receivable_per_mille = 100
+opening_payable_per_mille = 200
+monthly_seasonality = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+
+[distributions.lines_per_invoice]
+min = 1
+peak = 2
+max = 6
+
+[distributions.payment_delay]
+min_days = 3
+max_days = 30

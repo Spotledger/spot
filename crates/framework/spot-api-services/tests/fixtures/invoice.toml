@@ -1,0 +1,65 @@
+name = "invoice"
+label = "Invoice"
+title_field = "number"
+
+[[fields]]
+name = "number"
+type = "text"
+required = true
+max_chars = 40
+
+[[fields]]
+name = "customer"
+type = "link"
+options = "customer"
+
+[[fields]]
+name = "customer_name"
+type = "text"
+read_only = true
+
+[[fields]]
+name = "lines"
+type = "table"
+options = "invoice_line"
+
+[[fields]]
+name = "subtotal"
+type = "decimal"
+scale = 2
+precision = 14
+read_only = true
+
+[[fields]]
+name = "discount"
+type = "decimal"
+scale = 2
+precision = 14
+
+[[fields]]
+name = "grand_total"
+type = "decimal"
+scale = 2
+precision = 14
+read_only = true
+
+[[fields]]
+name = "secret"
+type = "text"
+protection_group = "pii"
+masking = { last_chars = 4 }
+
+[[fields]]
+name = "hidden_note"
+type = "text"
+protection_group = "internal"
+
+[[protection_groups]]
+name = "pii"
+label = "Personal data"
+trace = false
+
+[[protection_groups]]
+name = "internal"
+label = "Internal notes"
+trace = false

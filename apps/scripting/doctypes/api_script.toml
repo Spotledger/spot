@@ -1,0 +1,142 @@
+name = "api_script"
+label = "API Script"
+app = "scripting"
+module = "scripting"
+title_field = "name"
+
+# An API Script is TypeScript served as the whitelisted function
+# `scripting/<module>/<function>` (POST/GET /api/v1/method/scripting/<module>/<function>). It
+# runs as the caller, with the caller's rights; a guest can never call it. The source is
+# transpiled and compiled when the record is saved, and must export on_call({ args, ctx }).
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+required = true
+unique = true
+max_chars = 140
+in_list_view = true
+description = "The script's name."
+
+[[fields]]
+name = "enabled"
+label = "Enabled"
+type = "bool"
+default = "true"
+in_list_view = true
+in_standard_filter = true
+description = "Whether the function is served."
+
+[[fields]]
+name = "module"
+label = "Module"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+in_standard_filter = true
+description = "The module part of the function address (a storage name, lower case)."
+
+[[fields]]
+name = "function"
+label = "Function"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+description = "The function part of the address (a storage name, lower case). The function is served as scripting/<module>/<function>."
+
+[[fields]]
+name = "verbs"
+label = "Verbs"
+type = "select"
+options = "GET\nPOST\nGET and POST"
+default = "POST"
+required = true
+in_list_view = true
+description = "The HTTP verbs the function answers. A guest can call none of them."
+
+[[fields]]
+name = "arguments_schema"
+label = "Arguments Schema"
+type = "long_text"
+format = "code"
+syntax = "json"
+description = "Optional JSON schema for the call's arguments (type, required and properties only). Arguments that do not match are refused before the script starts."
+
+[[fields]]
+name = "script"
+label = "Script"
+type = "long_text"
+format = "code"
+syntax = "typescript"
+required = true
+description = "The TypeScript source. It must export on_call({ args, ctx }) and return JSON; every diagnostic is reported here on save."
+
+[[fields]]
+name = "timeout_ms"
+label = "Timeout (ms)"
+type = "int"
+default = "200"
+in_list_view = true
+description = "The per-call wall-clock deadline in milliseconds; at most the site maximum (2 s)."
+
+[[fields]]
+name = "compiled_hash"
+label = "Compiled Hash"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 64
+description = "The hash of the compiled source, written when the script saves."
+
+[[fields]]
+name = "last_error"
+label = "Last Error"
+type = "long_text"
+read_only = true
+no_copy = true
+description = "The last failure, if any, for the admin listing."
+
+[[fields]]
+name = "disabled_reason"
+label = "Disabled Reason"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 500
+description = "Why the script was disabled automatically, when it was."
+
+[[fields]]
+name = "elevated"
+label = "Elevated"
+type = "bool"
+default = "false"
+in_list_view = true
+in_standard_filter = true
+description = "Run the script's document and function calls as the platform instead of as the triggering user. Only a holder of the scripts_elevate permission can set it; every elevated run is audited with the triggering user. Editing the source without that permission switches it off."
+
+[[fields]]
+name = "elevation_reason"
+label = "Elevation Reason"
+type = "long_text"
+description = "Why the script needs to act as the platform (20 to 500 characters). Required when Elevated is on."
+
+[[fields]]
+name = "elevated_by"
+label = "Elevated By"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 140
+description = "Who turned elevation on, stamped on save."
+
+[[fields]]
+name = "elevated_at"
+label = "Elevated At"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 40
+description = "When elevation was turned on, stamped on save."

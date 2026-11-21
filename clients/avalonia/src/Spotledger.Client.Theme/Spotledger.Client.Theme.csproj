@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- WP-UI-15.T3: the Urdu fallback faces ship with the client. Compiled into the
+         assembly as avares:// resources so the shaping pipeline never depends on a host
+         font; the OFL text travels with them (see THIRD-PARTY-NOTICES.md). -->
+    <AvaloniaResource Include="Fonts\*.ttf" />
+    <AvaloniaResource Include="Fonts\*.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Build-order-only reference: MSBuild builds the generator once, before Theme, so
+         the generated-files check can run its assembly directly instead of `dotnet run`,
+         which restores and builds the generator in a nested, racy process. The output item
+         carries the built assembly path, consumed by CheckGeneratedThemeTokens. -->
+    <ProjectReference Include="../../design/Spotledger.TokenGenerator.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="TokenGeneratorAssembly" />
+  </ItemGroup>
+</Project>

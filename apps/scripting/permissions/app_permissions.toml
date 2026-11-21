@@ -1,0 +1,6 @@
+# The scripting app's named permission grants (WP-EXT-06.T8): only the Tenant Administrator may
+# elevate a script. Nobody else holds it unless a role is granted it on purpose.
+
+[[entries]]
+role = "Tenant Administrator"
+permission = "scripts_elevate"

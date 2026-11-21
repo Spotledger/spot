@@ -1,0 +1,8 @@
+# Suites that are skipped on one OS only, with the exact platform reason.
+#
+# Format:
+#   <os> = [{ suite = "<repo-relative suite path>", reason = "<why>" }]
+#
+# Valid OS keys: linux, macos, windows. Every entry must name a suite the
+# runner discovers (stale entries fail the run) and every entry needs a
+# non-empty reason. Skipped suites show as SKIP in the summary.

@@ -1,0 +1,20 @@
+# tenancy_pg codes: the PostgreSQL control store and provisioning executor (WP-CTL-01.T2).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tenancy_pg.migration_failed"
+class = "Internal"
+summary = "The tenancy control schema could not be created in the database."
+explanation_key = "error.tenancy_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create schemas and tables and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "tenancy_pg.invalid_baseline"
+class = "Internal"
+summary = "The tenant baseline catalogue cannot be merged with the built-in seed entity."
+explanation_key = "error.tenancy_pg.invalid_baseline"
+params = []
+remedy = "Remove the tenant_seed entity from the application catalogue and retry the provisioner setup."
+since = "0.1.0"

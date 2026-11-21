@@ -1,0 +1,19 @@
+Source: spot-control-plane
+Section: admin
+Priority: optional
+Maintainer: Spotledger Packaging <packaging@spotledger.invalid>
+Build-Depends: debhelper-compat (= 13), dh-sequence-installsystemd
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://spotledger.example/
+
+Package: spot-control-plane
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd
+Recommends: postgresql-18
+Description: Spotledger control plane
+ The Spotledger control plane: tenant registry, licensing, usage, fleet health
+ and links, served on two mutual-TLS listeners.
+ .
+ The service is installed but never started or enabled, and no key,
+ certificate or password is shipped.

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-BPM-13.T2: the client side of process-first operation. "Start" instead of "New" for a
+       process-only record type, the form-step screen over the generic form, My requests, and the
+       request page with its conversations. Every name for a run comes from the run label
+       catalogue; no screen text spells the engine word or the default label. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Forms/Spotledger.Client.Forms.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Workspace/Spotledger.Client.Workspace.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/*.json" WithCulture="false" LogicalName="Spotledger.Client.Requests.Resources.%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="Spotledger.Client.Requests.Tests" />
+  </ItemGroup>
+</Project>

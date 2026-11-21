@@ -1,0 +1,32 @@
+[package]
+name = "spot-coordinator"
+description = "Coordinator: fenced leases, locks, counters and rate limits for everything that must not be lossy; the in-process single-node backend and the backend-independent contract suite (WP-PLT-18.T1, ADR-20)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent contract suite (`contract::run_all`), public so the database backend
+# (WP-PLT-18.T2) and the Redis plugin (WP-PLT-19) run the same cases.
+testing = []
+
+[dependencies]
+# `Clock`, the only way this crate reads time; `ManualClock` for the contract suite.
+spot-core = { path = "../spot-core" }
+# Typed errors are plain structs (as in `spot-scheduler`); `thiserror` is not needed.
+# Lease expiry instants are `OffsetDateTime`, the type `Clock::now_utc` returns.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# `Notify` wakes lock waiters; `time` bounds the wait; `rt` lets a dropped `LockGuard` release in
+# the background and lets the contract suite spawn its racing tasks.
+tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }
+
+[dev-dependencies]
+# `#[tokio::test]` and the multi-thread runtime for the race cases.
+tokio = { version = "1", default-features = false, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+# The suite is a dev-dependency feature of this very crate for `tests/in_process.rs`.
+spot-coordinator = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

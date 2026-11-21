@@ -1,0 +1,30 @@
+[package]
+name = "spot-hardening"
+description = "The hardening baseline (WP-ADM-10.T1, blueprint WS22, ADR-44): a declarative baseline of controls per OS family, deterministic benchmark-style checks over agent facts, remediation through the typed operation catalogue, and a structured compliance report with a diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: a remedy is an `OpId` with typed `ParamValue`s, and a
+# baseline can be validated against a catalogue so a remedy can never name an operation or
+# parameter that does not exist.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# Stable, derive-based serde on every public data type, so a baseline, a report and a policy
+# ride the management API as JSON (or TOML for the baseline).
+serde = { version = "1", features = ["derive"] }
+# The compliance report's structured form.
+serde_json = "1"
+# The baseline is metadata text (TOML), parsed as data, never hand-built.
+toml = "0.9"
+# Typed errors with stable `hardening.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: evaluation is total and deterministic, and a report round-trips through JSON.
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "spot-agent-windows-real"
+description = "Real-system conformance tests for the WP-ADM-05 Windows modules (WP-ADM-05.T3): run on Windows Server 2022/2025, Windows 10 22H2 and Windows 11 through harness/agent-windows/run.ps1"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+publish = false
+license = "Apache-2.0"
+
+# This crate is a harness, not a workspace member: it is Windows-only, it is built and
+# run by run.ps1 on a disposable Windows VM runner, and the
+# Linux workspace build must never pick it up. The empty [workspace] table detaches it
+# from the repository workspace on purpose.
+[workspace]
+
+[dependencies]
+# The Windows module crate under test (services, updates, firewall, users).
+spot-agent-windows = { path = "../../../crates/framework/spot-agent-windows" }
+# The Windows system crate under test (VSS, certificates).
+spot-agent-windows-sys = { path = "../../../crates/framework/spot-agent-windows-sys" }
+# The typed operation catalogue: the operation ids and the Validated argument type the
+# modules are driven with, exactly as the host agent drives them.
+spot-mgmt-ops = { path = "../../../crates/framework/spot-mgmt-ops" }

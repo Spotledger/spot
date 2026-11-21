@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(&\nok(&\nslot_with(\"days\", RangeTest::ContainsRange\n{ start: Value::Date(day(1)), end: Value::Date(day(3)), }), & cat))"
+---
+SELECT $1 AS "one" FROM "slot" AS "x" WHERE ("x"."days" @> daterange($2, $3, '[)')) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Int8(1)
+$2 = Date(2026-11-01)
+$3 = Date(2026-11-03)
+$4 = Int8(0)
+columns = ["one"]
+decode = [Int]

@@ -1,0 +1,57 @@
+# bpm_request_authority codes (WP-BPM-13.T3): the production request authority, the `rg1.` grants
+# it signs, the request store it reads and the command-id shape the edges refuse. One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_request_authority.command_id_reserved"
+class = "Validation"
+summary = "A client-supplied command id is shaped like a request grant: either an `rg1.` grant or the old plain `request:node:attempt` form."
+explanation_key = "error.bpm_request_authority.command_id_reserved"
+params = []
+remedy = "Send an ordinary idempotency key of your own choosing; a grant is issued by the engine and is never supplied by a caller."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_request_authority.identifier_blank"
+class = "Validation"
+summary = "A request grant was asked for with a blank request, step or acting person, so it would bind nothing."
+explanation_key = "error.bpm_request_authority.identifier_blank"
+params = []
+remedy = "Issue the grant from the request step itself, which knows all three, and check that the step received the acting person."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_request_authority.lifetime_too_long"
+class = "Validation"
+summary = "A request grant was asked for with an expiry that is already past or more than fifteen minutes away."
+explanation_key = "error.bpm_request_authority.lifetime_too_long"
+params = []
+remedy = "Pass an expiry in the future and at most fifteen minutes after the issue instant, or take the cap from the port's own issue."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_request_authority.attempt_not_current"
+class = "InvalidState"
+summary = "A request grant was asked for a request or step that is not open, or for an attempt the request store does not hold as the current one."
+explanation_key = "error.bpm_request_authority.attempt_not_current"
+params = []
+remedy = "Issue the grant when the step actually starts its attempt; a finished, cancelled or advanced step issues nothing."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_request_authority.secret_unavailable"
+class = "Internal"
+summary = "The server secret request grants are signed under could not be resolved from the vault, or is shorter than this crate accepts."
+explanation_key = "error.bpm_request_authority.secret_unavailable"
+params = []
+remedy = "Check that the configured secret reference exists in the site's vault and holds at least sixteen bytes of key material, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_request_authority.actor_not_typed"
+class = "Validation"
+summary = "A request grant was asked for with an acting person that is not a typed principal reference (`user:<id>`, `consumer:<id>` or `system`)."
+explanation_key = "error.bpm_request_authority.actor_not_typed"
+params = []
+remedy = "Pass the actor text of the invocation (`actor_text`), which names the kind of principal as well as its id; never a bare id."
+since = "0.1.0"

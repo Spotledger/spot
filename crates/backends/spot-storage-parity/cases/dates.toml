@@ -1,0 +1,359 @@
+# Dates, instants and wall-clock times.
+
+[[case]]
+id = "dat-01-date-range-ends"
+rule = "SEM-DAT-01"
+title = "0001-01-01 and 9999-12-31 round-trip"
+setup = ['a code="t:a" day=date:0001-01-01', 'b code="t:b" day=date:9999-12-31']
+op = "query"
+query = { select = ["day"], order = ["code"] }
+expect = { rows = [["date:0001-01-01"], ["date:9999-12-31"]] }
+
+[[case]]
+id = "dat-01-leap-day"
+rule = "SEM-DAT-01"
+title = "29 February of a leap year round-trips"
+setup = ['a code="t:a" day=date:2024-02-29', 'b code="t:b" day=date:2000-02-29', 'c code="t:c" day=date:1900-03-01']
+op = "query"
+query = { select = ["day"], order = ["code"] }
+expect = { rows = [["date:2024-02-29"], ["date:2000-02-29"], ["date:1900-03-01"]] }
+
+[[case]]
+id = "dat-01-date-load"
+rule = "SEM-DAT-01"
+title = "load returns the date as written"
+setup = ['a code="t:a" day=date:2026-12-31']
+op = "load"
+doc = "a"
+fields = ["day"]
+expect = { rows = [["date:2026-12-31"]] }
+
+[[case]]
+id = "dat-01-date-is-not-shifted-by-the-year-end"
+rule = "SEM-DAT-01"
+title = "dates near a year boundary stay on their day"
+setup = ['a code="t:a" day=date:2025-12-31', 'b code="t:b" day=date:2026-01-01']
+op = "query"
+query = { select = ["day"], order = ["code"] }
+expect = { rows = [["date:2025-12-31"], ["date:2026-01-01"]] }
+
+[[case]]
+id = "dat-02-date-order"
+rule = "SEM-DAT-02"
+title = "dates order chronologically"
+setup = ['a code="t:a" day=date:2026-01-31', 'b code="t:b" day=date:2026-02-01', 'c code="t:c" day=date:2025-12-31', 'd code="t:d" day=date:0001-01-01']
+op = "query"
+query = { select = ["code"], order = ["day"] }
+expect = { rows = [["t:d"], ["t:c"], ["t:a"], ["t:b"]] }
+
+[[case]]
+id = "dat-02-date-range"
+rule = "SEM-DAT-02"
+title = "range comparison on dates"
+setup = ['a code="t:a" day=date:2026-01-31', 'b code="t:b" day=date:2026-02-01', 'c code="t:c" day=date:2025-12-31']
+op = "query"
+query = { select = ["code"], filter = '(and (> day "date:2025-12-31") (<= day "date:2026-02-01"))', order = ["code"] }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "dat-02-date-equality"
+rule = "SEM-DAT-02"
+title = "equality on dates"
+setup = ['a code="t:a" day=date:2026-01-31', 'b code="t:b" day=date:2026-02-01']
+op = "query"
+query = { select = ["code"], filter = '(= day "date:2026-02-01")' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "dat-02-date-min-max"
+rule = "SEM-DAT-02"
+title = "Min and Max of dates"
+setup = ['a code="t:a" day=date:2026-01-31', 'b code="t:b" day=date:2026-02-01', 'c code="t:c"']
+op = "query"
+query = { select = ["(min day)", "(max day)"] }
+expect = { rows = [["date:2026-01-31", "date:2026-02-01"]] }
+
+[[case]]
+id = "dat-03-offset-converted-to-utc"
+rule = "SEM-DAT-03"
+title = "an instant written with +05:00 is returned in UTC"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00+05:00']
+op = "load"
+doc = "a"
+fields = ["seen"]
+expect = { rows = [["dt:2026-01-31T05:00:00Z"]] }
+
+[[case]]
+id = "dat-03-negative-offset"
+rule = "SEM-DAT-03"
+title = "an instant written with -08:00 is returned in UTC on the next day"
+setup = ['a code="t:a" seen=dt:2026-01-31T20:30:00-08:00']
+op = "query"
+query = { select = ["seen"] }
+expect = { rows = [["dt:2026-02-01T04:30:00Z"]] }
+
+[[case]]
+id = "dat-03-offset-crossing-year"
+rule = "SEM-DAT-03"
+title = "an offset that moves the instant across a year boundary"
+setup = ['a code="t:a" seen=dt:2026-01-01T02:00:00+05:30']
+op = "query"
+query = { select = ["seen"] }
+expect = { rows = [["dt:2025-12-31T20:30:00Z"]] }
+
+[[case]]
+id = "dat-03-instant-load-returns-utc"
+rule = "SEM-DAT-03"
+title = "load returns an instant with the UTC offset"
+setup = ['a code="t:a" seen=dt:2026-06-15T12:00:00+02:00']
+op = "load"
+doc = "a"
+fields = ["seen"]
+expect = { rows = [["dt:2026-06-15T10:00:00Z"]] }
+
+[[case]]
+id = "dat-04-microsecond-roundtrip"
+rule = "SEM-DAT-04"
+title = "an instant with 6 fractional digits round-trips exactly"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00.123456Z']
+op = "query"
+query = { select = ["seen"] }
+expect = { rows = [["dt:2026-01-31T10:00:00.123456Z"]] }
+
+[[case]]
+id = "dat-04-range-ends"
+rule = "SEM-DAT-04"
+title = "the first and the last instant of the range round-trip"
+setup = ['a code="t:a" seen=dt:0001-01-01T00:00:00Z', 'b code="t:b" seen=dt:9999-12-31T23:59:59.999999Z']
+op = "query"
+query = { select = ["seen"], order = ["code"] }
+expect = { rows = [["dt:0001-01-01T00:00:00Z"], ["dt:9999-12-31T23:59:59.999999Z"]] }
+
+[[case]]
+id = "dat-04-epoch-neighbours"
+rule = "SEM-DAT-04"
+title = "one microsecond either side of the epoch"
+setup = ['a code="t:a" seen=dt:1970-01-01T00:00:00.000001Z', 'b code="t:b" seen=dt:1969-12-31T23:59:59.999999Z', 'c code="t:c" seen=dt:1970-01-01T00:00:00Z']
+op = "query"
+query = { select = ["seen"], order = ["code"] }
+expect = { rows = [["dt:1970-01-01T00:00:00.000001Z"], ["dt:1969-12-31T23:59:59.999999Z"], ["dt:1970-01-01T00:00:00Z"]] }
+
+[[case]]
+id = "dat-04-microsecond-ordering"
+rule = "SEM-DAT-04"
+title = "instants one microsecond apart order correctly"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00.000002Z', 'b code="t:b" seen=dt:2026-01-31T10:00:00.000001Z', 'c code="t:c" seen=dt:2026-01-31T10:00:00Z']
+op = "query"
+query = { select = ["code"], order = ["seen"] }
+expect = { rows = [["t:c"], ["t:b"], ["t:a"]] }
+
+[[case]]
+id = "dat-04-microsecond-equality"
+rule = "SEM-DAT-04"
+title = "equality distinguishes one microsecond"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00.000001Z', 'b code="t:b" seen=dt:2026-01-31T10:00:00Z']
+op = "query"
+query = { select = ["code"], filter = '(= seen "dt:2026-01-31T10:00:00.000001Z")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "dat-05-sub-microsecond-instant"
+rule = "SEM-DAT-05"
+title = "an instant with 7 and 9 fractional digits (open: truncate, round or refuse)"
+op = "write"
+write = ['insert a code="t:a" seen=dt:2026-01-31T10:00:00.1234565Z']
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-05-sub-microsecond-read-back"
+rule = "SEM-DAT-05"
+title = "what a 9-digit instant reads back as (open)"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00.123456789Z']
+op = "load"
+doc = "a"
+fields = ["seen"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-05-sub-microsecond-rounds-up-to-the-next-second"
+rule = "SEM-DAT-05"
+title = "an instant a half microsecond short of the next second (open)"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00.9999995Z']
+op = "load"
+doc = "a"
+fields = ["seen"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-06-instants-compare-by-moment"
+rule = "SEM-DAT-06"
+title = "the same moment written with two offsets is equal"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00+05:00', 'b code="t:b" seen=dt:2026-01-31T05:00:00Z', 'c code="t:c" seen=dt:2026-01-31T10:00:00Z']
+op = "query"
+query = { select = ["code"], filter = '(= seen "dt:2026-01-31T00:00:00-05:00")' }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "dat-06-instants-order-by-moment"
+rule = "SEM-DAT-06"
+title = "ordering uses the moment, not the written clock"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00+05:00', 'b code="t:b" seen=dt:2026-01-31T06:00:00Z', 'c code="t:c" seen=dt:2026-01-31T04:30:00Z']
+op = "query"
+query = { select = ["code"], order = ["seen"] }
+expect = { rows = [["t:c"], ["t:a"], ["t:b"]] }
+
+[[case]]
+id = "dat-06-instant-range"
+rule = "SEM-DAT-06"
+title = "a range over instants written with offsets"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00+05:00', 'b code="t:b" seen=dt:2026-01-31T06:00:00Z', 'c code="t:c" seen=dt:2026-01-31T04:30:00Z']
+op = "query"
+query = { select = ["code"], filter = '(and (>= seen "dt:2026-01-31T05:00:00Z") (< seen "dt:2026-01-31T06:00:00Z"))' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "dat-06-min-max"
+rule = "SEM-DAT-06"
+title = "Min and Max of instants"
+setup = ['a code="t:a" seen=dt:2026-01-31T10:00:00+05:00', 'b code="t:b" seen=dt:2026-01-31T06:00:00Z']
+op = "query"
+query = { select = ["(min seen)", "(max seen)"] }
+expect = { rows = [["dt:2026-01-31T05:00:00Z", "dt:2026-01-31T06:00:00Z"]] }
+
+[[case]]
+id = "dat-07-time-ends"
+rule = "SEM-DAT-07"
+title = "midnight and the last microsecond of the day round-trip"
+setup = ['a code="t:a" clock=time:00:00:00', 'b code="t:b" clock=time:23:59:59.999999', 'c code="t:c" clock=time:12:30:45.5']
+op = "query"
+query = { select = ["clock"], order = ["code"] }
+expect = { rows = [["time:00:00:00"], ["time:23:59:59.999999"], ["time:12:30:45.500000"]] }
+
+[[case]]
+id = "dat-07-time-load"
+rule = "SEM-DAT-07"
+title = "load returns the time as written"
+setup = ['a code="t:a" clock=time:09:05:03.000001']
+op = "load"
+doc = "a"
+fields = ["clock"]
+expect = { rows = [["time:09:05:03.000001"]] }
+
+[[case]]
+id = "dat-07-time-order"
+rule = "SEM-DAT-07"
+title = "times order from midnight to the last microsecond"
+setup = ['a code="t:a" clock=time:23:59:59.999999', 'b code="t:b" clock=time:00:00:00', 'c code="t:c" clock=time:12:00:00', 'd code="t:d" clock=time:00:00:00.000001']
+op = "query"
+query = { select = ["code"], order = ["clock"] }
+expect = { rows = [["t:b"], ["t:d"], ["t:c"], ["t:a"]] }
+
+[[case]]
+id = "dat-07-time-range"
+rule = "SEM-DAT-07"
+title = "range comparison on times"
+setup = ['a code="t:a" clock=time:08:00:00', 'b code="t:b" clock=time:12:00:00', 'c code="t:c" clock=time:18:00:00']
+op = "query"
+query = { select = ["code"], filter = '(and (>= clock "time:12:00:00") (< clock "time:18:00:00"))' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "dat-07-time-equality"
+rule = "SEM-DAT-07"
+title = "equality on times"
+setup = ['a code="t:a" clock=time:08:00:00', 'b code="t:b" clock=time:08:00:00.000001']
+op = "query"
+query = { select = ["code"], filter = '(= clock "time:08:00:00")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "dat-08-sub-microsecond-time"
+rule = "SEM-DAT-08"
+title = "a wall-clock time with 9 fractional digits (open: truncate, round or refuse)"
+setup = ['a code="t:a" clock=time:12:00:00.123456789']
+op = "load"
+doc = "a"
+fields = ["clock"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-08-time-rounds-to-midnight"
+rule = "SEM-DAT-08"
+title = "a time half a microsecond short of 24:00 (open)"
+setup = ['a code="t:a" clock=time:23:59:59.9999995']
+op = "load"
+doc = "a"
+fields = ["clock"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-09-date-vs-instant"
+rule = "SEM-DAT-09"
+title = "a date field compared with an instant literal is refused"
+setup = ['a code="t:a" day=date:2026-01-31']
+op = "query"
+query = { select = ["code"], filter = '(= day "dt:2026-01-31T00:00:00Z")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "dat-09-instant-vs-date"
+rule = "SEM-DAT-09"
+title = "an instant field compared with a date literal is refused"
+setup = ['a code="t:a" seen=dt:2026-01-31T00:00:00Z']
+op = "query"
+query = { select = ["code"], filter = '(< seen "date:2026-02-01")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "dat-09-time-vs-instant"
+rule = "SEM-DAT-09"
+title = "a time field compared with an instant literal is refused"
+setup = ['a code="t:a" clock=time:12:00:00']
+op = "query"
+query = { select = ["code"], filter = '(> clock "dt:2026-01-31T00:00:00Z")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "dat-09-date-vs-text"
+rule = "SEM-DAT-09"
+title = "a date field compared with text is refused"
+setup = ['a code="t:a" day=date:2026-01-31']
+op = "query"
+query = { select = ["code"], filter = '(= day "t:2026-01-31")' }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "qry-05-date-field-vs-instant-field"
+rule = "SEM-QRY-05"
+title = "a date field compared with an instant field (open: refused or left to the database)"
+setup = ['a code="t:a" day=date:2026-01-31 seen=dt:2026-01-31T00:00:00Z']
+op = "query"
+query = { select = ["code"], filter = "(= day seen)" }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-10-date-plus-integer"
+rule = "SEM-DAT-10"
+title = "date + 1 (open: refused or allowed)"
+setup = ['a code="t:a" day=date:2026-01-31']
+op = "query"
+query = { select = ["(+ day 1)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-10-instant-plus-integer"
+rule = "SEM-DAT-10"
+title = "instant + 1 (open)"
+setup = ['a code="t:a" seen=dt:2026-01-31T00:00:00Z']
+op = "query"
+query = { select = ["(+ seen 1)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "dat-10-date-minus-date"
+rule = "SEM-DAT-10"
+title = "date - date (open)"
+setup = ['a code="t:a" day=date:2026-01-31']
+op = "query"
+query = { select = ["(- day day)"] }
+expect = { same_as_reference = true }

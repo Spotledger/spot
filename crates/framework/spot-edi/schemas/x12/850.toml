@@ -1,0 +1,151 @@
+# A minimal X12 850 purchase order (our own definition, WP-INT-06.T1).
+id = "x12_850"
+syntax = "x12"
+version = "004010"
+title = "Purchase order"
+functional_group = "PO"
+
+[[segment]]
+tag = "ST"
+min = 1
+max = 1
+[[segment.element]]
+name = "set_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "BEG"
+min = 1
+max = 1
+[[segment.element]]
+name = "purpose"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "order_type"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "order_number"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "date"
+kind = "date"
+min = 0
+max = 1
+
+[[segment]]
+tag = "REF"
+min = 0
+max = 0
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "value"
+kind = "text"
+min = 0
+max = 1
+
+[[segment]]
+tag = "PER"
+min = 0
+max = 3
+[[segment.element]]
+name = "function"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "name"
+kind = "text"
+min = 0
+max = 1
+
+[[segment]]
+tag = "N1"
+min = 0
+max = 200
+[[segment.element]]
+name = "entity"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "name"
+kind = "text"
+min = 0
+max = 1
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "identification"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "PO1"
+min = 0
+max = 0
+[[segment.element]]
+name = "line"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "quantity"
+kind = "decimal"
+min = 0
+max = 1
+[[segment.element]]
+name = "unit"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "unit_price"
+kind = "decimal"
+min = 0
+max = 1
+
+[[segment]]
+tag = "CTT"
+min = 0
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 0
+max = 1
+
+[[segment]]
+tag = "SE"
+min = 1
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1

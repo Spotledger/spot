@@ -1,0 +1,49 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.badge_row",
+      "origin": "app:sample",
+      "props": [
+        {
+          "name": "n",
+          "type": "int"
+        }
+      ],
+      "body": {
+        "node": "row",
+        "children": [
+          {
+            "node": "control",
+            "control": "badge",
+            "value": "doc.n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sample.summary",
+      "origin": "app:sample",
+      "props": [
+        {
+          "name": "items",
+          "type": "list"
+        }
+      ],
+      "body": {
+        "node": "repeat",
+        "over": "items",
+        "max": 10,
+        "body": {
+          "node": "use",
+          "component": "sample.badge_row",
+          "props": {
+            "n": "len(doc.items)"
+          }
+        }
+      }
+    }
+  ]
+}

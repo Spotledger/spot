@@ -1,0 +1,15 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.reports",
+      "origin": "app:sample",
+      "label": "Reports",
+      "icon": "chart",
+      "slot": "shell.sidebar",
+      "navigate_url": "/sample/reports/summary"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# Help for the file error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "file.scan_failed"
+what_happened = "The file.scan check for this site failed, so the upload was not stored."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry later, or ask an administrator to check the file.scan seam.", "If it keeps happening, tell your administrator and quote the code file.scan_failed."]
+audience = "admin"
+
+[[help]]
+code = "file.store_failed"
+what_happened = "The file could not be stored at this time; the same upload may succeed on a retry."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry the upload; if it keeps failing, tell an administrator with the request id.", "If it keeps happening, tell your administrator and quote the code file.store_failed."]
+audience = "admin"
+
+[[help]]
+code = "file.too_large"
+what_happened = "The upload exceeds the size limit set for this site and nothing was stored."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Upload a smaller file, or ask an administrator to raise the upload limit.", "If it keeps happening, tell your administrator and quote the code file.too_large."]
+audience = "user"
+
+[[help]]
+code = "file.virus_detected"
+what_happened = "The file.scan check rejected the upload and nothing was stored."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Do not upload this file; scan it on your device.", "If it keeps happening, tell your administrator and quote the code file.virus_detected."]
+audience = "user"

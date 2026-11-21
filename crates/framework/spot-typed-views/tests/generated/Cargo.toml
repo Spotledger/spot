@@ -1,0 +1,48 @@
+[package]
+name = "spot-typed-views-generated-test"
+description = "The compile test (WP-MET-04.T1): the generated views built at build time and exercised against the StubHost"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.98.1"
+
+# Detached from the spot workspace on purpose: a nested integration-test target cannot
+# `include!(concat!(env!("OUT_DIR"), ...))` the source its own build.rs writes at build
+# time, so the test binary is its own crate with its own build script. Kept out of the
+# root workspace's members (an empty workspace table), it builds only when it (or the
+# fixture definitions) change; the parent crate's tests still cover everything else (the
+# snapshot of the same generated source, the error tests, the unit tests).
+[workspace]
+
+[lib]
+path = "lib.rs"
+
+[build-dependencies]
+# The generator under test: build_views loads the fixture definitions and emits the
+# source into OUT_DIR, printing cargo:rerun-if-changed for every fixture TOML.
+spot-typed-views = { path = "../../" }
+
+[dependencies]
+# The generated source's imports: the app API's types, Decimal in its prelude.
+spot-app-api = { path = "../../../../../contracts/app-api" }
+# The `Value` and `Name` re-exports the generated source addresses directly.
+spot-storage-contract = { path = "../../../../../contracts/storage" }
+# The `DocTypeDef`s the StubHost validates against, from the same fixtures. (`spot-meta`
+# also rides in as a build dependency of `spot-typed-views` above.)
+spot-meta = { path = "../../../../../crates/framework/spot-meta" }
+
+[dev-dependencies]
+# The async StubHost calls (`DocumentService::create`/`load` are async); the
+# spot-meta/spot-app-api dev-dependency precedent, macros+rt only.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+# The workspace lints, spelled out because this crate sits outside the workspace.
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

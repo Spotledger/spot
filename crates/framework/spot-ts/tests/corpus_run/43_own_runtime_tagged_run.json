@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "tagged_run",
+  "args": null,
+  "expect": "A1B2"
+}

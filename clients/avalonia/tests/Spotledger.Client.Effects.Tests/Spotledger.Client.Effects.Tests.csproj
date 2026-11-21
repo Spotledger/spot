@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-12.T2: the conformance runner and the protocol's edge cases. The corpus itself
+       lives in the Rust crate (crates/framework/spot-form-effects/conformance/forms) and is
+       found by walking up from the test assembly; it is never copied here, so the desktop
+       test host and the Rust implementation read the same bytes. The TOML reader is local to
+       this project on purpose: the corpus is TOML and the client adds no dependency for it. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Client.Effects/Spotledger.Client.Effects.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,455 @@
+# The field permission matrix, read by tests/fields.rs (one test reads this file).
+#
+# A row names a principal (as in matrix.toml), the DocType and field, the document facts and
+# the expectation: the `level` (`hidden`, `masked`, `read`, `read_reveal`), the `flags` that
+# are true (`create`, `update`, `report`, `reveal`, `reveal_bulk`; the rest are false) and the
+# reason `kinds` that spoke (sorted, de-duplicated, `assignment` left out). The groups, masks and
+# grants are in tests/common/mod.rs.
+
+version = 1
+crate = "spot-permissions"
+
+[[scenarios]]
+name = "an unprotected field follows read"
+principal = { user = "dave", roles = ["Reader"] }
+doctype = "sales_invoice"
+field = "status"
+level = "read"
+flags = []
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "an unprotected field follows write"
+principal = { user = "dave", roles = ["Writer"] }
+doctype = "sales_invoice"
+field = "status"
+level = "read"
+flags = ["update"]
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "an unprotected field follows create"
+principal = { user = "dave", roles = ["Creator"] }
+doctype = "sales_invoice"
+field = "status"
+level = "read"
+flags = ["create"]
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "an unprotected field follows report"
+principal = { user = "dave", roles = ["Reporter"] }
+doctype = "sales_invoice"
+field = "status"
+level = "read"
+flags = ["report"]
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "an unprotected field is hidden without read"
+principal = { user = "dave", roles = [] }
+doctype = "sales_invoice"
+field = "status"
+level = "hidden"
+flags = []
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "a posted invoice's field needs update_posted"
+principal = { user = "dave", roles = ["Writer"] }
+doctype = "sales_invoice"
+field = "status"
+state = "posted"
+level = "read"
+flags = []
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "update_posted opens a posted invoice's field"
+principal = { user = "dave", roles = ["Editor"] }
+doctype = "sales_invoice"
+field = "status"
+state = "posted"
+level = "read"
+flags = ["update"]
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "a protected group is closed by default"
+principal = { user = "dave", roles = ["Reader"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["field_closed"]
+
+[[scenarios]]
+name = "two groups, none granted: closed"
+principal = { user = "dave", roles = ["Reader"] }
+doctype = "sales_invoice"
+field = "total"
+level = "hidden"
+flags = []
+kinds = ["group_no_grant"]
+
+[[scenarios]]
+name = "a cost field is closed to a plain reader"
+principal = { user = "dave", roles = ["Reader"] }
+doctype = "item_master"
+field = "cost_price"
+level = "hidden"
+flags = []
+kinds = ["field_closed"]
+
+[[scenarios]]
+name = "a field with only a field grant is protected"
+principal = { user = "dave", roles = ["Reader"] }
+doctype = "sales_invoice"
+field = "number"
+level = "hidden"
+flags = []
+kinds = ["field_closed"]
+
+[[scenarios]]
+name = "a plain Writer still sees nothing of a protected group"
+principal = { user = "dave", roles = ["Writer"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["field_closed"]
+
+[[scenarios]]
+name = "a group read grant opens the group"
+principal = { user = "dave", roles = ["Reader", "NotesRead"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a field grant opens the field"
+principal = { user = "dave", roles = ["Reader", "NumberRead"] }
+doctype = "sales_invoice"
+field = "number"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a cost read grant"
+principal = { user = "dave", roles = ["Reader", "CostRead"] }
+doctype = "item_master"
+field = "cost_price"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a field right never exceeds the DocType read"
+principal = { user = "dave", roles = ["NotesRead"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["doctype_cap", "field_grant"]
+
+[[scenarios]]
+name = "update implies read"
+principal = { user = "dave", roles = ["Writer", "NotesUpdate"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "read"
+flags = ["update"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "update is capped by the DocType write"
+principal = { user = "dave", roles = ["Reader", "NotesUpdate"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "read"
+flags = []
+kinds = ["doctype_cap", "field_grant"]
+
+[[scenarios]]
+name = "create alone is not read"
+principal = { user = "dave", roles = ["Creator", "CostCreate"] }
+doctype = "item_master"
+field = "cost_price"
+level = "hidden"
+flags = ["create"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "report alone is not read"
+principal = { user = "dave", roles = ["Reporter", "CostReport"] }
+doctype = "item_master"
+field = "cost_price"
+level = "hidden"
+flags = ["report"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "report is capped by the DocType report right"
+principal = { user = "dave", roles = ["Reader", "CostReport"] }
+doctype = "item_master"
+field = "cost_price"
+level = "hidden"
+flags = []
+kinds = ["doctype_cap", "field_grant"]
+
+[[scenarios]]
+name = "read_masked shows the masked form"
+principal = { user = "dave", roles = ["Reader", "BankMasked"] }
+doctype = "sales_invoice"
+field = "bank_account"
+level = "masked"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "reveal implies read_masked"
+principal = { user = "dave", roles = ["Reader", "BankReveal"] }
+doctype = "sales_invoice"
+field = "bank_account"
+level = "masked"
+flags = ["reveal"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "read with reveal sees and reveals"
+principal = { user = "dave", roles = ["Reader", "BankReadReveal"] }
+doctype = "sales_invoice"
+field = "bank_account"
+level = "read_reveal"
+flags = ["reveal"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "reveal_bulk implies reveal"
+principal = { user = "dave", roles = ["Reader", "BankBulk"] }
+doctype = "sales_invoice"
+field = "bank_account"
+level = "masked"
+flags = ["reveal", "reveal_bulk"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "both groups granted: read"
+principal = { user = "dave", roles = ["Reader", "FinRead"] }
+doctype = "sales_invoice"
+field = "total"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "one group missing closes the field"
+principal = { user = "dave", roles = ["Reader", "FinFinancialOnly"] }
+doctype = "sales_invoice"
+field = "total"
+level = "hidden"
+flags = []
+kinds = ["field_grant", "group_no_grant"]
+
+[[scenarios]]
+name = "masked in both groups"
+principal = { user = "dave", roles = ["Reader", "FinMasked"] }
+doctype = "sales_invoice"
+field = "total"
+level = "masked"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "read in one group, masked in the other: masked"
+principal = { user = "dave", roles = ["Reader", "FinMix"] }
+doctype = "sales_invoice"
+field = "total"
+level = "masked"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "two roles cover the two groups"
+principal = { user = "dave", roles = ["Reader", "FinFinancialOnly", "CreditRead"] }
+doctype = "sales_invoice"
+field = "total"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "an explicit deny beats a grant of another role"
+principal = { user = "dave", roles = ["Reader", "NotesRead", "NotesDeny"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["field_deny", "field_grant"]
+
+[[scenarios]]
+name = "a deny in one assignment beats a grant in another"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader", "NotesRead"] }, { id = "b", roles = ["NotesDeny"] }] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["field_deny", "field_grant"]
+
+[[scenarios]]
+name = "denying read leaves the masked form"
+principal = { user = "dave", roles = ["Reader", "NotesRead", "NotesDenyRead"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "masked"
+flags = []
+kinds = ["field_deny", "field_grant"]
+
+[[scenarios]]
+name = "a deny beats the Tenant Administrator"
+principal = { user = "dave", roles = ["Tenant Administrator", "NotesDeny"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+level = "hidden"
+flags = []
+kinds = ["field_deny", "field_grant"]
+
+[[scenarios]]
+name = "own record: the creator reads"
+principal = { user = "dave", roles = ["Reader", "OwnNotes"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+created_by = "dave"
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "own record: someone else's document stays closed"
+principal = { user = "dave", roles = ["Reader", "OwnNotes"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+created_by = "erin"
+level = "hidden"
+flags = []
+kinds = ["condition_failed", "field_closed"]
+
+[[scenarios]]
+name = "a draft condition holds on a draft"
+principal = { user = "dave", roles = ["Writer", "NotesUpdateDraft"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+state = "draft"
+level = "read"
+flags = ["update"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a draft condition fails on another status"
+principal = { user = "dave", roles = ["Writer", "NotesUpdateDraft"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+state = "approved"
+level = "hidden"
+flags = []
+kinds = ["condition_failed", "field_closed"]
+
+[[scenarios]]
+name = "the Tenant Administrator holds every field right"
+principal = { user = "dave", roles = ["Tenant Administrator"] }
+doctype = "sales_invoice"
+field = "total"
+level = "read_reveal"
+flags = ["create", "update", "report", "reveal", "reveal_bulk"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "the Tenant Administrator on a cost field"
+principal = { user = "dave", roles = ["Tenant Administrator"] }
+doctype = "item_master"
+field = "cost_price"
+level = "read_reveal"
+flags = ["create", "update", "report", "reveal", "reveal_bulk"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "the system sees everything"
+principal = { user = "dave", is_system = true }
+doctype = "sales_invoice"
+field = "bank_account"
+level = "read_reveal"
+flags = ["create", "update", "report", "reveal", "reveal_bulk"]
+kinds = ["system"]
+
+[[scenarios]]
+name = "a posted invoice's protected field needs update_posted"
+principal = { user = "dave", roles = ["Writer", "NotesUpdate"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+state = "posted"
+level = "read"
+flags = []
+kinds = ["doctype_cap", "field_grant"]
+
+[[scenarios]]
+name = "update_posted lets a posted invoice's field change"
+principal = { user = "dave", roles = ["Editor", "NotesUpdate"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+state = "posted"
+level = "read"
+flags = ["update"]
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a cancelled invoice's field is read only"
+principal = { user = "dave", roles = ["Writer", "NotesUpdate"] }
+doctype = "sales_invoice"
+field = "internal_notes"
+state = "cancelled"
+level = "read"
+flags = []
+kinds = ["doctype_cap", "field_grant"]
+
+[[scenarios]]
+name = "an assignment outside the document's scope shows nothing"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader", "NotesRead"], scope = [{ field_or_link_doctype = "sales_invoice.customer", allowed = ["customer_1"] }] }] }
+doctype = "sales_invoice"
+field = "internal_notes"
+values = { customer = "customer_2" }
+level = "hidden"
+flags = []
+kinds = []
+
+[[scenarios]]
+name = "an assignment inside the document's scope shows the field"
+principal = { user = "dave", assignments = [{ id = "a", roles = ["Reader", "NotesRead"], scope = [{ field_or_link_doctype = "sales_invoice.customer", allowed = ["customer_1"] }] }] }
+doctype = "sales_invoice"
+field = "internal_notes"
+values = { customer = "customer_1" }
+level = "read"
+flags = []
+kinds = ["field_grant"]
+
+[[scenarios]]
+name = "a share reads an unprotected field"
+principal = { user = "sam", roles = [] }
+doctype = "sales_invoice"
+field = "status"
+id = "doc_a"
+level = "read"
+flags = []
+kinds = ["follows_doctype"]
+
+[[scenarios]]
+name = "a share does not open a protected group"
+principal = { user = "sam", roles = [] }
+doctype = "sales_invoice"
+field = "internal_notes"
+id = "doc_a"
+level = "hidden"
+flags = []
+kinds = ["field_closed"]

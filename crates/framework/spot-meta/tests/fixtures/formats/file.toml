@@ -1,0 +1,8 @@
+name = "file"
+label = "File"
+title_field = "file_name"
+
+[[fields]]
+name = "file_name"
+type = "text"
+max_chars = 140

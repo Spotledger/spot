@@ -1,0 +1,45 @@
+{
+  "actor": {
+    "actor": "system",
+    "component": "scheduler",
+    "on_behalf_of": null
+  },
+  "at": 1760000100000000,
+  "changed_fields": [
+    "items",
+    "notes"
+  ],
+  "command_id": null,
+  "diff": [
+    {
+      "after": {
+        "digest": {
+          "digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "len": 4096
+        }
+      },
+      "before": null,
+      "path": "notes"
+    },
+    {
+      "after": {
+        "int": 12
+      },
+      "before": {
+        "int": 10
+      },
+      "path": "items[id=0192f1c0-0000-7000-8000-000000000009].qty"
+    }
+  ],
+  "diff_digest": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+  "doctype": "purchase_order",
+  "hidden_changes": true,
+  "id": "0192f1c0-0000-7000-8000-000000000003",
+  "operation": {
+    "method": "recalculate_totals"
+  },
+  "site": "acme.spotledger.app",
+  "source": "job",
+  "truncated": true,
+  "version": 9
+}

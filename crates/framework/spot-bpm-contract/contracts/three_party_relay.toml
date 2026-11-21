@@ -1,0 +1,188 @@
+# Spotledger process contract (spot-bpm-contract). Canonical: one scalar per line, a fixed key order.
+id = "three_party_relay"
+version = 1
+title = "Order through a broker"
+
+[[participants]]
+role = "buyer"
+kind = "tenant"
+
+[[participants]]
+role = "broker"
+kind = "tenant"
+
+[[participants]]
+role = "supplier"
+kind = "external"
+
+[[messages]]
+name = "order"
+topic = "shop.order"
+schema_version = 1
+from = "buyer"
+to = "broker"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "amount_minor"
+kind = "integer"
+required = true
+
+[[messages]]
+name = "forward"
+topic = "shop.order"
+schema_version = 1
+from = "broker"
+to = "supplier"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "amount_minor"
+kind = "integer"
+required = true
+
+[[messages]]
+name = "confirm"
+topic = "shop.confirm"
+schema_version = 1
+from = "supplier"
+to = "broker"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "delivery_week"
+kind = "integer"
+required = true
+
+[[messages]]
+name = "decline"
+topic = "shop.confirm"
+schema_version = 1
+from = "supplier"
+to = "broker"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "reason"
+kind = "string"
+required = false
+max_len = 200
+
+[[messages]]
+name = "answer"
+topic = "shop.answer"
+schema_version = 1
+from = "broker"
+to = "buyer"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "delivery_week"
+kind = "integer"
+required = true
+
+[[messages]]
+name = "refusal"
+topic = "shop.answer"
+schema_version = 1
+from = "broker"
+to = "buyer"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "reason"
+kind = "string"
+required = false
+max_len = 200
+
+[[order]]
+by = "buyer"
+next = "order"
+
+[[order]]
+by = "broker"
+after = "order"
+next = "forward"
+
+[[order]]
+by = "supplier"
+after = "forward"
+next = "confirm"
+
+[[order]]
+by = "supplier"
+after = "forward"
+next = "decline"
+
+[[order]]
+by = "broker"
+after = "confirm"
+next = "answer"
+
+[[order]]
+by = "broker"
+after = "decline"
+next = "refusal"
+
+[[order]]
+by = "buyer"
+after = "answer"
+outcome = "ordered"
+
+[[order]]
+by = "buyer"
+after = "refusal"
+outcome = "rejected"
+
+[[outcomes]]
+name = "ordered"
+kind = "completed"
+
+[[outcomes]]
+name = "rejected"
+kind = "failed"
+
+[[timeouts]]
+message = "forward"
+by = "supplier"
+seconds = 86400
+
+[[timeouts]]
+message = "confirm"
+by = "broker"
+seconds = 86400
+
+[[timeouts]]
+message = "answer"
+by = "buyer"
+seconds = 172800

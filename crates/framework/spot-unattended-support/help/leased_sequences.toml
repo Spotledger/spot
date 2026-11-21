@@ -1,0 +1,37 @@
+# Help for the leased_sequences error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "leased_sequences.invalid_count"
+what_happened = "The number of ids asked for in one request is not valid."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Request at least one number.", "If it keeps happening, tell your administrator and quote the code leased_sequences.invalid_count."]
+audience = "user"
+
+[[help]]
+code = "leased_sequences.lease_exhausted"
+what_happened = "This branch has used up the numbers it was given for the series."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Lease another range from the hub and install it before naming another document of this series.", "If it keeps happening, tell your administrator and quote the code leased_sequences.lease_exhausted."]
+audience = "admin"
+
+[[help]]
+code = "leased_sequences.lease_refused"
+what_happened = "The new block of numbers offered to this branch was refused."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Keep the held lease; ask the hub for a new range and install it only when it lies above the held range.", "If it keeps happening, tell your administrator and quote the code leased_sequences.lease_refused."]
+audience = "user"
+
+[[help]]
+code = "leased_sequences.set_next_refused"
+what_happened = "A branch tried to choose the next number of a series, which only the hub may do."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Request a range from the hub; only the hub issues a series' numbers.", "If it keeps happening, tell your administrator and quote the code leased_sequences.set_next_refused."]
+audience = "user"
+
+[[help]]
+code = "leased_sequences.store"
+what_happened = "The last number given out for this series could not be saved, so no number was issued."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the branch series store and retry the allocation before naming the document.", "If it keeps happening, tell your administrator and quote the code leased_sequences.store."]
+audience = "admin"

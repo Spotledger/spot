@@ -1,0 +1,13 @@
+{
+  "entity_schema": 3,
+  "image": {
+    "currency": "PKR",
+    "customer": "0192f1c0-0000-7000-8000-0000000000a1",
+    "grand_total": "1250.50",
+    "id": "0192f1c0-0000-7000-8000-000000000001",
+    "posting_date": "2026-11-02",
+    "status": "draft",
+    "version": 1
+  },
+  "op": "insert"
+}

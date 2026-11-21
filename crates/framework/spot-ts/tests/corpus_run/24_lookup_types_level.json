@@ -1,0 +1,6 @@
+{
+  "case": "lookup_types",
+  "entry": "level",
+  "args": "write",
+  "expect": 2
+}

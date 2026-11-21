@@ -1,0 +1,61 @@
+# replay codes: the `replay.*` vocabulary of spot-replay (WP-MIG-06.T2). One [[entry]] per code;
+# see crates/framework/spot-errors/README.md.
+#
+# The replay engine raises its own typed errors (`spot_replay::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy states
+# what an operator does about it. A divergence a replay finds, and a divergence a declared
+# behaviour entry explains, are part of the replay report, not errors.
+
+[[entry]]
+code = "replay.invalid_input"
+class = "none"
+summary = "Invalid {what}: {reason}."
+explanation_key = "error.replay.invalid_input"
+params = ["reason", "what"]
+remedy = "Correct the named argument and run the replay again."
+since = "0.1.0"
+
+[[entry]]
+code = "replay.journal_failed"
+class = "none"
+summary = "Reading the journal failed: {reason}."
+explanation_key = "error.replay.journal_failed"
+params = ["reason"]
+remedy = "Check the event journal and its reader, then replay again; the live site is untouched."
+since = "0.1.0"
+
+[[entry]]
+code = "replay.execution_failed"
+class = "none"
+summary = "Re-executing {doctype} {record} failed: {reason}."
+explanation_key = "error.replay.execution_failed"
+params = ["doctype", "reason", "record"]
+remedy = "Read the reason, fix the clone or the new release, and replay again."
+since = "0.1.0"
+
+[[entry]]
+code = "replay.not_held"
+class = "none"
+summary = "Site {site} is not held ({state}), so replay refuses to run."
+explanation_key = "error.replay.not_held"
+params = ["site", "state"]
+remedy = "Begin the migration's side-effect hold before replaying, so nothing can leave the clone."
+since = "0.1.0"
+
+[[entry]]
+code = "replay.effect_escaped"
+class = "none"
+summary = "External effect {key} of class {class} would leave during replay."
+explanation_key = "error.replay.effect_escaped"
+params = ["class", "key"]
+remedy = "Nothing was sent; a replay never transmits, so remove the transmission from the replayed path."
+since = "0.1.0"
+
+[[entry]]
+code = "replay.not_clone"
+class = "none"
+summary = "Target {label} is not the clone."
+explanation_key = "error.replay.not_clone"
+params = ["label"]
+remedy = "Replay only against the scratch clone a rehearsal created, never the live database."
+since = "0.1.0"

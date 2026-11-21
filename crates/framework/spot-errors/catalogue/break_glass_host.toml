@@ -1,0 +1,65 @@
+# break_glass_host codes (WP-ADM-11.T2): the customer side of break-glass. One [[entry]] per code.
+# No message carries a value: only fixed sentences.
+
+[[entry]]
+code = "break_glass_host.settings_invalid"
+class = "none"
+summary = "The [services.break_glass] table has an unknown key or a value out of bounds, so the break-glass service does not start."
+explanation_key = "error.break_glass_host.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled, sweep_secs, retention_days, max_recording_bytes and page_max exist."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.not_wired"
+class = "none"
+summary = "A part the break-glass service needs (the audit chain, the file store, the sealer, the duty check or the loaded registry) is not wired, so it answers nothing and authorises nothing."
+explanation_key = "error.break_glass_host.not_wired"
+params = []
+remedy = "Enable the services that provide the missing part and restart the site; the readiness report names it."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.permission_denied"
+class = "none"
+summary = "The caller does not hold the security administrator (or auditor) duty, or the duty could not be checked."
+explanation_key = "error.break_glass_host.permission_denied"
+params = []
+remedy = "Ask a security administrator of the tenant; a failing duty check is a refusal, not an allow."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.not_found"
+class = "none"
+summary = "No such break-glass session in this tenant (a session of another tenant answers the same)."
+explanation_key = "error.break_glass_host.not_found"
+params = []
+remedy = "Check the session id in the list of sessions."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.store_failed"
+class = "none"
+summary = "The tenant's object store refused or failed an append-only write or a read of a break-glass object."
+explanation_key = "error.break_glass_host.store_failed"
+params = []
+remedy = "Check the file store of the site, then retry; nothing was overwritten."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.seal_failed"
+class = "none"
+summary = "A recording could not be sealed, or a sealed recording could not be opened under its tenant and session."
+explanation_key = "error.break_glass_host.seal_failed"
+params = []
+remedy = "Check the secrets service of the site; a recording moved to another session does not open."
+since = "0.1.0"
+
+[[entry]]
+code = "break_glass_host.invalid"
+class = "none"
+summary = "An input of a break-glass operation is out of bounds (a session id, a cursor, a page size, a window or a recording size)."
+explanation_key = "error.break_glass_host.invalid"
+params = []
+remedy = "Correct the input and retry."
+since = "0.1.0"

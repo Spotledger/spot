@@ -1,0 +1,25 @@
+[package]
+name = "spot-capture-invariant-pg"
+description = "The PostgreSQL readers of the journal capture invariant (WP-JRN-02.T3, ADR-061 s3 and s8): the change feed and the doc_state events of one site read inside one read-only REPEATABLE READ snapshot, a persisted watermark, and the scan that feeds spot-capture-invariant's checker one page at a time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The checker and the plain summaries (`FeedEntry`, `StateEvent`, `Report`) the readers produce.
+spot-capture-invariant = { path = "../../framework/spot-capture-invariant" }
+# The site's own pool (`PgBackend::pool()` hands this type): the readers never open a second one.
+deadpool-postgres = "0.14"
+# The driver: every statement here is a constant with bound parameters.
+tokio-postgres = "0.7"
+thiserror = "2"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+spot-storage-contract = { path = "../../../contracts/storage" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

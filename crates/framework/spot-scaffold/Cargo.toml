@@ -1,0 +1,53 @@
+[package]
+name = "spot-scaffold"
+description = "Spotledger scaffolding (WP-DX-01.T1): generate a new app, DocType, native controller, TypeScript script and permission set from templates into a virtual file tree, with a name and path safety layer, plus the `spot-scaffold` command line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The app manifest's typed model and parser: scaffolds are checked against the format the
+# installer reads, and edits go through the parsed model, never a hand-rolled regex.
+spot-manifest = { path = "../spot-manifest" }
+# The DocType authoring format: a scaffolded DocType is written as the definition TOML the
+# metadata layer loads.
+spot-meta = { path = "../spot-meta" }
+# The one template engine in the workspace (MiniJinja); no new template crate is added.
+spot-template = { path = "../spot-template" }
+# The app directory rules and the `check`/`pack` proof the test suite drives (do not
+# re-implement validation): `pathsafe::is_safe_rel_path` and the layout constants are reused.
+spot-pack = { path = "../spot-pack" }
+# Span-aware TOML tables: an edit to an existing manifest re-serialises only the table it
+# touches, and a conflict names the file and the line.
+toml_edit = "0.22"
+# The command line.
+clap = { version = "4", default-features = false, features = ["std", "help", "usage", "error-context", "derive"] }
+# The `--json` output (the created files and the dry-run tree).
+serde_json = "1"
+
+[dev-dependencies]
+# Temporary output directories for the proof and the safety layer.
+tempfile = "3"
+# The controller trait and the step/hook types the generated controller is registered with.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The controller registry the generated controller is registered against.
+spot-controllers = { path = "../spot-controllers" }
+# The permission model loader the generated permission files must compile with.
+spot-permissions = { path = "../spot-permissions" }
+# The TypeScript transpiler the generated scripts must transpile with.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The compiled catalogue: the generated DocTypes must build into it.
+spot-storage-contract = { path = "../../../contracts/storage" }
+
+[lints]
+workspace = true
+
+[lib]
+name = "spot_scaffold"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-scaffold"
+path = "src/main.rs"

@@ -1,0 +1,110 @@
+# sync_bootstrap codes: snapshot bootstrap of a new or restored node, spot-sync-bootstrap (WP-SYN-07.T3, ADR-066 sections 3, 4 and 7). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto its own conditions and none rides an AppError, so `class = "none"`.
+
+[[entry]]
+code = "sync_bootstrap.invalid_settings"
+class = "none"
+summary = "The bootstrap settings cannot run: {reason}."
+explanation_key = "error.sync_bootstrap.invalid_settings"
+params = ["reason"]
+remedy = "Set every limit above zero and keep the hard record limit at or above the per-bundle cap."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.untrusted_snapshot"
+class = "none"
+summary = "The snapshot is not marked trusted, so the node was not seeded from it."
+explanation_key = "error.sync_bootstrap.untrusted_snapshot"
+params = []
+remedy = "Run the rebuild test on the snapshot to mark it verified, or let an operator allow an untrusted snapshot explicitly."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.tenant_mismatch"
+class = "none"
+summary = "The snapshot belongs to a different tenant than the node."
+explanation_key = "error.sync_bootstrap.tenant_mismatch"
+params = []
+remedy = "Select the snapshot of the node's own tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.snapshot_mismatch"
+class = "none"
+summary = "The snapshot cannot be used with the hub's stream: {reason}."
+explanation_key = "error.sync_bootstrap.snapshot_mismatch"
+params = ["reason"]
+remedy = "Take a snapshot in the hub's current generation at or below its head."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.reference_unreadable"
+class = "none"
+summary = "The links of a {entity} record cannot be read from the catalog."
+explanation_key = "error.sync_bootstrap.reference_unreadable"
+params = ["entity"]
+remedy = "Fix the metadata so every link of the entity names an allowed target, then start the bootstrap again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.source_failed"
+class = "none"
+summary = "The snapshot source failed: {reason}."
+explanation_key = "error.sync_bootstrap.source_failed"
+params = ["reason"]
+remedy = "Check the journal store and the snapshot's integrity (verify the snapshot deeply), then resume from the cursor."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.scope_violation"
+class = "none"
+summary = "The snapshot source returned a {entity} record outside the node's scope or request, and it was not sent."
+explanation_key = "error.sync_bootstrap.scope_violation"
+params = ["entity"]
+remedy = "This is a defect in the snapshot source adapter or the scope view. Report it; nothing was delivered."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.component_too_large"
+class = "none"
+summary = "A group of {records} linked records ({bytes} bytes) cannot be split and does not fit one bundle."
+explanation_key = "error.sync_bootstrap.component_too_large"
+params = ["bytes", "records"]
+remedy = "Raise the bundle limits for this node, or break the cycle in the data."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.snapshot_changed"
+class = "none"
+summary = "The snapshot differs from the one the plan was made from: {reason}."
+explanation_key = "error.sync_bootstrap.snapshot_changed"
+params = ["reason"]
+remedy = "Start a new bootstrap; the node discards the old cursor."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.cursor_mismatch"
+class = "none"
+summary = "The cursor does not belong to this snapshot, node and scope: {reason}."
+explanation_key = "error.sync_bootstrap.cursor_mismatch"
+params = ["reason"]
+remedy = "Discard the cursor and start the bootstrap from the beginning."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.not_admitted"
+class = "none"
+summary = "The node is not admitted to bootstrap."
+explanation_key = "error.sync_bootstrap.not_admitted"
+params = []
+remedy = "Ask for admission first and wait out the retry delay."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap.position_overflow"
+class = "none"
+summary = "A position cannot advance without overflowing."
+explanation_key = "error.sync_bootstrap.position_overflow"
+params = []
+remedy = "The stream position is corrupt. Report it to the operator."
+since = "0.1.0"

@@ -1,0 +1,31 @@
+[package]
+name = "spot-dag-exec"
+description = "DAG execution state (WS8, WP-DAG-02, ADR-13): the run-and-node state machine over spot-dag's compiled graphs, a transactional ExecStore trait with an in-memory reference and a backend contract suite, and the Unit port that commits a node transition with the caller's document change in one transaction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The compiled graphs and the Published pin (WP-DAG-01).
+spot-dag = { path = "../spot-dag" }
+# AppError/AppResult and the OffsetDateTime re-export the Unit port carries.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The storage Transaction a Unit commits through.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Types and the canonical node output payload.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `dag_exec.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The in-memory storage backend the Unit port is demonstrated over.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,5 @@
+error: `goNow` is not a valid method name: use snake_case (lowercase letters, digits and underscores, starting with a letter, at most 63 bytes)
+  --> tests/ui/not_snake_case.rs:22:14
+   |
+22 |     async fn goNow(&self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |              ^^^^^

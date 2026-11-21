@@ -1,0 +1,110 @@
+# app_compose codes: app-to-app composition (WP-STR-06.T1, ADR-21; blueprint WS11). One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "app_compose.duplicate_app"
+class = "none"
+summary = "An app is listed twice or is already installed: {app}."
+explanation_key = "error.app_compose.duplicate_app"
+params = ["app"]
+remedy = "Remove the duplicate entry, or upgrade the installed app instead of installing it again."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.duplicate_export"
+class = "none"
+summary = "Two apps export interface {interface} at the same version."
+explanation_key = "error.app_compose.duplicate_export"
+params = ["interface"]
+remedy = "Give one app a different interface version, or have it replace the other explicitly."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.missing_provider"
+class = "none"
+summary = "An import has no provider and is not optional: {interface}."
+explanation_key = "error.app_compose.missing_provider"
+params = ["interface"]
+remedy = "Install an app that exports the interface, or mark the import optional."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.version_conflict"
+class = "none"
+summary = "No installed provider satisfies the range {requirement} for {interface}."
+explanation_key = "error.app_compose.version_conflict"
+params = ["interface", "requirement"]
+remedy = "Install a provider version inside the range, or widen the import's version range."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.cycle"
+class = "none"
+summary = "The compose graph is cyclic: {apps}."
+explanation_key = "error.app_compose.cycle"
+params = ["apps"]
+remedy = "Break the cycle by removing one app's import of the interface the other exports."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.capability_escalation"
+class = "none"
+summary = "An importing app declares a capability no provider grants: {capability}."
+explanation_key = "error.app_compose.capability_escalation"
+params = ["capability"]
+remedy = "Ask the provider to grant the capability to importers, or drop it from the app."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.grant_not_held"
+class = "none"
+summary = "A provider grants a capability it does not hold: {capability}."
+explanation_key = "error.app_compose.grant_not_held"
+params = ["capability"]
+remedy = "Declare the capability in the provider's manifest, or stop granting it to importers."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.fuel_exhausted"
+class = "none"
+summary = "A composed call used more fuel than the caller's budget allows: {caller}."
+explanation_key = "error.app_compose.fuel_exhausted"
+params = ["caller"]
+remedy = "Raise the caller's per-call fuel budget, or make the provider's work smaller."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.uninstall_has_dependents"
+class = "none"
+summary = "A provider with dependents cannot be uninstalled: {app}."
+explanation_key = "error.app_compose.uninstall_has_dependents"
+params = ["app"]
+remedy = "Uninstall the dependent apps first, or name a replacement that satisfies their ranges."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.replacement_incomplete"
+class = "none"
+summary = "A replacement does not satisfy a dependent's import range: {app}."
+explanation_key = "error.app_compose.replacement_incomplete"
+params = ["app"]
+remedy = "Publish a replacement version inside every dependent's range, or upgrade the dependents."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.unknown_app"
+class = "none"
+summary = "An operation names an app that is not installed: {app}."
+explanation_key = "error.app_compose.unknown_app"
+params = ["app"]
+remedy = "Install the app first, or correct the app name."
+since = "0.1.0"
+
+[[entry]]
+code = "app_compose.unknown_interface"
+class = "none"
+summary = "A link names an interface the importer does not import: {interface}."
+explanation_key = "error.app_compose.unknown_interface"
+params = ["interface"]
+remedy = "Call an interface the app imports, or add the import to the app's composition."
+since = "0.1.0"

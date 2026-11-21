@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-13.T3: the thin Avalonia renderer of the tier A model. It draws the controls
+       the catalog has (SpotButton) and themed primitives where the catalog has no
+       read-only presentation yet, and every colour, size and font comes from
+       Spotledger.Client.Theme tokens: no literal colour, size or font anywhere. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Extensions.csproj" />
+    <ProjectReference Include="../../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+</Project>

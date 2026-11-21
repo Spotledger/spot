@@ -1,0 +1,72 @@
+# Help for the platform error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "platform.event"
+what_happened = "An event could not be prepared for sending."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the event content against the topic's schema.", "If it keeps happening, tell your administrator and quote the code platform.event."]
+audience = "operator"
+
+[[help]]
+code = "platform.invalid_job_name"
+what_happened = "A job name is not of the <app>:<job> form."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Name jobs as <app>:<job>.", "If it keeps happening, tell your administrator and quote the code platform.invalid_job_name."]
+audience = "operator"
+
+[[help]]
+code = "platform.invalid_name"
+what_happened = "A name the platform stored or received is not a valid storage identifier."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this with the name; inputs are validated before reaching here.", "If it keeps happening, tell your administrator and quote the code platform.invalid_name."]
+audience = "operator"
+
+[[help]]
+code = "platform.invalid_step_name"
+what_happened = "A step name is not of the <app>:<step> form."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Declare step names as <app>:<step>.", "If it keeps happening, tell your administrator and quote the code platform.invalid_step_name."]
+audience = "operator"
+
+[[help]]
+code = "platform.phase_violation"
+what_happened = "A step of a document's life cycle did something that is not allowed at that point."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the hook: derive in before_*, check in validate_*, change documents in after_*, call out in *_committed.", "If it keeps happening, tell your administrator and quote the code platform.phase_violation."]
+audience = "operator"
+
+[[help]]
+code = "platform.reserved_topic"
+what_happened = "An app tried to publish on a platform-reserved topic."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Publish under the app's own topic prefix.", "If it keeps happening, tell your administrator and quote the code platform.reserved_topic."]
+audience = "operator"
+
+[[help]]
+code = "platform.seam_encoding"
+what_happened = "A result could not be turned into data for the caller."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the seam provider's return shape.", "If it keeps happening, tell your administrator and quote the code platform.seam_encoding."]
+audience = "operator"
+
+[[help]]
+code = "platform.stub"
+what_happened = "A built-in stand-in host received a result it could not read."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this; it indicates a stub-internal bug.", "If it keeps happening, tell your administrator and quote the code platform.stub."]
+audience = "operator"
+
+[[help]]
+code = "platform.unknown_step"
+what_happened = "A controller was asked to run a step it does not declare."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Register the step, or fix the pipeline's step list.", "If it keeps happening, tell your administrator and quote the code platform.unknown_step."]
+audience = "operator"
+
+[[help]]
+code = "platform.unsupported"
+what_happened = "The host does not implement this operation."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Use a full host; the stub host implements the contract's core only.", "If it keeps happening, tell your administrator and quote the code platform.unsupported."]
+audience = "operator"

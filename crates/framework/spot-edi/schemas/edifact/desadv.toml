@@ -1,0 +1,156 @@
+# A minimal EDIFACT DESADV despatch advice (our own definition, WP-INT-06.T1).
+id = "edifact_desadv"
+syntax = "edifact"
+version = "D96A"
+title = "Despatch advice message"
+functional_group = "DESADV"
+
+[[segment]]
+tag = "UNH"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "message_id"
+kind = "text"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "type"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "version"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "BGM"
+min = 1
+max = 1
+[[segment.element]]
+name = "type"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "document_number"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "function"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "DTM"
+min = 0
+max = 0
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "value"
+kind = "text"
+min = 0
+max = 1
+[[segment.element.component]]
+name = "date"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element.component]]
+name = "format"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "RFF"
+min = 0
+max = 0
+[[segment.element]]
+name = "reference"
+kind = "text"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "qualifier"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "number"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "NAD"
+min = 0
+max = 0
+[[segment.element]]
+name = "party"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "name"
+kind = "text"
+min = 0
+max = 1
+
+[[segment]]
+tag = "LIN"
+min = 0
+max = 0
+[[segment.element]]
+name = "line"
+kind = "numeric"
+min = 1
+max = 1
+
+[[segment]]
+tag = "QTY"
+min = 0
+max = 0
+[[segment.element]]
+name = "quantity"
+kind = "text"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "qualifier"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element.component]]
+name = "value"
+kind = "decimal"
+min = 1
+max = 1
+
+[[segment]]
+tag = "UNT"
+min = 1
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1

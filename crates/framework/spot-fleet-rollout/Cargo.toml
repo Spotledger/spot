@@ -1,0 +1,24 @@
+[package]
+name = "spot-fleet-rollout"
+description = "Fleet rollout for migrations (WP-MIG-12.T1, ADR-22, ADR-062): a pure, seeded rollout planner with canary waves, a fail-closed state machine that pauses the whole fleet on failure, the per-network migration epoch ledger and version-skew rule, the NodeMigrator seam and a 500-node fleet simulator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The plan document, its observations and the ledger are plain values a console persists and a
+# later apply engine reads back.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `fleet_rollout.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The ledger monotonicity property and the plan determinism property.
+proptest = "1"
+# Every code this crate raises has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

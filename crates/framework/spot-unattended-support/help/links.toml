@@ -1,0 +1,58 @@
+# Help for the links error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "links.cancelled_target"
+what_happened = "A link points at a cancelled document."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Point the field at a document that is still active, or correct the cancelled one.", "If it keeps happening, tell your administrator and quote the code links.cancelled_target."]
+audience = "user"
+
+[[help]]
+code = "links.draft_target"
+what_happened = "A posted document points at a draft one."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Post the linked draft first, or point the field at a posted document.", "If it keeps happening, tell your administrator and quote the code links.draft_target."]
+audience = "user"
+
+[[help]]
+code = "links.dynamic_type_not_allowed"
+what_happened = "A dynamic link's type names a document kind that cannot be linked."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Point the link at a top-level document, not a child row or a reserved kind.", "If it keeps happening, tell your administrator and quote the code links.dynamic_type_not_allowed."]
+audience = "user"
+
+[[help]]
+code = "links.dynamic_type_unknown"
+what_happened = "A dynamic link's type field names no document type."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set the type field to the name of a document type the link may point at.", "If it keeps happening, tell your administrator and quote the code links.dynamic_type_unknown."]
+audience = "user"
+
+[[help]]
+code = "links.name_taken"
+what_happened = "Another document already uses the name."
+why = "Something with the same identity already exists."
+what_to_do = ["Choose a different name, or open the document that already holds it.", "If it keeps happening, tell your administrator and quote the code links.name_taken."]
+audience = "user"
+
+[[help]]
+code = "links.referenced"
+what_happened = "Other documents still refer to this one."
+why = "Other records still depend on this one, so it cannot be removed."
+what_to_do = ["Open the referencing documents, then remove or repoint their links before deleting or cancelling this one.", "If it keeps happening, tell your administrator and quote the code links.referenced."]
+audience = "user"
+
+[[help]]
+code = "links.target_not_found"
+what_happened = "A link points at a document that does not exist."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Pick an existing document for the field, or create the document it should point at.", "If it keeps happening, tell your administrator and quote the code links.target_not_found."]
+audience = "user"
+
+[[help]]
+code = "links.wrong_doctype"
+what_happened = "A link points at a document of the wrong kind."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Point the field at a document of the document type it expects.", "If it keeps happening, tell your administrator and quote the code links.wrong_doctype."]
+audience = "user"

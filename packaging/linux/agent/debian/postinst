@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+# The package never starts, enables or enrols the agent and never writes a
+# secret: enrolment needs a one-time token that only an operator holds. It
+# creates the account and the state directory, then (upgrade only) restarts an
+# agent that is already running, so the old identity and enrolment are kept.
+# No value from the environment reaches a command.
+if [ "$1" = "configure" ]; then
+	if command -v systemd-sysusers >/dev/null 2>&1; then
+		systemd-sysusers spot-agent.conf
+	fi
+	if command -v systemd-tmpfiles >/dev/null 2>&1; then
+		systemd-tmpfiles --create spot-agent.conf
+	fi
+	if [ -n "${2:-}" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+		systemctl daemon-reload || true
+		systemctl try-restart spot-agent.service || true
+	fi
+fi
+
+#DEBHELPER#
+
+exit 0

@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "accessors_run",
+  "args": 5,
+  "expect": 10
+}

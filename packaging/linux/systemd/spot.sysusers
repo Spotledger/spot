@@ -1,0 +1,4 @@
+# systemd-sysusers(5) definition for the Spotledger service account.
+# Installed as /usr/lib/sysusers.d/spot.conf. The account is a system user with
+# no login shell; its home is the state directory created by the unit.
+u spot - "Spotledger service" /var/lib/spot /sbin/nologin

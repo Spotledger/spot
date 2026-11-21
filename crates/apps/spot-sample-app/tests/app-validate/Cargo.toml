@@ -1,0 +1,46 @@
+[package]
+name = "spot-sample-app-validated"
+description = "The detached validation suite of the sample app (WP-DX-05.T1): the definitions load and lint under spot-meta, the permission decision table holds under spot-permissions, the typed views generate and compile, and the seed validates — the checks that need framework crates an app crate may not depend on (gate G4)"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.98.1"
+
+# Detached from the spot workspace on purpose, like spot-typed-views/tests/generated:
+# its checks run as this crate's own test binary — kept out of the root workspace's
+# members (an empty workspace table) so the G4 lint never sees it. The acceptance
+# command `cargo test -p spot-sample-app` runs the app crate's own stub-host tests;
+# run `cargo test` in this directory for the metadata/permission/view/seed proofs
+# (the report's acceptance run shows both).
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# The loader under test and the permission engine, with the app API they share.
+spot-meta = { path = "../../../../../crates/framework/spot-meta" }
+spot-permissions = { path = "../../../../../crates/framework/spot-permissions" }
+spot-typed-views = { path = "../../../../../crates/framework/spot-typed-views" }
+spot-app-api = { path = "../../../../../contracts/app-api" }
+spot-storage-contract = { path = "../../../../../contracts/storage" }
+# The app under test: text, constants and the catalogue vocabulary module.
+spot-sample-app = { path = "../.." }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[dev-dependencies]
+# The permission engine's async surface is none; the typed views' StubHost calls are
+# (DocumentService::create). macros+rt only, per the house dev-dependency shape.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+# The workspace lints, spelled out because this crate sits outside the workspace.
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+float_arithmetic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"

@@ -1,0 +1,51 @@
+[package]
+name = "spot-tenant-link-pg"
+description = "PostgreSQL link store for the tenant link (WP-CTL-09.T2, ADR-058, ADR-080): links, grants, consents, public peer keys, offers, audit references and handshake nonces in each tenant's own schema, the control-plane registry entry that records only that a link exists, and the administration operations for the management API"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The link model, the `LinkStore` port this crate implements, the handshake types and the
+# stable `tenant_link.*` errors.
+spot-tenant-link = { path = "../../framework/spot-tenant-link" }
+# The `LinkIntake` port the host intake implements (the dependency runs backend to framework).
+spot-link-transport = { path = "../../framework/spot-link-transport" }
+# `TenantId`: the tenant a store belongs to, and the schema name derived from it.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# `Principal` and the permission engine behind the `link.manage` right.
+spot-permissions = { path = "../../framework/spot-permissions" }
+# The lifecycle `Operation` the permission engine's actions are named by.
+spot-events-contract = { path = "../../../contracts/events" }
+# `AuditRecord`: the record every link audit entry is, and its chain sequence number.
+spot-audit-chain = { path = "../../framework/spot-audit-chain" }
+# The `AppError` the schema-preparation codes ride.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The pool the caller builds and the objects checkout returns.
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
+# The runtime the synchronous `LinkStore` methods block on while awaiting the database.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
+# Link and tenant ids are UUIDv7 values.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+# Grants, consents and offers are stored as JSON documents next to their searchable columns.
+serde = "1"
+serde_json = "1"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The empty catalogue the migrator plans against.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Per-test scratch databases and a raw client for the isolation assertions.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# `Consent`s are built from an IAM step-up proof in the tests.
+spot-iam-access = { path = "../../framework/spot-iam-access" }
+# An empty metadata registry builds the permission engine the adapter test denies through.
+spot-meta = { path = "../../framework/spot-meta" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Spotledger.Designer.Reports.Views"
+             x:Class="Spotledger.Designer.Reports.Views.DashboardBuilderView">
+  <!-- The dashboard builder. DataContext is a DashboardBuilderViewModel. Tiles are added from the
+       gallery at the first free place (or wherever a gallery tile is dragged onto the grid), and
+       sit on a grid where a tile can be dragged by its header to another cell; while it is dragged
+       the target cells are shown, green when free and red when they cover another tile, and Escape
+       abandons the drag. The keyboard alternative: Tab to a tile, then Alt+arrow keys move it and
+       Alt+Shift+arrow keys resize it (the same moves are also buttons). The server checks every
+       place and refuses a tile that overlaps or falls off the grid. -->
+  <UserControl.Styles>
+    <Style Selector="Border.tile">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Strong}" />
+    </Style>
+  </UserControl.Styles>
+  <Grid ColumnDefinitions="260,*,280" RowDefinitions="Auto,*" Margin="8">
+    <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+      <Button x:Name="PublishButton" Content="Publish" Command="{Binding PublishCommand}" />
+      <Button x:Name="RefreshButton" Content="Refresh preview" Command="{Binding RefreshCommand}" />
+      <TextBlock x:Name="StatusText" Text="{Binding Status}" VerticalAlignment="Center" Foreground="{DynamicResource Color.Text.Secondary}" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1" Margin="0,0,8,0">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Add a tile" FontWeight="SemiBold" />
+        <ComboBox x:Name="ReportPicker" ItemsSource="{Binding Reports}" SelectedItem="{Binding SelectedReport, Mode=TwoWay}" PlaceholderText="Choose a report" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <ItemsControl x:Name="GalleryList">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Margin="0,0,0,4">
+                <Button Content="{Binding Label}" HorizontalAlignment="Stretch"
+                        Command="{Binding $parent[ItemsControl].DataContext.AddTileCommand}"
+                        CommandParameter="{Binding}" />
+                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="{DynamicResource Font.Size.Caption}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="Shared filters" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <TextBox x:Name="FilterName" PlaceholderText="Name, like region" />
+        <TextBox x:Name="FilterLabel" PlaceholderText="Label the viewer sees" />
+        <ComboBox x:Name="FilterType" HorizontalAlignment="Stretch" />
+        <Button x:Name="AddFilterButton" Content="Add shared filter" Click="OnAddFilter" />
+        <ListBox x:Name="FilterList" ItemsSource="{Binding Draft.Filters}" MaxHeight="100">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Button x:Name="RemoveFilterButton" Content="Remove shared filter" Click="OnRemoveFilter" />
+        <ItemsControl x:Name="FilterValueList" ItemsSource="{Binding FilterInputs}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Margin="0,0,0,4">
+                <TextBlock Text="{Binding Label}" />
+                <TextBox Text="{Binding Text, Mode=TwoWay}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="Refresh" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <ComboBox x:Name="RefreshBox" HorizontalAlignment="Stretch" />
+        <NumericUpDown x:Name="RefreshSeconds" Minimum="1" Value="60" FormatString="0" />
+        <Button x:Name="SetRefreshButton" Content="Set refresh" Click="OnSetRefresh" />
+
+        <TextBlock Text="Share with" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <TextBox x:Name="RolesBox" PlaceholderText="Roles, separated by commas" />
+        <Button x:Name="ShareButton" Content="Share" Click="OnShare" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <ScrollViewer Grid.Row="1" Grid.Column="1" HorizontalScrollBarVisibility="Auto">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Layout" FontWeight="SemiBold" />
+        <Border BorderThickness="1" BorderBrush="{DynamicResource Color.Border.Strong}" HorizontalAlignment="Left">
+          <Canvas x:Name="GridCanvas" />
+        </Border>
+        <TextBlock Text="Preview" FontWeight="SemiBold" />
+        <ItemsControl x:Name="PreviewList" ItemsSource="{Binding TilePreviews}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border BorderThickness="1" BorderBrush="{DynamicResource Color.Border.Strong}" Padding="8" Margin="0,0,0,6">
+                <StackPanel>
+                  <TextBlock Text="{Binding TileId}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+                  <v:RowsTableView DataContext="{Binding TableView}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+
+    <ScrollViewer Grid.Row="1" Grid.Column="2" Margin="8,0,0,0">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Selected tile" FontWeight="SemiBold" />
+        <TextBlock x:Name="SelectedText" Text="{Binding SelectedTileId}" />
+        <TextBox x:Name="TileTitleBox" Text="{Binding TileTitleEdit, Mode=TwoWay}" PlaceholderText="Tile title" />
+        <CheckBox x:Name="TileFiltersBox" Content="Follows the shared filters" IsChecked="{Binding TileUsesFiltersEdit, Mode=TwoWay}" />
+        <Button x:Name="ApplySettingsButton" Content="Apply tile settings" Command="{Binding ApplyTileSettingsCommand}" />
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="UpButton" Content="Up" Click="OnUp" />
+          <Button x:Name="DownButton" Content="Down" Click="OnDown" />
+          <Button x:Name="LeftButton" Content="Left" Click="OnLeft" />
+          <Button x:Name="RightButton" Content="Right" Click="OnRight" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="WiderButton" Content="Wider" Click="OnWider" />
+          <Button x:Name="NarrowerButton" Content="Narrower" Click="OnNarrower" />
+          <Button x:Name="TallerButton" Content="Taller" Click="OnTaller" />
+          <Button x:Name="ShorterButton" Content="Shorter" Click="OnShorter" />
+        </StackPanel>
+        <Button x:Name="RemoveButton" Content="Remove tile" Command="{Binding RemoveTileCommand}" />
+        <TextBlock Text="To fix or check" FontWeight="SemiBold" />
+        <ItemsControl x:Name="IssueList" ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="PublishText" Text="{Binding PublishMessage}" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

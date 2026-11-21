@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-02.T1: the native API client for the Avalonia shell. The Kiota-generated
+       client (contracts/native-api/openapi.yaml, ADR-055) is produced into obj/Generated
+       at build time and never committed; the hand-written layer (ApiConnection, ApiError,
+       SessionTokenStore) lives next to it. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <KiotaToolVersion>1.35.0</KiotaToolVersion>
+    <NativeApiContractPath>$(MSBuildThisFileDirectory)../../../../contracts/native-api/openapi.yaml</NativeApiContractPath>
+    <!-- Reuse the single Kiota pin from WP-CON-03.T2; never a second manifest. -->
+    <KiotaManifestDirectory>$(MSBuildThisFileDirectory)../../../../tools/contract-clients/csharp</KiotaManifestDirectory>
+    <KiotaToolManifestPath>$(KiotaManifestDirectory)/.config/dotnet-tools.json</KiotaToolManifestPath>
+    <KiotaGeneratedOutputPath>$(MSBuildProjectDirectory)/obj/generated/</KiotaGeneratedOutputPath>
+    <!-- The stamp file name carries the tool version, so a Kiota bump regenerates. -->
+    <KiotaGenerationStampPath>$(MSBuildProjectDirectory)/obj/kiota-$(KiotaToolVersion).stamp</KiotaGenerationStampPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Kiota.Bundle" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shell tests drive the store plumbing internals directly (WP-UI-02.T3). -->
+    <InternalsVisibleTo Include="Spotledger.Client.Shell.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <NativeApiContractFile Include="$(NativeApiContractPath)" />
+    <KiotaToolManifestFile Include="$(KiotaToolManifestPath)" />
+  </ItemGroup>
+
+  <!-- Incremental generation: runs `dotnet tool run kiota generate` against the contract
+       before compile, skipping when neither the contract nor the tool manifest changed
+       since the last stamp was written. Generated code lands in obj/ (never committed). -->
+  <Target Name="GenerateNativeApiClient"
+          BeforeTargets="CoreCompile"
+          Inputs="@(NativeApiContractFile);@(KiotaToolManifestFile)"
+          Outputs="$(KiotaGenerationStampPath)">
+    <Error Condition="!Exists('$(NativeApiContractPath)')"
+           Text="Native API contract not found at $(NativeApiContractPath)." />
+    <Error Condition="!Exists('$(KiotaToolManifestPath)')"
+           Text="Kiota tool manifest not found at $(KiotaToolManifestPath) (expected at $(KiotaManifestDirectory))." />
+    <Message Importance="high" Text="Generating NativeApiClient with Kiota $(KiotaToolVersion) into $(KiotaGeneratedOutputPath)" />
+    <MakeDir Directories="$(KiotaGeneratedOutputPath)" />
+    <!-- Kiota writes non-fatal OpenAPI advisories ("polymorphic type without a
+         discriminator") to its console output with the word "error" in the line text;
+         MSBuild's Exec pattern scan would escalate them and -warnaserror fails the
+         build. Generation output therefore goes to obj/kiota-generate.log (same
+         pattern as tools/contract-clients/check.sh, which redirects to a log file).
+         A genuine failure still fails the build through the exec exit code; the log
+         keeps every advisory visible for whoever is at the console. -->
+    <Exec WorkingDirectory="$(KiotaManifestDirectory)"
+          Command="dotnet tool restore &amp;&amp; dotnet tool run kiota -- generate --language CSharp --openapi &quot;$(NativeApiContractPath)&quot; --output &quot;$(KiotaGeneratedOutputPath)&quot; --class-name NativeApiClient --namespace-name Spotledger.Client.Api.Generated --clean-output > &quot;$(MSBuildProjectDirectory)/obj/kiota-generate.log&quot; 2>&amp;1" />
+    <Message Condition="Exists('$(MSBuildProjectDirectory)/obj/kiota-generate.log')"
+             Text="Kiota generation log: $(MSBuildProjectDirectory)/obj/kiota-generate.log" />
+    <WriteLinesToFile File="$(KiotaGenerationStampPath)"
+                      Lines="$(KiotaToolVersion);$(NativeApiContractPath)"
+                      Overwrite="true" />
+  </Target>
+
+  <Target Name="IncludeGeneratedNativeApiClient"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="GenerateNativeApiClient">
+    <ItemGroup>
+      <Compile Include="$(KiotaGeneratedOutputPath)**/*.cs" Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>

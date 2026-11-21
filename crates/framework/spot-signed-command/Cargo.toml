@@ -1,0 +1,40 @@
+[package]
+name = "spot-signed-command"
+description = "The signed command envelope (WP-ADM-01.T2, blueprint WS22, ADR-44): a canonical JSON command encoding, Ed25519 signatures with domain separation, expiry and audience checks, and replay protection with a bounded nonce window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The nonce-store contract suite (`testing::nonce_contract`), run by every store crate.
+testing = []
+
+[dependencies]
+# The one cryptographic dependency (pre-approved by `spot-license`, same version and
+# features): Ed25519 signatures. `std` only; no RNG features — keys are always supplied
+# by the caller.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The CSPRNG for the command's random id and nonce (same version `spot-secrets` uses;
+# `OsRng`, the OS source). Signing itself is deterministic Ed25519.
+rand = "0.9"
+# Command parameters are an opaque JSON value; the canonical encoding is written here.
+serde_json = "1"
+# Key ids are the first 16 bytes of SHA-256 of the public key, hex (same derivation the
+# licence crate uses for its issuer key ids).
+sha2 = "0.10"
+# Typed errors with stable `cmd.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: random (float-free) parameters sign and verify; any single flipped
+# byte of the signed message or the signature breaks verification.
+proptest = "1"
+# Drives the async verifier and the contract suite to completion in tests.
+futures = "0.3"
+# The contract suite lives behind this crate's own `testing` feature.
+spot-signed-command = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,56 @@
+name = "invoice"
+label = "Invoice"
+app = "sample_app"
+module = "billing"
+is_posted = true
+title_field = "number"
+
+[[fields]]
+name = "number"
+label = "Number"
+type = "text"
+max_chars = 140
+unique = true
+
+[[fields]]
+name = "party"
+label = "Party"
+type = "link"
+options = "party"
+required = true
+
+[[fields]]
+name = "posting_date"
+label = "Posting Date"
+type = "date"
+required = true
+index = true
+
+[[fields]]
+name = "status"
+label = "Status"
+type = "select"
+options = "Open\nPaid\nOverdue"
+default = "Open"
+allow_on_posted = true
+
+[[fields]]
+name = "lines"
+label = "Lines"
+type = "table"
+options = "invoice_line"
+
+[[fields]]
+name = "total"
+label = "Total"
+type = "decimal"
+scale = 2
+read_only = true
+
+[[fields]]
+name = "remarks"
+type = "long_text"
+allow_on_posted = true
+
+[[indexes]]
+fields = ["party", "posting_date"]

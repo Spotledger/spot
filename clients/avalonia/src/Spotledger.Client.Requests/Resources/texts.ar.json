@@ -1,0 +1,15 @@
+{
+  "start.action": "ابدأ {process}",
+  "new.action": "جديد",
+  "mine.title": "{runs} الخاصة بي",
+  "mine.filter.waiting_for_me": "بانتظاري",
+  "mine.filter.waiting_for_others": "بانتظار الآخرين",
+  "mine.filter.finished": "المنتهية",
+  "mine.empty": "لا توجد {runs} هنا.",
+  "mine.overdue": "متأخر",
+  "mine.reference": "{run} {number}",
+  "step.save": "حفظ",
+  "step.complete": "إكمال هذه الخطوة",
+  "page.confirm": "اضغط مرة أخرى للتأكيد: {action}",
+  "page.cancel": "إلغاء {run}"
+}

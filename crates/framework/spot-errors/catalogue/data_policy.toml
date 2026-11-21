@@ -1,0 +1,127 @@
+# data_policy codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "data_policy.invalid_policy"
+class = "none"
+summary = "The residency policy is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_policy"
+params = ["reason"]
+remedy = "Fix the policy file: list valid regions and remove duplicates or unknown keys."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_region"
+class = "none"
+summary = "The region {region} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_region"
+params = ["reason", "region"]
+remedy = "Use a lower-case region name of letters, digits, '-' or '_', starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_rule"
+class = "none"
+summary = "Retention rule {rule} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_rule"
+params = ["reason", "rule"]
+remedy = "Fix the rule file: one rule per DocType, a valid trigger, period and action, and unique ids."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_hold"
+class = "none"
+summary = "Legal hold {hold} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_hold"
+params = ["hold", "reason"]
+remedy = "Give the hold an id, a scope, a reason and who set it."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_floor"
+class = "none"
+summary = "Statutory floor {entry} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_floor"
+params = ["entry", "reason"]
+remedy = "Give each floor a DocType class, a jurisdiction and a positive period."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_classification"
+class = "none"
+summary = "Field classification {entry} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_classification"
+params = ["entry", "reason"]
+remedy = "Classify each field once with a lower-case DocType and field name."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_record"
+class = "none"
+summary = "Record {record} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_record"
+params = ["reason", "record"]
+remedy = "Give the record an id, a DocType, a creation instant and lower-case class and jurisdiction."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_calendar"
+class = "none"
+summary = "The calendar {calendar} refused {detail}."
+explanation_key = "error.data_policy.invalid_calendar"
+params = ["calendar", "detail"]
+remedy = "Use an instant and period the injected calendar supports."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.region_change_unapproved"
+class = "none"
+summary = "Moving a tenant from {from} to {to} needs the owner's approval."
+explanation_key = "error.data_policy.region_change_unapproved"
+params = ["from", "to"]
+remedy = "Have the tenant owner approve the region change, then retry the move."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.run_mismatch"
+class = "none"
+summary = "Run {run} cannot be {operation}: {reason}."
+explanation_key = "error.data_policy.run_mismatch"
+params = ["operation", "reason", "run"]
+remedy = "Resume the existing run instead of starting it again, or start a run with a new plan."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.plan_changed"
+class = "none"
+summary = "Run {run} was planned from a different policy."
+explanation_key = "error.data_policy.plan_changed"
+params = ["run"]
+remedy = "Finish the run with the plan it started from, then start a new run for the new policy."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.store_failed"
+class = "none"
+summary = "The retention store failed: {reason}."
+explanation_key = "error.data_policy.store_failed"
+params = ["reason"]
+remedy = "Check the store and retry; a resumed run continues where the outcomes say it stopped."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.proof_invalid"
+class = "none"
+summary = "The deletion proof for {record} is not valid: {reason}."
+explanation_key = "error.data_policy.proof_invalid"
+params = ["reason", "record"]
+remedy = "Treat the deletion as unproven and re-check the proof ledger and the record store."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy.invalid_option"
+class = "none"
+summary = "The execution option {option} is not valid: {reason}."
+explanation_key = "error.data_policy.invalid_option"
+params = ["option", "reason"]
+remedy = "Use a positive batch size, a valid run kind and an audit actor."
+since = "0.1.0"

@@ -1,0 +1,9 @@
+Release plan: metadata 0 -> 0
+Risk: destructive
+Estimate: 2s expected (1s low, 4s high), blocking: maintenance window
+1 change (schema 0, metadata 1, patches 0, behaviour 0)
+
+Destructive (1)
+  - [metadata] party.note — Field `party.note` is removed. (Text -> absent)
+      why: removing a field discards its values and may be a rename without a hint
+      instead: if this is a rename, add a rename hint; otherwise stop using the field first and drop it later

@@ -1,0 +1,41 @@
+[package]
+name = "spot-migration-conflicts"
+description = "Customisation conflict detection for a release plan (WP-MIG-03.T1): what a release breaks in this site's custom fields, property overrides, fixtures, view layers, rules, scripts and installed apps, reported as plan items with a risk, a cause and a resolution"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The release plan and its `Change`, `ChangeKind`, `Risk` and `BlockingClass`: the conflicts are
+# reported as plan items and converted into `Change`s that a `ReleasePlan` can carry.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The site's customisations (`Customisations`, `CustomField`, `Override`, `Property`) and the
+# effective metadata model (`Definition`, `FieldSpec`, `FieldType`, `EffectiveMeta`).
+spot-meta = { path = "../spot-meta" }
+# View layers, the layer merge (`resolve`) and the save-time checks (`validate_layer`).
+spot-views = { path = "../spot-views" }
+# The TypeScript declaration generator: the *new* `.d.ts` a script is checked against.
+spot-dts = { path = "../spot-dts" }
+# The save-time TypeScript checker (parse, tier rules, type stripping) — no execution.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The shared expression language: rule strings are parsed and their field paths read.
+spot-expr = { path = "../spot-expr" }
+# The parsed app manifest: events, fixtures, methods and capabilities of an installed app.
+spot-manifest = { path = "../spot-manifest" }
+# `HookPoint` from the one contract apps may depend on: an app's `field_changed:<field>` hook
+# names a field the release may remove.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Host and app versions (`requires_host`).
+semver = "1"
+# Plain serde values for the JSON fixtures a site carries.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Property tests: arbitrary customisations never panic the detector.
+proptest = "1"
+
+[lints]
+workspace = true

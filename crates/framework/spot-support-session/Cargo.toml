@@ -1,0 +1,28 @@
+[package]
+name = "spot-support-session"
+description = "Scoped, time-boxed support sessions (WP-AI-06.T2): session grants with a tier ceiling and a DocType/action scope, distinct-approver approval, expiry and extension by a new approval, revocation, and the check that refuses anything outside the session as a pure model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one `Tier` ladder (T0 to T3), shared with the agent authoriser (WP-AI-06.T3).
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# Stable, derive-based serde on every public type, so grants cross process boundaries as
+# JSON or TOML and land in the control plane later (WP-CTL-07).
+serde = { version = "1", features = ["derive"] }
+# The one error type, with stable machine-readable `session.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: a grant is Active exactly over [starts_at, expires_at) unless revoked.
+proptest = "1"
+# The serde round trip of a grant with extension history, as JSON.
+serde_json = "1"
+# Grants are TOML-loadable records; the round trip through TOML text is tested.
+toml = "0.8"
+
+[lints]
+workspace = true

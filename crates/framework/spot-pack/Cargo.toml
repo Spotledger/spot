@@ -1,0 +1,47 @@
+[package]
+name = "spot-pack"
+description = "Spotledger app packaging (WP-EXT-07.T1): checking an app directory end to end, packing it into one deterministic bundle through the bundle builder, signing and verifying with the publisher layer, and the `spot-pack` command line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The manifest is already parsed and validated there; spot-pack reports its codes through.
+spot-manifest = { path = "../spot-manifest" }
+# DocType definitions load and validate here, with the metadata's own rules and lints.
+spot-meta = { path = "../spot-meta" }
+# The permission model files (grants, field grants, groups, shares) load here.
+spot-permissions = { path = "../spot-permissions" }
+# The deterministic ZIP builder, the canonical digest, the limits and the installer-side check.
+spot-bundle = { path = "../spot-bundle" }
+# Publisher keys, certificates, detached signatures and the revocation list.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# TypeScript scripts must exist and transpile with no diagnostics.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# Component imports and exports, at the same version and features the bundle validates with.
+wasmparser = { version = "0.261", default-features = false, features = ["std", "features", "component-model", "validate"] }
+# The command line: derive support plus the one dependency the brief names for it.
+clap = { version = "4", default-features = false, features = ["std", "help", "usage", "error-context", "derive"] }
+# Types with stable `pack.*` codes.
+thiserror = "2"
+# The JSON output of `--json`.
+serde_json = "1"
+# Version of the host the default PackOptions names, and of the packed app's `version`.
+semver = "1"
+
+[dev-dependencies]
+# Test components and TS/JSON fixtures are written as bytes in the tests.
+tempfile = "3"
+
+[lints]
+workspace = true
+
+[lib]
+name = "spot_pack"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-pack"
+path = "src/main.rs"

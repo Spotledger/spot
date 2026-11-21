@@ -1,0 +1,19 @@
+name = "role_duty"
+label = "Role Duty"
+app = "platform"
+module = "identity"
+is_child = true
+
+[[fields]]
+name = "duty"
+label = "Duty"
+type = "text"
+required = true
+max_chars = 100
+description = "The duty's name, as an app pack defines it."
+
+[[fields]]
+name = "duty_version"
+label = "Duty Version"
+type = "int"
+description = "The version the role was built against; empty takes the current one."

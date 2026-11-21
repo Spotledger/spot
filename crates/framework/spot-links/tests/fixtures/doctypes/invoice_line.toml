@@ -1,0 +1,8 @@
+name = "invoice_line"
+label = "Invoice Line"
+is_child = true
+fields = [
+  { name = "item", type = "text" },
+  { name = "billing_customer", type = "link", options = "customer" },
+  { name = "amount", type = "decimal", scale = 2, precision = 18 },
+]

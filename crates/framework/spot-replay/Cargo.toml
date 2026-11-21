@@ -1,0 +1,38 @@
+[package]
+name = "spot-replay"
+description = "Behavioural replay of recent transactions through the new release on the clone (WP-MIG-06.T2, ADR-22): sample the journal, re-execute each operation with the original instant and principal while every external effect stays held, and diff every outcome that differs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `SiteId`: which tenant a replay belongs to (ADR-34), and `Clock`: the duration budget, never the
+# wall clock.
+spot-core = { path = "../spot-core" }
+# The document contract the sampled operations are expressed in (`Document`, `DocumentPatch`,
+# `Version`, `Invocation`) and the invocation's actor.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The side-effect hold, engaged in `Held` mode: the gate every external effect a replay would
+# otherwise emit passes through, and the ledger it is recorded in.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# The policy, the sample, the outcomes, the divergences and the report derive serde for a JSON
+# artefact.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SHA-256 over an outcome's canonical form (its `digest`).
+sha2 = "0.10"
+# Typed errors with stable `replay.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The storage contract the toy clone engine writes through (`FakeBackend`), ADR-053.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The in-memory backend the toy clone is built on, so no database is involved in the tests.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# `#[tokio::test]` and the multi-thread runtime for the replayed operations.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

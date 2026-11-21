@@ -1,0 +1,10 @@
+<Project>
+  <!-- WP-UI-18: demo-local properties. Import the client tree's props first so the
+       demo shares the repo-wide compiler settings, then layer demo additions. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

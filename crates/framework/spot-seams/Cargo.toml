@@ -1,0 +1,24 @@
+[package]
+name = "spot-seams"
+description = "Spotledger step and seam registry (WP-EXT-02.T1): override-aware execution plans, install-time conflict detection and seam resolution"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one crate framework code takes the extension contract from (gate G4).
+spot-app-api = { path = "../../../contracts/app-api" }
+# `Seams::call_json` takes and returns `serde_json::Value`; the contract does not re-export it.
+serde_json = "1"
+# The admin override listing (WP-EXT-03) is data a UI or CLI can print: `Serialize` with a
+# stable field order.
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1"
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

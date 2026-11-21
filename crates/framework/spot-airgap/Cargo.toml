@@ -1,0 +1,71 @@
+[package]
+name = "spot-airgap"
+description = "Air-gapped operation (WP-ADM-12.T1, blueprint WS22, ADR-44): signed offline bundles (runtime, agent, pack, os-mirror) with a deterministic manifest, verified import from removable media into a local repository, local OS package mirror support, and signed command and result bundles carried across the gap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The in-memory `Storage` fake with failure injection, for the crate's own tests and any
+# caller that wants to rehearse an interrupted import.
+testing = []
+
+[dependencies]
+# The canonical bundle digest type the signing crate signs over, and the app bundle the
+# pack kind ultimately carries.
+spot-bundle = { path = "../spot-bundle" }
+# The one signature and revocation implementation: publisher certificates under a rotating
+# store root, detached Ed25519 signatures over the bundle digest, and the signed revocation
+# list. This crate adds no cryptography of its own.
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The manifest verification rules (SHA-256 digests and the size checks), the detached
+# signature document, the key anchor with validity windows and the signed revocation list.
+spot-updater = { path = "../spot-updater" }
+# The signed command envelope, the verifier and the nonce window: the command bundle for an
+# air-gapped agent is exactly these signed commands, carried on media.
+spot-signed-command = { path = "../spot-signed-command" }
+# The one cryptographic dependency (pre-approved, same version and features as every sibling
+# crate): Ed25519 signatures, reconstructed when a command bundle is read back from media.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Operation ids of the typed management catalogue, so a command bundle's operations are
+# checked against the same naming rule the console and CLI use.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# SHA-256 for the bundle digest and the audit-segment head; the same digest family the rest
+# of the platform uses.
+sha2 = "0.10"
+# The canonical, domain-separated JSON bytes a signature covers, and the file documents.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The `offline.toml` manifest and the repository index.
+toml = "0.9"
+# Semantic versions of a bundle and of an installed release.
+semver = "1"
+# Base64 for signatures carried in the JSON documents.
+base64 = "0.22"
+# Typed errors with stable `airgap.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# A real temporary directory for the `StdStorage` round trip and the end-to-end import test.
+tempfile = "3"
+# The signing material the tests build (roots, certificates, keys, revocation lists).
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+# The canonical digest type the signing crate signs over, named in the test signer's trait impl.
+spot-bundle = { path = "../spot-bundle" }
+# The signed commands, signer and nonce store the command-bundle tests use.
+spot-signed-command = { path = "../spot-signed-command" }
+# The key anchor, revocation list and signature document the result-bundle tests use.
+spot-updater = { path = "../spot-updater" }
+# JSON parameter values for the signed-command fixtures.
+serde_json = "1"
+# Semantic versions in the test fixtures.
+semver = "1"
+# Drives the async command verification to completion in the replay test.
+futures = "0.3"
+# The in-memory storage fake lives behind this crate's own `testing` feature.
+spot-airgap = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

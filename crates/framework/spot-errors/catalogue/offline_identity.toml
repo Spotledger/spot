@@ -1,0 +1,489 @@
+# offline_identity codes: the refusals, denials and quarantine reasons of spot-offline-identity (WP-IAM-09.T1, ADR-070 rule 12.13). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "offline_identity.invalid_id"
+class = "none"
+summary = "An id (tenant or node) is empty, too long or has control characters."
+explanation_key = "error.offline_identity.invalid_id"
+params = []
+remedy = "Pass a non-empty id of at most 128 bytes without control characters."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.certificate_offline"
+class = "none"
+summary = "The node certificate cannot be renewed because the node is not connected to the hub."
+explanation_key = "error.offline_identity.certificate_offline"
+params = []
+remedy = "Reconnect the node to the hub; a certificate is only renewed through the hub and otherwise lapses on its own."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.certificate_lifetime"
+class = "none"
+summary = "The requested certificate lifetime is zero or longer than the platform maximum (24 hours)."
+explanation_key = "error.offline_identity.certificate_lifetime"
+params = []
+remedy = "Ask the hub for a lifetime between one millisecond and 24 hours."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.certificate_serial"
+class = "none"
+summary = "The certificate serial does not advance, so it may be an older certificate replayed."
+explanation_key = "error.offline_identity.certificate_serial"
+params = []
+remedy = "Renew with a certificate whose serial is higher than the current one."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.journal_tampered"
+class = "none"
+summary = "The offline journal fails its hash chain at entry {seq}."
+explanation_key = "error.offline_identity.journal_tampered"
+params = ["seq"]
+remedy = "Treat the journal from that entry on as untrusted; the hub quarantines it for a person to review."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.journal_sequence"
+class = "none"
+summary = "The device sequence {got} does not follow {previous}."
+explanation_key = "error.offline_identity.journal_sequence"
+params = ["got", "previous"]
+remedy = "Stamp the next write with the previous device sequence plus one."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.journal_store"
+class = "none"
+summary = "The journal store refused or failed to store an entry, so the offline write must not proceed."
+explanation_key = "error.offline_identity.journal_store"
+params = []
+remedy = "Check the node's disk and the journal store, then retry the write."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.override_refused"
+class = "none"
+summary = "The stale-lease override was refused: {reason}."
+explanation_key = "error.offline_identity.override_refused"
+params = ["reason"]
+remedy = "Use a supervisor who holds sync.override_stale, a permitted tier, a duration within the policy maximum and a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.audit_failed"
+class = "none"
+summary = "The audit record could not be written, so the action was not taken."
+explanation_key = "error.offline_identity.audit_failed"
+params = []
+remedy = "Restore the audit sink and repeat the action."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.key_release_refused"
+class = "none"
+summary = "Key release was refused for node {node}: {reason}."
+explanation_key = "error.offline_identity.key_release_refused"
+params = ["node", "reason"]
+remedy = "Check the node's state in the registry; a suspended or decommissioned node gets no keys, and a node may only ask for its own."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.unknown_node"
+class = "none"
+summary = "The node is not registered with the hub."
+explanation_key = "error.offline_identity.unknown_node"
+params = []
+remedy = "Register the node before suspending, decommissioning or reinstating it."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.stamp_malformed"
+class = "none"
+summary = "A journal record is not a well-formed offline stamp, or names another node than the journal's."
+explanation_key = "error.offline_identity.stamp_malformed"
+params = []
+remedy = "Write stamps only through the offline journal of the node that made the write."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.rollback"
+class = "none"
+summary = "The snapshot epoch {got} is lower than the accepted epoch {held}: a rollback."
+explanation_key = "error.offline_identity.rollback"
+params = ["got", "held"]
+remedy = "Ignore the message; the node keeps the newer snapshot it holds."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.fork"
+class = "none"
+summary = "Epoch {epoch} is already held with different content: a fork."
+explanation_key = "error.offline_identity.fork"
+params = ["epoch"]
+remedy = "Raise this with the hub operator; two snapshots must never share an epoch."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.replay"
+class = "none"
+summary = "Epoch {epoch} is already held, so accepting it again would change nothing."
+explanation_key = "error.offline_identity.replay"
+params = ["epoch"]
+remedy = "No action; wait for a newer snapshot or a timestamp."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.bad_signature"
+class = "none"
+summary = "The signature does not verify under the delegated key."
+explanation_key = "error.offline_identity.bad_signature"
+params = []
+remedy = "Fetch the message again from the hub; if it keeps failing, check the key delegation."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.bad_delegation"
+class = "none"
+summary = "The key delegation is not signed by the trusted root, or delegates one key for both roles."
+explanation_key = "error.offline_identity.bad_delegation"
+params = []
+remedy = "Have the root key holder issue a valid delegation for the snapshot and timestamp keys."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.delegation_rollback"
+class = "none"
+summary = "The delegation version {got} is lower than the accepted version {held}."
+explanation_key = "error.offline_identity.delegation_rollback"
+params = ["got", "held"]
+remedy = "Ignore the message; an older delegation must not come back after a key change."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.wrong_tenant"
+class = "none"
+summary = "The message is for another tenant."
+explanation_key = "error.offline_identity.wrong_tenant"
+params = []
+remedy = "Check the node's tenant configuration and the hub address it connects to."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.wrong_node"
+class = "none"
+summary = "The message is for another node."
+explanation_key = "error.offline_identity.wrong_node"
+params = []
+remedy = "Check the node's identity and the hub's routing of snapshots."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.expired"
+class = "none"
+summary = "Every tier's valid_until of the message has already passed."
+explanation_key = "error.offline_identity.expired"
+params = []
+remedy = "Wait for a fresh snapshot or timestamp; check the connection to the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.bounds_out_of_range"
+class = "none"
+summary = "The {tier} lease is outside the platform floor (1 minute) and ceiling (7 days)."
+explanation_key = "error.offline_identity.bounds_out_of_range"
+params = ["tier"]
+remedy = "Have the hub clamp the tenant's tier bounds into the allowed range."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.malformed"
+class = "none"
+summary = "The message is malformed: {detail}."
+explanation_key = "error.offline_identity.malformed"
+params = ["detail"]
+remedy = "Rebuild the snapshot on the hub; directory, grants and sync classes must not repeat an entry."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.stale_timestamp"
+class = "none"
+summary = "The timestamp is not newer than the last accepted message."
+explanation_key = "error.offline_identity.stale_timestamp"
+params = []
+remedy = "Ignore it; only a timestamp signed later than the last accepted can extend the lease."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.timestamp_mismatch"
+class = "none"
+summary = "The timestamp does not belong to the snapshot the node holds."
+explanation_key = "error.offline_identity.timestamp_mismatch"
+params = []
+remedy = "Send the full snapshot for the timestamp's epoch before its timestamps."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.persist_failed"
+class = "none"
+summary = "The node state could not be persisted, so nothing was accepted."
+explanation_key = "error.offline_identity.persist_failed"
+params = []
+remedy = "Check the node's storage; the message is accepted when it can be stored."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.no_snapshot"
+class = "none"
+summary = "The node holds no verified snapshot, so every offline action is denied."
+explanation_key = "error.offline_identity.deny.no_snapshot"
+params = []
+remedy = "Connect to the hub to fetch a snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.node_suspended"
+class = "none"
+summary = "The snapshot suspends or decommissions this node."
+explanation_key = "error.offline_identity.deny.node_suspended"
+params = []
+remedy = "Contact the tenant administrator to reinstate the node."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.certificate_lapsed"
+class = "none"
+summary = "The node certificate has lapsed or was never issued."
+explanation_key = "error.offline_identity.deny.certificate_lapsed"
+params = []
+remedy = "Reconnect to the hub to renew the certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.clock_fault"
+class = "none"
+summary = "The monotonic clock went backwards or the boot changed without a restore, so the lease cannot be trusted."
+explanation_key = "error.offline_identity.deny.clock_fault"
+params = []
+remedy = "Restore the node state at start-up and reconnect to the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.unknown_user"
+class = "none"
+summary = "The user is not in the directory the node holds."
+explanation_key = "error.offline_identity.deny.unknown_user"
+params = []
+remedy = "Connect to the hub to refresh the directory."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.user_disabled"
+class = "none"
+summary = "The directory says the user is disabled."
+explanation_key = "error.offline_identity.deny.user_disabled"
+params = []
+remedy = "Ask the tenant administrator to enable the user."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.not_offline_allowed"
+class = "none"
+summary = "The user is not on this node's offline allowlist."
+explanation_key = "error.offline_identity.deny.not_offline_allowed"
+params = []
+remedy = "Work online, or ask the tenant administrator to allow offline work for this user."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.user_revoked"
+class = "none"
+summary = "The snapshot revokes the user."
+explanation_key = "error.offline_identity.deny.user_revoked"
+params = []
+remedy = "The user cannot work on this node; ask the tenant administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.tier_not_allowed_for_user"
+class = "none"
+summary = "The requested tier is more sensitive than the user may act at while offline."
+explanation_key = "error.offline_identity.deny.tier_not_allowed_for_user"
+params = []
+remedy = "Do this action online."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.tier_lapsed"
+class = "none"
+summary = "The lease of the tier has lapsed, so the node can no longer confirm the user for it."
+explanation_key = "error.offline_identity.deny.tier_lapsed"
+params = []
+remedy = "Connect to the hub, or ask a supervisor holding sync.override_stale for a bounded override."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.deny.permission_not_granted"
+class = "none"
+summary = "No assignment of the user grants the permission offline."
+explanation_key = "error.offline_identity.deny.permission_not_granted"
+params = []
+remedy = "Ask the tenant administrator for the role that grants it."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.tenant_mismatch"
+class = "none"
+summary = "An offline write names another tenant than the connection's."
+explanation_key = "error.offline_identity.quarantine.tenant_mismatch"
+params = []
+remedy = "Review the write in the quarantine queue; it came from a misconfigured or hostile node."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.node_mismatch"
+class = "none"
+summary = "An offline write names another node than the one that authenticated."
+explanation_key = "error.offline_identity.quarantine.node_mismatch"
+params = []
+remedy = "Review the write in the quarantine queue; the sender claimed an identity it does not hold."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.sender_suspended"
+class = "none"
+summary = "The node that sent the write is suspended or decommissioned."
+explanation_key = "error.offline_identity.quarantine.sender_suspended"
+params = []
+remedy = "Review the write in the quarantine queue before releasing or discarding it."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.sequence_replay"
+class = "none"
+summary = "The device sequence repeats or goes backwards, which suggests a replayed journal."
+explanation_key = "error.offline_identity.quarantine.sequence_replay"
+params = []
+remedy = "Review the write in the quarantine queue and check the node's journal."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.unknown_epoch"
+class = "none"
+summary = "The write's snapshot epoch was never issued to this node."
+explanation_key = "error.offline_identity.quarantine.unknown_epoch"
+params = []
+remedy = "Review the write in the quarantine queue; the stamp is forged or corrupted."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.assignment_mismatch"
+class = "none"
+summary = "The assignment on the write is not one of the author's."
+explanation_key = "error.offline_identity.quarantine.assignment_mismatch"
+params = []
+remedy = "Review the write in the quarantine queue; the stamp claims rights the author does not hold."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.author_revoked"
+class = "none"
+summary = "The author, or the assignment, was revoked."
+explanation_key = "error.offline_identity.quarantine.author_revoked"
+params = []
+remedy = "A person decides in the quarantine queue whether the write stands."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.tier1_after_revocation"
+class = "none"
+summary = "A tier-1 action was made by a revoked author."
+explanation_key = "error.offline_identity.quarantine.tier1_after_revocation"
+params = []
+remedy = "A person decides in the quarantine queue whether the write stands."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.beyond_bound"
+class = "none"
+summary = "The node's snapshot was older than the tier's bound when the write was made."
+explanation_key = "error.offline_identity.quarantine.beyond_bound"
+params = []
+remedy = "A person decides in the quarantine queue whether the write stands."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine.journal_tampered"
+class = "none"
+summary = "The node's journal fails its hash chain at or before this entry."
+explanation_key = "error.offline_identity.quarantine.journal_tampered"
+params = []
+remedy = "Treat the entry as untrusted; a person reviews it in the quarantine queue."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine_store"
+class = "none"
+summary = "The quarantine queue refused or failed to store an item, so the offline write was not placed."
+explanation_key = "error.offline_identity.quarantine_store"
+params = []
+remedy = "Check the quarantine store and its disk, then sync the node's journal again; an item the queue cannot take is never acknowledged."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.quarantine_conflict"
+class = "none"
+summary = "The quarantine queue already holds a different payload for node {node} at journal position {journal_seq}."
+explanation_key = "error.offline_identity.quarantine_conflict"
+params = ["journal_seq", "node"]
+remedy = "A person must review the held item and the new one; a journal position's payload is immutable, so the queue never replaces it."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.request_report_missing"
+class = "none"
+summary = "The node's request to the hub carries no report of what the node holds."
+explanation_key = "error.offline_identity.request_report_missing"
+params = []
+remedy = "Build the request from the node's store (node_request); the hub refuses a request without the report of its epoch, snapshot hash and hub nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.request_bad_signature"
+class = "none"
+summary = "The signature on the node's request does not verify, so the request or its report was altered or signed by another key."
+explanation_key = "error.offline_identity.request_bad_signature"
+params = []
+remedy = "Sign the request with the node's own key and send it unchanged; the signature covers the report."
+since = "0.1.0"
+
+# The three audit record kinds the hub's replay guard writes (spot-lease-grants). They ride the
+# audit chain, not an AppError.
+[[entry]]
+code = "offline_identity.node_regressed"
+class = "none"
+summary = "Audit kind: a node reported an older state than the hub issued and was flagged for re-enrolment."
+explanation_key = "error.offline_identity.node_regressed"
+params = []
+remedy = "Re-enrol the node; the record carries the acknowledged and the reported epoch and hash."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.node_report_ahead"
+class = "none"
+summary = "Audit kind: a node reported a state the hub never issued to it."
+explanation_key = "error.offline_identity.node_report_ahead"
+params = []
+remedy = "Check the node's identity and enrolment; the record carries the reported state."
+since = "0.1.0"
+
+[[entry]]
+code = "offline_identity.node_reenrolled"
+class = "none"
+summary = "Audit kind: an operator re-enrolled a flagged node, which clears the flag."
+explanation_key = "error.offline_identity.node_reenrolled"
+params = []
+remedy = "None: this is a record of a re-enrolment, not a failure."
+since = "0.1.0"

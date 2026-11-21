@@ -1,0 +1,25 @@
+[package]
+name = "spot-perm-query"
+description = "Permission compilation to the storage query IR (WP-PLT-04.T1): a principal's read rights as one filter, refusals of queries that would leak by filtering, sorting or aggregating, and column restriction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The decision core whose rules this crate compiles.
+spot-permissions = { path = "../spot-permissions" }
+# The query IR it emits and walks.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `RecordId`, `Value` re-exports.
+spot-app-api = { path = "../../../contracts/app-api" }
+thiserror = "2"
+
+[dev-dependencies]
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-meta = { path = "../spot-meta" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

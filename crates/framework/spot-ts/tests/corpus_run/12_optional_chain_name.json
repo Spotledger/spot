@@ -1,0 +1,10 @@
+{
+  "case": "optional_chain",
+  "entry": "name",
+  "args": {
+    "owner": {
+      "name": "Ada"
+    }
+  },
+  "expect": "Ada"
+}

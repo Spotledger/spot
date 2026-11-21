@@ -1,0 +1,13 @@
+# sso_logout_host codes: the hosting of the single logout receivers (WP-IAM-05.T13).
+# A logout that fails verification is answered with the contract's `sso.logout_rejected` and no
+# detail; the real code goes to the audit only.
+
+[[entry]]
+code = "sso_logout_host.settings_invalid"
+class = "none"
+summary = "[services.sso_logout] holds a value out of range."
+explanation_key = "error.sso_logout_host.settings_invalid"
+params = []
+remedy = "Set max_sessions_per_user between 1 and 1000."
+since = "0.1.0"
+

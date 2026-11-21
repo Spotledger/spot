@@ -1,0 +1,47 @@
+# sync_reconcile codes (WP-EDG-07.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_reconcile.mirror_as_source"
+class = "Internal"
+summary = "Repairs were planned with a mirror as the source of truth: {entity}/{name}."
+explanation_key = "error.sync_reconcile.mirror_as_source"
+params = ["entity", "name"]
+remedy = "Reconcile with the record's owner as the source of truth, never a mirror."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_reconcile.invalid_scope"
+class = "Validation"
+summary = "The reconciliation asked a source for a scope it does not hold: {reason}."
+explanation_key = "error.sync_reconcile.invalid_scope"
+params = ["reason"]
+remedy = "Run the cycle for the scope keys the node actually holds."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_reconcile.invalid_schedule"
+class = "Validation"
+summary = "The reconciliation cycle settings do not parse: {reason}."
+explanation_key = "error.sync_reconcile.invalid_schedule"
+params = ["reason"]
+remedy = "Use a six-field cron expression and an IANA time zone name."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_reconcile.unknown_entity"
+class = "Validation"
+summary = "The digest plan names an entity the node's catalog does not hold: {entity}."
+explanation_key = "error.sync_reconcile.unknown_entity"
+params = ["entity"]
+remedy = "Declare the digest plan from the metadata that defines the entities."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_reconcile.source_failed"
+class = "Internal"
+summary = "Reading a node's storage for reconciliation failed: {message}."
+explanation_key = "error.sync_reconcile.source_failed"
+params = ["message"]
+remedy = "Check the node's storage and retry the reconciliation cycle."
+since = "0.1.0"

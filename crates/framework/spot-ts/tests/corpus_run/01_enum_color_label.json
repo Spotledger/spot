@@ -1,0 +1,6 @@
+{
+  "case": "enum_color",
+  "entry": "label",
+  "args": 2,
+  "expect": "Blue"
+}

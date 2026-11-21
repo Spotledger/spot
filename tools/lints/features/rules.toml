@@ -1,0 +1,27 @@
+# Rules of the `testing` feature gate (tools/lints/features/features_lint.py).
+
+[feature]
+# The feature name the gate keeps out of product builds.
+name = "testing"
+
+[framework]
+# A package whose manifest is under this folder is a framework crate.
+prefix = "crates/framework/"
+
+# Workspace packages with a binary target that are NOT product binaries: test fakes, harness
+# runners and developer tools. Every other package with a binary target is a product binary and
+# its normal and build dependency closure must not enable `testing` on a framework crate. A new
+# binary crate is therefore checked by default; listing it here needs a reason (a table of
+# name = "reason") AND a matching entry in baseline.toml, which is a lead-reviewed change.
+# Binaries are looked for in every workspace member, wherever it lives.
+[non_product.packages]
+"spot-snapshot" = "fake-pg: a stand-in server for the snapshot tests"
+"spot-pg-supervisor" = "fake-postgres: a stand-in server for the supervisor tests"
+"spot-l7-invariants" = "harness runner (L7)"
+"spot-l8-isolation" = "harness runner (L8)"
+"spot-support-eval" = "harness runner (support evaluation)"
+"spot-cluster-redis" = "bench: a benchmark binary"
+"spot-unattended-support" = "help-coverage: a developer check of the help catalogue"
+
+# There is no allow-list: a normal dependency that enables `testing` on a framework crate is a
+# finding. Move the edge to [dev-dependencies] or forward a `testing` feature of the dependent crate.

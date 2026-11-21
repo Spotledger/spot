@@ -1,0 +1,5 @@
+error: `Time-Entry` is not a valid DocType name: use snake_case (lowercase letters, digits and underscores, starting with a letter, at most 63 bytes)
+  --> tests/ui/bad_doctype.rs:18:24
+   |
+18 | #[controller(doctype = "Time-Entry")]
+   |                        ^^^^^^^^^^^^

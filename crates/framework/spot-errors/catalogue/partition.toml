@@ -1,0 +1,101 @@
+# partition codes: single-writer partition ownership and per-branch naming ranges
+# (spot-partition, WP-EDG-03.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "partition.not_owner"
+class = "PermissionDenied"
+summary = "A node tried to change or forward a record it does not own."
+explanation_key = "error.partition.not_owner"
+params = []
+remedy = "Send the change from the node the partition map names as the owner."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.range_exhausted"
+class = "Unavailable"
+summary = "A branch naming series ran out of its leased number range."
+explanation_key = "error.partition.range_exhausted"
+params = []
+remedy = "Lease another range from the hub; never allocate outside a lease."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.no_lease"
+class = "InvalidState"
+summary = "No number range is installed for the branch naming series."
+explanation_key = "error.partition.no_lease"
+params = []
+remedy = "Lease a range from the hub and install it before allocating."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.invalid_range"
+class = "Validation"
+summary = "A number range lease is malformed or its high-water mark is outside it."
+explanation_key = "error.partition.invalid_range"
+params = []
+remedy = "Lease a range whose start is at least one and whose end is at or above its start."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.invalid_scope"
+class = "Validation"
+summary = "A scope key is malformed."
+explanation_key = "error.partition.invalid_scope"
+params = []
+remedy = "Use a non-empty printable key type and value."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.ownership_conflict"
+class = "InvalidState"
+summary = "Two nodes would own the same scope key at the same time."
+explanation_key = "error.partition.ownership_conflict"
+params = []
+remedy = "End the current owner's effective interval before assigning the key to another node."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.invalid_argument"
+class = "Validation"
+summary = "An argument to a partition operation is invalid."
+explanation_key = "error.partition.invalid_argument"
+params = []
+remedy = "Pass the argument the operation requires."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.store"
+class = "Unavailable"
+summary = "The branch series high-water store failed."
+explanation_key = "error.partition.store"
+params = []
+remedy = "Check the store and retry before handing out another number."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.lease_not_above_stored"
+class = "InvalidState"
+summary = "An offered number range lease is not above the one already stored for the branch naming series."
+explanation_key = "error.partition.lease_not_above_stored"
+params = []
+remedy = "Lease a range whose first number is above the stored high-water mark, or resume the stored lease after a restart."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.scope_uncovered"
+class = "PermissionDenied"
+summary = "A partitioned DocType has no scope field entry, so its writes would be unprotected and are refused."
+explanation_key = "error.partition.scope_uncovered"
+params = []
+remedy = "Add a scope field entry for every DocType in the deployment's partitioned list before starting the node."
+since = "0.1.0"
+
+[[entry]]
+code = "partition.range_low_not_recorded"
+class = "none"
+summary = "The running-low notice of a branch naming series could not be written to the outbox; numbering continues."
+explanation_key = "error.partition.range_low_not_recorded"
+params = []
+remedy = "Check the outbox; lease another range from the hub before the current one runs out."
+since = "0.1.0"

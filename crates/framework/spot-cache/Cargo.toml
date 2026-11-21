@@ -1,0 +1,26 @@
+[package]
+name = "spot-cache"
+description = "CacheStore interface and the bounded in-process backend: TTL, single-flight loading, per-site quotas (WP-PLT-09.T1, ADR-20)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Shared `SiteId` and `Clock` (the lead moved them out of this crate on 29 Sep 2026).
+spot-core = { path = "../spot-core" }
+# Hit/miss accounting for the current request (WP-PLT-15.T2).
+spot-telemetry = { path = "../spot-telemetry" }
+# Single-flight coordination parks concurrent loaders on a `Notify`.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+
+[dev-dependencies]
+# `ManualClock::new` takes a wall-clock start; tests use `OffsetDateTime::UNIX_EPOCH`.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# `#[tokio::test]`, the multi-thread runtime for concurrency tests, and timeouts that turn a
+# single-flight bug into a test failure instead of a hang.
+tokio = { version = "1", default-features = false, features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

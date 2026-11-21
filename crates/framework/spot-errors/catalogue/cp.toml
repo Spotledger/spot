@@ -1,0 +1,307 @@
+# cp control-plane codes: the operator API of spot-control-plane (CpCode reasons). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "cp.approval_required"
+class = "none"
+summary = "The operation needs a second approver before it can run."
+explanation_key = "error.cp.approval_required"
+params = []
+remedy = "Ask an authorised approver to approve the request, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.audit_unavailable"
+class = "none"
+summary = "The audit record could not be written, so the call was refused."
+explanation_key = "error.cp.audit_unavailable"
+params = []
+remedy = "Fix the audit store and retry the call."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.body_too_large"
+class = "none"
+summary = "The request body is larger than the control plane accepts."
+explanation_key = "error.cp.body_too_large"
+params = []
+remedy = "Send a smaller body."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.cardinality_rejected"
+class = "none"
+summary = "The request would exceed the licence's count limit."
+explanation_key = "error.cp.cardinality_rejected"
+params = []
+remedy = "Remove unused items or raise the licence limit."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.certificate_revoked"
+class = "none"
+summary = "The client certificate has been revoked."
+explanation_key = "error.cp.certificate_revoked"
+params = []
+remedy = "Use a valid certificate issued by the control plane."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.conflict"
+class = "none"
+summary = "The request conflicts with the current state or with a running operation."
+explanation_key = "error.cp.conflict"
+params = []
+remedy = "Wait for the other operation to finish, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.forbidden"
+class = "none"
+summary = "The caller is not allowed to perform this operation."
+explanation_key = "error.cp.forbidden"
+params = []
+remedy = "Use an account that holds the permission."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.internal"
+class = "none"
+summary = "The control plane hit an internal error."
+explanation_key = "error.cp.internal"
+params = []
+remedy = "Retry; if it repeats, report the code and the request id to support."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.invalid"
+class = "none"
+summary = "The request is not valid."
+explanation_key = "error.cp.invalid"
+params = []
+remedy = "Correct the named parameters and send the request again."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.licence_invalid"
+class = "none"
+summary = "The licence is missing, expired or not valid for this operation."
+explanation_key = "error.cp.licence_invalid"
+params = []
+remedy = "Install a valid licence."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.limit_exceeded"
+class = "none"
+summary = "The request would exceed a limit of the plan or licence."
+explanation_key = "error.cp.limit_exceeded"
+params = []
+remedy = "Reduce the request or raise the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.links_store"
+class = "none"
+summary = "The control plane could not read or write its link store."
+explanation_key = "error.cp.links_store"
+params = []
+remedy = "Check the control plane database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.no_certificate"
+class = "none"
+summary = "The request carried no client certificate."
+explanation_key = "error.cp.no_certificate"
+params = []
+remedy = "Connect with a client certificate issued by the control plane."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.nonce_store_unavailable"
+class = "none"
+summary = "The nonce store could not be reached, so the signed command was refused."
+explanation_key = "error.cp.nonce_store_unavailable"
+params = []
+remedy = "Check the control plane database and retry with a new nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.not_a_host"
+class = "none"
+summary = "The client certificate does not belong to a registered host."
+explanation_key = "error.cp.not_a_host"
+params = []
+remedy = "Use the certificate of a host registered with the control plane."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.not_an_operator"
+class = "none"
+summary = "The client certificate does not belong to an operator."
+explanation_key = "error.cp.not_an_operator"
+params = []
+remedy = "Use an operator certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.not_confirmable"
+class = "none"
+summary = "The operation cannot be confirmed in its current state."
+explanation_key = "error.cp.not_confirmable"
+params = []
+remedy = "Start the operation again and confirm the new request."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.not_found"
+class = "none"
+summary = "The thing the request names does not exist."
+explanation_key = "error.cp.not_found"
+params = []
+remedy = "Check the identifier."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.rate_limited"
+class = "none"
+summary = "Too many requests came in a short time."
+explanation_key = "error.cp.rate_limited"
+params = []
+remedy = "Wait a moment and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.replayed"
+class = "none"
+summary = "The signed command was already used."
+explanation_key = "error.cp.replayed"
+params = []
+remedy = "Sign the command again with a new nonce."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.signature_invalid"
+class = "none"
+summary = "The command signature is missing, malformed, expired or wrong."
+explanation_key = "error.cp.signature_invalid"
+params = []
+remedy = "Sign the command again with the operator key."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.signature_unbound"
+class = "none"
+summary = "The command signature is not bound to this request."
+explanation_key = "error.cp.signature_unbound"
+params = []
+remedy = "Sign the exact request you send."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.unauthenticated"
+class = "none"
+summary = "The caller is not authenticated."
+explanation_key = "error.cp.unauthenticated"
+params = []
+remedy = "Authenticate with a valid certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.usage_period"
+class = "none"
+summary = "The metering period could not be set up."
+explanation_key = "error.cp.usage_period"
+params = []
+remedy = "Report the code to support; the period is fixed by the platform."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.usage_store"
+class = "none"
+summary = "The usage store could not be read or written."
+explanation_key = "error.cp.usage_store"
+params = []
+remedy = "Check the control plane database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.already_deprovisioned"
+class = "none"
+summary = "The operation was refused: already deprovisioned."
+explanation_key = "error.cp.already_deprovisioned"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.approval_invalid"
+class = "none"
+summary = "The operation was refused: approval invalid."
+explanation_key = "error.cp.approval_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.approval_unbound"
+class = "none"
+summary = "The operation was refused: approval unbound."
+explanation_key = "error.cp.approval_unbound"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.cp_tenant_deprovision_approve"
+class = "none"
+summary = "The operation was refused: cp tenant deprovision approve."
+explanation_key = "error.cp.cp_tenant_deprovision_approve"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.edition_limit"
+class = "none"
+summary = "The operation was refused: edition limit."
+explanation_key = "error.cp.edition_limit"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.scope_not_all"
+class = "none"
+summary = "The operation was refused: scope not all."
+explanation_key = "error.cp.scope_not_all"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.wiring.deployment_key_invalid"
+class = "none"
+summary = "The operation was refused: wiring deployment key invalid."
+explanation_key = "error.cp.wiring.deployment_key_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.wiring.deployment_key_missing"
+class = "none"
+summary = "The operation was refused: wiring deployment key missing."
+explanation_key = "error.cp.wiring.deployment_key_missing"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "cp.wiring.deployment_key_not_separate"
+class = "none"
+summary = "The operation was refused: wiring deployment key not separate."
+explanation_key = "error.cp.wiring.deployment_key_not_separate"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

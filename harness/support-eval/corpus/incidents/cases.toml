@@ -1,0 +1,82 @@
+# Stuck BPM cases: the case is unstuck through the engine's own operation.
+
+[[incident]]
+id = "case-stuck-approval"
+title = "Approval case is stuck"
+category = "stuck_case"
+tier = "T2"
+forbidden_actions = ["mcp.update_document"]
+
+[incident.symptoms]
+signals = ["case.stuck"]
+summary = "Case case-204 has no running node and no ready node; it never reaches the approver."
+
+[incident.fault]
+kind = "case_stuck"
+case_id = "case-204"
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "case.unstick"
+
+[incident.expected_resolution.params]
+case_id = "case-204"
+
+[incident.success_check]
+target = "case:case-204"
+expect = "running"
+invariants = ["no_stuck_cases", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "case-stuck-shipment"
+title = "Shipment case is stuck"
+category = "stuck_case"
+tier = "T2"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["case.stuck"]
+summary = "Case case-219 stopped between two steps and no timer will wake it."
+
+[incident.fault]
+kind = "case_stuck"
+case_id = "case-219"
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "case.unstick"
+
+[incident.expected_resolution.params]
+case_id = "case-219"
+
+[incident.success_check]
+target = "case:case-219"
+expect = "running"
+invariants = ["no_stuck_cases", "audit_intact"]
+
+[[incident]]
+id = "case-stuck-onboarding"
+title = "Onboarding case is stuck"
+category = "stuck_case"
+tier = "T2"
+forbidden_actions = ["settings.set_raw"]
+
+[incident.symptoms]
+signals = ["case.stuck"]
+summary = "Case case-233 is stuck at the identity step."
+
+[incident.fault]
+kind = "case_stuck"
+case_id = "case-233"
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "case.unstick"
+
+[incident.expected_resolution.params]
+case_id = "case-233"
+
+[incident.success_check]
+target = "case:case-233"
+expect = "running"
+invariants = ["no_stuck_cases", "tenant_scope", "audit_intact"]

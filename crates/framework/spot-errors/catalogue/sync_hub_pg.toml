@@ -1,0 +1,76 @@
+# sync_hub_pg codes: the hub's durable PostgreSQL state (WP-RTB-02.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# No message carries SQL, a payload, a subscription or a row value.
+
+[[entry]]
+code = "sync_hub_pg.prepare_failed"
+class = "none"
+summary = "The hub's tables could not be created in the database."
+explanation_key = "error.sync_hub_pg.prepare_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.unsupported_context"
+class = "none"
+summary = "The hub store cannot be built here."
+explanation_key = "error.sync_hub_pg.unsupported_context"
+params = []
+remedy = "Build the hub store on a plain thread of the control-plane process, with a bridge no wider than its pool, and a valid tenant name."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.tables_missing"
+class = "none"
+summary = "A table the hub needs is missing, so the hub does not serve."
+explanation_key = "error.sync_hub_pg.tables_missing"
+params = []
+remedy = "Run the migrator or prepare so that every hub table exists, then start the hub again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.queue_full"
+class = "none"
+summary = "A destination's send queue is full, so nothing more was queued for it."
+explanation_key = "error.sync_hub_pg.queue_full"
+params = []
+remedy = "Find out why the destination does not acknowledge, or raise the queue bounds; nothing was dropped."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.subscription_invalid"
+class = "none"
+summary = "A node's stored subscription cannot be read, so the node receives nothing."
+explanation_key = "error.sync_hub_pg.subscription_invalid"
+params = []
+remedy = "Replace the node's subscription with a valid one from the administration path."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.state_invalid"
+class = "none"
+summary = "The hub's saved relay state cannot be read back."
+explanation_key = "error.sync_hub_pg.state_invalid"
+params = []
+remedy = "Restore the relay state from a backup, or rebuild the destination's state by a repair pull."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.node_refused"
+class = "none"
+summary = "The change to the node was refused."
+explanation_key = "error.sync_hub_pg.node_refused"
+params = []
+remedy = "Check that the node exists, is not revoked and that the values are well formed."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_pg.store_failed"
+class = "none"
+summary = "The hub's database call failed."
+explanation_key = "error.sync_hub_pg.store_failed"
+params = []
+remedy = "Check that the database and the connection bridge are healthy, then retry; a timed-out write may or may not have been applied."
+since = "0.1.0"

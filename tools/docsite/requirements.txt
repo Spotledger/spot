@@ -1,0 +1,8 @@
+# Pinned dependencies for the contract documentation site (WP-DX-04.T1).
+# tools/docsite/bootstrap.py installs exactly this list into a throwaway venv
+# outside the repository when the running interpreter cannot import them (the
+# CI python jobs run no pip step); the pins are the only third-party packages
+# the site and its tests use. Keep the pins identical across CI and local runs.
+PyYAML==6.0.3
+Jinja2==3.1.6
+markdown-it-py==3.0.0

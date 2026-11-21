@@ -1,0 +1,29 @@
+[package]
+name = "spot-journal-snapshot"
+description = "The journal snapshot writer and reader (WP-JRN-05.T2, ADR-061 s6): a base image of every captured record as of one position, written under snapshots/<generation>/<position>/ as zstd parts with a SHA-256 each and a signed index written last, read back with every signature and hash verified, listed for the rebuild planner and marked verified by the rebuild test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The object-store seam and the per-tenant key layout.
+spot-journal-store = { path = "../spot-journal-store" }
+# SnapshotInfo, the shape the rebuild planner takes a snapshot in.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# The image record and the index are JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Part compression (same crate and features as spot-journal-segment).
+zstd = { version = "0.13", default-features = false }
+# Typed errors with stable `journal_snapshot.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The keyed-hash signer test double.
+sha2 = "0.10"
+proptest = "1"
+
+[lints]
+workspace = true

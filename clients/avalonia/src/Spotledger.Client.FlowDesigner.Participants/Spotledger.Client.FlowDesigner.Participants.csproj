@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-BPM-14.T1: designer support for processes that span organisations (ADR-080 sections
+       5.10 and 6.8). The project extends the process designer without forking its canvas: the four
+       participant node kinds join through the kind catalogue, and one canvas subclass paints the
+       participant lanes, the effect badges, the commit regions and the Undo and Rewind edges over
+       the base canvas. It holds no model of its own: contracts, their checks, the diff, the
+       conformance of the local half, the effect summary and the dry-run partner simulation are the
+       server's, reached through IParticipantServer and IPartnerSimulatorServer. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.FlowDesigner/Spotledger.Client.FlowDesigner.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.FlowDesigner.Participants.Tests" />
+  </ItemGroup>
+</Project>

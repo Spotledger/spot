@@ -1,0 +1,352 @@
+# backup codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "backup.target_unavailable"
+class = "none"
+summary = "The backup target {target} is not available: {reason}."
+explanation_key = "error.backup.target_unavailable"
+params = ["reason", "target"]
+remedy = "Insert the removable media or point the job at a reachable target; a waiting job resumes when the media appears."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.same_physical_disk"
+class = "none"
+summary = "The backup target {target} is on the live data's physical disk {disk} and the setting forbids that."
+explanation_key = "error.backup.same_physical_disk"
+params = ["disk", "target"]
+remedy = "Choose a target on a different physical disk, or turn off the same-disk refusal in the backup settings."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.manifest_invalid"
+class = "none"
+summary = "The backup manifest is not valid: {reason}."
+explanation_key = "error.backup.manifest_invalid"
+params = ["reason"]
+remedy = "Use a backup produced by this platform version; do not edit backup.toml by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.verify_failed"
+class = "none"
+summary = "Backup verification failed: {reason}."
+explanation_key = "error.backup.verify_failed"
+params = ["reason"]
+remedy = "Take the backup again and keep the failed package for diagnosis; an unverified backup is never restorable."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.retention_refused"
+class = "none"
+summary = "Retention refused to delete {id}: {reason}."
+explanation_key = "error.backup.retention_refused"
+params = ["id", "reason"]
+remedy = "Keep the protected backup; adjust the retention window only after confirming another verified backup exists."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.restore_refused"
+class = "none"
+summary = "The restore was refused before any data changed: {reason}."
+explanation_key = "error.backup.restore_refused"
+params = ["reason"]
+remedy = "Resolve every preflight blocker (app set, free space, empty target, tenant) and run the restore again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.newer_schema"
+class = "none"
+summary = "The backup schema {backup_schema} is newer than the target schema {target_schema}."
+explanation_key = "error.backup.newer_schema"
+params = ["backup_schema", "target_schema"]
+remedy = "Upgrade the target platform first, or repeat the restore with the explicit newer-schema override."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.not_found"
+class = "none"
+summary = "No backup {id} exists on the target."
+explanation_key = "error.backup.not_found"
+params = ["id"]
+remedy = "List the target's backups and choose an id it holds."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.invariants_failed"
+class = "none"
+summary = "The restore finished but invariants failed: {violations}."
+explanation_key = "error.backup.invariants_failed"
+params = ["violations"]
+remedy = "Keep the service closed, inspect the violations and restore again from another verified backup."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.restore_failed"
+class = "none"
+summary = "The restore failed at {stage}: {reason}."
+explanation_key = "error.backup.restore_failed"
+params = ["reason", "stage"]
+remedy = "The site stays closed; fix the reported stage and restore again from a verified backup."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.unsupported"
+class = "none"
+summary = "The requested backup feature is not available: {feature}."
+explanation_key = "error.backup.unsupported"
+params = ["feature"]
+remedy = "Wire the missing platform adapter (scratch site, invariant runner or volume probe) and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.snapshot"
+class = "none"
+summary = "The snapshot provider failed: {reason}."
+explanation_key = "error.backup.snapshot"
+params = ["reason"]
+remedy = "Check the PostgreSQL instance and the bundled client tools, then run the backup again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.io"
+class = "none"
+summary = "A backup operation failed underneath the request."
+explanation_key = "error.backup.io"
+params = []
+remedy = "Retry once the disk, mount or connection is healthy; a partial package is never listed."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.encryption_unavailable"
+class = "none"
+summary = "The backup cannot be encrypted or decrypted: {reason}."
+explanation_key = "error.backup.encryption_unavailable"
+params = ["reason"]
+remedy = "Configure a key provider and a current key for the job, or restore the retired key version; nothing is written without the encryption the job asked for."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.decrypt_failed"
+class = "none"
+summary = "The backup could not be decrypted: {reason}."
+explanation_key = "error.backup.decrypt_failed"
+params = ["reason"]
+remedy = "The package was altered, cut short or sealed under another key; use the key provider that wrote it or restore a different backup. Nothing decrypted is trusted."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.encryption_header_invalid"
+class = "none"
+summary = "The backup's encryption header is not valid: {reason}."
+explanation_key = "error.backup.encryption_header_invalid"
+params = ["reason"]
+remedy = "Use a backup written by a supported platform version; a damaged header cannot be repaired, so restore another backup."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.ledger_corrupt"
+class = "none"
+summary = "The backup ledger {path} is not usable: {reason}."
+explanation_key = "error.backup.ledger_corrupt"
+params = ["path", "reason"]
+remedy = "Keep the file for diagnosis and do not delete it by hand; retention is paused until an operator restores or rebuilds the ledger from verified backups."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.ledger_locked"
+class = "none"
+summary = "The backup ledger lock {path} is held by another run."
+explanation_key = "error.backup.ledger_locked"
+params = ["path"]
+remedy = "Wait for the other backup run to finish; remove the lock file only after confirming that process is gone."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.ledger_write_failed"
+class = "none"
+summary = "The backup ledger {path} could not be written: {reason}."
+explanation_key = "error.backup.ledger_write_failed"
+params = ["path", "reason"]
+remedy = "Free disk space or fix the directory permissions and run the backup again; the previous ledger file is intact."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.audit_unavailable"
+class = "none"
+summary = "The audit log could not record the restore, so nothing was changed."
+explanation_key = "error.backup.audit_unavailable"
+params = []
+remedy = "Fix the audit store and run the restore again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.instance_running"
+class = "none"
+summary = "A stopped-instance backup was asked for while the instance is running."
+explanation_key = "error.backup.instance_running"
+params = []
+remedy = "Stop the instance first, or take a logical or base backup instead."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.target_absent"
+class = "none"
+summary = "The backup volume is not plugged in or not mounted."
+explanation_key = "error.backup.target_absent"
+params = []
+remedy = "Insert and mount the volume; a waiting job resumes at the next slot."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.target_ambiguous"
+class = "none"
+summary = "More than one volume matches the configured label or UUID."
+explanation_key = "error.backup.target_ambiguous"
+params = []
+remedy = "Make the label or UUID unique, or point the target at one volume."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.target_foreign_tenant"
+class = "none"
+summary = "The backup package belongs to another tenant."
+explanation_key = "error.backup.target_foreign_tenant"
+params = []
+remedy = "Use a package of this tenant, or restore on the tenant's own host."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.target_invalid"
+class = "none"
+summary = "The backup target is configured wrongly."
+explanation_key = "error.backup.target_invalid"
+params = []
+remedy = "Correct the target settings and run the job again."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.target_unsafe"
+class = "none"
+summary = "The volume is a system disk, not removable, or otherwise unsafe to write."
+explanation_key = "error.backup.target_unsafe"
+params = []
+remedy = "Choose a dedicated backup volume."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.chunk_immutable"
+class = "none"
+summary = "The operation was refused: chunk immutable."
+explanation_key = "error.backup.chunk_immutable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.code_exists"
+class = "none"
+summary = "The operation was refused: code exists."
+explanation_key = "error.backup.code_exists"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.code_invalid"
+class = "none"
+summary = "The operation was refused: code invalid."
+explanation_key = "error.backup.code_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.committed"
+class = "none"
+summary = "The operation was refused: committed."
+explanation_key = "error.backup.committed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.id_in_use"
+class = "none"
+summary = "The operation was refused: id in use."
+explanation_key = "error.backup.id_in_use"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.incomplete"
+class = "none"
+summary = "The operation was refused: incomplete."
+explanation_key = "error.backup.incomplete"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.backup.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.not_a_backup_host"
+class = "none"
+summary = "The operation was refused: not a backup host."
+explanation_key = "error.backup.not_a_backup_host"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.not_entitled"
+class = "none"
+summary = "The operation was refused: not entitled."
+explanation_key = "error.backup.not_entitled"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.quota_exceeded"
+class = "none"
+summary = "The operation was refused: quota exceeded."
+explanation_key = "error.backup.quota_exceeded"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.recovery_required"
+class = "none"
+summary = "The operation was refused: recovery required."
+explanation_key = "error.backup.recovery_required"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.retention_active"
+class = "none"
+summary = "The operation was refused: retention active."
+explanation_key = "error.backup.retention_active"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "backup.store"
+class = "none"
+summary = "The operation was refused: store."
+explanation_key = "error.backup.store"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

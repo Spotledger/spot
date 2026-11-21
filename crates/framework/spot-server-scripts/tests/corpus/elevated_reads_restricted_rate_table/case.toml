@@ -1,0 +1,17 @@
+kind = "api"
+pattern = "elevated script reading a restricted document"
+restricted = true
+elevated = true
+[[before]]
+key = "r1"
+doctype = "rate_table"
+[before.fields]
+region = "PK"
+rate = "42.00"
+[input.args]
+table = "${r1}"
+[expect]
+ok = true
+audit_entries = 1
+[expect.result]
+rate = "42.00"

@@ -1,0 +1,10 @@
+name = "payment"
+label = "Payment"
+is_posted = true
+title_field = "reference"
+fields = [
+  { name = "reference", type = "text", required = true },
+  { name = "amount", type = "decimal", scale = 2, precision = 18 },
+  { name = "customer", type = "link", options = "customer" },
+  { name = "invoice", type = "link", options = "invoice" },
+]

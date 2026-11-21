@@ -1,0 +1,36 @@
+[package]
+name = "spot-agent-windows-sys"
+description = "Windows system modules, part 2 (WP-ADM-05.T2): Volume Shadow Copy coordinated with PostgreSQL backup mode, a spot-snapshot VssProvider adapter, and LocalMachine certificate store management, all through traits with in-memory fakes so the crate builds and tests on Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Clock`: manifest instants come from an injected clock, never the wall clock.
+spot-core = { path = "../spot-core" }
+# The typed operation catalogue every Windows module registers its operations on.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# `SnapshotProvider`, `SnapshotManifest`, the checksummed tree copy and its inventory.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Async file work for the provider; the rest of the crate is synchronous.
+tokio = { version = "1.47", default-features = false, features = ["fs", "rt", "sync", "macros", "time"] }
+# RFC 3339 instants for the retention policy and the manifest (integers for sizes).
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# UUIDv7 snapshot ids in the manifest (the canonical form spot-snapshot requires).
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+# SHA-256 for the certificate thumbprint the fake store derives.
+sha2 = "0.10"
+thiserror = "2"
+# A non-blocking warn when a bound certificate is within 30 days of expiry.
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+# `PgLayout`, to build a `SnapshotTarget::Instance` in the provider tests.
+spot-pg-supervisor = { path = "../spot-pg-supervisor" }
+tokio = { version = "1.47", default-features = false, features = ["fs", "rt", "rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

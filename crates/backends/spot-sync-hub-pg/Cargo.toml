@@ -1,0 +1,45 @@
+[package]
+name = "spot-sync-hub-pg"
+description = "The hub's durable state on PostgreSQL (WP-RTB-02.T1, ADR-062, ADR-082 class C): the HubStream over the tenant outbox, the per-destination send queue with serve sequences, hold and extras state, the node registry with subscriptions, the acknowledgement book and the ledger tables, all per tenant, over the shared blocking bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The traits implemented here (`HubStream`, `SendQueue`, `AckObserver`), the entry, queue and
+# relay-state types, and `HubError`.
+spot-sync-hub = { path = "../../framework/spot-sync-hub" }
+# `ImageSource`, `SourceImage`: the closure builder's view of a record.
+spot-sync-closure = { path = "../../framework/spot-sync-closure" }
+# `NodeStateStore`, `NodeRecord`: the ledger store whose tables this crate keeps.
+spot-sync-acks = { path = "../../framework/spot-sync-acks" }
+# `MandatoryEvent`, `Pending`, `Lane`.
+spot-sync-obligations = { path = "../../framework/spot-sync-obligations" }
+# `Subscription`, `ScopeKey`, `Doctype`, `Router`: the node registry's subscription form.
+spot-sync-master = { path = "../../framework/spot-sync-master" }
+# `NodeId`.
+spot-sync-protocol = { path = "../../framework/spot-sync-protocol" }
+# The shared blocking bridge every call goes through (ADR-082 addendum 1); no private `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The driver types the bridge hands to the closures.
+tokio-postgres = "0.7"
+# `Handle::try_current`: the constructors refuse a thread that is inside an async runtime.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# The stored JSON forms (snapshots, queue items, subscriptions, ledger records).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The in-memory references the contract tests compare against, and the relay scenarios.
+spot-sync-hub = { path = "../../framework/spot-sync-hub" }
+# Keys of the closure bundles in the tests.
+spot-sync-closure = { path = "../../framework/spot-sync-closure" }
+# The runtime the scratch database needs.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

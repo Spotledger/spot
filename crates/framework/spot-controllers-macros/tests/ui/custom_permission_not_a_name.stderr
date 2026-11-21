@@ -1,0 +1,5 @@
+error: `Approve Note` is not a valid permission name: use snake_case (lowercase letters, digits and underscores, starting with a letter, at most 63 bytes)
+  --> tests/ui/custom_permission_not_a_name.rs:20:30
+   |
+20 |     #[whitelist(permission = "Approve Note")]
+   |                              ^^^^^^^^^^^^^^

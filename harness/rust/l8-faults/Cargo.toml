@@ -1,0 +1,39 @@
+[package]
+name = "spot-l8-faults"
+version = "0.1.0"
+description = "L8 fault injection, framework cut (WP-TST-08.T2): a disposable PostgreSQL cluster killed under load, killed connections, a fault-injecting TCP proxy (drop, delay, blackhole, reset mid-commit), the durability audit of acknowledged and unacknowledged commits, and the recovery proofs for sequences, the outbox and the job engine"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The supervised, disposable PostgreSQL cluster (WP-PRD-02.T1).
+spot-pg-supervisor = { path = "../../../crates/framework/spot-pg-supervisor" }
+# The backend under fault and its connection pool (ADR-02).
+spot-postgres = { path = "../../../crates/backends/spot-postgres" }
+# The storage contract: errors, the catalog, the transaction and the feed.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The in-memory backend, used by the offline honesty proofs.
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+# T1's LoadDriver, History, Oracle and InvariantRegistry: the workload and the judges.
+spot-l7-invariants = { path = "../l7-invariants" }
+# T2's job engine and its job invariants: the job-engine scenario's judges.
+spot-l7-engine = { path = "../l7-engine" }
+# The isolation checker (WP-TST-08.T1): the partition scenario's judge.
+spot-l8-isolation = { path = "../l8-isolation" }
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "macros",
+    "time",
+    "sync",
+    "net",
+    "io-util",
+    "process",
+    "fs",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

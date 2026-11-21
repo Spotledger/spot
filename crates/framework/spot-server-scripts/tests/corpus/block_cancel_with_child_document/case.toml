@@ -1,0 +1,8 @@
+kind = "doc_event"
+event = "before_cancel"
+pattern = "block cancel when a child document exists"
+unsupported = "the corpus world has no submittable DocType, so before_cancel never fires; the case only proves the script does not run on a plain create"
+[input.fields]
+title = "PO-4004"
+[expect]
+ok = true

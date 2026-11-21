@@ -1,0 +1,27 @@
+[package]
+name = "spot-conditions-pg"
+description = "PgConditionStore (WP-RTB-01.T2): the durable PostgreSQL side of spot-conditions — load_open() restores the open set after a restart, and apply() writes spot_condition_open, spot_condition_history and the matching sys_condition_raised/sys_condition_cleared outbox event in one transaction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The pure engine: AuditEvent, Open, Severity, ConditionId, Subject, ConditionParams, Millis.
+spot-conditions = { path = "../../framework/spot-conditions" }
+# The site's own pool, transactions and the outbox (ADR-11, ADR-053): this store never opens a
+# second connection and never uses the blocking bridge.
+spot-postgres = { path = "../spot-postgres" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+serde_json = "1"
+thiserror = "2"
+# `jsonb` parameter binding for params/payload columns.
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,28 @@
+# settings_store codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "settings_store.corrupt_row"
+class = "none"
+summary = "A stored row cannot be read back."
+explanation_key = "error.settings_store.corrupt_row"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings_store.storage_failed"
+class = "none"
+summary = "A statement or a connection failed."
+explanation_key = "error.settings_store.storage_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "settings_store.version_conflict"
+class = "none"
+summary = "A write lost a version race."
+explanation_key = "error.settings_store.version_conflict"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

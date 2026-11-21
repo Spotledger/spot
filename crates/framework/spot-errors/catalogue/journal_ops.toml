@@ -1,0 +1,76 @@
+# The journal management operations' error codes (WP-RTB-04.T4, ADR-061, ADR-44). Library-internal
+# vocabulary: the site host bridges these onto the management API's result envelope; none of
+# them is raised through AppError, so every class is `none`. Codes and summaries carry no record
+# content, key or personal value.
+
+[[entry]]
+code = "journal_ops.unknown_operation"
+class = "none"
+summary = "The operation id is not one of the journal's management operations."
+explanation_key = "error.journal_ops.unknown_operation"
+params = []
+remedy = "Use an operation id from the journal catalogue."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.bad_arguments"
+class = "none"
+summary = "The invocation does not parse into the operation's typed arguments."
+explanation_key = "error.journal_ops.bad_arguments"
+params = []
+remedy = "Correct the named parameter and resubmit the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.serialise"
+class = "none"
+summary = "An operation's result could not be turned into JSON."
+explanation_key = "error.journal_ops.serialise"
+params = []
+remedy = "Report this as a defect; the result type is wrong, not the request."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.denied"
+class = "none"
+summary = "The caller is not permitted to run the journal operation, or the check could not decide."
+explanation_key = "error.journal_ops.denied"
+params = []
+remedy = "Ask an administrator for the permission the operation needs, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.not_found"
+class = "none"
+summary = "The snapshot, grant, subject or other thing the operation names does not exist."
+explanation_key = "error.journal_ops.not_found"
+params = []
+remedy = "Check the identifier against the journal's status or listing and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.conflict"
+class = "none"
+summary = "The journal's current state does not allow the operation now."
+explanation_key = "error.journal_ops.conflict"
+params = []
+remedy = "Wait for the running operation to finish or re-plan, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.unavailable"
+class = "none"
+summary = "A dependency the operation needs, such as the object store or key provider, is unreachable."
+explanation_key = "error.journal_ops.unavailable"
+params = []
+remedy = "Restore the dependency and retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ops.failed"
+class = "none"
+summary = "The operation started and failed."
+explanation_key = "error.journal_ops.failed"
+params = []
+remedy = "Read the operation's audit record for the reason code, fix the cause and retry."
+since = "0.1.0"

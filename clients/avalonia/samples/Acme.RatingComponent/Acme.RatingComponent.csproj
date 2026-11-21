@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Acme.RatingComponent</RootNamespace>
+    <!-- A sample third-party component package: it references only the contract, never the app. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Themes/**/*.axaml" />
+    <!-- The same file again as a manifest resource: a compiled ControlTheme cannot be read back
+         as an asset, and the contract kit scans the styles for hard-coded literals. -->
+    <EmbeddedResource Include="Themes/AcmeRating.axaml" LogicalName="Acme.RatingComponent.Themes.AcmeRating.axaml" />
+  </ItemGroup>
+</Project>

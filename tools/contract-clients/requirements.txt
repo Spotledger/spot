@@ -1,0 +1,5 @@
+# Pinned build inputs for the native API client generator gate (WP-CON-03.T2).
+# convert.py only needs PyYAML; keep this list identical to what the
+# repository's Python version ships, and let tools/lints/native-api's existing
+# venv convention install it.
+PyYAML==6.0.3

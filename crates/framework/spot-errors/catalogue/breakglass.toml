@@ -1,0 +1,19 @@
+# breakglass codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "breakglass.close"
+class = "none"
+summary = "Closes a session."
+explanation_key = "error.breakglass.close"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "breakglass.open"
+class = "none"
+summary = "Opens a session."
+explanation_key = "error.breakglass.open"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

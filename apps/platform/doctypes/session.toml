@@ -1,0 +1,117 @@
+name = "session"
+label = "Session"
+app = "platform"
+module = "identity"
+
+[[protection_groups]]
+name = "credential"
+label = "Credential"
+trace = true
+sync_class_hint = "home_only"
+
+[[protection_groups]]
+name = "login_source"
+label = "Login Source"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "active\nended\nexpired"
+required = true
+default = "active"
+in_standard_filter = true
+
+[[fields]]
+name = "audience"
+label = "Audience"
+type = "select"
+options = "staff\npartner\nconsumer"
+required = true
+read_only = true
+in_standard_filter = true
+description = "Who the session is for (ADR-083 Barrier 1). Chosen once at creation from the issuing service and the user's type; nothing changes it afterwards. A stored session with no audience, or an unknown one, is invalid."
+
+[[fields]]
+name = "method"
+label = "Method"
+type = "select"
+options = "password\ntotp\nrecovery\noidc\nsaml\napi_key\nmagic_link"
+description = "How the session was established; it may not move to a weaker method."
+
+[[fields]]
+name = "created_at"
+label = "Created At"
+type = "datetime"
+required = true
+read_only = true
+
+[[fields]]
+name = "last_seen"
+label = "Last Seen"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "step_up_at"
+label = "Step-up At"
+type = "datetime"
+read_only = true
+description = "When the person last re-authenticated on this session (POST /api/v1/auth/step-up, ADR-070 section 3). Empty until they do: a session that was only just created has not stepped up. The operations that need a recent step-up compare it with the step-up window; only the step-up service writes it, and only on the caller's own session."
+
+[[fields]]
+name = "idle_expires_at"
+label = "Idle Expires At"
+type = "datetime"
+required = true
+
+[[fields]]
+name = "absolute_expires_at"
+label = "Absolute Expires At"
+type = "datetime"
+required = true
+
+[[fields]]
+name = "client_info"
+label = "Client Info"
+type = "text"
+max_chars = 500
+description = "Device label and user agent."
+
+[[fields]]
+name = "source_digest"
+label = "Source Digest"
+type = "text"
+max_chars = 128
+read_only = true
+protection_group = "login_source"
+classification = ["pii"]
+description = "A keyed digest of the client network and agent hint that started the session, never the address (WP-PLT-02.T10). Empty on a session created before the column existed: such a session is treated as an unknown source, which the policy allows only until its absolute timeout."
+
+[[fields]]
+name = "end_reason"
+label = "End Reason"
+type = "select"
+options = "sign_out\nidle\nabsolute\nrevoked_by_user\nrevoked_by_admin\nleaver\nsso_logout\npassword_change"
+read_only = true
+in_standard_filter = true
+description = "Why the session ended; empty while it is active and on a session ended before the column existed (WP-PLT-02.T10)."
+
+[[fields]]
+name = "token_digest"
+label = "Token Digest"
+type = "secret"
+lookup = true
+unique = true
+protection_group = "credential"
+classification = ["secret"]
+no_copy = true

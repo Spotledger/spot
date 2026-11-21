@@ -1,0 +1,13 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT ("p"."name" COLLATE "C") AS "name", "p"."active" AS "active", SUM("p"."credit_limit") AS "total" FROM "party" AS "p" WHERE ("p"."visits" > $1) GROUP BY "p"."name" COLLATE "C", "p"."active" HAVING ((SUM("p"."credit_limit") > $2) AND (("p"."name" COLLATE "C") <> $3 COLLATE "C") AND (("p"."name" COLLATE "C") COLLATE "spot_en" < $4 COLLATE "spot_en")) ORDER BY ("p"."name" COLLATE "C") COLLATE "spot_en" ASC NULLS LAST, ("p"."name" COLLATE "C") ASC NULLS LAST, SUM("p"."credit_limit") DESC NULLS LAST OFFSET $5
+$1 = Int8(0)
+$2 = Numeric(0)
+$3 = Text("zz")
+$4 = Text("zz")
+$5 = Int8(0)
+columns = ["name", "active", "total"]
+decode = [Text, Bool, Decimal { scale: Some(2) }]
+path = Transactional

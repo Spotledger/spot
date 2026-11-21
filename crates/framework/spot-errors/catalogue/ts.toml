@@ -1,0 +1,109 @@
+# ts codes: diagnostics of the spot-ts-transpile save-time transpiler. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "ts.import_not_allowed"
+class = "none"
+summary = "A script imports a module that is not on the import allow-list."
+explanation_key = "error.ts.import_not_allowed"
+params = []
+remedy = "Import only allow-listed modules (by default the spot:* virtual modules)."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.source_too_large"
+class = "none"
+summary = "The script is larger than the save-time size cap."
+explanation_key = "error.ts.source_too_large"
+params = []
+remedy = "Split the script into smaller files."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.too_deep"
+class = "none"
+summary = "The script nests deeper than the allowed number of levels."
+explanation_key = "error.ts.too_deep"
+params = []
+remedy = "Split the deeply nested code into smaller functions."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.transpile"
+class = "none"
+summary = "The transpiler could not produce a source map for the script."
+explanation_key = "error.ts.transpile"
+params = []
+remedy = "Report the script that triggered this; it is a transpiler fault, not a script error."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.decorator_not_supported"
+class = "none"
+summary = "A script uses a decorator, which scripts do not support."
+explanation_key = "error.ts.decorator_not_supported"
+params = []
+remedy = "Write the wiring as plain statements instead of a decorator."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.dynamic_import_not_allowed"
+class = "none"
+summary = "A script calls import() dynamically, which is not allowed."
+explanation_key = "error.ts.dynamic_import_not_allowed"
+params = []
+remedy = "Use a static import of an allow-listed module."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.eval_not_allowed"
+class = "none"
+summary = "A script refers to or calls eval, which the engine never provides."
+explanation_key = "error.ts.eval_not_allowed"
+params = []
+remedy = "Remove eval and write the statements directly."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.function_constructor_not_allowed"
+class = "none"
+summary = "A script calls Function or new Function, which is not allowed."
+explanation_key = "error.ts.function_constructor_not_allowed"
+params = []
+remedy = "Write the statements you would have passed to Function directly."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.namespace_not_supported"
+class = "none"
+summary = "A script declares a namespace or module block, which scripts do not support."
+explanation_key = "error.ts.namespace_not_supported"
+params = []
+remedy = "Group the code under an object, or use the modules supplied by the allow-list."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.require_not_allowed"
+class = "none"
+summary = "A script uses require, which is not available."
+explanation_key = "error.ts.require_not_allowed"
+params = []
+remedy = "Use a static import of an allow-listed module."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.syntax"
+class = "none"
+summary = "The script has a syntax error reported by the parser."
+explanation_key = "error.ts.syntax"
+params = []
+remedy = "Fix the syntax error at the reported line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "ts.with_not_allowed"
+class = "none"
+summary = "A script uses a with statement, which is not allowed."
+explanation_key = "error.ts.with_not_allowed"
+params = []
+remedy = "Refer to the object's members by name instead of using with."
+since = "0.1.0"

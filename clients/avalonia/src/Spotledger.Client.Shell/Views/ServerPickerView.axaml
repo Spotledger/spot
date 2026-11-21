@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Spotledger.Client.Shell"
+             x:Class="Spotledger.Client.Shell.Views.ServerPickerView"
+             x:DataType="vm:ServerPickerViewModel">
+  <Grid RowDefinitions="Auto,*,Auto" MaxWidth="640" Margin="24">
+    <StackPanel Grid.Row="1" Spacing="12" VerticalAlignment="Center">
+      <TextBlock Text="Choose a server"
+                 FontSize="{DynamicResource Font.Size.Title}"
+                 FontWeight="{DynamicResource Font.Weight.Semibold}"
+                 Foreground="{DynamicResource Color.Text.Primary}" />
+      <TextBlock Text="Spotledger addresses one site per connection."
+                 FontSize="{DynamicResource Font.Size.Body}"
+                 Foreground="{DynamicResource Color.Text.Secondary}" />
+      <AutoCompleteBox ItemsSource="{Binding RecentServers}"
+                       Text="{Binding ServerUrl, Mode=TwoWay}"
+                       PlaceholderText="https://site.example"
+                       FilterMode="Contains" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="Check"
+                Command="{Binding CheckCommand}"
+                Classes="accent" />
+      </StackPanel>
+      <TextBlock Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 FontSize="{DynamicResource Font.Size.Caption}"
+                 Foreground="{DynamicResource Color.Semantic.Info}"
+                 TextWrapping="Wrap" />
+      <TextBlock Name="VersionNoticeText"
+                 Text="{Binding VersionNotice}"
+                 IsVisible="{Binding HasVersionNotice}"
+                 FontSize="{DynamicResource Font.Size.Body}"
+                 Foreground="{DynamicResource Color.Semantic.Info}"
+                 TextWrapping="Wrap" />
+      <Button Content="Next"
+              Command="{Binding NextCommand}"
+              HorizontalAlignment="Stretch"
+              Classes="accent" />
+    </StackPanel>
+  </Grid>
+</UserControl>

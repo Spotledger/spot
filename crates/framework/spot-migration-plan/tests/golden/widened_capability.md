@@ -1,0 +1,9 @@
+# Release plan: metadata 0 -> 0
+
+- **Risk:** needs review
+- **Estimate:** 5s expected (2s low, 10s high), blocking: online
+- **Changes:** 1 change (schema 0, metadata 0, patches 0, behaviour 1)
+
+## Needs review (1)
+- [behaviour] erp_selling — App `erp_selling` widens its capabilities. (network=[] email=false files= read=[] write=[] -> network=[api.example.com:443] email=true files= read=[] write=[])
+  - why: widened: network api.example.com:443, email

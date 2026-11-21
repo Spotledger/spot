@@ -1,0 +1,21 @@
+[package]
+name = "spot-sync-obligations"
+description = "Sync obligation ledger (WP-SYN-05.T1, ADR-065 s1-s3 and s6): outstanding mandatory events derived from the applied prefix, deadlines, the escalation ladder, lane order, satisfaction evidence and the per-node report - pure functions over plain data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public type, so the sync runtime can persist and ship them.
+serde = { version = "1", features = ["derive"] }
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property test: `outstanding` is monotone as the applied prefix advances.
+proptest = "1"
+
+[lints]
+workspace = true

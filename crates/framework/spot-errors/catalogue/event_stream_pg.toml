@@ -1,0 +1,11 @@
+# event_stream_pg codes: the PostgreSQL event stream consumer store (WP-INT-02.T2). One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "event_stream_pg.migration_failed"
+class = "Internal"
+summary = "The event stream consumer tables could not be created in the database."
+explanation_key = "error.event_stream_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and that the server is reachable, then retry prepare."
+since = "0.1.0"

@@ -1,0 +1,28 @@
+# permission codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "permission.denied"
+class = "PermissionDenied"
+summary = "The caller may not perform this action."
+explanation_key = "error.permission.denied"
+params = []
+remedy = "Ask a role with the needed permission, or have an administrator grant it."
+since = "0.1.0"
+
+[[entry]]
+code = "permission.field_denied"
+class = "PermissionDenied"
+summary = "A write names a field the caller may not set, or a query filters on a field the caller may not read unmasked."
+explanation_key = "error.permission.field_denied"
+params = []
+remedy = "Remove the field from the request, or ask for a role with the field's right."
+since = "0.1.0"
+
+[[entry]]
+code = "permission.reveal_denied"
+class = "none"
+summary = "The reveal was refused; the answer is the same for a missing document, a forbidden one, a field that cannot be revealed and a caller without the right."
+explanation_key = "error.permission.reveal_denied"
+params = []
+remedy = "Ask an administrator for the reveal right on this field, and give the reason when you ask."
+since = "0.1.0"

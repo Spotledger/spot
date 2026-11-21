@@ -1,0 +1,112 @@
+// The connector world (WP-INT-05.T1): the one interface a connector component exports and the
+// host provides. It follows the conventions of the app world in `spot-wasm/wit/test-world.wit`
+// (WP-EXT-05.T1): the host is the only source of authority, JSON text crosses the boundary, and
+// the guest has no clock, no filesystem and no network of its own. The world is versioned by its
+// package (`spotledger:connector@0.1.0`); a breaking change is a new package version.
+package spotledger:connector@0.1.0;
+
+/// The interface a connector component implements. The host imports the three exports
+/// (`describe`, `invoke`, `webhook`) and provides the four imports (`log`, `http-request`,
+/// `secrets-get`, `kv-get`/`kv-set`).
+world connector {
+    /// Log levels, lowest first. The same vocabulary as the app world.
+    enum level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    /// How a connector authenticates. The host injects a credential for `bearer`, `basic` and
+    /// `oauth2`; the guest never holds that token.
+    enum auth-kind {
+        /// No credential.
+        none,
+        /// `Authorization: Bearer <token>`.
+        bearer,
+        /// `Authorization: Basic <base64(user:password)>`.
+        basic,
+        /// `Authorization: Bearer <access-token>`, refreshed by the host.
+        oauth2,
+    }
+
+    /// One operation the connector supports. `input-schema` and `output-schema` are JSON
+    /// Schema documents as text.
+    record operation {
+        /// The operation name the caller passes to `invoke`.
+        name: string,
+        /// The JSON Schema of the operation's input.
+        input-schema: string,
+        /// The JSON Schema of the operation's output.
+        output-schema: string,
+    }
+
+    /// What `describe` returns: the connector's identity, its operations and the auth kinds it
+    /// supports.
+    record connector-info {
+        /// The connector's name.
+        name: string,
+        /// The connector's version.
+        version: string,
+        /// The operations it supports.
+        operations: list<operation>,
+        /// The auth kinds it supports, at least one.
+        auth: list<auth-kind>,
+    }
+
+    /// The invocation context: who is calling, the invocation's clock and its deadline. The
+    /// guest has no clock of its own; `now-micros` is the only time it sees.
+    record call-context {
+        /// The tenant the call runs for.
+        tenant: string,
+        /// The actor (user or service), when there is one.
+        actor: option<string>,
+        /// The invocation's time, in microseconds since the Unix epoch.
+        now-micros: s64,
+        /// The deadline, in microseconds since the Unix epoch. The host stops the call at it.
+        deadline-micros: s64,
+    }
+
+    /// An error a connector returns on purpose. `retryable` is the connector's own hint; the
+    /// host classifies it further (a transport failure is retryable, a bad argument is not).
+    record error {
+        /// A stable, dotted code.
+        code: string,
+        /// A human message. Never a secret.
+        message: string,
+        /// Whether retrying the same call may succeed.
+        retryable: bool,
+    }
+
+    /// Writes a log line. The host decides where it goes; it is never the guest's memory.
+    import log: func(level: level, message: string);
+
+    /// Makes an outbound HTTP request **through the egress policy**. `request` is a JSON object
+    /// `{"method","url","headers","body"}`; the result is the JSON response
+    /// `{"status","headers","body"}`. The host injects any credential the connector declared
+    /// for `bearer`/`basic`/`oauth2`; the guest never sees the token. A denied destination is
+    /// an error, never a connection.
+    import http-request: func(request: string) -> result<string, string>;
+
+    /// Reads a credential the connector declared as guest-visible, by reference name. The host
+    /// refuses a reference the connector did not declare. Credentials used by the injected auth
+    /// schemes are **not** readable here.
+    import secrets-get: func(reference: string) -> result<string, string>;
+
+    /// Reads small per-connector state. The value is `none` when the key is absent.
+    import kv-get: func(key: string) -> option<string>;
+
+    /// Writes small per-connector state. The host bounds the total size.
+    import kv-set: func(key: string, value: string) -> result<_, string>;
+
+    /// Describes the connector. Called once when it is loaded.
+    export describe: func() -> connector-info;
+
+    /// Invokes an operation. `op` names it; `input` is JSON matching the operation's input
+    /// schema; `ctx` is the invocation context. The result is JSON matching the output schema.
+    export invoke: func(op: string, input: string, ctx: call-context) -> result<string, error>;
+
+    /// Handles an inbound webhook request (JSON) and returns a JSON response. Optional: a
+    /// connector that does not accept webhooks returns a `connector.unsupported` error.
+    export webhook: func(request: string) -> result<string, error>;
+}

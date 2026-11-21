@@ -1,0 +1,172 @@
+# Spotledger process contract (spot-bpm-contract). Canonical: one scalar per line, a fixed key order.
+id = "request_approve"
+version = 1
+title = "Request and approve"
+
+[[participants]]
+role = "requester"
+kind = "tenant"
+
+[[participants]]
+role = "approver"
+kind = "external"
+
+[[messages]]
+name = "request"
+topic = "bpm.request"
+schema_version = 1
+from = "requester"
+to = "approver"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "amount_minor"
+kind = "integer"
+required = true
+
+[[messages.fields]]
+name = "note"
+kind = "string"
+required = false
+max_len = 500
+
+[[messages]]
+name = "approve"
+topic = "bpm.decision"
+schema_version = 1
+from = "approver"
+to = "requester"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages]]
+name = "reject"
+topic = "bpm.decision"
+schema_version = 1
+from = "approver"
+to = "requester"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "reason"
+kind = "string"
+required = false
+max_len = 200
+
+[[messages]]
+name = "cancel"
+topic = "bpm.request"
+schema_version = 1
+from = "requester"
+to = "approver"
+
+[[messages.fields]]
+name = "reference"
+kind = "string"
+required = true
+max_len = 64
+
+[[messages.fields]]
+name = "reason"
+kind = "string"
+required = false
+max_len = 200
+
+[[order]]
+by = "requester"
+next = "request"
+
+[[order]]
+by = "approver"
+after = "request"
+next = "approve"
+
+[[order]]
+by = "approver"
+after = "request"
+next = "reject"
+
+[[order]]
+by = "requester"
+after = "request"
+next = "cancel"
+
+[[order]]
+by = "approver"
+after = "request"
+outcome = "expired"
+
+[[order]]
+by = "requester"
+after = "approve"
+outcome = "approved"
+
+[[order]]
+by = "requester"
+after = "approve"
+outcome = "expired"
+
+[[order]]
+by = "requester"
+after = "reject"
+outcome = "rejected"
+
+[[order]]
+by = "approver"
+after = "cancel"
+outcome = "cancelled"
+
+[[outcomes]]
+name = "approved"
+kind = "completed"
+
+[[outcomes]]
+name = "rejected"
+kind = "failed"
+
+[[outcomes]]
+name = "cancelled"
+kind = "cancelled"
+
+[[outcomes]]
+name = "expired"
+kind = "needs_attention"
+
+[[timeouts]]
+message = "request"
+by = "approver"
+seconds = 86400
+outcome = "expired"
+
+[[timeouts]]
+message = "approve"
+by = "requester"
+seconds = 86400
+outcome = "expired"
+
+[[timeouts]]
+message = "reject"
+by = "requester"
+seconds = 86400
+outcome = "expired"
+
+[[signatures]]
+role = "requester"
+algorithm = "ed25519"
+key_id = "requester-key-1"
+signed_hash = "7bcaff801cd9ae0f1c0b0368190102bbad22690df770779a4d0198284eb23452"
+signature = "9f2c4d1e7a3b5c6d8e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f"

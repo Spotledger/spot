@@ -1,0 +1,27 @@
+# The scripting app's DocType grants (WP-EXT-06.T6).
+#
+# Only the two administrator roles may create, read, write or delete an API Script or a
+# Scheduled Script. No other role holds any right on either DocType, and neither DocType is
+# selectable from a link picker, so a script's source and its run-as user stay with the
+# administrators. A script runs with the rights of its caller (API) or its run-as user
+# (scheduled); writing one grants no data access of its own.
+
+[[entries]]
+role = "Tenant Administrator"
+doctype = "api_script"
+rights = ["read", "write", "create", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "api_script"
+rights = ["read", "write", "create", "delete"]
+
+[[entries]]
+role = "Tenant Administrator"
+doctype = "scheduled_script"
+rights = ["read", "write", "create", "delete"]
+
+[[entries]]
+role = "System Manager"
+doctype = "scheduled_script"
+rights = ["read", "write", "create", "delete"]

@@ -1,0 +1,1 @@
+{"op":"add_tile","tile":{"id":"number_1","title":"Sales","source":{"kind":"number","report":"sales","column":"debit"},"place":{"row":1,"column":1,"width":3,"height":2},"uses_filters":true}}

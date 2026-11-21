@@ -1,0 +1,74 @@
+# Spotledger process definition (spot-bpm-model). Canonical: keys sorted, one scalar per line.
+name = "order_to_cash"
+app = "selling"
+title = "Order to Cash"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+doctype = "Sales Order"
+event = "post"
+trigger = "document_event"
+
+[[nodes]]
+id = "create_delivery"
+kind = "document"
+action = "create"
+doctype = "Delivery Note"
+
+[[nodes]]
+id = "post_delivery"
+kind = "document"
+action = "post"
+doctype = "Delivery Note"
+operation = "post"
+
+[[nodes]]
+id = "approve"
+kind = "decision"
+assignee = "role:sales_manager"
+outcomes = ["approve", "hold"]
+title = "Approve the delivery?"
+
+[[nodes]]
+id = "notify"
+kind = "integration"
+terminal = true
+action = "send"
+connector = "email"
+endpoint = "customer"
+
+[[nodes]]
+id = "hold"
+kind = "wait"
+terminal = true
+event = "payment_received"
+wait = "event"
+
+[[edges]]
+from = "start"
+to = "create_delivery"
+
+[[edges]]
+from = "create_delivery"
+to = "post_delivery"
+
+[[edges]]
+from = "post_delivery"
+to = "approve"
+
+[[edges]]
+from = "approve"
+to = "notify"
+rule = "high_value"
+
+[[edges]]
+from = "approve"
+to = "hold"
+default = true
+
+[[rules]]
+id = "high_value"
+expression = "doc.total > 1000"

@@ -1,0 +1,5 @@
+error: the method name `first` is whitelisted twice on this controller; whitelisted names are unique per DocType (rename one with #[whitelist(name = "...")])
+  --> tests/ui/duplicate_names.rs:23:14
+   |
+23 |     async fn second(&self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |              ^^^^^^

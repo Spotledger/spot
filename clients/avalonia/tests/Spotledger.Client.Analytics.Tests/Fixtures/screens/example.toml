@@ -1,0 +1,9 @@
+# An example file: excluded from the generated id set, exactly as check.py excludes it.
+
+[[screen]]
+id = "fixture.example.only"
+title = "Fixture example"
+module = "fixture"
+kind = "form"
+design_ref = "docs/ui/designs/demo.md#example"
+priority = "p2"

@@ -1,0 +1,22 @@
+[package]
+name = "spot-registry"
+description = "Signed app registry core, atomic index, verified clients and blob storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-bundle = { path = "../spot-bundle" }
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+spot-manifest = { path = "../spot-manifest" }
+semver = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+spot-pack = { path = "../spot-pack" }
+tempfile = "3"
+
+[lints]
+workspace = true

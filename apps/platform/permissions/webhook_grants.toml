@@ -1,0 +1,27 @@
+# DocType rights for webhooks (WP-INT-01.T3), loaded after `grants.toml` (additive rows only;
+# `spot_platform_app::permission_texts` concatenates the two). `Tenant Administrator` needs no
+# row: it holds every right by definition.
+#
+# The signing secret (the `secret` protection group of `webhook`) is closed by default and no
+# field grant opens it. `webhook_delivery` is written only by the delivery service: no role
+# holds create, write or delete on it.
+
+[[entries]]
+role = "System Manager"
+doctype = "webhook"
+rights = ["read", "write", "create", "delete", "report", "select"]
+
+[[entries]]
+role = "System Manager"
+doctype = "webhook_delivery"
+rights = ["read", "report", "select"]
+
+[[entries]]
+role = "Webhook Manager"
+doctype = "webhook"
+rights = ["read", "report", "select"]
+
+[[entries]]
+role = "Webhook Manager"
+doctype = "webhook_delivery"
+rights = ["read", "report", "select"]

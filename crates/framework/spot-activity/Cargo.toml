@@ -1,0 +1,30 @@
+[package]
+name = "spot-activity"
+description = "Document activity model (WP-DOC-07.T1): version history with a field-level document diff, the timeline builder, comments with mentions and edit rules, the assignment state machine and share grants - pure data with stable serde"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, the value model it diffs, `Actor` and the re-exports.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Effective metadata: field declaration order, field kinds (`secret`) and child DocTypes.
+spot-meta = { path = "../spot-meta" }
+# Stable, derive-based serde on every public type, so the engine can persist the models.
+serde = { version = "1", features = ["derive"] }
+# The JSON encoding of values (ADR-055), of whole-row snapshots and of change records.
+serde_json = "1"
+# Instants on every record; formatting and parsing for their wire form. Every instant is a
+# parameter: nothing in this crate reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting", "parsing", "macros"] }
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: `diff(a, a)` is empty, and applying changes to `before` reproduces `after`.
+proptest = "1"
+
+[lints]
+workspace = true

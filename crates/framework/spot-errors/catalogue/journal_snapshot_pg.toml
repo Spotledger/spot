@@ -1,0 +1,73 @@
+# journal_snapshot_pg codes: journal snapshots hosted (WP-RTB-01.T5, ADR-061 s6): the PostgreSQL image reader, the wait for the journal and the signing key. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_snapshot_pg.read_failed"
+class = "none"
+summary = "The snapshot could not read the database (the transaction could not start, a statement failed or the outbox is not installed), so nothing was written."
+explanation_key = "error.journal_snapshot_pg.read_failed"
+params = []
+remedy = "Check the site's database and the journal's state; the next scheduled run tries again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.image_invalid"
+class = "none"
+summary = "A stored value contradicts its declared type, so the record cannot be written as an image and the snapshot stopped."
+explanation_key = "error.journal_snapshot_pg.image_invalid"
+params = []
+remedy = "Find the entity and column the database reports and repair the value; never edit a snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.options_invalid"
+class = "none"
+summary = "The snapshot options or the catalogue are unusable (a zero page size, no document entity to snapshot)."
+explanation_key = "error.journal_snapshot_pg.options_invalid"
+params = []
+remedy = "Correct [services.journal_snapshots] or the metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.journal_behind"
+class = "none"
+summary = "The journal did not reach the snapshot's position within the wait, so the signed index was not written and nothing is listed: a base image the journal cannot back would be useless."
+explanation_key = "error.journal_snapshot_pg.journal_behind"
+params = []
+remedy = "Restore the journal target (see journal hosting); the next run snapshots again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.write_failed"
+class = "none"
+summary = "The snapshot writer or the object store failed (the code of the snapshot crate follows), so no index was written and nothing is listed."
+explanation_key = "error.journal_snapshot_pg.write_failed"
+params = []
+remedy = "Check the journal target; parts already written are reused by the next run."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.key_unavailable"
+class = "none"
+summary = "The snapshot signing or verifying key could not be derived from the site's key provider."
+explanation_key = "error.journal_snapshot_pg.key_unavailable"
+params = []
+remedy = "Check [services.secrets] and the key file."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.prune_refused"
+class = "none"
+summary = "The object store refused to remove old snapshot objects."
+explanation_key = "error.journal_snapshot_pg.prune_refused"
+params = []
+remedy = "Check the store permissions for deletion; the next prune run tries again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_snapshot_pg.prune_failed"
+class = "none"
+summary = "Removing old snapshot objects failed."
+explanation_key = "error.journal_snapshot_pg.prune_failed"
+params = []
+remedy = "Check the journal target and the log; the next prune run tries again."
+since = "0.1.0"

@@ -1,0 +1,127 @@
+# metering codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "metering.unknown_zone"
+class = "Validation"
+summary = "The metering period spec named an IANA time zone the build does not know: {zone}."
+explanation_key = "error.metering.unknown_zone"
+params = ["zone"]
+remedy = "Use an IANA zone name the platform ships (for example Asia/Karachi), or leave the zone unset for UTC."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.basis_points_out_of_range"
+class = "Validation"
+summary = "A metering fraction (warn level or soft tolerance) was set outside 0..=10000 basis points: {bps}."
+explanation_key = "error.metering.basis_points_out_of_range"
+params = ["bps"]
+remedy = "Set the fraction as basis points between 0 and 10000 (80% is 8000)."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.invalid_period_spec"
+class = "Validation"
+summary = "A metering period spec is inconsistent: {reason}."
+explanation_key = "error.metering.invalid_period_spec"
+params = ["reason"]
+remedy = "Correct the period spec (an anniversary anchor must be a day of month in 1..=31)."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.malformed_event"
+class = "Validation"
+summary = "A metering event does not match its meter's kind and was refused: event {id}, meter {meter}."
+explanation_key = "error.metering.malformed_event"
+params = ["id", "meter"]
+remedy = "Send a member digest with a distinct-set meter (active users) and an amount with a counter or gauge; the event was not counted."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.period_unresolvable"
+class = "Validation"
+summary = "The instant {at} cannot be resolved into a period in zone {zone}."
+explanation_key = "error.metering.period_unresolvable"
+params = ["at", "zone"]
+remedy = "Check the instant and the tenant's configured zone; the event was not bucketed."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.quota_exceeded"
+class = "none"
+summary = "Usage is at or past the meter's limit; creating new users or metered documents is blocked."
+explanation_key = "error.metering.quota_exceeded"
+params = []
+remedy = "Reduce usage or move to a licence that grants a higher limit; reading, exporting and reversals stay available."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.quota_soft_exceeded"
+class = "none"
+summary = "Usage is past the meter's soft over-limit tolerance; creating new users or metered documents is blocked."
+explanation_key = "error.metering.quota_soft_exceeded"
+params = []
+remedy = "Bring usage back under the tolerated level, or contact your provider about a higher limit."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.quota_snapshot_stale"
+class = "none"
+summary = "The usage snapshot is older than the guard's bound, so a hard limit fails closed until the next refresh."
+explanation_key = "error.metering.quota_snapshot_stale"
+params = []
+remedy = "Check that the metering flusher is running and refreshing the snapshot; the limit is a contract, so it is not breached on a suspect reading."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.counter_overflow"
+class = "Validation"
+summary = "The exact usage counter exceeds its integer range."
+explanation_key = "error.metering.counter_overflow"
+params = []
+remedy = "Investigate the producer amounts; do not replace the exact count with a saturated value."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.tenant_mismatch"
+class = "Validation"
+summary = "The quota guard belongs to another tenant."
+explanation_key = "error.metering.tenant_mismatch"
+params = []
+remedy = "Select the guard bound to the current tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.late_beyond_horizon"
+class = "Validation"
+summary = "Event {id} belongs to period {period}, which is past the metering retention horizon."
+explanation_key = "error.metering.late_beyond_horizon"
+params = ["id", "period"]
+remedy = "This event is older than the store's late-arrival window: compaction removed the tombstones of its period, so counting it could count a replay twice. Do not retry it; replay the fact only within the horizon the store is configured with."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.batch_too_large"
+class = "Validation"
+summary = "A batch of {size} events exceeds the bound of {max} events per call."
+explanation_key = "error.metering.batch_too_large"
+params = ["max", "size"]
+remedy = "Send the backlog in several calls of at most the documented bound; recording is idempotent, so splitting a batch never changes the totals."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.retention_horizon_too_short"
+class = "Validation"
+summary = "A metering retention horizon of {periods} periods is shorter than the minimum of {min}."
+explanation_key = "error.metering.retention_horizon_too_short"
+params = ["min", "periods"]
+remedy = "Raise the horizon to at least the minimum. A shorter horizon stops accepting events that producers may still retry, which loses revenue; keeping the tombstones a little longer only costs storage."
+since = "0.1.0"
+
+[[entry]]
+code = "metering.store_unavailable"
+class = "Unavailable"
+summary = "The metering store is unavailable ({cause}); the call can be retried."
+explanation_key = "error.metering.store_unavailable"
+params = ["cause"]
+remedy = "Retry later. Quota decisions keep using the last snapshot: a hard-block meter then refuses new metered documents once the snapshot is stale, and reads are never blocked."
+since = "0.1.0"

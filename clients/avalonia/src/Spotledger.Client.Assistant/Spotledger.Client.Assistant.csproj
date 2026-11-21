@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-AI-13.T1: the in-product support assistant. A docked chat panel that talks to the
+       server's support-agent endpoint as the signed-in user (never with authority of its
+       own), shows the plan before any change, and degrades to the offline catalogue when
+       AI is unavailable. The model is renderer-neutral; the panel is code-built Avalonia.
+       No floating point, no wall clock (time is an argument). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.Assistant.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+  </ItemGroup>
+</Project>

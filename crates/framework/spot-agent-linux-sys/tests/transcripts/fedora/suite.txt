@@ -1,0 +1,51 @@
+# Fedora 40: SELinux enforcing, XFS root on an LVM volume, NetworkManager.
+# Synthetic transcript written for this test; no real machine's output is copied.
+
+$ lsblk -J -b -o NAME,KNAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,UUID,LABEL,ROTA
+{"blockdevices":[{"name":"vda","kname":"vda","type":"disk","size":"53687091200","fstype":null,"mountpoint":null,"uuid":null,"label":null,"rota":false,"children":[{"name":"vda1","kname":"vda1","type":"part","size":"1073741824","fstype":"ext4","mountpoint":"/boot","uuid":"1111","label":null,"rota":false},{"name":"vda2","kname":"vda2","type":"part","size":"52613349376","fstype":"LVM2_member","mountpoint":null,"uuid":"2222","label":null,"rota":false,"children":[{"name":"fedora-root","kname":"dm-0","type":"lvm","size":"47244640256","fstype":"xfs","mountpoint":"/","uuid":"3333","label":null,"rota":false}]}]}]}
+$ findmnt -J -o TARGET,SOURCE,FSTYPE,OPTIONS
+{"filesystems":[{"target":"/","source":"/dev/mapper/fedora-root","fstype":"xfs","options":"rw,relatime,seclabel"},{"target":"/boot","source":"/dev/vda1","fstype":"ext4","options":"rw,relatime"}]}
+$ df -P -B1 /var/lib/pgsql
+Filesystem     1B-blocks       Used  Available Use% Mounted on
+/dev/mapper/fedora-root 47244640256 20000000000 27000000000  43% /
+$ sysctl -a
+vm.swappiness = 60
+net.core.somaxconn = 4096
+fs.file-max = 9223372036854775807
+net.ipv4.ip_forward = 1
+$ sysctl -n vm.swappiness
+60
+$ chronyc tracking
+Reference ID    : C0A80101 (time.example)
+Stratum         : 3
+System time     : 0.000012345 seconds fast of NTP time
+Last offset     : +0.000000123 seconds
+RMS offset      : 0.000456789 seconds
+Leap status     : Normal
+$ chronyc sources -v
+210 Number of sources = 1
+  .-- Source mode  '^' = server
+MS Name/IP address         Stratum Poll Reach LastRx Last sample
+===============================================================================
+^* time.example                  2   6   377    34    -12us[  -8us] +/-   21ms
+$ getenforce
+Enforcing
+$ semodule -l
+abrt
+chronyd
+$ ip -j address show
+[{"ifname":"eth0","operstate":"UP","address":"52:54:00:00:00:01","addr_info":[{"family":"inet","local":"192.0.2.10","prefixlen":24}]},{"ifname":"lo","operstate":"UNKNOWN","addr_info":[{"family":"inet","local":"127.0.0.1","prefixlen":8}]}]
+$ ip -j route show
+[{"dst":"default","gateway":"192.0.2.1","dev":"eth0","metric":100}]
+$ resolvectl status
+Global
+         DNS Servers: 192.0.2.1
+$ systemctl is-active NetworkManager
+active
+$ systemctl is-active systemd-networkd
+inactive
+$ nmcli -t connection show eth0
+connection.id:eth0
+ipv4.method:manual
+ipv4.gateway:192.0.2.1
+ipv4.dns:192.0.2.1

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-DX-06.T2: the no-code DocType and form designer client. It edits a server-side
+       draft (spot-nocode-model) through the typed designer surface in Model/, renders the
+       preview with the metadata-driven field controls from Spotledger.Client.Controls so
+       the preview is the real form, and never evaluates a condition, validates a document
+       or publishes anything itself: the server is the authority for every one of those. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- The designer's views bind to view-model properties by name; compiled bindings would
+         need an x:DataType on every template, and the templates are built at run time from
+         the server's layout. Reflection bindings are the deliberate choice here. -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Designer.Tests" />
+  </ItemGroup>
+</Project>

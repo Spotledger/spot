@@ -1,0 +1,35 @@
+[package]
+name = "spot-workload-routing"
+description = "Workload routing (WP-PLT-20.T1, ADR-24): the policy engine that decides where work runs — queue affinity per node, path-based routing of report and export requests to dedicated nodes, and staleness-bounded replica reads — as pure decisions with a load simulation proving interactive latency stays within budget"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent pieces a host wires: the recording transport, the counting metrics
+# sink and the in-memory session source, exposed for tests and for a follow-up host task.
+testing = []
+
+[dependencies]
+# The routing policy is settings-driven data (TOML or JSON); serde is how it is read.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The policy document is TOML in the settings catalogue; `parse` accepts both.
+toml = "0.9"
+# Typed errors with stable `workload_routing.*` codes.
+thiserror = "2"
+# Instants and windows: the crate never reads the wall clock, callers pass `now`.
+time = { version = "0.3", features = ["std"] }
+# The `spot-http` middleware is a tower layer; `http` is the request/response it inspects.
+tower = "0.5"
+http = "1"
+
+[dev-dependencies]
+# `#[tokio::test]` drives the tower layer; `tower::util` provides `service_fn` for the fakes.
+tokio = { version = "1", features = ["macros", "rt"] }
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

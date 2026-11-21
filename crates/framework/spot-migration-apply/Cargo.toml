@@ -1,0 +1,52 @@
+[package]
+name = "spot-migration-apply"
+description = "The apply engine (WP-MIG-07.T1, ADR-22): the migration state machine Idle -> Gated -> Applying -> Verifying -> Open with failure edges to Restoring and Halted, a write-ahead journal so a restart resumes the first incomplete step or restores from the snapshot, the maintenance gate that keeps users out, the side-effect hold, the per-step runner with transactional DDL and checkpoint restore, live progress, and the verify gate that admits users only after verification passes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent test doubles (in-memory site, step runner, verifier and the
+# deterministic kill switch) are public so integration tests and later tasks can drive the engine
+# without a database.
+testing = []
+
+[dependencies]
+# `SiteId`: which tenant an apply run belongs to (ADR-34).
+spot-core = { path = "../spot-core" }
+# The approved `ReleasePlan` and its ordered `ApplyStep`s, and `verify_applied`.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The `ApplyTicket` the engine requires before it touches anything.
+spot-migration-approval = { path = "../spot-migration-approval" }
+# The `HoldService` whose `begin`/`release`/`discard` the engine drives, and its
+# `QueueGate`/`EdgeSyncGate` that pause jobs and edge sync while the site is held.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# The journal records and the maintenance problem document derive serde for a durable backend.
+serde = { version = "1", features = ["derive"] }
+# `tokio::time::timeout` bounds a step and `tokio::time::sleep` bounds the drain.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# Typed errors with stable `migration_apply.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The test doubles live behind the `testing` feature of this very crate.
+spot-migration-apply = { path = ".", features = ["testing"] }
+# The plan, ticket and site types the integration tests build inputs from.
+spot-core = { path = "../spot-core" }
+spot-migration-plan = { path = "../spot-migration-plan" }
+spot-migration-approval = { path = "../spot-migration-approval" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+
+# The traversal-index test (WP-STO-07.T3) runs the plan on a real PostgreSQL: the scratch database,
+# the backend planner that turns the catalogue into the index build, and the catalogue types.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+spot-pg-migrate = { path = "../../backends/spot-pg-migrate" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-meta = { path = "../spot-meta" }
+# The driver client type the EXPLAIN helper takes.
+tokio-postgres = "0.7"
+
+[lints]
+workspace = true

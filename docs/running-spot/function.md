@@ -1,0 +1,189 @@
+Part of [Running Spot](../running-spot.md).
+
+# Functions
+
+`POST|GET /api/v1/method/{app}/{module}/{function}` (`function_call`, `function_call_get`) calls a
+module-level whitelisted function (ADR-16). It is not a way to call any method by name: only a
+function an installed app declares in its manifest can be reached, and it runs for the caller, never
+for the host. The rules live in `spot-functions`; the hosting module is
+`crates/framework/spot-cli/src/services/function.rs`.
+
+## Declaring a function
+
+An app declares each function in its manifest (`app.toml`):
+
+```toml
+[[functions]]
+module = "reports"
+name = "total"
+http = ["GET"]        # the verbs it answers; without `http` it is not reachable over HTTP
+guest = false         # true: a caller with no credential may call it (read verbs only)
+```
+
+A guest function must name its verbs. The function's address is `<app>/<module>/<name>`; an app
+declares only functions under its own name.
+
+## Registering a native handler
+
+The binary that links the app registers the implementation before the host starts, in
+`crates/framework/spot-cli/src/natives.rs`:
+
+```rust
+natives::register_function("sample", "reports", "total", Arc::new(MyHandler));
+// or, with a rate limit and an argument schema the manifest does not carry:
+natives::register_function_with("sample", "reports", "total", spec, Arc::new(MyHandler));
+// or a closure over plain values (`FunctionCall`), for a probe or a test:
+natives::register_function_fn("sample", "reports", "total", spec, |call| Box::pin(async move { ... }));
+```
+
+Registering is not declaring: a handler no manifest declares is never reachable, and a declared
+function without a handler answers `404 method.not_found` (the host logs the list once at
+start-up). Script and WASM functions (EXT-06, EXT-05) will implement the same `FunctionHandler`
+trait and be contributed through the same builder; no new path is needed.
+
+The handler receives the caller (a user id, or nobody for a guest), the verb, the site and the
+`Idempotency-Key`, and the arguments. It has no wider authority than that: a handler that reads or
+writes data does so through the engine for that user, so the caller's rights apply.
+
+## What a call checks, in order
+
+1. The function exists, and an anonymous caller asked for a `guest` one: otherwise
+   `404 method.not_found` (`function_code` `function.not_found`). A guest never learns which
+   functions exist.
+2. The verb: `405 api.method_not_allowed`, `details.allow` listing the verbs it answers.
+3. A guest on a verb that changes things (`POST`, `PUT`, `PATCH`, `DELETE`): `401 auth.required`.
+4. The rate limit: `429 api.rate_limited` with `details.retry_after` and the `Retry-After` header
+   (whole seconds). The bucket is per function and caller; every guest shares one bucket.
+5. The argument schema: `400 api.invalid_request`; the explanation names the problem and the path,
+   never an argument value. On a `GET` each query value is read by the schema first (`integer`,
+   `number`, `boolean`). The keywords are listed under "Argument schema keywords" below.
+6. The handler. Its own errors pass through as they are (a field error is `422`, a refusal is
+   `403 permission.denied`), and a handler returning an error is never reported as a success.
+
+`details.function_code` carries the finer `function.*` code of the first five. Calling with no
+credential is a guest call; a credential that does not resolve, or a session that has not chosen
+its password yet, is refused, never treated as a guest. The `admin` app's own methods (the
+customise admin API, `GET` for `list` only) are served by the host before this registry.
+
+## Guest calls over HTTP
+
+A request to `GET|POST /api/v1/method/<app>/<module>/<name>` that carries **no `Authorization`
+header at all** reaches the function service as an anonymous caller (WP-PLT-17.T3). It is served
+only for a function declared `guest = true`, only over a read verb, and under the guest rate limit;
+anything else it asks for answers exactly as an unknown function (`404 method.not_found`). Every
+anonymous caller shares the one `anonymous` bucket, so the limit is per function for all guests
+together: the n+1th anonymous call in a window is `429` with `Retry-After`.
+
+A request that carries an `Authorization` header is never a guest. If its credential does not
+resolve (malformed, expired, revoked, for another site, or a session that has not chosen its
+password yet) it is refused with the usual `auth.*` or `permission.denied` answer and no handler
+runs. Reports, documents and the admin methods still require a credential. Under `spot serve --dev`
+the dev credential is added to a request that has no header, so a guest call there runs as the dev
+user.
+
+## Operating it
+
+- **Level: required**, with nothing to degrade: the registry is in memory and is built when the site
+  starts and again on every reload. Two apps whose functions conflict (a duplicate address, an
+  override of nothing, an override without a reason) stop the site start with every conflict listed;
+  on a reload they fail the reload and the previous registry keeps serving.
+- **Settings**, `[services.function]` in `common.toml` (unknown keys are refused):
+
+  | Key | Default | Meaning |
+  | --- | --- | --- |
+  | `enabled` | `true` | `false`: the endpoint answers `404 method.not_found`, as before |
+  | `guest_permits` | `30` | calls a guest function with no limit of its own allows per window |
+  | `guest_window_seconds` | `60` | the guest window |
+  | `idle_after_seconds` | `600` | a bucket idle this long is dropped when evicted |
+  | `bucket_cap` | `10000` | more buckets than this make the next call evict idle ones |
+
+- **Listing**: `FunctionService::list` returns every function with its declaring app, verbs, guest
+  flag, limit, argument schema and override (who and why). The Administrator reads the answer as the
+  function `platform/functions/list` (`GET /api/v1/method/platform/functions/list`): per function
+  `{key, app, module, name, verbs, guest, limit, arguments_schema}`, never a handler, a bucket or
+  a caller. Everyone else (a viewer, a scoped administrator, a guest) gets the answer of an
+  unknown function, `404 method.not_found`. The behaviour lives in `services/functions_admin.rs`;
+  it is mounted once the platform app declares the function (see WP-PLT-17.T7's report).
+- **Eviction**: idle buckets are dropped by the job `platform:function_evict_idle`; the host
+  registers the handler, and the platform app's `[[schedules]]` entry `function_evict_idle`
+  (`0 */5 * * * *`: every five minutes, queue `short`) enqueues it. There is no timer of its own,
+  and `bucket_cap` bounds memory if the schedule does not run.
+- **Audit**: target `spot::audit::function` logs a line per call that reached the registry: caller,
+  function address, verb, outcome code. Never an argument, a result, a token or a header.
+
+## Rate limits
+
+A function declares `limit = { permits = 10, per = "1m" }`. The registry asks a **rate gate** for one
+permit per call; the gate answers or refuses with a `retry_after`, and a refusal is
+`429 api.rate_limited` (`function_code` `function.rate_limited`) as before.
+
+- **On one node** (the `single` profile) the gate is the in-process token bucket: one bucket per
+  function and caller in the node's memory, refilled continuously over `per`. A bucket starts full,
+  so an idle caller may burst `permits` calls at once.
+- **In a cluster** (the `cluster` profile) the gate is the coordinator's `take`: the bucket lives in
+  the shared store (PostgreSQL or Redis), so `10 per minute` means ten calls a minute for the
+  **site**, not ten per node. Three nodes admit ten of ninety concurrent calls, not thirty. It is the
+  same token bucket as on one node; the same burst after idleness applies, and there is no sliding
+  window.
+- **The key.** The coordinator row or Redis key is `function:<site>:<function>:<caller hash>`. The
+  caller part is the first 16 bytes of the SHA-256 of the caller label (`user:<id>`, `system:<id>`
+  or `anonymous`), in hex, so a `MONITOR` line or a `spot_coord_rate` row names no user. A function
+  name that would make the key too long is replaced by its hash in the key.
+- **When the coordinator cannot answer** (the database is down, the call errors for any reason) the
+  call is checked against **this node's own bucket** instead, so a function is held to at most
+  `permits` per node. It is stricter than the cluster limit only when one node takes all the
+  traffic, and it is **never open**: a failing coordinator never lets a call through unchecked. Each
+  fallback adds one to `spot_function_gate_fallback_total`; the log says it at `warn` once a minute
+  (`the function rate gate could not reach the coordinator`), not once per call. The fallback buckets
+  are the ones the eviction job drops.
+- **Seeing it.** `spot_function_rate_limited_total` counts refusals (no function or caller label: a
+  function name is app text and a caller is a person); `spot_function_gate_seconds` is the gate's own
+  latency, a database round trip in a cluster (alert when its p95 approaches the request budget);
+  `spot_function_gate_fallback_total` should stay flat (alert on any sustained rise: the
+  coordinator is failing). A refused caller sees the `function.rate_limited` response with
+  `retry_after` in its details and `Retry-After` in its headers.
+- **One shared guest bucket, cluster-wide.** Every anonymous caller shares one bucket per function
+  (the rule above), and in a cluster that bucket is cluster-wide: one abuser can exhaust the guests'
+  allowance for everyone, on every node. That is the intended trade; a guest function that must stay
+  available declares a limit sized for the whole guest population, and signed-in callers keep their
+  own buckets.
+- **What a limit is.** A fairness and abuse bound, not a security boundary: it slows a flood and
+  shares capacity, it does not authenticate or authorise anyone, and a function that must be
+  protected still checks permissions itself.
+
+## Argument schema keywords
+
+The same check serves registered functions, server scripts of the `api` kind and the MCP tools
+(a tool call is checked against the tool's `inputSchema` before it runs). It understands these
+keywords and no others; any other keyword in a schema node (`description`, `format`, `default`,
+`pattern`, `oneOf`, `anyOf`, `exclusiveMinimum`, `multipleOf`, ...) is documented, not enforced:
+it is ignored and never a reason to refuse a call:
+
+| Keyword | Meaning |
+|---|---|
+| `type` | `object`, `array`, `string`, `integer`, `number`, `boolean` or `null`; an unknown name is a schema error |
+| `required` | property names that must be present |
+| `properties` | property name to subschema, checked when the property is present |
+| `additionalProperties` | `false` refuses every argument property not in `properties` (`unexpected property`, the path names it); a subschema validates every unlisted property; `true` or absent keeps them; anything else is a schema error |
+| `items` | the subschema each array element must satisfy |
+| `enum` | a non-empty list of `null`, boolean, string or integer values; the argument must equal one |
+| `minLength`, `maxLength` | bounds on a string, in Unicode scalar values |
+| `minimum`, `maximum` | inclusive integer bounds; a fractional bound is a schema error and a fractional number under a bounded schema is refused (no float arithmetic) |
+| `minItems`, `maxItems` | bounds on an array's length |
+| `uniqueItems` | a boolean (anything else is a schema error); `true` refuses an array in which an item equals an earlier one (JSON equality: object key order does not matter, numbers compare as parsed numbers), with the dotted path of the later item and the message `duplicate item`, never the value; `false` or absent changes nothing. The comparison is quadratic, so an array of more than 1,024 items (`spot_functions::MAX_UNIQUE_ITEMS`) under `uniqueItems: true` is refused as a whole; `maxItems` is checked first |
+
+The first problem wins and its path is dotted (`lines.2.extra`). An error names the keyword's
+fact (a bound, a property name cut at 64 characters), never an argument value.
+
+**Behaviour change (WP-AI-04.T9).** `uniqueItems: true` used to be ignored (the `recall_memory`
+tool declares it for `kinds`); a repeated item is now refused as invalid arguments.
+
+**Behaviour change (WP-AI-04.T8).** `additionalProperties: false` used to be ignored, so a call
+with an extra argument (for example `retrieve` with `tier: 3`) was accepted and the extra field
+dropped. It is now refused as invalid arguments, and the tool or function does not run. A caller
+that sent extra fields to a schema saying `false` must stop sending them.
+
+`spot_functions::check_schema(schema)` checks a schema's own shape with the same keyword readers
+(a bound that is not an integer, `minLength` above `maxLength`, `additionalProperties` that is
+neither a boolean nor a schema, a non-object node). Server scripts call it when an API script is
+saved, so a schema that cannot work is refused at authoring time instead of at the first call.

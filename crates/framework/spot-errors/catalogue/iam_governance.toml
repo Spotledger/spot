@@ -1,0 +1,101 @@
+# iam_governance codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The access-governance core (spot-iam-governance) raises these; the API layer maps them.
+
+[[entry]]
+code = "iam_governance.request_invalid"
+class = "none"
+summary = "A grant request or record is malformed: a blank id, user, role or name."
+explanation_key = "error.iam_governance.request_invalid"
+params = []
+remedy = "Give the named field a non-blank value."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.delegation_denied"
+class = "none"
+summary = "The grantor may not grant the requested role or scope."
+explanation_key = "error.iam_governance.delegation_denied"
+params = []
+remedy = "Grant only roles and scopes you hold yourself, or ask an administrator who holds them."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.idp_managed"
+class = "none"
+summary = "A manual grant cannot touch a role the identity provider manages."
+explanation_key = "error.iam_governance.idp_managed"
+params = []
+remedy = "Change the user's group at the identity provider instead of granting the role here."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.override_incomplete"
+class = "none"
+summary = "An override of a segregation-of-duties conflict is missing its reason or its mitigating control."
+explanation_key = "error.iam_governance.override_incomplete"
+params = []
+remedy = "Record a non-blank reason and a mitigating control with an id and text."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.override_not_permitted"
+class = "none"
+summary = "The grantor does not hold the override_sod right, so they cannot override a conflict."
+explanation_key = "error.iam_governance.override_not_permitted"
+params = []
+remedy = "Have a grantor with the override_sod right record the override."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.approval_process"
+class = "none"
+summary = "The grant approval Process could not be built from the template or launched."
+explanation_key = "error.iam_governance.approval_process"
+params = []
+remedy = "Check the approval template and the BPM launcher, then retry the request."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.approval_not_pending"
+class = "none"
+summary = "A decision arrived for a grant approval that is not pending."
+explanation_key = "error.iam_governance.approval_not_pending"
+params = []
+remedy = "Act only on a pending approval; a decided or expired one is final."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.approver_is_grantee"
+class = "none"
+summary = "The person asked to approve is the person the grant is for."
+explanation_key = "error.iam_governance.approver_is_grantee"
+params = []
+remedy = "Have someone other than the grantee decide the approval."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.not_the_approver"
+class = "none"
+summary = "The person deciding a grant approval is not the approver the approval names."
+explanation_key = "error.iam_governance.not_the_approver"
+params = []
+remedy = "Have the named approver, or a holder of the named approver role, decide the approval."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.not_approved"
+class = "none"
+summary = "The grant cannot take effect because its approval is not approved."
+explanation_key = "error.iam_governance.not_approved"
+params = []
+remedy = "Approve the grant first; a rejected or expired approval grants nothing."
+since = "0.1.0"
+
+[[entry]]
+code = "iam_governance.snapshot_failed"
+class = "none"
+summary = "A canonical before or after snapshot of a change could not be serialised."
+explanation_key = "error.iam_governance.snapshot_failed"
+params = []
+remedy = "Check the record for a value that cannot be represented as JSON."
+since = "0.1.0"

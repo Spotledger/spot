@@ -1,0 +1,27 @@
+[package]
+name = "spot-l8-engine-faults"
+version = "0.1.0"
+description = "L8 fault injection at the document-engine level (WP-TST-08.T6): kill -9 of a real PostgreSQL and a lost commit reply under engine load (create, post, cancel, correct with command ids), judged by the L7 engine invariants and an engine durability audit that resolves every indeterminate commit through the command ledger"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The scratch cluster, the fault proxy and the profile rules of T2.
+spot-l8-faults = { path = "../l8-faults" }
+# The world, the engine over the sample DocTypes, the oracle and the engine invariants.
+spot-l7-engine = { path = "../l7-engine" }
+spot-l7-invariants = { path = "../l7-invariants" }
+spot-document = { path = "../../../crates/framework/spot-document" }
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-postgres = { path = "../../../crates/backends/spot-postgres" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-storage-fake = { path = "../../../crates/backends/spot-storage-fake" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

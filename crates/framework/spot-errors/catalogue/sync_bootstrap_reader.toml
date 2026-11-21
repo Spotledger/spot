@@ -1,0 +1,20 @@
+# sync_bootstrap_reader codes: opening a journal snapshot as a bootstrap source, spot-sync-bootstrap-reader (WP-SYN-07.T7). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the host maps these onto its own conditions and none rides an AppError, so `class = "none"`.
+
+[[entry]]
+code = "sync_bootstrap_reader.snapshot_mismatch"
+class = "none"
+summary = "The snapshot info the caller holds says generation {info_generation} position {info_position} but the verified index says generation {index_generation} position {index_position}, so the snapshot is not opened as a source."
+explanation_key = "error.sync_bootstrap_reader.snapshot_mismatch"
+params = ["index_generation", "index_position", "info_generation", "info_position"]
+remedy = "List the snapshots again and open the reader and the info of the same snapshot; never reuse an info after the snapshot was replaced."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_bootstrap_reader.tenant_mismatch"
+class = "none"
+summary = "The snapshot index belongs to another tenant than the one the caller expects, so no image of it is read."
+explanation_key = "error.sync_bootstrap_reader.tenant_mismatch"
+params = []
+remedy = "Open the snapshot under the tenant it belongs to; a bootstrap never reads another tenant's snapshot."
+since = "0.1.0"

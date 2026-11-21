@@ -1,0 +1,11 @@
+{
+  "diagnostics": [
+    {
+      "code": "ts.with_not_allowed",
+      "line": 5,
+      "column": 3,
+      "end_line": 7,
+      "end_column": 4
+    }
+  ]
+}

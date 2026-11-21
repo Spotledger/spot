@@ -1,0 +1,46 @@
+# sync_process codes: process definitions that sync (WP-SYN-12.T1). One [[entry]] per code.
+
+[[entry]]
+code = "sync_process.hash_mismatch"
+class = "none"
+summary = "The definition does not match its hash, or an installed version has a different definition."
+explanation_key = "error.sync_process.hash_mismatch"
+params = []
+remedy = "Quarantined on the edge; publish a changed definition as a new version."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_process.edge_authored"
+class = "none"
+summary = "A process record came from an edge; definitions flow from the hub down only."
+explanation_key = "error.sync_process.edge_authored"
+params = []
+remedy = "Publish the process on the hub."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_process.foreign_record"
+class = "none"
+summary = "The record is for another tenant or its definition names another process."
+explanation_key = "error.sync_process.foreign_record"
+params = []
+remedy = "Nothing to do; the record is refused."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_process.invalid_record"
+class = "none"
+summary = "The process record is malformed."
+explanation_key = "error.sync_process.invalid_record"
+params = []
+remedy = "Republish a well-formed record."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_process.store_failed"
+class = "none"
+summary = "The definition store failed."
+explanation_key = "error.sync_process.store_failed"
+params = []
+remedy = "Check the store and retry."
+since = "0.1.0"

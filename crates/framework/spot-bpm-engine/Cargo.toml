@@ -1,0 +1,36 @@
+[package]
+name = "spot-bpm-engine"
+description = "The durable Business Process engine (WS8, WP-BPM-02.T1, ADR-49): the step execution loop over the DAG execution store, idempotent node execution keyed by (case, node, attempt), retries and error branches, parallel paths and joins, sub-processes and timers, a node-handler registry and a deterministic simulation harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The compiled DAG a process is compiled onto: node ids, edges, ready/join rules.
+spot-dag = { path = "../spot-dag" }
+# The durable run-and-node state, the pure start/claim/complete/cancel transitions and the
+# in-memory reference execution store this engine orchestrates.
+spot-dag-exec = { path = "../spot-dag-exec" }
+# The Process model and its compiler: the pinned `CompiledProcess` and the typed node kinds.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `OffsetDateTime` and the app error/result the ports carry.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The shared expression language (ADR-28) for branch conditions and data mapping.
+spot-expr = { path = "../spot-expr" }
+# The job engine's deterministic `Backoff` for per-node retry delays, and its job shape.
+spot-jobs = { path = "../spot-jobs" }
+# Typed errors with stable `bpm_engine.*` codes.
+thiserror = "2"
+# The engine's state and node outputs serialise as canonical JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+proptest = "1"
+
+[lints]
+workspace = true

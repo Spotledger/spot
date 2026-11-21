@@ -1,0 +1,64 @@
+# controller codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "controller.method_conflict"
+class = "Internal"
+summary = "Apps {apps} declare method {method} on DocType {doctype}."
+explanation_key = "error.controller.method_conflict"
+params = ["apps", "doctype", "method"]
+remedy = "Declare one method an override of the other, or rename one."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.host_unavailable"
+class = "Unavailable"
+summary = "The {adapter} controller host adapter is not installed."
+explanation_key = "error.controller.host_unavailable"
+params = ["adapter"]
+remedy = "Install the controller host adapter for this kind, or ship the controller natively."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.invalid_reference"
+class = "Internal"
+summary = "A controller reference is not one of native:, wasm: or ts:: {reference}."
+explanation_key = "error.controller.invalid_reference"
+params = ["reference"]
+remedy = "Write the reference as native:<name>, wasm:<export> or ts:<path>."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.unknown_native"
+class = "NotFound"
+summary = "No native controller named {name} is built into the host."
+explanation_key = "error.controller.unknown_native"
+params = ["name"]
+remedy = "Add the controller to the host's NativeControllers table."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.no_step"
+class = "Internal"
+summary = "The default controller declares no steps, so it cannot run one."
+explanation_key = "error.controller.no_step"
+params = []
+remedy = "Register a controller that declares the step."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.event_doctype_unserved"
+class = "Internal"
+summary = "The manifest declares an event for DocType {doctype}, but no controller of app {app} serves it."
+explanation_key = "error.controller.event_doctype_unserved"
+params = ["app", "doctype"]
+remedy = "Name a controller for that DocType in the app's manifest, or remove the event."
+since = "0.1.0"
+
+[[entry]]
+code = "controller.doctype_duplicate"
+class = "Internal"
+summary = "App {app} names more than one controller for DocType {doctype}."
+explanation_key = "error.controller.doctype_duplicate"
+params = ["app", "doctype"]
+remedy = "Name one controller per DocType."
+since = "0.1.0"

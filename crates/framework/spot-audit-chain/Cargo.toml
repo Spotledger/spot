@@ -1,0 +1,26 @@
+[package]
+name = "spot-audit-chain"
+description = "The tamper-evident audit chain (WP-AI-11.T1): canonical audit records, a per-site SHA-256 hash chain in segments, signed Ed25519 checkpoints, an append API over an AuditStore trait with an in-memory store and a backend-independent contract suite, and the verifier that finds any altered, removed, reordered, inserted or truncated entry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Ed25519 for checkpoint signatures (same version and features as spot-bundle-signing). Keys are
+# always supplied by the caller; this crate reads no randomness.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# SHA-256 for entry hashes, the genesis hash and key ids.
+sha2 = "0.10"
+# Derives so a backend can persist entries and checkpoints; the hash never depends on serde.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `audit.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+futures = "0.3"
+
+[lints]
+workspace = true

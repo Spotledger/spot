@@ -1,0 +1,43 @@
+# Ubuntu LTS: AppArmor, ext4 root on a plain partition, systemd-networkd.
+# Synthetic transcript written for this test; no real machine's output is copied.
+
+$ lsblk -J -b -o NAME,KNAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,UUID,LABEL,ROTA
+{"blockdevices":[{"name":"sda","kname":"sda","type":"disk","size":"21474836480","fstype":null,"mountpoint":null,"uuid":null,"label":null,"rota":true,"children":[{"name":"sda1","kname":"sda1","type":"part","size":"21473787904","fstype":"ext4","mountpoint":"/","uuid":"5555","label":null,"rota":true}]}]}
+$ findmnt -J -o TARGET,SOURCE,FSTYPE,OPTIONS
+{"filesystems":[{"target":"/","source":"/dev/sda1","fstype":"ext4","options":"rw,relatime"}]}
+$ df -P -B1 /var/lib/pgsql
+Filesystem     1B-blocks       Used  Available Use% Mounted on
+/dev/sda1 21473787904 8000000000 12500000000  40% /
+$ sysctl -a
+vm.swappiness = 60
+net.core.somaxconn = 4096
+fs.inotify.max_user_watches = 524288
+$ sysctl -n vm.swappiness
+60
+$ chronyc tracking
+Reference ID    : C0A80101 (time.example)
+Stratum         : 3
+System time     : 0.000001000 seconds fast of NTP time
+Last offset     : +0.000001000 seconds
+Leap status     : Normal
+$ chronyc sources -v
+210 Number of sources = 1
+  .-- Source mode  '^' = server
+MS Name/IP address         Stratum Poll Reach LastRx Last sample
+===============================================================================
+^* time.example                  2   6   377    34    -12us[  -8us] +/-   21ms
+$ getenforce
+!missing
+$ aa-status --json
+{"version":"4","profiles":{"/usr/sbin/chronyd":"enforce","/usr/bin/man":"enforce"}}
+$ ip -j address show
+[{"ifname":"enp1s0","operstate":"UP","address":"52:54:00:00:00:03","addr_info":[{"family":"inet","local":"203.0.113.10","prefixlen":24}]}]
+$ ip -j route show
+[{"dst":"default","gateway":"203.0.113.1","dev":"enp1s0","metric":100}]
+$ resolvectl status
+Global
+         DNS Servers: 203.0.113.1
+$ systemctl is-active NetworkManager
+inactive
+$ systemctl is-active systemd-networkd
+active

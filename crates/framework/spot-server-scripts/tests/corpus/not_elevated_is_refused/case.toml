@@ -1,0 +1,16 @@
+kind = "api"
+pattern = "the same script, not elevated"
+restricted = true
+elevated = false
+[[before]]
+key = "r1"
+doctype = "rate_table"
+[before.fields]
+region = "PK"
+rate = "42.00"
+[input.args]
+table = "${r1}"
+[expect]
+ok = false
+error_code = "script.thrown"
+audit_entries = 0

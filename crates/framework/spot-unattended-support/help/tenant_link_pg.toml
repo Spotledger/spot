@@ -1,0 +1,9 @@
+# Help for the tenant_link_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "tenant_link_pg.migration_failed"
+what_happened = "The tenant link tables could not be created in the database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the tenant schema exists, that the database user may create tables in it and in the control schema, and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code tenant_link_pg.migration_failed."]
+audience = "operator"

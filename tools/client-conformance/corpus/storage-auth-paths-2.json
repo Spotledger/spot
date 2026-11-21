@@ -1,0 +1,656 @@
+{
+ "cases": [
+  {
+   "description": "The call is sent but nothing is stored: no storage_write carries the body, the password or any part of the path.",
+   "name": "dot dot into auth",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+      "idempotency_key": "k-dot",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1/resource/../auth/login",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-dot"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/resource/../auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "The call is sent but nothing is stored: no storage_write carries the body, the password or any part of the path.",
+   "name": "auth with a query",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+      "idempotency_key": "k-aut",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1/auth/login?x=1",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-aut"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login?x=1"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "The call is sent but nothing is stored: no storage_write carries the body, the password or any part of the path.",
+   "name": "encoded slash into auth",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+      "idempotency_key": "k-enc",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1/auth%2Flogin",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-enc"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth%2Flogin"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "The call is sent but nothing is stored: no storage_write carries the body, the password or any part of the path.",
+   "name": "double slash before auth",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": null
+     },
+     "out": []
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    },
+    {
+     "in": {
+      "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+      "idempotency_key": "k-dou",
+      "method": "POST",
+      "op": "call",
+      "path": "/api/v1//auth/login",
+      "req_id": 2,
+      "type": "request"
+     },
+     "out": [
+      {
+       "id": 2,
+       "request": {
+        "body": "{\"user\":\"u1@x.test\",\"password\":\"hunter2\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-dou"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1//auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "A queue from older code holds a login call; on restore it is dropped, never sent, and the queue is rewritten without it.",
+   "name": "restored denied call is dropped",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":5,\"method\":\"POST\",\"path\":\"/api/v1/auth/login\",\"body\":\"{\\\"user\\\":\\\"u1@x.test\\\",\\\"password\\\":\\\"hunter2\\\"}\",\"if_match\":null,\"idempotency_key\":null},{\"req_id\":6,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-6\"}]}"
+     },
+     "out": [
+      {
+       "event": "reauth_required",
+       "req_id": 6,
+       "type": "emit"
+      },
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":6,\"method\":\"POST\",\"path\":\"/api/v1/method/invoice_ping\",\"body\":\"{}\",\"if_match\":null,\"idempotency_key\":\"k-6\"}]}"
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      },
+      {
+       "id": 2,
+       "request": {
+        "body": "{}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Authorization",
+          "Bearer tok-1"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ],
+         [
+          "Idempotency-Key",
+          "k-6"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/method/invoice_ping"
+       },
+       "type": "send_http"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "The stored queue is host-controlled: a value that holds a call on a denied path (here, tampered to carry a login) is refused by may_persist on restore too, not just on fresh writes. It is dropped before any sign-in judges the owner, never sent.",
+   "name": "tampered restored call on a denied path is refused",
+   "start": {
+    "out": [
+     {
+      "id": 1,
+      "key": "queue",
+      "type": "storage_read"
+     }
+    ],
+    "site": "s1"
+   },
+   "steps": [
+    {
+     "in": {
+      "id": 1,
+      "type": "storage_reply",
+      "value": "{\"v\":2,\"owner\":{\"site\":\"s1\",\"user_id\":\"u1\"},\"calls\":[{\"req_id\":2,\"method\":\"POST\",\"path\":\"/api/v1/auth/login\",\"body\":\"{\\\"user\\\":\\\"u1@x.test\\\",\\\"password\\\":\\\"hunter2\\\"}\",\"if_match\":null,\"idempotency_key\":null}]}"
+     },
+     "out": [
+      {
+       "key": "queue",
+       "type": "storage_write",
+       "value": null
+      }
+     ]
+    },
+    {
+     "in": {
+      "op": "sign_in",
+      "password": "pw",
+      "req_id": 1,
+      "type": "request",
+      "user": "u1@x.test"
+     },
+     "out": [
+      {
+       "id": 1,
+       "request": {
+        "body": "{\"password\":\"pw\",\"user\":\"u1@x.test\"}",
+        "headers": [
+         [
+          "Accept",
+          "application/json"
+         ],
+         [
+          "Content-Type",
+          "application/json"
+         ]
+        ],
+        "method": "POST",
+        "path": "/api/v1/auth/login"
+       },
+       "type": "send_http"
+      }
+     ]
+    },
+    {
+     "in": {
+      "id": 1,
+      "reply": {
+       "body": "{\"data\":{\"token\":\"tok-1\",\"expires_at\":\"2026-11-06T08:00:00Z\",\"user\":{\"id\":\"u1\"}}}",
+       "headers": [],
+       "status": 200
+      },
+      "type": "transport_reply"
+     },
+     "out": [
+      {
+       "event": "signed_in",
+       "expires_at": "2026-11-06T08:00:00Z",
+       "req_id": 1,
+       "type": "emit",
+       "user_id": "u1"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "requires": [
+  "storage"
+ ],
+ "topic": "Persisted queue: calls that must never be written to storage (encodings and restore)"
+}

@@ -1,0 +1,9 @@
+kind = "doc_event"
+event = "validate"
+pattern = "maximum discount by role"
+unsupported = "the document-event ctx has no user and no roles (only event, doctype and id), so a role-dependent cap cannot be written; the script falls back to the flat 10 percent cap"
+[input.fields]
+discount = "15"
+[expect]
+ok = false
+error_fields = ["discount"]

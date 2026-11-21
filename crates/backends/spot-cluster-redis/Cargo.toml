@@ -1,0 +1,72 @@
+[package]
+name = "spot-cluster-redis"
+description = "Optional Redis/Valkey plugin (WP-PLT-19): CacheStore, Coordinator, InvalidationBus and node presence for the cluster-redis profile, behind the non-default `redis` feature"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The Redis/Valkey plugin itself. Off by default: the default product needs no Redis (the
+# database-backed coordinator and the in-process cache and bus serve it), so the workspace-wide
+# build never compiles the `redis` crate unless a profile asks for it.
+redis = [
+    "dep:redis",
+    "dep:futures-util",
+    "dep:serde",
+    "dep:serde_json",
+]
+
+[dependencies]
+# `SiteId` scopes every cache key, lease name and bus channel to one tenant.
+spot-core = { path = "../../framework/spot-core" }
+# The `CacheStore` trait, `Ttl` and `CacheStats` this plugin implements.
+spot-cache = { path = "../../framework/spot-cache" }
+# The `Coordinator` trait, its `Lease`/`FencingToken`/`RateLimit` types and its `contract` suite.
+spot-coordinator = { path = "../../framework/spot-coordinator" }
+# The `InvalidationBus`, `VersionStore`, `Invalidation` and `BusEvent` this plugin implements.
+spot-meta-live = { path = "../../framework/spot-meta-live" }
+# The Redis/Valkey driver: async, a reconnecting `ConnectionManager`, TLS and Lua scripting.
+# `default-features = false` keeps the build to the parts a cluster plugin needs (no ACL/streams
+# sugar, no big integers); `tokio-rustls-comp` enables `rediss://` TLS URLs. Every command used
+# exists in Valkey too (no Redis-only modules).
+redis = { version = "1", default-features = false, features = [
+    "aio",
+    "tokio-comp",
+    "connection-manager",
+    "script",
+    "tokio-rustls-comp",
+], optional = true }
+# `Stream` and `StreamExt` for a bus subscription (the host drives it; the plugin spawns the
+# reader task).
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+# The bus message shape (a small JSON envelope), feature-gated with the plugin.
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+# The reconnect loop, the bounded subscriber queues and the reader tasks.
+tokio = { version = "1", default-features = false, features = ["sync", "rt", "time"] }
+# `OffsetDateTime` for `Lease::expires_at` and the injected clock conversion.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# `spot_coordinator::contract` (feature `testing`) and `InProcessCoordinator` for comparisons.
+spot-coordinator = { path = "../../framework/spot-coordinator", features = ["testing"] }
+# `InProcessCache` as the side-by-side reference in the bench and the comparison test.
+spot-cache = { path = "../../framework/spot-cache" }
+# `ManualClock` drives the coordinator contract suite; `SystemClock` the bench.
+spot-core = { path = "../../framework/spot-core" }
+# `#[tokio::test]` on a multi-thread runtime, plus time and channels for the suites.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+# Driving a bus subscription's `Stream` in the tests.
+futures-util = { version = "0.3", default-features = false }
+
+[[bin]]
+name = "bench"
+path = "bench/main.rs"
+# The benchmark is meaningless without the plugin: without the feature it is not built at all.
+required-features = ["redis"]
+
+[lints]
+workspace = true

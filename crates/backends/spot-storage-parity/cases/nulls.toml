@@ -1,0 +1,496 @@
+# NULL versus empty versus absent: three-valued logic, ordering, grouping, aggregates.
+
+[[case]]
+id = "nul-01-null-is-not-empty"
+rule = "SEM-NUL-01"
+title = "IsNull finds the null note and not the empty one"
+setup = ['a code="t:a"', 'b code="t:b" note="t:"']
+op = "query"
+query = { select = ["code"], filter = "(null? note)" }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "nul-01-empty-is-not-null"
+rule = "SEM-NUL-01"
+title = "equality with the empty text finds the empty note and not the null one"
+setup = ['a code="t:a"', 'b code="t:b" note="t:"']
+op = "query"
+query = { select = ["code"], filter = '(= note "t:")' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "nul-01-roundtrip-null"
+rule = "SEM-NUL-01"
+title = "a null note reads back as null, not as empty text"
+setup = ['a code="t:a"']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["null"]] }
+
+[[case]]
+id = "nul-01-roundtrip-empty"
+rule = "SEM-NUL-01"
+title = "an empty note reads back as empty text, not as null"
+setup = ['a code="t:a" note="t:"']
+op = "load"
+doc = "a"
+fields = ["note"]
+expect = { rows = [["t:"]] }
+
+[[case]]
+id = "nul-01-update-null-to-empty-and-back"
+rule = "SEM-NUL-01"
+title = "updating null to empty and empty to null keeps them apart"
+setup = ['a code="t:a"', 'b code="t:b" note="t:"', 'update a note="t:"', 'update b note=null']
+op = "query"
+query = { select = ["code", "(null? note)"], order = ["code"] }
+expect = { rows = [["t:a", "b:false"], ["t:b", "b:true"]] }
+
+[[case]]
+id = "nul-01-empty-sorts-before-text-null-by-placement"
+rule = "SEM-NUL-01"
+title = "empty text sorts with the texts (first) and null by its explicit placement"
+setup = ['a code="t:a" note="t:b"', 'b code="t:b" note="t:"', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], order = ["note nulls-last"] }
+expect = { rows = [["t:b"], ["t:a"], ["t:c"]] }
+
+[[case]]
+id = "nul-02-ne-excludes-null"
+rule = "SEM-NUL-02"
+title = "<> does not return the row whose field is null"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(<> qty 2)" }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "nul-02-eq-excludes-null"
+rule = "SEM-NUL-02"
+title = "= on a text field excludes null"
+setup = ['a code="t:a" note="t:x"', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = '(= note "t:x")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "nul-02-range-excludes-null"
+rule = "SEM-NUL-02"
+title = "<, <=, > and >= never return a null"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2', 'c code="t:c"']
+op = "query"
+query = { select = ["code", "(< qty 2)", "(<= qty 2)", "(> qty 1)", "(>= qty 1)"], order = ["code"] }
+expect = { rows = [["t:a", "b:true", "b:true", "b:false", "b:true"], ["t:b", "b:false", "b:true", "b:true", "b:true"], ["t:c", "null", "null", "null", "null"]] }
+
+[[case]]
+id = "nul-02-two-null-fields-are-not-equal"
+rule = "SEM-NUL-02"
+title = "a field compared with a field is not true when both are null"
+setup = ['a code="t:a" qty=i:1 flag=b:true', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = "(= note short)" }
+expect = { rows = [] }
+
+[[case]]
+id = "nul-02-comparison-selected-is-null"
+rule = "SEM-NUL-02"
+title = "a selected comparison with a null operand is null, not false"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["(= qty 1)", "(<> qty 1)"] }
+expect = { rows = [["null", "null"]] }
+
+[[case]]
+id = "nul-03-eq-null-literal"
+rule = "SEM-NUL-03"
+title = "= with a literal null is refused"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["code"], filter = "(= qty null)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "nul-03-ne-null-literal"
+rule = "SEM-NUL-03"
+title = "<> with a literal null is refused"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["code"], filter = "(<> null note)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "nul-03-null-literal-in-range"
+rule = "SEM-NUL-03"
+title = "< with a literal null is refused"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["code"], filter = "(< qty null)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "nul-04-in-skips-null-operand"
+rule = "SEM-NUL-04"
+title = "In does not match a null operand"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(in qty 1 2)" }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "nul-04-in-list-with-null"
+rule = "SEM-NUL-04"
+title = "an In list containing null is refused"
+setup = ['a code="t:a" qty=i:1']
+op = "query"
+query = { select = ["code"], filter = "(in qty 1 null)" }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "nul-04-empty-in-list"
+rule = "SEM-NUL-04"
+title = "an empty In list matches nothing"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = "(in qty)" }
+expect = { rows = [] }
+
+[[case]]
+id = "nul-04-not-in-skips-null-operand"
+rule = "SEM-NUL-04"
+title = "Not(In) does not return the null row either"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(not (in qty 1))" }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "nul-05-not-unknown"
+rule = "SEM-NUL-05"
+title = "Not of a comparison with a null operand is not true"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(not (= qty 1))" }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "nul-05-not-is-null"
+rule = "SEM-NUL-05"
+title = "Not(IsNull) is the non-null rows"
+setup = ['a code="t:a" qty=i:1', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(not (null? qty))" }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "nul-05-not-text-match"
+rule = "SEM-NUL-05"
+title = "Not of a text match on a null text is not true"
+setup = ['a code="t:a" note="t:xyz"', 'b code="t:b" note="t:abc"', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = '(not (contains note "x"))' }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "nul-05-selected-not-null"
+rule = "SEM-NUL-05"
+title = "a selected Not of an unknown is null"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["(not (= qty 1))", "(not (null? qty))"] }
+expect = { rows = [["null", "b:false"]] }
+
+[[case]]
+id = "nul-06-or-unknown-true"
+rule = "SEM-NUL-06"
+title = "Or(true, unknown) is true, Or(unknown, unknown) is not"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2 note="t:q"', 'c code="t:c"', 'd code="t:d" note="t:q"']
+op = "query"
+query = { select = ["code"], filter = '(or (= qty 1) (= note "t:q"))' }
+expect = { rows = [["t:a"], ["t:b"], ["t:d"]] }
+
+[[case]]
+id = "nul-06-and-false-unknown"
+rule = "SEM-NUL-06"
+title = "Not(And(false, unknown)) is true, Not(And(unknown, true)) is not"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b" qty=i:2 note="t:q"', 'c code="t:c"', 'd code="t:d" note="t:q"']
+op = "query"
+query = { select = ["code"], filter = '(not (and (= qty 5) (= note "t:q")))' }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "nul-06-empty-and"
+rule = "SEM-NUL-06"
+title = "an empty And is true"
+setup = ['a code="t:a"', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = "(and)" }
+expect = { rows = [["t:a"], ["t:b"]] }
+
+[[case]]
+id = "nul-06-empty-or"
+rule = "SEM-NUL-06"
+title = "an empty Or is false"
+setup = ['a code="t:a"', 'b code="t:b"']
+op = "query"
+query = { select = ["code"], filter = "(or)" }
+expect = { rows = [] }
+
+[[case]]
+id = "nul-06-and-of-unknowns-selected"
+rule = "SEM-NUL-06"
+title = "selected And/Or over unknown and known operands"
+setup = ['a code="t:a"']
+op = "query"
+query = { select = ["(and (= qty 1) false)", "(or (= qty 1) true)", "(and (= qty 1) true)", "(or (= qty 1) false)"], filter = '(= code "t:a")' }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "nul-07-nulls-first-ascending"
+rule = "SEM-NUL-07"
+title = "ascending, nulls first, ties by id"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"', 'e code="t:e" qty=i:3']
+op = "query"
+query = { select = ["code"], order = ["qty asc nulls-first"] }
+expect = { rows = [["t:b"], ["t:d"], ["t:c"], ["t:a"], ["t:e"]] }
+
+[[case]]
+id = "nul-07-nulls-last-ascending"
+rule = "SEM-NUL-07"
+title = "ascending, nulls last"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"', 'e code="t:e" qty=i:3']
+op = "query"
+query = { select = ["code"], order = ["qty asc nulls-last"] }
+expect = { rows = [["t:c"], ["t:a"], ["t:e"], ["t:b"], ["t:d"]] }
+
+[[case]]
+id = "nul-07-nulls-first-descending"
+rule = "SEM-NUL-07"
+title = "descending, nulls first"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"', 'e code="t:e" qty=i:3']
+op = "query"
+query = { select = ["code"], order = ["qty desc nulls-first"] }
+expect = { rows = [["t:b"], ["t:d"], ["t:e"], ["t:a"], ["t:c"]] }
+
+[[case]]
+id = "nul-07-nulls-last-descending"
+rule = "SEM-NUL-07"
+title = "descending, nulls last"
+setup = ['a code="t:a" qty=i:2', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"', 'e code="t:e" qty=i:3']
+op = "query"
+query = { select = ["code"], order = ["qty desc nulls-last"] }
+expect = { rows = [["t:e"], ["t:a"], ["t:c"], ["t:b"], ["t:d"]] }
+
+[[case]]
+id = "nul-07-text-nulls"
+rule = "SEM-NUL-07"
+title = "text sorts with explicit null placement too"
+setup = ['a code="t:a" note="t:b"', 'b code="t:b"', 'c code="t:c" note="t:a"']
+op = "query"
+query = { select = ["code"], order = ["note desc nulls-last"] }
+expect = { rows = [["t:a"], ["t:c"], ["t:b"]] }
+
+[[case]]
+id = "nul-08-group-by-null-keys"
+rule = "SEM-NUL-08"
+title = "group by a nullable key (open: do nulls form one group)"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"']
+op = "query"
+query = { select = ["qty", "(count)"], group = ["qty"] }
+expect = { same_as_reference = true, unordered = true }
+
+[[case]]
+id = "nul-08-count-distinct-null"
+rule = "SEM-NUL-08"
+title = "count distinct over a column with nulls (open)"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b"', 'c code="t:c" qty=i:1', 'd code="t:d"']
+op = "query"
+query = { select = ["(count-distinct qty)", "(count qty)", "(count)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "nul-09-empty-set-aggregates"
+rule = "SEM-NUL-09"
+title = "Count is 0 and Sum, Min and Max are null over no rows"
+op = "query"
+query = { select = ["(count)", "(count qty)", "(sum qty)", "(min qty)", "(max qty)", "(sum money)", "(min code)"] }
+expect = { rows = [["i:0", "i:0", "null", "null", "null", "null", "null"]] }
+
+[[case]]
+id = "nul-09-filtered-to-nothing"
+rule = "SEM-NUL-09"
+title = "the same over rows that the filter removes"
+setup = ['a code="t:a" qty=i:5']
+op = "query"
+query = { select = ["(count)", "(sum qty)", "(max qty)"], filter = "(> qty 100)" }
+expect = { rows = [["i:0", "null", "null"]] }
+
+[[case]]
+id = "nul-09-grouped-empty"
+rule = "SEM-NUL-09"
+title = "grouping over no rows gives no groups"
+op = "query"
+query = { select = ["qty", "(count)"], group = ["qty"] }
+expect = { rows = [] }
+
+[[case]]
+id = "nul-10-aggregates-skip-null"
+rule = "SEM-NUL-10"
+title = "Count(x) counts non-nulls, Count() rows, Sum, Min, Max skip nulls"
+setup = ['a code="t:a" qty=i:1', 'b code="t:b"', 'c code="t:c" qty=i:3']
+op = "query"
+query = { select = ["(count)", "(count qty)", "(sum qty)", "(min qty)", "(max qty)"] }
+expect = { rows = [["i:3", "i:2", "i:4", "i:1", "i:3"]] }
+
+[[case]]
+id = "nul-10-decimal-aggregates-skip-null"
+rule = "SEM-NUL-10"
+title = "Sum, Min, Max of decimals skip nulls"
+setup = ['a code="t:a" money="d:1.25"', 'b code="t:b"', 'c code="t:c" money="d:2.50"']
+op = "query"
+query = { select = ["(= (sum money) \"d:3.75\")", "(= (min money) \"d:1.25\")", "(= (max money) \"d:2.5\")", "(count money)"] }
+expect = { rows = [["b:true", "b:true", "b:true", "i:2"]] }
+
+[[case]]
+id = "nul-10-all-null-column"
+rule = "SEM-NUL-10"
+title = "an all-null column: Count(x) is 0, Sum is null"
+setup = ['a code="t:a"', 'b code="t:b"']
+op = "query"
+query = { select = ["(count qty)", "(sum qty)", "(count)"] }
+expect = { rows = [["i:0", "null", "i:2"]] }
+
+[[case]]
+id = "nul-11-coalesce"
+rule = "SEM-NUL-11"
+title = "Coalesce gives the first non-null and null when all are null"
+setup = ['a code="t:a" note="t:n" short="t:s"', 'b code="t:b" short="t:s"', 'c code="t:c"']
+op = "query"
+query = { select = ["code", "(coalesce note short)", "(coalesce note short \"t:z\")"], order = ["code"] }
+expect = { rows = [["t:a", "t:n", "t:n"], ["t:b", "t:s", "t:s"], ["t:c", "null", "t:z"]] }
+
+[[case]]
+id = "nul-11-coalesce-empty-text-is-a-value"
+rule = "SEM-NUL-11"
+title = "an empty text is a value for Coalesce, not a null"
+setup = ['a code="t:a" note="t:" short="t:s"']
+op = "query"
+query = { select = ["(coalesce note short)"] }
+expect = { rows = [["t:"]] }
+
+[[case]]
+id = "nul-12-unique-null-never-conflicts"
+rule = "SEM-NUL-12"
+title = "two rows with the same short and a null qty do not conflict on the unique pair"
+setup = ['a code="t:a" short="t:s"']
+op = "write"
+write = ['insert b code="t:b" short="t:s"']
+expect = { ok = true }
+
+[[case]]
+id = "nul-12-unique-null-in-first-field"
+rule = "SEM-NUL-12"
+title = "two rows with a null short and the same qty do not conflict"
+setup = ['a code="t:a" qty=i:1']
+op = "write"
+write = ['insert b code="t:b" qty=i:1']
+expect = { ok = true }
+
+[[case]]
+id = "nul-12-unique-without-nulls-conflicts"
+rule = "SEM-NUL-12"
+title = "the same non-null pair does conflict"
+setup = ['a code="t:a" short="t:s" qty=i:1']
+op = "write"
+write = ['insert b code="t:b" short="t:s" qty=i:1']
+expect = { error = "unique_violation" }
+
+[[case]]
+id = "nul-13-absent-field-refused"
+rule = "SEM-NUL-13"
+title = "a write that leaves out declared fields is refused"
+op = "write"
+write = ['insert a @strict code="t:a"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "nul-13-absent-on-update"
+rule = "SEM-NUL-13"
+title = "an update that leaves out declared fields is refused"
+setup = ['a code="t:a"']
+op = "write"
+write = ['update a @strict code="t:b"']
+expect = { ok = true }
+
+[[case]]
+id = "nul-14-null-in-required-field"
+rule = "SEM-NUL-14"
+title = "a null in the required code is refused on insert"
+op = "write"
+write = ['insert a code=null']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "nul-14-null-in-required-field-on-update"
+rule = "SEM-NUL-14"
+title = "a null in the required code is refused on update"
+setup = ['a code="t:a"']
+op = "write"
+write = ['update a code=null']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "nul-15-left-join-reads-null"
+rule = "SEM-NUL-15"
+title = "a left join gives null columns for a missing right row"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"', 'c code="t:c"']
+op = "query"
+query = { select = ["code", "j.code"], joins = [{ kind = "left", entity = "item", alias = "j", on = "(= ref j.id)" }], order = ["code"] }
+expect = { rows = [["t:a", "null"], ["t:b", "t:a"], ["t:c", "null"]] }
+
+[[case]]
+id = "nul-15-left-join-null-test"
+rule = "SEM-NUL-15"
+title = "IsNull on a left-joined column finds the unmatched rows"
+setup = ['a code="t:a"', 'b code="t:b" ref="id:a"', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], joins = [{ kind = "left", entity = "item", alias = "j", on = "(= ref j.id)" }], filter = "(null? j.code)", order = ["code"] }
+expect = { rows = [["t:a"], ["t:c"]] }
+
+[[case]]
+id = "nul-16-arithmetic-with-null"
+rule = "SEM-NUL-16"
+title = "arithmetic with a null operand (open: is it null)"
+setup = ['a code="t:a" qty=i:2 money="d:1.50"', 'b code="t:b"']
+op = "query"
+query = { select = ["code", "(+ qty 1)", "(- qty 1)", "(* money 2)"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "nul-17-every-type-null"
+rule = "SEM-NUL-17"
+title = "every nullable field stores null and returns null"
+setup = ['a code="t:a"']
+op = "load"
+doc = "a"
+fields = ["short", "note", "money", "small", "wide", "qty", "flag", "day", "clock", "seen", "doc", "blob", "ref"]
+expect = { rows = [["null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null"]] }
+
+[[case]]
+id = "nul-17-null-replaces-value"
+rule = "SEM-NUL-17"
+title = "updating a value to null stores null"
+setup = ['a code="t:a" short="t:s" note="t:n" money="d:1.00" small="d:1.00" wide="d:1" qty=i:1 flag=b:true day=date:2026-01-01 clock=time:01:00:00 seen=dt:2026-01-01T00:00:00Z doc="json:{}" blob=bytes:00', 'update a short=null note=null money=null small=null wide=null qty=null flag=null day=null clock=null seen=null doc=null blob=null']
+op = "load"
+doc = "a"
+fields = ["short", "note", "money", "small", "wide", "qty", "flag", "day", "clock", "seen", "doc", "blob"]
+expect = { rows = [["null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null"]] }
+
+[[case]]
+id = "nul-11-coalesce-mixed-types"
+rule = "SEM-QRY-05"
+title = "Coalesce of a text and an integer operand (open: refused or not)"
+setup = ['a code="t:a" note="t:n"']
+op = "query"
+query = { select = ["(coalesce note qty)"] }
+expect = { same_as_reference = true }

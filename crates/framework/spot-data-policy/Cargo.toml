@@ -1,0 +1,24 @@
+[package]
+name = "spot-data-policy"
+description = "Data residency and retention per tenant (WP-SEC-05.T1, ADR-058, ADR-071): residency checks for placement, move, backup and egress with policy clauses; retention rules, legal holds and statutory floors in metadata text form; a planner with reasons and per-rule counts; an executor with identity, checkpoints, per-item outcomes and resume; anonymisation that keeps ledger fields; and a deletion proof kept after the data is gone"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Audit records are the same tamper-evident shape the rest of the platform writes (ADR-061).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Policy, rule, hold and floor files are metadata text, parsed with explicit rejection of
+# unknown keys.
+toml = "0.8"
+# The deletion proof's digest, and the planner's identity.
+sha2 = "0.10"
+# Derives so a host can store policies and plans; no hashing depends on serde.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `data_policy.*` codes.
+thiserror = "2"
+
+[lints]
+workspace = true

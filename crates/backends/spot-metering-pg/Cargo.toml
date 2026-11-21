@@ -1,0 +1,23 @@
+[package]
+name = "spot-metering-pg"
+description = "PostgreSQL MeterStore for usage metering (WP-CTL-05.T2): an idempotent event table with id tombstones, maintained per-period totals and distinct members updated only for newly recorded events in one transaction, compaction that keeps tombstones, totals and members"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The MeterStore trait, events, meters, periods and errors this store implements.
+spot-metering = { path = "../../framework/spot-metering" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

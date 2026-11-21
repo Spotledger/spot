@@ -1,0 +1,190 @@
+# dag codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "dag.node_id_invalid"
+class = "none"
+summary = "A node id is not 1 to 63 characters of lower-case letters, digits or underscores, starting with a letter: {raw}."
+explanation_key = "error.dag.node_id_invalid"
+params = ["raw"]
+remedy = "Rename the node id to the allowed pattern."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.kind_invalid"
+class = "none"
+summary = "A node kind or key holds characters outside lower-case letters, digits, dots or underscores, or exceeds 63 characters: {raw}."
+explanation_key = "error.dag.kind_invalid"
+params = ["raw"]
+remedy = "Rename the kind to the allowed pattern."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.float_in_config"
+class = "none"
+summary = "A float was found inside a node's config; config numbers must be integers (ADR-12): {node} at {path}."
+explanation_key = "error.dag.float_in_config"
+params = ["node", "path"]
+remedy = "Write the value as an integer or a string."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.empty"
+class = "none"
+summary = "The DAG definition has zero nodes."
+explanation_key = "error.dag.empty"
+params = []
+remedy = "Add at least one terminal node."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.version_zero"
+class = "none"
+summary = "The DAG definition's version is 0; versions start at 1."
+explanation_key = "error.dag.version_zero"
+params = []
+remedy = "Version the definition starting at 1."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.duplicate_node"
+class = "none"
+summary = "The same node id appears twice in the definition's nodes: {node}."
+explanation_key = "error.dag.duplicate_node"
+params = ["node"]
+remedy = "Keep one node per id."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.duplicate_edge"
+class = "none"
+summary = "The same (from, to, condition) edge appears twice: {from} to {to}."
+explanation_key = "error.dag.duplicate_edge"
+params = ["from", "to"]
+remedy = "Keep one edge per pair and condition."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.self_loop"
+class = "none"
+summary = "An edge loops from a node straight back to itself: {node}."
+explanation_key = "error.dag.self_loop"
+params = ["node"]
+remedy = "Remove the self edge, or split the node in two."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.unknown_node"
+class = "none"
+summary = "An edge references a node id the definition does not declare: {edge} references {node}."
+explanation_key = "error.dag.unknown_node"
+params = ["edge", "node"]
+remedy = "Declare the referenced node or fix the edge."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.cycle"
+class = "none"
+summary = "The graph has a cycle; DAGs must be acyclic: {cycle}."
+explanation_key = "error.dag.cycle"
+params = ["cycle"]
+remedy = "Remove one edge of the cycle."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.unreachable"
+class = "none"
+summary = "A node cannot be reached from the definition's entry: {node}."
+explanation_key = "error.dag.unreachable"
+params = ["node"]
+remedy = "Connect the node to the graph or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.dead_end"
+class = "none"
+summary = "A non-terminal node has no outgoing edge, so the workflow stops there: {node}."
+explanation_key = "error.dag.dead_end"
+params = ["node"]
+remedy = "Connect the node to the terminal or mark it terminal."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.no_entry"
+class = "none"
+summary = "The definition declares no entry node."
+explanation_key = "error.dag.no_entry"
+params = []
+remedy = "Mark exactly one node as the entry."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.no_terminal"
+class = "none"
+summary = "The definition declares no terminal node."
+explanation_key = "error.dag.no_terminal"
+params = []
+remedy = "Mark a node as the terminal."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.too_many_nodes"
+class = "none"
+summary = "The definition exceeds the node budget ({limit})."
+explanation_key = "error.dag.too_many_nodes"
+params = ["limit"]
+remedy = "Split the workflow or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.too_many_edges"
+class = "none"
+summary = "The definition exceeds the edge budget ({limit})."
+explanation_key = "error.dag.too_many_edges"
+params = ["limit"]
+remedy = "Reduce the edges or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.config_too_large"
+class = "none"
+summary = "A node's config exceeds the size budget: {limit} over {node}."
+explanation_key = "error.dag.config_too_large"
+params = ["limit", "node"]
+remedy = "Shrink the config or raise the configured budget."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.json"
+class = "none"
+summary = "A node config is not valid JSON of the declared shape: {error} at {node}."
+explanation_key = "error.dag.json"
+params = ["error", "node"]
+remedy = "Fix the config JSON."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.registry.invalid"
+class = "none"
+summary = "A DAG registry update was rejected: the definition is invalid or does not chain: {error}."
+explanation_key = "error.dag.registry.invalid"
+params = ["error"]
+remedy = "Fix the definition against the registry change rules."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.registry.version_gap"
+class = "none"
+summary = "A registry update skips a version; versions must advance by one: expected {expected}, got {got}."
+explanation_key = "error.dag.registry.version_gap"
+params = ["expected", "got"]
+remedy = "Publish the missing intermediate version first."
+since = "0.1.0"
+
+[[entry]]
+code = "dag.registry.no_change"
+class = "none"
+summary = "A registry update carries the same version and definition as installed: {version}."
+explanation_key = "error.dag.registry.no_change"
+params = ["version"]
+remedy = "Bump the version when the definition changes."
+since = "0.1.0"

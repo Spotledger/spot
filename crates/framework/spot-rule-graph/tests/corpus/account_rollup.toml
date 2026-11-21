@@ -1,0 +1,87 @@
+# Roll-up of an account tree: each account's subtree total is the sum of every account in its
+# subtree (itself included), found through the account.parent_account edge.
+name = "account_rollup"
+meta = "accounts"
+query = "subtree_total"
+rules = """
+node(A) :- account.code(A, _).
+descendant(A, A) :- node(A).
+descendant(C, A) :- account.parent_account(C, P), descendant(P, A).
+subtree_total(A, sum<Amount>) :- descendant(D, A), account.amount(D, Amount).
+"""
+
+# A0 (root) has children A1 and A2; A1 has child A3.
+[[edge]]
+type = "account.parent_account"
+from = { entity = "account", id = 1 }
+to = { entity = "account", id = 0 }
+
+[[edge]]
+type = "account.parent_account"
+from = { entity = "account", id = 2 }
+to = { entity = "account", id = 0 }
+
+[[edge]]
+type = "account.parent_account"
+from = { entity = "account", id = 3 }
+to = { entity = "account", id = 1 }
+
+[[field]]
+doctype = "account"
+field = "code"
+record = { entity = "account", id = 0 }
+value = { text = "a0" }
+
+[[field]]
+doctype = "account"
+field = "code"
+record = { entity = "account", id = 1 }
+value = { text = "a1" }
+
+[[field]]
+doctype = "account"
+field = "code"
+record = { entity = "account", id = 2 }
+value = { text = "a2" }
+
+[[field]]
+doctype = "account"
+field = "code"
+record = { entity = "account", id = 3 }
+value = { text = "a3" }
+
+[[field]]
+doctype = "account"
+field = "amount"
+record = { entity = "account", id = 0 }
+value = { decimal = "10" }
+
+[[field]]
+doctype = "account"
+field = "amount"
+record = { entity = "account", id = 1 }
+value = { decimal = "100" }
+
+[[field]]
+doctype = "account"
+field = "amount"
+record = { entity = "account", id = 2 }
+value = { decimal = "20" }
+
+[[field]]
+doctype = "account"
+field = "amount"
+record = { entity = "account", id = 3 }
+value = { decimal = "5" }
+
+[[expect]]
+row = [ { record = { entity = "account", id = 0 } }, { decimal = "135" } ]
+
+[[expect]]
+row = [ { record = { entity = "account", id = 1 } }, { decimal = "105" } ]
+
+[[expect]]
+row = [ { record = { entity = "account", id = 2 } }, { decimal = "20" } ]
+
+[[expect]]
+row = [ { record = { entity = "account", id = 3 } }, { decimal = "5" } ]

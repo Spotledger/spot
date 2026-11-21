@@ -1,0 +1,55 @@
+name = "field became required after an app upgrade"
+description = "A migration run for selling 2.0.0 set sales_invoice.total to required; why(Field) must name the run that proves it."
+epoch = 11
+
+[caller]
+id = "agent:t0"
+tier = "T0"
+
+[[doctypes]]
+name = "sales_invoice"
+app = "selling"
+
+[[doctypes.fields]]
+name = "total"
+type = "decimal"
+required = true
+
+[[doctypes.fields]]
+name = "customer"
+type = "link"
+options = "customer"
+
+[[doctypes]]
+name = "customer"
+app = "selling"
+
+[[doctypes.fields]]
+name = "name"
+type = "text"
+
+[[migrations]]
+id = "upgrade-1"
+actor = "user:alice"
+started = 100
+ended = 110
+outcome = "verified"
+risk = "additive"
+
+[[migrations.impacts]]
+kind = "Field"
+name = "sales_invoice.total"
+change = "required was set to true"
+change_kind = "updated"
+
+[[migrations.installs]]
+app = "selling"
+version = "2.0.0"
+
+[[expect]]
+subject = { kind = "Field", name = "sales_invoice.total" }
+paths = [["Field:sales_invoice.total", "Migration:upgrade-1"]]
+
+[[expect]]
+subject = { kind = "App", name = "selling" }
+paths = [["App:selling", "Migration:upgrade-1"]]

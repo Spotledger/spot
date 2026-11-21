@@ -1,0 +1,35 @@
+[package]
+name = "spot-partition-pg"
+description = "The PostgreSQL implementation of the partition registry and the naming range allocator (WP-EDG-03.T8, ADR-082 class C): effective-dated single-writer assignments with an append-only history, and a range allocator whose grants are disjoint by construction, over the shared blocking bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `PartitionRegistry` and `RangeAllocator` traits this crate implements, their types and the
+# stable `partition.*` errors.
+spot-partition = { path = "../../framework/spot-partition" }
+# `NodeId`: the node an assignment or a range belongs to.
+spot-sync-protocol = { path = "../../framework/spot-sync-protocol" }
+# `SeriesKey`: the naming series a range is granted from.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The shared blocking bridge every call goes through (ADR-082 addendum 1); no private `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The driver types the bridge hands to the store's closures.
+tokio-postgres = "0.7"
+# The transaction type a pooled connection opens.
+deadpool-postgres = "0.14"
+# `Handle::try_current`: the constructor refuses a thread that is inside an async runtime.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# Instants are arguments; they are stored as exact nanoseconds since the Unix epoch.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

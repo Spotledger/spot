@@ -1,0 +1,41 @@
+# JSON Web Tokens: `eyJ<parts>` in compact form; unsigned two-part forms included.
+
+[[case]]
+input = 'token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c verified'
+expected = 'token [redacted:jwt] verified'
+class = 'jwt'
+
+[[case]]
+input = 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0'
+expected = 'Bearer [redacted:jwt]'
+class = 'jwt'
+
+[[case]]
+input = 'headless eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.'
+expected = 'headless [redacted:jwt]'
+class = 'jwt'
+
+[[case]]
+input = 'eyJsomethingnodots'
+expected = 'eyJsomethingnodots'
+class = 'jwt'
+
+[[case]]
+input = 'eyJSB3cBMn-8.short.payload here'
+expected = 'eyJSB3cBMn-8.short.payload here'
+class = 'jwt'
+
+[[case]]
+input = 'digest e29b7c4d8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6'
+expected = 'digest e29b7c4d8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6'
+class = 'jwt'
+
+[[case]]
+input = 'token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.sigPart42'
+expected = 'token=[redacted:jwt]'
+class = 'jwt'
+
+[[case]]
+input = 'JWT eyJhbGciOiJub25lIn0.eyJ1IjoiYiJ9'
+expected = 'JWT [redacted:jwt]'
+class = 'jwt'

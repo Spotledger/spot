@@ -1,0 +1,49 @@
+[package]
+name = "spot-sync-hub-host"
+description = "The join between the sync wire and the hub relay (WP-RTB-02.T4, ADR-062, ADR-063): the serve cache that answers a node's pull by serve sequence, the acknowledgement trim, the per-tenant push sink, per-node admission and limits, and the guard layer in front of the sync router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The wire: the hub source and push sink traits, the node directory and the error vocabulary.
+spot-sync-http = { path = "../spot-sync-http" }
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+# The relay and its queue traits (the production core wraps a HubRelay).
+spot-sync-hub = { path = "../spot-sync-hub" }
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+# `ImageSource`, the relay's third type parameter.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# `SourceId`: `<site>#<partition>` names a stream.
+spot-events-contract = { path = "../../../contracts/events" }
+# `Clock`: every limit takes its time from an injected clock.
+spot-core = { path = "../spot-core" }
+axum = { version = "0.8.9", features = ["http2"] }
+tokio = { version = "1.47", features = ["rt", "sync", "time", "macros"] }
+tokio-stream = "0.1"
+serde_json = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+# The grants host (WP-RTB-03.T8): the lease service, the replay guard and the edge's messages.
+spot-lease-grants = { path = "../spot-lease-grants" }
+spot-offline-identity = { path = "../spot-offline-identity" }
+spot-audit-chain = { path = "../spot-audit-chain" }
+spot-bundle-signing = { path = "../spot-bundle-signing" }
+spot-partition = { path = "../spot-partition" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-edge-offline-host = { path = "../spot-edge-offline-host" }
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+tokio-postgres = "0.7"
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "time", "sync", "test-util"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,46 @@
+# bulk_actions codes: whole-request refusals of spot-bulk-actions (WP-DOC-09.T6). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bulk_actions.too_many_targets"
+class = "none"
+summary = "The request names more documents than max_targets."
+explanation_key = "error.bulk_actions.too_many_targets"
+params = []
+remedy = "Split the selection into several batches or raise max_targets."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk_actions.empty_batch"
+class = "none"
+summary = "The request names no document."
+explanation_key = "error.bulk_actions.empty_batch"
+params = []
+remedy = "Select at least one document."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk_actions.bad_label"
+class = "none"
+summary = "The batch label is empty, longer than 64 characters or holds a control character."
+explanation_key = "error.bulk_actions.bad_label"
+params = []
+remedy = "Use a label of 1 to 64 printable characters."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk_actions.bad_concurrency"
+class = "none"
+summary = "The concurrency is outside 1 to 16."
+explanation_key = "error.bulk_actions.bad_concurrency"
+params = []
+remedy = "Ask for between 1 and 16 calls in flight."
+since = "0.1.0"
+
+[[entry]]
+code = "bulk_actions.action_not_allowed"
+class = "none"
+summary = "The action itself is refused: an empty patch or a method name that is not lower-case letters, digits and underscores."
+explanation_key = "error.bulk_actions.action_not_allowed"
+params = []
+remedy = "Give the update a patch that changes something, or name the method as the DocType declares it."
+since = "0.1.0"

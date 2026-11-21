@@ -1,0 +1,29 @@
+[package]
+name = "spot-migration-audit"
+description = "The migration audit record (WP-MIG-11.T1, ADR-22): every plan, approval, rehearsal report, apply journal and result recorded in the tamper-evident audit chain, the query API a console lists and explains runs through, and the role permission that refuses an apply with no recorded run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Every lifecycle event is an `AuditRecord` appended to the tamper-evident chain (WP-AI-11).
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The `Principal` and its role assignments the `migration.run` permission is evaluated over.
+spot-permissions = { path = "../spot-permissions" }
+# The `ReleasePlan` whose changes, risk class and digest the record summarises and explains.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The run records and the query filters derive serde for a console (JSON) and the report.
+serde = { version = "1", features = ["derive"] }
+# SHA-256 over a stored artefact (the plan, the rehearsal report, the apply journal) it is
+# referenced by, and the plan's summary counts.
+sha2 = "0.10"
+# Typed errors with stable `migration_audit.*` codes.
+thiserror = "2"
+# `BoxFuture` for the object-safe async `RunRecorder` and `RunStore` traits; the tests use its
+# `block_on` executor, as `spot-audit-chain` does.
+futures = "0.3"
+
+[lints]
+workspace = true

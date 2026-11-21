@@ -1,0 +1,37 @@
+# The `tier_s` profile (WP-TST-15.T3): the README S-tier floor, "a reference low-end Windows 10
+# machine with 4 GB RAM runs the performance suite with 10 simulated users", with runtime
+# plus database under about 1 GB.
+#
+# The reference configuration is the desktop package: one `spot serve` process and the
+# bundled PostgreSQL as WP-PRD-02.T1 ships it (`shared_buffers = 128MB`, `max_connections =
+# 100`, `work_mem` at the PostgreSQL default, `fsync` and `full_page_writes` on), under a
+# 4 GB memory cap and 2 CPUs. How the cap is applied and verified is in
+# the project process notes; `tests/tier_s.rs` refuses to call a run a tier S run
+# unless the cap is observed in effect (L9_REQUIRE_CAP=1 or =vm).
+#
+# Rate. `target_tps` counts every arrival; `create_submit` (create a `time_entry` and post it,
+# one transaction) is 5 of every 100, so 20 arrivals/s is 1 tx/s of posting ("light posting"),
+# with the same read-heavy mix as tier M. Ten sessions with 50 to 150 ms of think time can
+# serve far more than 20 arrivals/s on a floor machine, so any shed arrival is a finding.
+name = "tier_s"
+tier = "S"
+sessions = 10
+ramp_seconds = 30
+steady_seconds = 600
+seed = 20261113
+target_tps = 20
+request_timeout_ms = 10000
+sample_every_seconds = 5
+report = "task_summary"
+
+[think]
+kind = "uniform"
+min_ms = 50
+max_ms = 150
+
+[mix]
+sign_in = 3
+open_form = 50
+list = 37
+report_run = 5
+create_submit = 5

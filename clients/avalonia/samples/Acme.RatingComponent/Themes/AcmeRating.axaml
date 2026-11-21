@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:acme="using:Acme.RatingComponent">
+  <!--
+    Acme.RatingComponent — the ControlTheme for the star rating.
+    Every colour, font and spacing below is a DynamicResource into a Spotledger.Client.Theme
+    token: a component that hard-coded a colour would look foreign in the dark theme, so the
+    contract kit fails it. Thickness-valued tokens (Padding, BorderThickness) are kept at zero
+    because the markup extension that turns a Space.* token into a Thickness lives in
+    Spotledger.Client.Controls, which a component package may not reference.
+  -->
+  <ControlTheme x:Key="{x:Type acme:AcmeRatingView}" TargetType="acme:AcmeRatingView">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Border"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                Padding="{TemplateBinding Padding}">
+          <StackPanel Orientation="Vertical" Spacing="{DynamicResource Space.1}">
+            <TextBlock Text="{TemplateBinding Label}"
+                       Foreground="{TemplateBinding Foreground}"
+                       FontFamily="{TemplateBinding FontFamily}"
+                       FontSize="{TemplateBinding FontSize}"
+                       FontWeight="{DynamicResource Font.Weight.Semibold}" />
+            <StackPanel Name="PART_Stars"
+                        Orientation="Horizontal"
+                        Spacing="{DynamicResource Space.2}" />
+          </StackPanel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource Color.Text.Disabled}" />
+    </Style>
+
+    <Style Selector="^:focus-visible /template/ Border#PART_Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Color.Brand.500}" />
+    </Style>
+  </ControlTheme>
+</ResourceDictionary>

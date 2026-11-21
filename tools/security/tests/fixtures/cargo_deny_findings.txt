@@ -1,0 +1,39 @@
+   Compiling spot-runtime v0.1.0 (/repo/crates/framework/runtime)
+    Checking spot-runtime v0.1.0 (/repo/crates/framework/runtime)
+error[A0001]: Vulnerability detected in a package you are using
+ ┌─ /repo/Cargo.lock:198:3
+ │
+198 │ idna 0.1.5 registry+https://github.com/rust-lang/crates.io-index
+ │ ^^^^^^^^ security vulnerability detected
+ │
+ ├─ Package: idna
+ ├─ Version: 0.1.5
+ ├─ Advisory ID: RUSTSEC-2024-0421
+ ├─ Advisory URL: https://rustsec.org/advisories/RUSTSEC-2024-0421
+ ├─ Title: idna punycode
+ ├─ Severity: 7.5 (High)
+ ├─ Solution: Upgrade to >=0.5.0 (try `cargo update -p idna`)
+ │
+
+warning[A0002]: Unmaintained crate
+ ┌─ /repo/Cargo.lock:337:1
+ │
+337 │ ammonia 2.0.0 registry+https://github.com/rust-lang/crates.io-index
+ │ ^^^^^^^ unmaintained
+ │
+ ├─ Package: ammonia
+ ├─ Version: 2.0.0
+ ├─ Advisory ID: RUSTSEC-2019-0002
+ ├─ Advisory URL: https://rustsec.org/advisories/RUSTSEC-2019-0002
+ ├─ Solution: Try updating the crate
+ │
+
+error[B0001]: crate `leftpad 0.1.0` is banned
+ ┌─ /repo/Cargo.lock:402:1
+ │
+402 │ leftpad 0.1.0 registry+https://github.com/rust-lang/crates.io-index
+ │
+ ├─ Package: leftpad
+ ├─ Version: 0.1.0
+ ├─ Solution: remove the dependency, it is banned by deny.toml
+ │

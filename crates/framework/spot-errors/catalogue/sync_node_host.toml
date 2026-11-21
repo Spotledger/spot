@@ -1,0 +1,93 @@
+# sync_node_host codes: the edge sync service (WP-RTB-02.T5). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. No message carries a record, a key, a code or a
+# certificate: names, counts and positions only.
+
+[[entry]]
+code = "sync_node_host.hub_untrusted"
+class = "none"
+summary = "The hub presented a certificate other than the pinned one."
+explanation_key = "error.sync_node_host.hub_untrusted"
+params = []
+remedy = "Check the hub address and the fingerprint given at enrolment; a different certificate, even a valid CA-signed one, is refused."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.not_enrolled"
+class = "none"
+summary = "The node has no identity or no pinned hub certificate yet, so the sync loop does not run."
+explanation_key = "error.sync_node_host.not_enrolled"
+params = []
+remedy = "Put an enrolment code (and the hub fingerprint) in the enrolment file and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.code_file_unsafe"
+class = "none"
+summary = "The enrolment code file is not a plain file with mode 0600, or could not be read or wiped."
+explanation_key = "error.sync_node_host.code_file_unsafe"
+params = []
+remedy = "Make it a regular file readable only by the service user (chmod 600)."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.envelope_invalid"
+class = "none"
+summary = "A served record did not decode, or is of an envelope version this node does not read."
+explanation_key = "error.sync_node_host.envelope_invalid"
+params = []
+remedy = "Upgrade the node; the record is counted and quarantined, never applied."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.foreign_record"
+class = "none"
+summary = "A served record named a source, tenant or partition that is not for this node."
+explanation_key = "error.sync_node_host.foreign_record"
+params = []
+remedy = "Nothing to do on the node; the hub's routing is wrong and the record was quarantined."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.apply_failed"
+class = "none"
+summary = "The apply path failed (the store, not one refused bundle)."
+explanation_key = "error.sync_node_host.apply_failed"
+params = []
+remedy = "Check the database; the hub re-serves from the acknowledged prefix."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.store_failed"
+class = "none"
+summary = "The sync cursor or outbox state could not be read or written."
+explanation_key = "error.sync_node_host.store_failed"
+params = []
+remedy = "Check the database; if the table is missing run `spot migrate`."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.invalid_settings"
+class = "none"
+summary = "A [services.sync_node] setting is out of bounds."
+explanation_key = "error.sync_node_host.invalid_settings"
+params = []
+remedy = "Correct the setting named in the message."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.not_owned"
+class = "none"
+summary = "The node's own outbox yielded a record the node does not own; it is never pushed."
+explanation_key = "error.sync_node_host.not_owned"
+params = []
+remedy = "Report it: a write gate let a non-owned record into the outbox."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_host.hub_refused"
+class = "none"
+summary = "The hub refused the handshake (protocol version or metadata epoch)."
+explanation_key = "error.sync_node_host.hub_refused"
+params = []
+remedy = "Upgrade the older side; the loop keeps retrying with backoff."
+since = "0.1.0"

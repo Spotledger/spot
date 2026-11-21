@@ -1,0 +1,21 @@
+# bpm_tasks_pg codes: the PostgreSQL TaskStore for the task inbox (WP-BPM-05.T6). Failures of a
+# call are the task service's own bpm_tasks.store_failed / version_conflict refusals; only the
+# setup codes are new. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_tasks_pg.bad_setup"
+class = "none"
+summary = "The task store could not be built: the tenant name is not usable, or the bridge settings do not hold against the pool."
+explanation_key = "error.bpm_tasks_pg.bad_setup"
+params = []
+remedy = "Give the store a non-empty tenant of at most 128 characters without control characters, and a bridge whose max_in_flight is at least one below the pool size minus the bridge reserve."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_tasks_pg.migration_failed"
+class = "none"
+summary = "The task inbox tables could not be created."
+explanation_key = "error.bpm_tasks_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, indexes and a trigger function and that the server is reachable, then call prepare again."
+since = "0.1.0"

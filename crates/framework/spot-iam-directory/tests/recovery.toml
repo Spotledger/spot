@@ -1,0 +1,122 @@
+# The recovery matrix (ADR-070 section 6.5). One [[case]] per row.
+#
+#   kind            password | second_factor
+#   self_service    the request is the target's own (initiated_by == target)
+#   requester_admin whether the initiator is a tenant administrator
+#   target_type     internal | portal | service | agent
+#   target_enabled  whether the target is enabled
+#   target_admin    whether the target is a tenant administrator
+#   policy_*        what the tenant allows for self-service
+#   steps           the expected steps, in order; or
+#   refused         the expected error code
+#
+# The policy defaults to: password self-service on, second-factor self-service off.
+
+[[case]]
+name = "self-service password reset where the policy allows it"
+kind = "password"
+self_service = true
+steps = []
+
+[[case]]
+name = "self-service second-factor reset is refused where the policy does not allow it"
+kind = "second_factor"
+self_service = true
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "self-service second-factor reset where the policy allows it"
+kind = "second_factor"
+self_service = true
+policy_second_factor = true
+steps = []
+
+[[case]]
+name = "self-service password reset is refused when the policy turns it off"
+kind = "password"
+self_service = true
+policy_password = false
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "an administrator's own self-service reset still notifies every address"
+kind = "password"
+self_service = true
+requester_admin = true
+target_admin = true
+steps = ["notify_all_addresses"]
+
+[[case]]
+name = "an administrator resets an ordinary user's password: step-up and notice"
+kind = "password"
+requester_admin = true
+steps = ["step_up", "notify_all_addresses"]
+
+[[case]]
+name = "an administrator resets an ordinary user's second factor, whatever the self-service policy"
+kind = "second_factor"
+requester_admin = true
+policy_second_factor = false
+steps = ["step_up", "notify_all_addresses"]
+
+[[case]]
+name = "an administrator resets a portal user"
+kind = "password"
+requester_admin = true
+target_type = "portal"
+steps = ["step_up", "notify_all_addresses"]
+
+[[case]]
+name = "resetting an administrator also needs a second approver"
+kind = "password"
+requester_admin = true
+target_admin = true
+steps = ["step_up", "second_approver", "notify_all_addresses"]
+
+[[case]]
+name = "resetting an administrator's second factor needs a second approver"
+kind = "second_factor"
+requester_admin = true
+target_admin = true
+steps = ["step_up", "second_approver", "notify_all_addresses"]
+
+[[case]]
+name = "an ordinary user cannot reset another user"
+kind = "password"
+requester_admin = false
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "an ordinary user cannot reset an administrator"
+kind = "password"
+requester_admin = false
+target_admin = true
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "a disabled user cannot recover by self-service"
+kind = "password"
+self_service = true
+target_enabled = false
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "a disabled user cannot be reset by an administrator"
+kind = "password"
+requester_admin = true
+target_enabled = false
+refused = "iam.recovery_not_allowed"
+
+[[case]]
+name = "a service user has no password to recover"
+kind = "password"
+requester_admin = true
+target_type = "service"
+refused = "iam.no_password"
+
+[[case]]
+name = "an agent user has no second factor to recover"
+kind = "second_factor"
+requester_admin = true
+target_type = "agent"
+refused = "iam.no_password"

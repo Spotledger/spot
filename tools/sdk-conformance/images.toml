@@ -1,0 +1,55 @@
+# Build images and commands for the guest-SDK conformance harness (WP-STR-07.T1).
+#
+# Each language names the container image its component is built in, and the command that
+# produces the component. The image is pinned: an immutable `@sha256:` digest, or an explicit
+# version tag that is not `latest`. `run.py --list` refuses to *run* a language whose image is
+# not pinned; a run records `BLOCKED(image, ...)` instead. This keeps the matrix reproducible.
+#
+# The command runs with the repository mounted at `/work` and the working directory set to the
+# template (`/work/sdk/templates/<language>`), so it can call the template's own `build.sh` and
+# the harness's `install-wasm-tools.sh`. `provision` runs first (it installs the toolchain the
+# image does not ship); `build` produces `out/component.wasm` in the template.
+#
+# `--engine local` skips the container: it runs `build` on the host, which must already have the
+# toolchain. That is how a developer with a toolchain checks a template without a container.
+
+[harness]
+# The contract kit binary, relative to the repository root, built from runner/.
+runner = "runner/target/release/spot-sdk-conformance"
+# The sample-app contract cases, relative to this file's directory.
+cases = "cases.json"
+# Where a build leaves its component, relative to the template directory.
+component = "out/component.wasm"
+# The wasm-tools release `install-wasm-tools.sh` downloads (the version tested here).
+wasm_tools_version = "1.262.0"
+
+[languages.rust]
+# The reference language. The image is the toolchain; wasm-tools is installed by `provision`.
+image = "docker.io/library/rust@sha256:4cd829461bd5c4d511c32e269da9cb8929223b666519d8004e35fc8d1d771ab7"
+toolchain = "rustc 1.98.1, wasm-tools 1.262.0, target wasm32-unknown-unknown"
+provision = "apt-get update -qq && apt-get install -y -qq curl >/dev/null && /work/tools/sdk-conformance/install-wasm-tools.sh"
+build = "./build.sh"
+
+[languages.go]
+image = "docker.io/library/golang@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61"
+toolchain = "Go 1.27, componentize-go (go tool)"
+provision = ""
+build = "./build.sh"
+
+[languages.csharp]
+image = "mcr.microsoft.com/dotnet/sdk@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa"
+toolchain = ".NET SDK 10.0, componentize-dotnet (BytecodeAlliance.Componentize.DotNet.Wasm.SDK)"
+provision = ""
+build = "./build.sh"
+
+[languages.javascript]
+image = "docker.io/library/node@sha256:a856ae5e25d498bbe5ec85fde88f00f5ed99908fda803ba39d7735ab8574f58c"
+toolchain = "Node.js 26, jco + @bytecodealliance/componentize-js"
+provision = ""
+build = "./build.sh"
+
+[languages.python]
+image = "docker.io/library/python@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170"
+toolchain = "CPython 3.14, componentize-py 0.25.1"
+provision = "python -m pip install --quiet componentize-py"
+build = "./build.sh"

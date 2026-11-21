@@ -1,0 +1,459 @@
+# Numbers: decimal scale and range, integers, exact arithmetic, booleans.
+
+[[case]]
+id = "num-01-scale-as-written"
+rule = "SEM-NUM-01"
+title = "values written at the column's scale read back with the same digits, 2.00 and 3.2500000000 included"
+setup = ['a code="t:a" money="d:1.50" small="d:2.00" wide="d:3.2500000000"']
+op = "load"
+doc = "a"
+fields = ["money", "small", "wide"]
+expect = { rows = [["d:1.50", "d:2.00", "d:3.2500000000"]] }
+
+[[case]]
+id = "num-01-zero-and-negative"
+rule = "SEM-NUM-01"
+title = "zero keeps its scale and negative values keep their sign and digits"
+setup = ['a code="t:a" money="d:0.00" small="d:-0.50" wide="d:-0.0000000001"']
+op = "load"
+doc = "a"
+fields = ["money", "small", "wide"]
+expect = { rows = [["d:0.00", "d:-0.50", "d:-0.0000000001"]] }
+
+[[case]]
+id = "num-01-trailing-zeros-kept"
+rule = "SEM-NUM-01"
+title = "trailing zeros at the scale are kept"
+setup = ['a code="t:a" money="d:100.00" small="d:1.10"']
+op = "load"
+doc = "a"
+fields = ["money", "small"]
+expect = { rows = [["d:100.00", "d:1.10"]] }
+
+[[case]]
+id = "num-01-query-returns-the-scale"
+rule = "SEM-NUM-01"
+title = "a query returns the same digits"
+setup = ['a code="t:a" money="d:7.50"', 'b code="t:b" money="d:7.00"']
+op = "query"
+query = { select = ["money"], order = ["code"] }
+expect = { rows = [["d:7.50"], ["d:7.00"]] }
+
+[[case]]
+id = "num-01-update-keeps-the-scale"
+rule = "SEM-NUM-01"
+title = "a decimal written by update reads back with the same digits"
+setup = ['a code="t:a" money="d:1.00"', 'update a money="d:2.50"']
+op = "load"
+doc = "a"
+fields = ["money"]
+expect = { rows = [["d:2.50"]] }
+
+[[case]]
+id = "num-11-short-scale-load"
+rule = "SEM-NUM-11"
+title = "1.5, 2 and 3.25 written into scale 2, 2 and 10 (open: read padded or as written)"
+setup = ['a code="t:a" money="d:1.5" small="d:2" wide="d:3.25"']
+op = "load"
+doc = "a"
+fields = ["money", "small", "wide"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-11-short-scale-zero"
+rule = "SEM-NUM-11"
+title = "0 written into a scale-2 column (open)"
+setup = ['a code="t:a" money="d:0"']
+op = "load"
+doc = "a"
+fields = ["money"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-11-short-scale-query"
+rule = "SEM-NUM-11"
+title = "a query over short-scale writes (open)"
+setup = ['a code="t:a" money="d:7.5"', 'b code="t:b" money="d:7"']
+op = "query"
+query = { select = ["money"], order = ["code"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-11-short-scale-update"
+rule = "SEM-NUM-11"
+title = "a short-scale decimal written by update (open)"
+setup = ['a code="t:a" money="d:1.00"', 'update a money="d:2.5"']
+op = "load"
+doc = "a"
+fields = ["money"]
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-02-extra-digit-refused"
+rule = "SEM-NUM-02"
+title = "1.005 in a scale-2 column is refused, not rounded"
+op = "write"
+write = ['insert a code="t:a" money="d:1.005"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-02-tiny-fraction-refused"
+rule = "SEM-NUM-02"
+title = "0.001 is refused, not rounded to zero"
+op = "write"
+write = ['insert a code="t:a" money="d:0.001"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-02-round-half-refused"
+rule = "SEM-NUM-02"
+title = "a value that would round up (2.675) is refused"
+op = "write"
+write = ['insert a code="t:a" money="d:2.675"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-02-trailing-zeros-beyond-scale-accepted"
+rule = "SEM-NUM-02"
+title = "1.500 and 2.00000 carry no digits beyond the scale and are accepted"
+op = "write"
+write = ['insert a code="t:a" money="d:1.500" small="d:2.0000000000"']
+expect = { ok = true }
+
+[[case]]
+id = "num-02-small-scale"
+rule = "SEM-NUM-02"
+title = "1.234 is refused in the (4,2) column"
+op = "write"
+write = ['insert a code="t:a" small="d:1.234"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-02-wide-scale"
+rule = "SEM-NUM-02"
+title = "an eleventh fractional digit is refused in the (38,10) column"
+op = "write"
+write = ['insert a code="t:a" wide="d:0.12345678901"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-02-update-refused"
+rule = "SEM-NUM-02"
+title = "an update with an extra digit is refused"
+setup = ['a code="t:a" money="d:1.00"']
+op = "write"
+write = ['update a money="d:1.001"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-03-largest-and-smallest"
+rule = "SEM-NUM-03"
+title = "the largest and smallest values of numeric(18,2) round-trip exactly"
+setup = ['a code="t:a" money="d:9999999999999999.99"', 'b code="t:b" money="d:-9999999999999999.99"']
+op = "query"
+query = { select = ["money"], order = ["code"] }
+expect = { rows = [["d:9999999999999999.99"], ["d:-9999999999999999.99"]] }
+
+[[case]]
+id = "num-03-one-over-the-precision"
+rule = "SEM-NUM-03"
+title = "a seventeenth integer digit is refused"
+op = "write"
+write = ['insert a code="t:a" money="d:10000000000000000.00"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-03-small-limits"
+rule = "SEM-NUM-03"
+title = "99.99 and -99.99 fit (4,2) and round-trip"
+setup = ['a code="t:a" small="d:99.99"', 'b code="t:b" small="d:-99.99"']
+op = "query"
+query = { select = ["small"], order = ["code"] }
+expect = { rows = [["d:99.99"], ["d:-99.99"]] }
+
+[[case]]
+id = "num-03-small-overflow"
+rule = "SEM-NUM-03"
+title = "100 does not fit (4,2)"
+op = "write"
+write = ['insert a code="t:a" small="d:100"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-03-small-negative-overflow"
+rule = "SEM-NUM-03"
+title = "-100.00 does not fit (4,2)"
+op = "write"
+write = ['insert a code="t:a" small="d:-100.00"']
+expect = { error = "invalid_value" }
+
+[[case]]
+id = "num-03-wide-28-digits"
+rule = "SEM-NUM-03"
+title = "a 28-digit value (the most a Decimal holds) in (38,10) round-trips"
+setup = ['a code="t:a" wide="d:999999999999999999.9999999999"', 'b code="t:b" wide="d:-999999999999999999.9999999999"']
+op = "query"
+query = { select = ["wide"], order = ["code"] }
+expect = { rows = [["d:999999999999999999.9999999999"], ["d:-999999999999999999.9999999999"]] }
+
+[[case]]
+id = "num-04-equality-ignores-scale"
+rule = "SEM-NUM-04"
+title = "1.5 equals the stored 1.50"
+setup = ['a code="t:a" money="d:1.50"', 'b code="t:b" money="d:1.51"']
+op = "query"
+query = { select = ["code"], filter = '(= money "d:1.5")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-04-in-ignores-scale"
+rule = "SEM-NUM-04"
+title = "In matches 1.5000 against 1.50"
+setup = ['a code="t:a" money="d:1.50"', 'b code="t:b" money="d:1.51"']
+op = "query"
+query = { select = ["code"], filter = '(in money "d:1.5000" "d:9")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-04-ordering-is-numeric"
+rule = "SEM-NUM-04"
+title = "ordering is numeric: -1, 2.50, 10 (not text order)"
+setup = ['a code="t:a" money="d:10.00"', 'b code="t:b" money="d:-1.00"', 'c code="t:c" money="d:2.50"']
+op = "query"
+query = { select = ["code"], order = ["money"] }
+expect = { rows = [["t:b"], ["t:c"], ["t:a"]] }
+
+[[case]]
+id = "num-04-range"
+rule = "SEM-NUM-04"
+title = "< and >= compare numerically across scales"
+setup = ['a code="t:a" money="d:2.50"', 'b code="t:b" money="d:2.49"', 'c code="t:c" money="d:-3.00"']
+op = "query"
+query = { select = ["code"], filter = '(and (< money "d:2.5") (>= money "d:-3"))', order = ["code"] }
+expect = { rows = [["t:b"], ["t:c"]] }
+
+[[case]]
+id = "num-05-integer-extremes"
+rule = "SEM-NUM-05"
+title = "the 64-bit minimum and maximum round-trip"
+setup = ['a code="t:a" qty=i:9223372036854775807', 'b code="t:b" qty=i:-9223372036854775808', 'c code="t:c" qty=i:0']
+op = "query"
+query = { select = ["qty"], order = ["qty"] }
+expect = { rows = [["i:-9223372036854775808"], ["i:0"], ["i:9223372036854775807"]] }
+
+[[case]]
+id = "num-05-integer-comparison-at-the-edge"
+rule = "SEM-NUM-05"
+title = "comparison near the 64-bit limits is exact"
+setup = ['a code="t:a" qty=i:9223372036854775807', 'b code="t:b" qty=i:9223372036854775806', 'c code="t:c" qty=i:-9223372036854775808']
+op = "query"
+query = { select = ["code"], filter = "(> qty 9223372036854775806)" }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-05-load-extremes"
+rule = "SEM-NUM-05"
+title = "load returns the extreme integer"
+setup = ['a code="t:a" qty=i:-9223372036854775808']
+op = "load"
+doc = "a"
+fields = ["qty"]
+expect = { rows = [["i:-9223372036854775808"]] }
+
+[[case]]
+id = "num-05-negative-ordering"
+rule = "SEM-NUM-05"
+title = "negative integers order below zero"
+setup = ['a code="t:a" qty=i:-1', 'b code="t:b" qty=i:-10', 'c code="t:c" qty=i:1']
+op = "query"
+query = { select = ["qty"], order = ["qty desc"] }
+expect = { rows = [["i:1"], ["i:-1"], ["i:-10"]] }
+
+[[case]]
+id = "num-06-int-equals-decimal"
+rule = "SEM-NUM-06"
+title = "an integer field equals a decimal literal of the same value"
+setup = ['a code="t:a" qty=i:5', 'b code="t:b" qty=i:6']
+op = "query"
+query = { select = ["code"], filter = '(= qty "d:5.00")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-06-decimal-field-int-literal"
+rule = "SEM-NUM-06"
+title = "a decimal field compares with an integer literal"
+setup = ['a code="t:a" money="d:5.00"', 'b code="t:b" money="d:5.01"']
+op = "query"
+query = { select = ["code"], filter = "(> money 5)" }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "num-06-int-below-decimal"
+rule = "SEM-NUM-06"
+title = "an integer field below a fractional decimal literal"
+setup = ['a code="t:a" qty=i:5', 'b code="t:b" qty=i:6']
+op = "query"
+query = { select = ["code"], filter = '(< qty "d:5.5")' }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-06-add-int-and-decimal"
+rule = "SEM-NUM-06"
+title = "an integer field plus a decimal literal is exact"
+setup = ['a code="t:a" qty=i:2']
+op = "query"
+query = { select = ["(= (+ qty \"d:0.5\") \"d:2.5\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-sum-is-exact"
+rule = "SEM-NUM-07"
+title = "0.10 + 0.20 sums to exactly 0.30"
+setup = ['a code="t:a" money="d:0.10"', 'b code="t:b" money="d:0.20"']
+op = "query"
+query = { select = ["(= (sum money) \"d:0.30\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-many-small-amounts"
+rule = "SEM-NUM-07"
+title = "ten times 0.10 is exactly 1.00"
+setup = ['a1 code="t:1" money="d:0.10"', 'a2 code="t:2" money="d:0.10"', 'a3 code="t:3" money="d:0.10"', 'a4 code="t:4" money="d:0.10"', 'a5 code="t:5" money="d:0.10"', 'a6 code="t:6" money="d:0.10"', 'a7 code="t:7" money="d:0.10"', 'a8 code="t:8" money="d:0.10"', 'a9 code="t:9" money="d:0.10"', 'a10 code="t:10" money="d:0.10"']
+op = "query"
+query = { select = ["(= (sum money) \"d:1\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-product-keeps-every-digit"
+rule = "SEM-NUM-07"
+title = "99999999999999.99 times 100 keeps every digit"
+setup = ['a code="t:a" money="d:99999999999999.99"']
+op = "query"
+query = { select = ["(= (* money 100) \"d:9999999999999999\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-multiply-fractions"
+rule = "SEM-NUM-07"
+title = "1.15 times 1.15 is exactly 1.3225"
+setup = ['a code="t:a" money="d:1.15"']
+op = "query"
+query = { select = ["(= (* money money) \"d:1.3225\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-subtract"
+rule = "SEM-NUM-07"
+title = "0.30 - 0.10 is exactly 0.20"
+setup = ['a code="t:a" money="d:0.30" small="d:0.10"']
+op = "query"
+query = { select = ["(= (- money small) \"d:0.20\")"] }
+expect = { rows = [["b:true"]] }
+
+[[case]]
+id = "num-07-sum-per-group"
+rule = "SEM-NUM-07"
+title = "grouped sums are exact"
+setup = ['a code="t:a" note="t:g" money="d:0.10"', 'b code="t:b" note="t:g" money="d:0.20"', 'c code="t:c" note="t:h" money="d:0.70"']
+op = "query"
+query = { select = ["note", "(= (sum money) \"d:0.3\")"], group = ["note"], order = ["note"] }
+expect = { rows = [["t:g", "b:true"], ["t:h", "b:false"]] }
+
+[[case]]
+id = "num-08-integer-overflow-add"
+rule = "SEM-NUM-08"
+title = "i64::MAX + 1 (open: which error)"
+setup = ['a code="t:a" qty=i:9223372036854775807']
+op = "query"
+query = { select = ["(+ qty 1)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-08-integer-overflow-sum"
+rule = "SEM-NUM-08"
+title = "Sum past i64::MAX (open: which error)"
+setup = ['a code="t:a" qty=i:9223372036854775807', 'b code="t:b" qty=i:1']
+op = "query"
+query = { select = ["(sum qty)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-08-integer-overflow-multiply"
+rule = "SEM-NUM-08"
+title = "i64::MAX * 2 (open: which error)"
+setup = ['a code="t:a" qty=i:9223372036854775807']
+op = "query"
+query = { select = ["(* qty 2)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-09-result-scale-of-product"
+rule = "SEM-NUM-09"
+title = "the scale of a product (open)"
+setup = ['a code="t:a" money="d:1.50"']
+op = "query"
+query = { select = ["(* money money)", "(+ money money)", "(- money 1)", "(* money 2)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-09-result-scale-of-sum"
+rule = "SEM-NUM-09"
+title = "the scale of Sum and Min/Max (open)"
+setup = ['a code="t:a" money="d:1.50"', 'b code="t:b" money="d:2.25"']
+op = "query"
+query = { select = ["(sum money)", "(min money)", "(max money)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-09-int-times-decimal"
+rule = "SEM-NUM-09"
+title = "the scale of integer times decimal (open)"
+setup = ['a code="t:a" money="d:1.50" qty=i:3']
+op = "query"
+query = { select = ["(* qty money)", "(+ qty money)"] }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "num-10-bool-roundtrip"
+rule = "SEM-NUM-10"
+title = "true and false round-trip"
+setup = ['a code="t:a" flag=b:true', 'b code="t:b" flag=b:false', 'c code="t:c"']
+op = "query"
+query = { select = ["flag"], order = ["code"] }
+expect = { rows = [["b:true"], ["b:false"], ["null"]] }
+
+[[case]]
+id = "num-10-bool-filter"
+rule = "SEM-NUM-10"
+title = "a boolean field compares with true and false"
+setup = ['a code="t:a" flag=b:true', 'b code="t:b" flag=b:false', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(= flag true)" }
+expect = { rows = [["t:a"]] }
+
+[[case]]
+id = "num-10-bool-not-equal"
+rule = "SEM-NUM-10"
+title = "<> true finds false and not null"
+setup = ['a code="t:a" flag=b:true', 'b code="t:b" flag=b:false', 'c code="t:c"']
+op = "query"
+query = { select = ["code"], filter = "(<> flag true)" }
+expect = { rows = [["t:b"]] }
+
+[[case]]
+id = "num-10-bool-order"
+rule = "SEM-NUM-10"
+title = "false sorts before true"
+setup = ['a code="t:a" flag=b:true', 'b code="t:b" flag=b:false']
+op = "query"
+query = { select = ["code"], order = ["flag"] }
+expect = { rows = [["t:b"], ["t:a"]] }
+
+[[case]]
+id = "num-10-bool-group-and-count"
+rule = "SEM-NUM-10"
+title = "grouping by a boolean"
+setup = ['a code="t:a" flag=b:true', 'b code="t:b" flag=b:false', 'c code="t:c" flag=b:true']
+op = "query"
+query = { select = ["flag", "(count)"], group = ["flag"] }
+expect = { rows = [["b:true", "i:2"], ["b:false", "i:1"]], unordered = true }

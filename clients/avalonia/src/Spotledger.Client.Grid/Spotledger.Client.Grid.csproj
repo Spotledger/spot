@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-08.T2: the custom-drawn virtualized grid. Owns no Api/Metadata knowledge:
+       it renders GridRow/GridCell display strings from an IGridSource and is styled
+       only through Spotledger.Client.Theme tokens. The CellEditing hook (factory,
+       commit/cancel) ships here without an editor; WP-UI-08.T3 supplies editors. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.Grid.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,183 @@
+# mcp codes: the native MCP server core (WP-AI-04.T1) error vocabulary. One [[entry]] per code;
+# see crates/framework/spot-errors/README.md. Every code is a JSON-RPC error the server returns
+# with the stable code under `data.code`, so none of them rides an `AppError` (`class = "none"`).
+
+[[entry]]
+code = "mcp.call"
+class = "none"
+summary = "The audit kind recorded for one MCP tool call, allowed or refused."
+explanation_key = "error.mcp.call"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.parse"
+class = "none"
+summary = "A message was not valid JSON or was not a JSON-RPC object."
+explanation_key = "error.mcp.parse"
+params = []
+remedy = "Send a JSON-RPC 2.0 request or notification object."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.invalid_request"
+class = "none"
+summary = "A well-formed JSON-RPC object violates the protocol shape."
+explanation_key = "error.mcp.invalid_request"
+params = []
+remedy = "Include `jsonrpc: \"2.0\"`, a `method` and a non-null `id` for a request."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.method_not_found"
+class = "none"
+summary = "The requested method is not implemented."
+explanation_key = "error.mcp.method_not_found"
+params = []
+remedy = "Use one of the methods the server's `server/discover` result advertises."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.invalid_params"
+class = "none"
+summary = "The method's parameters are missing or malformed."
+explanation_key = "error.mcp.invalid_params"
+params = []
+remedy = "Check the method's parameters against the MCP schema."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.internal"
+class = "none"
+summary = "An internal error occurred while handling the request."
+explanation_key = "error.mcp.internal"
+params = []
+remedy = "Retry; if it persists, check the server's health and logs."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.unsupported_protocol_version"
+class = "none"
+summary = "The requested MCP protocol version is not supported."
+explanation_key = "error.mcp.unsupported_protocol_version"
+params = []
+remedy = "Retry with one of the versions listed in the error's `supported` data."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.missing_capability"
+class = "none"
+summary = "The request needs a client capability the client did not declare."
+explanation_key = "error.mcp.missing_capability"
+params = []
+remedy = "Declare the required capabilities in `_meta`'s client capabilities."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.unauthorized"
+class = "none"
+summary = "The request carried no usable credential."
+explanation_key = "error.mcp.unauthorized"
+params = []
+remedy = "Send a valid bearer token or API key with the request."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.permission_denied"
+class = "none"
+summary = "The calling principal is not allowed to do this."
+explanation_key = "error.mcp.permission_denied"
+params = []
+remedy = "Use a principal whose rights cover the action."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.not_found"
+class = "none"
+summary = "The named document or resource does not exist, or is invisible to the caller."
+explanation_key = "error.mcp.not_found"
+params = []
+remedy = "Check the identifier, or the caller's rights on the document."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.unknown_tool"
+class = "none"
+summary = "The named tool does not exist."
+explanation_key = "error.mcp.unknown_tool"
+params = []
+remedy = "Call `tools/list` and use one of the returned tool names."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.invalid_arguments"
+class = "none"
+summary = "The tool arguments are missing or malformed."
+explanation_key = "error.mcp.invalid_arguments"
+params = []
+remedy = "Check the arguments against the tool's `inputSchema`."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.limit_exceeded"
+class = "none"
+summary = "A configured limit (input size, rows or depth) was exceeded."
+explanation_key = "error.mcp.limit_exceeded"
+params = []
+remedy = "Send a smaller request, or narrow the query."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.rate_limited"
+class = "none"
+summary = "The principal has spent its call rate limit."
+explanation_key = "error.mcp.rate_limited"
+params = []
+remedy = "Wait for the retry delay in the error's data, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.timeout"
+class = "none"
+summary = "The call exceeded its per-call timeout."
+explanation_key = "error.mcp.timeout"
+params = []
+remedy = "Narrow the request, or use an asynchronous tool that returns a job id."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.cancelled"
+class = "none"
+summary = "The call was cancelled by the client."
+explanation_key = "error.mcp.cancelled"
+params = []
+remedy = "Send a new request if the work is still wanted."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.job_not_found"
+class = "none"
+summary = "The named job does not exist."
+explanation_key = "error.mcp.job_not_found"
+params = []
+remedy = "Check the job id returned when the asynchronous tool was called."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.not_supported"
+class = "none"
+summary = "The requested feature is not available on this server."
+explanation_key = "error.mcp.not_supported"
+params = []
+remedy = "Use a feature the server advertises in its capabilities."
+since = "0.1.0"
+
+[[entry]]
+code = "mcp.audit_unavailable"
+class = "none"
+summary = "The call was refused because its audit record could not be written."
+explanation_key = "error.mcp.audit_unavailable"
+params = []
+remedy = "Retry later; the call was not run. If it persists, tell the operator that the AI audit chain is down."
+since = "0.1.0"

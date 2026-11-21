@@ -1,0 +1,43 @@
+# Affected items for a BOM change: every item that uses the changed part, directly or through
+# the item.component chain.
+name = "bom"
+meta = "bom"
+query = "affected"
+rules = """
+uses(Item, Component) :- item.component(Item, Component).
+affected(Component) :- bom_change.item(_, Component).
+affected(Up) :- uses(Up, Down), affected(Down).
+"""
+
+# I0 is built from I1, I1 from I2, I2 from I3. A change to I3 affects all of them.
+[[edge]]
+type = "item.component"
+from = { entity = "item", id = 0 }
+to = { entity = "item", id = 1 }
+
+[[edge]]
+type = "item.component"
+from = { entity = "item", id = 1 }
+to = { entity = "item", id = 2 }
+
+[[edge]]
+type = "item.component"
+from = { entity = "item", id = 2 }
+to = { entity = "item", id = 3 }
+
+[[edge]]
+type = "bom_change.item"
+from = { entity = "bom_change", id = 0 }
+to = { entity = "item", id = 3 }
+
+[[expect]]
+row = [ { record = { entity = "item", id = 0 } } ]
+
+[[expect]]
+row = [ { record = { entity = "item", id = 1 } } ]
+
+[[expect]]
+row = [ { record = { entity = "item", id = 2 } } ]
+
+[[expect]]
+row = [ { record = { entity = "item", id = 3 } } ]

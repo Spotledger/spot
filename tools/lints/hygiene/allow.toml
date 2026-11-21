@@ -1,0 +1,6 @@
+# Add only confirmed false positives. Every entry needs a target path pattern and reason.
+# Example:
+# [[entries]]
+# path = "crates/example/src/generated.rs"
+# reason = "Generated interface repeats a reference shape by design."
+version = 1

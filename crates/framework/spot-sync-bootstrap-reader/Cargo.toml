@@ -1,0 +1,27 @@
+[package]
+name = "spot-sync-bootstrap-reader"
+description = "The synchronous SnapshotSource that spot-sync-bootstrap reads, implemented over the async spot-journal-snapshot SnapshotReader (WP-SYN-07.T7): scan streams every image once in order holding one at a time and records the first key of each part, fetch loads only the parts that hold the requested keys, every error is a SourceFailed carrying a stable code and never content"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `SnapshotSource` trait, `BootstrapError` and `RecordKey` this crate implements and returns.
+spot-sync-bootstrap = { path = "../spot-sync-bootstrap" }
+# The async reader driven here, `ImageRecord` and `SnapshotInfo`.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# `RecordKey` (re-exported by the bootstrap crate too) and the closure seams the tests use.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# The values of an image are `serde_json::Value`s; this crate only moves them.
+serde_json = "1"
+# Typed errors with stable `sync_bootstrap_reader.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The `MemoryStore` the snapshots are written into.
+spot-journal-store = { path = "../spot-journal-store" }
+
+[lints]
+workspace = true

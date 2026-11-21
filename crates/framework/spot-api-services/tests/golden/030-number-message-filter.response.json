@@ -1,0 +1,15 @@
+{
+  "data": {
+    "patch": {
+      "secret": "******V-30"
+    }
+  },
+  "messages": [
+    {
+      "code": "document.created",
+      "field": "secret",
+      "level": "info",
+      "message": "Internal code derived."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# sync_hub_parts codes: the hub's parts module (WP-RTB-02.T13). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. No message carries a value: part names and codes only.
+
+[[entry]]
+code = "sync_hub_parts.part_unavailable"
+class = "none"
+summary = "A part of the sync hub could not be built; the hub does not start."
+explanation_key = "error.sync_hub_parts.part_unavailable"
+params = []
+remedy = "Read which part the message names. A missing table means running `spot migrate`; a store failure means checking the database, then restart the site."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_hub_parts.part_missing"
+class = "none"
+summary = "No module provided a part the sync hub needs; the hub does not start."
+explanation_key = "error.sync_hub_parts.part_missing"
+params = []
+remedy = "Enable the module that provides the named part (the random and id sources, or the relay assembly), then restart the site."
+since = "0.1.0"

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "patch": {
+      "grand_total": "50.00",
+      "lines": [
+        {
+          "amount": "50.00",
+          "id": "01970000-0000-7000-8000-0000000000f1",
+          "idx": 1
+        }
+      ],
+      "subtotal": "50.00"
+    }
+  },
+  "messages": [
+    {
+      "code": "document.created",
+      "field": "lines[1].qty",
+      "level": "warning",
+      "message": "Large quantity."
+    }
+  ]
+}

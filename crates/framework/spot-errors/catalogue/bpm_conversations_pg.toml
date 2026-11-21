@@ -1,0 +1,21 @@
+# bpm_conversations_pg codes: the PostgreSQL ConversationStore (WP-BPM-12.T6). Failures of a call
+# are the conversation crate's own bpm_conversations.store_failed / conflict / too_long refusals;
+# only the setup codes are new. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_conversations_pg.bad_setup"
+class = "none"
+summary = "The conversation store could not be built: the tenant name is not usable, or the bridge settings do not hold against the pool."
+explanation_key = "error.bpm_conversations_pg.bad_setup"
+params = []
+remedy = "Give the store a non-empty tenant of at most 128 characters without control characters, and a bridge whose max_in_flight is at least one below the pool size minus the bridge reserve."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations_pg.migration_failed"
+class = "none"
+summary = "The conversation tables could not be created."
+explanation_key = "error.bpm_conversations_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then call prepare again."
+since = "0.1.0"

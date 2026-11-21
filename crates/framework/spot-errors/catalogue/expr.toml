@@ -1,0 +1,128 @@
+# expr codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The shared expression language (spot-expr, docs/expression-language.md).
+
+[[entry]]
+code = "expr.syntax"
+class = "none"
+summary = "The expression does not match the grammar."
+explanation_key = "error.expr.syntax"
+params = []
+remedy = "Fix the expression at the reported position."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.unterminated_string"
+class = "none"
+summary = "A text literal is not closed."
+explanation_key = "error.expr.unterminated_string"
+params = []
+remedy = "Close the text with the quote it started with."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.bad_escape"
+class = "none"
+summary = "A text literal has an unknown escape."
+explanation_key = "error.expr.bad_escape"
+params = []
+remedy = "Use only the escapes backslash, quote, n, t and r."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.number_range"
+class = "none"
+summary = "A numeric literal does not fit its type."
+explanation_key = "error.expr.number_range"
+params = []
+remedy = "Use an integer within 64 bits, or a decimal of at most 28 digits."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.too_complex"
+class = "none"
+summary = "The expression has more than 2000 nodes."
+explanation_key = "error.expr.too_complex"
+params = []
+remedy = "Simplify the expression or split it into rules."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.too_deep"
+class = "none"
+summary = "The expression nests deeper than 64 levels."
+explanation_key = "error.expr.too_deep"
+params = []
+remedy = "Flatten the nesting."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.unknown_name"
+class = "none"
+summary = "A name is not a keyword, a function call or a field path."
+explanation_key = "error.expr.unknown_name"
+params = []
+remedy = "Write fields as doc.name or parent.name."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.unknown_function"
+class = "none"
+summary = "The expression calls a function the language does not have."
+explanation_key = "error.expr.unknown_function"
+params = []
+remedy = "Use a function from the language's library."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.arity"
+class = "none"
+summary = "A function is called with the wrong number of arguments."
+explanation_key = "error.expr.arity"
+params = []
+remedy = "Check the function's arguments."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.type"
+class = "none"
+summary = "An operand or argument has the wrong type."
+explanation_key = "error.expr.type"
+params = []
+remedy = "Convert the value, for example with text(), int() or decimal()."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.division_by_zero"
+class = "none"
+summary = "The expression divides or takes a remainder by zero."
+explanation_key = "error.expr.division_by_zero"
+params = []
+remedy = "Guard the divisor, for example with a ternary."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.overflow"
+class = "none"
+summary = "A number or date result is out of range."
+explanation_key = "error.expr.overflow"
+params = []
+remedy = "Use smaller values."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.bad_date"
+class = "none"
+summary = "Text is not a valid date or datetime."
+explanation_key = "error.expr.bad_date"
+params = []
+remedy = "Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ."
+since = "0.1.0"
+
+[[entry]]
+code = "expr.bad_number"
+class = "none"
+summary = "Text is not a valid integer or decimal."
+explanation_key = "error.expr.bad_number"
+params = []
+remedy = "Use digits with an optional sign and decimal point."
+since = "0.1.0"

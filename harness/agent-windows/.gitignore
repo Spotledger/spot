@@ -1,0 +1,5 @@
+# JUnit XML and other run.ps1 output.
+artifacts/
+
+# The tests-real crate is its own cargo workspace, so its build output lands here.
+tests-real/target/

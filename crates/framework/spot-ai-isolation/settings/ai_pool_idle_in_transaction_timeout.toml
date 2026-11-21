@@ -1,0 +1,29 @@
+# How long an idle AI transaction may hold a connection before the server ends it
+# (WP-AI-05.T1).
+
+key = "ai.pool.idle_in_transaction_timeout_ms"
+title = "AI Idle-in-Transaction Timeout"
+summary = "How long an idle AI transaction may hold a connection, in milliseconds."
+description = "Set as the `ai` role's idle_in_transaction_session_timeout. An agent that opens a transaction and stalls is ended by the server, so the dedicated pool is never held hostage by an abandoned transaction."
+scopes = [
+    "fleet",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "ai",
+    "timeout",
+]
+
+[value.Int]
+min = 1
+max = 3600000
+
+[default]
+Int = 60000
+
+[restart]
+type = "none"

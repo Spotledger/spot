@@ -1,0 +1,29 @@
+[package]
+name = "spot-functions"
+description = "Spotledger whitelisted module-level functions (WP-PLT-17.T1, ADR-16): registry by app, module and function, guest access, HTTP verbs, per-(function, caller) token-bucket rate limits over an injectable clock, the admin override table and the dispatcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Gate G4 framework gate: FunctionSub and HttpVerb come from the manifest model, AppError and
+# CallContext from the app API contract, Clock from spot-core.
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-manifest = { path = "../spot-manifest" }
+spot-core = { path = "../spot-core" }
+# Argument schemas are `serde_json::Value`; the contract does not re-export the crate.
+serde_json = "1"
+# Error types for the builder results and the rate limiter (no unwraps on locks).
+thiserror = "2"
+
+[dev-dependencies]
+# The tests name `HttpVerb` directly (spot-app-api does not re-export the manifest model)
+# and drive tokio; proptest stays available for property cases. The brief's allowed list.
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+proptest = "1"
+spot-manifest = { path = "../spot-manifest" }
+
+[lints]
+workspace = true

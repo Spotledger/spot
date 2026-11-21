@@ -1,0 +1,181 @@
+# journal codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "journal.audit.last"
+class = "none"
+summary = "The operation was refused: audit last."
+explanation_key = "error.journal.audit.last"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.audit.run"
+class = "none"
+summary = "The operation was refused: audit run."
+explanation_key = "error.journal.audit.run"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.commit_outcome_unknown"
+class = "none"
+summary = "The operation was refused: commit outcome unknown."
+explanation_key = "error.journal.commit_outcome_unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.halted"
+class = "none"
+summary = "The operation was refused: halted."
+explanation_key = "error.journal.halted"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.policy.get"
+class = "none"
+summary = "The operation was refused: policy get."
+explanation_key = "error.journal.policy.get"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.policy.set"
+class = "none"
+summary = "The operation was refused: policy set."
+explanation_key = "error.journal.policy.set"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.range_unavailable"
+class = "none"
+summary = "The operation was refused: range unavailable."
+explanation_key = "error.journal.range_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.read"
+class = "none"
+summary = "The one permission of the role."
+explanation_key = "error.journal.read"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.reader.grant"
+class = "none"
+summary = "The operation was refused: reader grant."
+explanation_key = "error.journal.reader.grant"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.reader.list"
+class = "none"
+summary = "The operation was refused: reader list."
+explanation_key = "error.journal.reader.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.reader.revoke"
+class = "none"
+summary = "The operation was refused: reader revoke."
+explanation_key = "error.journal.reader.revoke"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.rebuild.plan"
+class = "none"
+summary = "The operation was refused: rebuild plan."
+explanation_key = "error.journal.rebuild.plan"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.rebuild.run"
+class = "none"
+summary = "The operation was refused: rebuild run."
+explanation_key = "error.journal.rebuild.run"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.recovery.report"
+class = "none"
+summary = "The operation was refused: recovery report."
+explanation_key = "error.journal.recovery.report"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.reship"
+class = "none"
+summary = "The operation was refused: reship."
+explanation_key = "error.journal.reship"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.snapshot.list"
+class = "none"
+summary = "The operation was refused: snapshot list."
+explanation_key = "error.journal.snapshot.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.snapshot.take"
+class = "none"
+summary = "The operation was refused: snapshot take."
+explanation_key = "error.journal.snapshot.take"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.status"
+class = "none"
+summary = "The operation was refused: status."
+explanation_key = "error.journal.status"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.subject.erase"
+class = "none"
+summary = "The operation was refused: subject erase."
+explanation_key = "error.journal.subject.erase"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal.verify"
+class = "none"
+summary = "The operation was refused: verify."
+explanation_key = "error.journal.verify"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

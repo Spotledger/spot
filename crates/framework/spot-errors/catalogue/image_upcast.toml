@@ -1,0 +1,64 @@
+# image_upcast codes: the image upcasters of spot-image-upcast (WP-JRN-06.T1, ADR-061 s3 and s6): registration refusals, the chaining walk's refusals and the step builders' shape refusals. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "image_upcast.no_path"
+class = "none"
+summary = "Entity {entity} has no registered upcaster from schema {from} towards schema {to}, so an image cannot be rewritten to that schema."
+explanation_key = "error.image_upcast.no_path"
+params = ["entity", "from", "to"]
+remedy = "Register the missing step for the entity, or rebuild to a schema the registered chain reaches."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.from_the_future"
+class = "none"
+summary = "An image of {entity} records schema {schema}, which is newer than the rebuild's target schema {target}."
+explanation_key = "error.image_upcast.from_the_future"
+params = ["entity", "schema", "target"]
+remedy = "Apply the rebuild with the release that wrote the image, or target a schema at least as new as the image's."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.duplicate_step"
+class = "none"
+summary = "Entity {entity} already has an upcaster from schema {from}, so the step to schema {to} cannot be registered."
+explanation_key = "error.image_upcast.duplicate_step"
+params = ["entity", "from", "to"]
+remedy = "Keep one step per entity and starting schema: fold the two rewrites into the registered step, or chain them through an intermediate schema."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.backwards_step"
+class = "none"
+summary = "The upcaster offered for {entity} runs from schema {from} to schema {to}, which does not move forward."
+explanation_key = "error.image_upcast.backwards_step"
+params = ["entity", "from", "to"]
+remedy = "Name a target schema above the starting one; a rebuild never downgrades an image."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.step_shape"
+class = "none"
+summary = "The step {step} refused the image's field {field}: it {reason}."
+explanation_key = "error.image_upcast.step_shape"
+params = ["field", "reason", "step"]
+remedy = "Fix the image's stored shape, or rewrite the step so it converts that shape instead of refusing it."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.convert_failed"
+class = "none"
+summary = "The retype step cannot convert the stored value of field {field}: {reason}."
+explanation_key = "error.image_upcast.convert_failed"
+params = ["field", "reason"]
+remedy = "Make the step's converter accept the shape the older schema stored for that field."
+since = "0.1.0"
+
+[[entry]]
+code = "image_upcast.image_invalid"
+class = "none"
+summary = "A value is not a well-formed document image: its body is not a JSON object of fields and child rows."
+explanation_key = "error.image_upcast.image_invalid"
+params = []
+remedy = "Build the image from the event payload's parts, whose image must be a JSON object."
+since = "0.1.0"

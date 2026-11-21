@@ -1,0 +1,7 @@
+kind = "api"
+negative = true
+pattern = "throwing a non-Error still fails the run with an engine code"
+[input.args]
+[expect]
+ok = false
+error_code_prefix = "script."

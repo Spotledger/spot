@@ -1,0 +1,11 @@
+{
+  "name": "reference panel",
+  "layout": {
+    "columns": 3,
+    "fields": [
+      { "field": "caption", "kind": "text", "required": true },
+      { "field": "quantity", "kind": "integer", "required": false }
+    ]
+  },
+  "active": true
+}

@@ -1,0 +1,124 @@
+{
+  "approve": {
+    "arguments": {},
+    "custom_permission": true,
+    "mutates": true,
+    "result": {},
+    "right": "approve_note"
+  },
+  "explode": {
+    "arguments": {
+      "type": "null"
+    },
+    "custom_permission": false,
+    "mutates": true,
+    "result": {
+      "type": "null"
+    },
+    "right": "write"
+  },
+  "peek_title": {
+    "arguments": {
+      "type": "null"
+    },
+    "custom_permission": false,
+    "mutates": false,
+    "result": {
+      "type": "string"
+    },
+    "right": "read"
+  },
+  "rename": {
+    "arguments": {
+      "additionalProperties": false,
+      "properties": {
+        "suffix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "custom_permission": false,
+    "mutates": true,
+    "result": {
+      "additionalProperties": false,
+      "properties": {
+        "new": {
+          "type": "string"
+        },
+        "old": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "old",
+        "new"
+      ],
+      "type": "object"
+    },
+    "right": "write"
+  },
+  "tally": {
+    "arguments": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "Sum",
+            "largest"
+          ],
+          "type": "string"
+        },
+        "numbers": {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "numbers",
+        "mode"
+      ],
+      "type": "object"
+    },
+    "custom_permission": false,
+    "mutates": false,
+    "result": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "count"
+      ],
+      "type": "object"
+    },
+    "right": "read"
+  }
+}

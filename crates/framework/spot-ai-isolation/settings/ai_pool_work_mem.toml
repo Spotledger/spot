@@ -1,0 +1,29 @@
+# The per-session work-mem cap for AI sessions (WP-AI-05.T1): an agent's query may not sort or
+# hash with more memory than this.
+
+key = "ai.pool.work_mem_kb"
+title = "AI Work-Mem Cap"
+summary = "Per-session work-mem cap for AI sessions, in kibibytes."
+description = "Set as the `ai` role's work_mem. A heavy agent query spills to disk above this, so a few large agent queries cannot exhaust the server's memory and stall interactive users."
+scopes = [
+    "fleet",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "ai",
+    "performance",
+]
+
+[value.Int]
+min = 64
+max = 1048576
+
+[default]
+Int = 65536
+
+[restart]
+type = "none"

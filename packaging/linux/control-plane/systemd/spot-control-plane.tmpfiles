@@ -1,0 +1,7 @@
+# systemd-tmpfiles(8): state and configuration directories with the modes the keys need.
+d /var/lib/spot-control-plane 0700 spot-control-plane spot-control-plane -
+d /etc/spot-control-plane 0750 root spot-control-plane -
+d /etc/spot-control-plane/operator-ca 0750 root spot-control-plane -
+d /etc/spot-control-plane/host-ca 0750 root spot-control-plane -
+d /etc/spot-control-plane/tls 0750 root spot-control-plane -
+d /etc/spot-control-plane/licence 0750 root spot-control-plane -

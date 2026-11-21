@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+
+# Never starts, enables or configures the service and never writes a key or a
+# secret. Creates the account and the directories, fixes the group of the config
+# directory, and restarts a service that is already running after an upgrade.
+if [ "$1" = "configure" ]; then
+	if command -v systemd-sysusers >/dev/null 2>&1; then
+		systemd-sysusers spot-control-plane.conf
+	fi
+	if command -v systemd-tmpfiles >/dev/null 2>&1; then
+		systemd-tmpfiles --create spot-control-plane.conf
+	fi
+	if getent group spot-control-plane >/dev/null 2>&1; then
+		chgrp spot-control-plane /etc/spot-control-plane /etc/spot-control-plane/control-plane.toml.example
+		chown spot-control-plane:spot-control-plane /etc/spot-control-plane/environment
+	fi
+	if [ -n "${2:-}" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+		systemctl daemon-reload || true
+		systemctl try-restart spot-control-plane.service || true
+	fi
+fi
+
+#DEBHELPER#
+
+exit 0

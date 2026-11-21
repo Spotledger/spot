@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "workspace_root": "/repo",
+  "workspace_members": ["spot-runtime 0.1.0 (path+file:///repo/crates/framework/runtime)"],
+  "packages": [
+    {
+      "name": "serde",
+      "version": "1.0.210",
+      "id": "serde 1.0.210 (registry+https://github.com/rust-lang/crates.io-index)",
+      "license": "MIT OR Apache-2.0",
+      "license_file": null,
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "b3bcd2f7a3c0c4a1b3bcd2f7a3c0c4a1b3bcd2f7a3c0c4a1b3bcd2f7a3c0c4a1",
+      "dependencies": []
+    },
+    {
+      "name": "spot-runtime",
+      "version": "0.1.0",
+      "id": "spot-runtime 0.1.0 (path+file:///repo/crates/framework/runtime)",
+      "license": null,
+      "license_file": null,
+      "source": null,
+      "checksum": null,
+      "dependencies": []
+    },
+    {
+      "name": "localdep",
+      "version": "0.2.0",
+      "id": "localdep 0.2.0 (path+file:///repo/vendored/localdep)",
+      "license": "Apache-2.0",
+      "license_file": null,
+      "source": null,
+      "checksum": null,
+      "dependencies": []
+    }
+  ],
+  "resolve": null,
+  "target_directory": "/repo/target"
+}

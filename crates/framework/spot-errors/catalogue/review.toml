@@ -1,0 +1,47 @@
+# review codes: the access review campaign state machine (WP-SEC-02). One [[entry]] per
+# code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "review.spec_invalid"
+class = "Validation"
+summary = "The campaign spec is not reviewable: {detail}."
+explanation_key = "error.review.spec_invalid"
+params = ["detail"]
+remedy = "Fix the condition the detail names (a past deadline, a missing escalation contact)."
+since = "0.1.0"
+
+[[entry]]
+code = "review.item_invalid"
+class = "Validation"
+summary = "Review item {item} cannot be reviewed: {detail}."
+explanation_key = "error.review.item_invalid"
+params = ["detail", "item"]
+remedy = "Fix the item the detail names (a blank id or assignment, a duplicate id)."
+since = "0.1.0"
+
+[[entry]]
+code = "review.campaign_closed"
+class = "InvalidState"
+summary = "The campaign is completed, so no decision or escalation can change anything."
+explanation_key = "error.review.campaign_closed"
+params = []
+remedy = "Decisions are final; open a new campaign for a different decision."
+since = "0.1.0"
+
+[[entry]]
+code = "review.not_authorized"
+class = "PermissionDenied"
+summary = "Actor may not decide review item {item}: {detail}."
+explanation_key = "error.review.not_authorized"
+params = ["detail", "item"]
+remedy = "Wait for the reviewer or, on an escalated item, the escalation target named in the error."
+since = "0.1.0"
+
+[[entry]]
+code = "review.decision_invalid"
+class = "Validation"
+summary = "The decision on review item {item} breaks its rule: {detail}."
+explanation_key = "error.review.decision_invalid"
+params = ["detail", "item"]
+remedy = "Give the non-blank reason or note the rule requires, or decide an item that is still open."
+since = "0.1.0"

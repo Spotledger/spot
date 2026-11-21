@@ -1,0 +1,105 @@
+# quarantine codes: the `quarantine.*` vocabulary of the quarantine queue
+# (WP-EDG-06.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The quarantine queue is a platform facility, so these are library-internal vocabulary:
+# `class = "none"` describes what each code means. The rejection reasons a quarantined item
+# carries are `replica_apply.*` codes (WP-EDG-06.T1), catalogued in replica_apply.toml.
+
+[[entry]]
+code = "quarantine.not_found"
+class = "none"
+summary = "The quarantine item {id} does not exist."
+explanation_key = "error.quarantine.not_found"
+params = ["id"]
+remedy = "Reload the queue; the item was never stored, or it was discarded on another session."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.denied"
+class = "none"
+summary = "The principal may not {access} quarantine item {id}."
+explanation_key = "error.quarantine.denied"
+params = ["access", "id"]
+remedy = "Grant the role the right the operation needs on the quarantined record's DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.reason_required"
+class = "none"
+summary = "Discarding quarantine item {id} needs a reason."
+explanation_key = "error.quarantine.reason_required"
+params = ["id"]
+remedy = "Give a reason; a discard is a person's decision and is audited."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.not_open"
+class = "none"
+summary = "Quarantine item {id} is {state} and cannot be {access}."
+explanation_key = "error.quarantine.not_open"
+params = ["access", "id", "state"]
+remedy = "Only a held or retrying item can be retried, released or discarded."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.store_failed"
+class = "none"
+summary = "The quarantine store failed: {why}."
+explanation_key = "error.quarantine.store_failed"
+params = ["why"]
+remedy = "Check the quarantine store's health; the queue is unchanged."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.audit_failed"
+class = "none"
+summary = "Recording the quarantine audit entry failed: {why}."
+explanation_key = "error.quarantine.audit_failed"
+params = ["why"]
+remedy = "Check the audit chain store's availability; a discard must be provable before it takes effect."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.dependent_held"
+class = "none"
+summary = "A later version of a quarantined document is parked behind it."
+explanation_key = "error.quarantine.dependent_held"
+params = []
+remedy = "Resolve the earlier version; this item is released in order behind it."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.item_closed"
+class = "none"
+summary = "The quarantine item is closed and cannot change."
+explanation_key = "error.quarantine.item_closed"
+params = []
+remedy = "A released or discarded item is final; nothing about it can be edited or reopened."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.too_large"
+class = "none"
+summary = "A quarantine value is longer than the queue accepts."
+explanation_key = "error.quarantine.too_large"
+params = []
+remedy = "Shorten the value: a payload is limited to 256 KiB, a detail to 4 KiB, a reason code and a source name to 128 bytes. Nothing is truncated."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.payload_too_large"
+class = "none"
+summary = "A received record is larger than the queue stores, so only a marker was kept."
+explanation_key = "error.quarantine.payload_too_large"
+params = []
+remedy = "Ask the sender to split or shrink the record; the marker names the sender, the size and a hash of the image, and can only be discarded."
+since = "0.1.0"
+
+[[entry]]
+code = "quarantine.marker_only"
+class = "none"
+summary = "The item only marks a record too large to store, so it cannot be retried or released."
+explanation_key = "error.quarantine.marker_only"
+params = []
+remedy = "Discard the marker once the sender has been told."
+since = "0.1.0"

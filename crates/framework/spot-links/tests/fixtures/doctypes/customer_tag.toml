@@ -1,0 +1,6 @@
+name = "customer_tag"
+label = "Customer Tag"
+is_child = true
+fields = [
+  { name = "tag", type = "link", options = "tag" },
+]

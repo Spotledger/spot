@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.ValidationPanelView">
+  <!-- The server's live validation, in its own words. An issue is a button: clicking it selects
+       the field or section it is about. -->
+  <Border Padding="10" Background="{DynamicResource Color.Surface.Raised}">
+    <Grid RowDefinitions="Auto,*">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+        <TextBlock Text="{Binding Validation.Summary}"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <Button Grid.Column="1" Content="Validate" Command="{Binding Validation.RefreshCommand}" />
+      </Grid>
+      <ScrollViewer Grid.Row="1">
+        <ItemsControl ItemsSource="{Binding Validation.Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Margin="0,2"
+                      Padding="8,6"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Click="OnIssueClick">
+                <StackPanel Spacing="2">
+                  <TextBlock Foreground="{DynamicResource Color.Text.Primary}">
+                    <Run Text="{Binding SeverityText}" FontWeight="SemiBold" />
+                    <Run Text=" · " />
+                    <Run Text="{Binding Message}" />
+                  </TextBlock>
+                  <TextBlock Text="{Binding Suggestion}"
+                             FontSize="{DynamicResource Font.Size.Caption}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource Color.Text.Secondary}" />
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </Border>
+</UserControl>

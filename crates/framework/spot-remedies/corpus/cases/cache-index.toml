@@ -1,0 +1,21 @@
+# The support-case corpus: cache and index symptoms.
+
+[[case]]
+id = "cache-stale-sessions"
+symptom = "Users see stale data because the sessions cache was never invalidated."
+evidence = ["cache.namespace_populated", "cache.stale_reads"]
+remedy = "cache.flush_namespace"
+outcome = "resolved"
+
+[case.params]
+namespace = "sessions"
+
+[[case]]
+id = "index-stale-retrieval"
+symptom = "Search misses recent changes because the retrieval index is stale."
+evidence = ["index.stale", "retrieval.lag"]
+remedy = "index.rebuild_retrieval"
+outcome = "resolved"
+
+[case.params]
+index = "retrieval"

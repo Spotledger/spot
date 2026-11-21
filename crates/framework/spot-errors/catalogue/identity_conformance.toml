@@ -1,0 +1,30 @@
+# identity_conformance codes: the failure labels of the ADR-083 conformance suite
+# (harness/rust/spot-identity-conformance, WP-IAM-11.T6). They name which barrier a failure is
+# about; a failure line also names the task that owns the missing barrier.
+
+[[entry]]
+code = "identity_conformance.audience_not_refused"
+class = "none"
+summary = "A route answered a token of the wrong audience, or reached a handler for one (Barrier 1)."
+explanation_key = "error.identity_conformance.audience_not_refused"
+params = []
+remedy = "Mark the route for the audiences that may use it in the route table, and keep the audience check ahead of every handler (WP-IAM-11.T1, T2)."
+since = "0.1.0"
+
+[[entry]]
+code = "identity_conformance.surface_mismatch"
+class = "none"
+summary = "A listener mounts a route its audience may not use, or the consumer surface differs from consumer-surface.snapshot (Barrier 2)."
+explanation_key = "error.identity_conformance.surface_mismatch"
+params = []
+remedy = "Fix the route table, or review the snapshot diff: adding a consumer route needs a visible, approved change (WP-IAM-11.T1, T3)."
+since = "0.1.0"
+
+[[entry]]
+code = "identity_conformance.open_default"
+class = "none"
+summary = "A route, group or role that was never marked is reachable by an outside audience (Barrier 3, B7)."
+explanation_key = "error.identity_conformance.open_default"
+params = []
+remedy = "Defaults must be closed: unmarked means absent, and an unexposed duty or desk role is never held by an outside user (WP-IAM-11.T1, T4)."
+since = "0.1.0"

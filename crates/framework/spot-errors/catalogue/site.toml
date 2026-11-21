@@ -1,0 +1,37 @@
+# site codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "site.backup.list"
+class = "none"
+summary = "The operation was refused: backup list."
+explanation_key = "error.site.backup.list"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "site.backup.verify"
+class = "none"
+summary = "The operation was refused: backup verify."
+explanation_key = "error.site.backup.verify"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "site.maintenance.leave"
+class = "none"
+summary = "The operation was refused: maintenance leave."
+explanation_key = "error.site.maintenance.leave"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "site.restore.preflight"
+class = "none"
+summary = "The operation was refused: restore preflight."
+explanation_key = "error.site.restore.preflight"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

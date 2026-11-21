@@ -1,0 +1,15 @@
+# Time-boxed dependency exceptions for tools/security/audit.py.
+# Policy: docs/security/dependency-policy.md (lead approval, maximum 90 days).
+#
+# The file ships empty. To add an exception (least privilege: one entry per
+# advisory, never a blanket package pardon), append:
+#
+# [[exceptions]]
+# id = "RUSTSEC-2024-0421"          # the advisory id, GHSA id, or deny.toml code
+# package = "idna"                  # the package the finding is about
+# reason = "why the finding is accepted for now"   # concrete, with a link
+# owner = "lead"                    # the lead engineer who approved it
+# expires = "2026-12-31"            # ISO date, at most 90 days from approval
+#
+# An active exception suppresses matching findings; an expired one makes the
+# audit fail until it is removed or renewed.

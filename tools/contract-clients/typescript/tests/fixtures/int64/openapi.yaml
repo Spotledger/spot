@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info: {title: Big, version: 0.0.2}
+paths:
+  /n:
+    get:
+      operationId: big_get
+      responses:
+        '200':
+          description: ok
+          content: {application/json: {schema: {$ref: '#/components/schemas/Amount'}}}
+components:
+  schemas:
+    Amount:
+      type: object
+      properties:
+        minor_units: {type: integer, format: int64}
+        huge: {type: integer, maximum: 9007199254740993}
+        fine: {type: integer, maximum: 100}

@@ -1,0 +1,83 @@
+# tscontroller codes: TypeScript DocType controllers (WP-EXT-10.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tscontroller.compile_failed"
+class = "Validation"
+summary = "A TypeScript controller module did not compile."
+explanation_key = "error.tscontroller.compile_failed"
+params = []
+remedy = "Fix the reported TypeScript diagnostic; the problem names the line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.invalid_module"
+class = "Validation"
+summary = "A TypeScript controller module does not match the module contract."
+explanation_key = "error.tscontroller.invalid_module"
+params = []
+remedy = "Fix the module's contract() declaration; every problem is reported with its position."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.limit_exceeded"
+class = "Internal"
+summary = "A TypeScript controller handler exceeded one of its limits."
+explanation_key = "error.tscontroller.limit_exceeded"
+params = []
+remedy = "Make the handler faster and lighter, or raise its timeout; the operation was rolled back."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.result_invalid"
+class = "Internal"
+summary = "A TypeScript controller method returned a result that does not match its declared schema."
+explanation_key = "error.tscontroller.result_invalid"
+params = []
+remedy = "Return the shape the method declares in its contract(), or change the declaration."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.module_missing"
+class = "NotFound"
+summary = "The installed app bundle carries no controller module for this reference."
+explanation_key = "error.tscontroller.module_missing"
+params = []
+remedy = "Ship the module at the path the ts: reference names, or fix the reference."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.conformance_fail"
+class = "Validation"
+summary = "A conformance fixture controller threw the failure its fixture declares."
+explanation_key = "error.tscontroller.conformance_fail"
+params = []
+remedy = "This code belongs to the shared controller conformance suite, not to an app."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.conformance_failed"
+class = "Internal"
+summary = "The controller conformance suite could not build its fixture."
+explanation_key = "error.tscontroller.conformance_failed"
+params = []
+remedy = "Report this with the fixture details; the suite's own metadata or site id is invalid."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.conformance_wrong"
+class = "Internal"
+summary = "A controller did not behave the way the conformance suite requires."
+explanation_key = "error.tscontroller.conformance_wrong"
+params = []
+remedy = "Fix the controller so it behaves like a native one; the check names the difference."
+since = "0.1.0"
+
+[[entry]]
+code = "tscontroller.conformance_not_found"
+class = "NotFound"
+summary = "The conformance suite could not load a document it had just written."
+explanation_key = "error.tscontroller.conformance_not_found"
+params = []
+remedy = "Report this with the fixture details; the fake backend did not store the document."
+since = "0.1.0"

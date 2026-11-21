@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>WinExe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Demo.Mock/Spotledger.Demo.Mock.csproj" />
+    <ProjectReference Include="../../../src/Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+    <ProjectReference Include="../../../src/Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <EmbeddedResource Include="Keymaps/*.json" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,23 @@
+# Help for the sync_healing error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sync_healing.invalid_settings"
+what_happened = "The healing settings are not usable."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Correct the healing limits (rates, attempts and backoff) and restart.", "If it keeps happening, tell your administrator and quote the code sync_healing.invalid_settings."]
+audience = "admin"
+
+[[help]]
+code = "sync_healing.direction_ambiguous"
+what_happened = "No repair was made because the direction of the repair is not certain."
+why = "The system could not do what was asked in this state."
+what_to_do = ["Check which node owns the data for this scope and settle its role before repairing.", "If it keeps happening, tell your administrator and quote the code sync_healing.direction_ambiguous."]
+audience = "admin"
+
+[[help]]
+code = "sync_healing.mirror_ahead"
+what_happened = "No repair was made because the mirror holds a newer version than its owner."
+why = "The system could not do what was asked in this state."
+what_to_do = ["Check why the mirror is ahead of its owner; do not overwrite it until that is understood.", "If it keeps happening, tell your administrator and quote the code sync_healing.mirror_ahead."]
+audience = "admin"

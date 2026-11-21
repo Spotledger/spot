@@ -1,0 +1,27 @@
+[package]
+name = "spot-expand-contract"
+description = "Expand/contract enforcement (WP-MIG-09.T1, ADR-22): classify every schema change as Expand, Migrate or Contract, refuse a Contract step in the same release as the code that stops using the object, and check a release's usage manifest against the previous release and the storage schema registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The change model reused as is: `ReleasePlan`, `Change`, `ChangeKind`, `Risk` and the rule
+# names. This crate classifies those changes; it never re-diffs a schema.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The release-metadata check's `ReleaseContext`: a release that stops using an object is handed
+# to `spot_release_meta::check_release` through the context this crate implements.
+spot-release-meta = { path = "../spot-release-meta" }
+# The storage layer's compiled schema registry (`Catalog`): the usage manifest is derived from
+# it and checked against it, so a manifest can never drift from what a binary can touch.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The usage manifest's on-disk TOML form.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+# Typed errors with stable `expand_contract.*` codes.
+thiserror = "2"
+
+[lints]
+workspace = true

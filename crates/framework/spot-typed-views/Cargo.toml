@@ -1,0 +1,27 @@
+[package]
+name = "spot-typed-views"
+description = "Typed-view generator (WP-MET-04.T1): standard DocType definitions into Rust `DocView` newtypes with typed getters and setters, generated at build time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The definition model (`Definition`, `FieldSpec`, `load_dir`).
+spot-meta = { path = "../../../crates/framework/spot-meta" }
+# The dynamic `Document`, the `DocView` trait, the typed accessors and the generated types.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Building typed syntax trees. `processing` keeps syn small.
+proc-macro2 = { version = "1", default-features = false }
+quote = { version = "1", default-features = false }
+syn = { version = "2.0", default-features = false, features = ["derive", "parsing", "printing"] }
+# Formatted output.
+prettyplease = { version = "0.2", default-features = false }
+
+[dev-dependencies]
+# Snapshot tests of the generated code.
+insta = "1"
+
+[lints]
+workspace = true

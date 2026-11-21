@@ -1,0 +1,45 @@
+[package]
+name = "spot-telemetry"
+description = "Structured logs, tracing with optional OTLP export, Prometheus metrics, per-request cost accounting and redaction (WP-PLT-15.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Export traces over OTLP (HTTP/protobuf). Without it, `OtlpConfig` is a typed error.
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]
+
+[dependencies]
+# `SiteId` for the request span and the `SiteField` extension.
+spot-core = { path = "../spot-core" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "registry", "std", "ansi"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+tower = { version = "0.5", default-features = false }
+http = "1"
+pin-project-lite = "0.2"
+# `task_local!` for the per-request cost and its future type.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# RFC 3339 timestamps in the JSON log.
+time = { version = "0.3.55", default-features = false, features = ["std", "formatting"] }
+thiserror = "2"
+opentelemetry = { version = "0.31", optional = true }
+opentelemetry_sdk = { version = "0.31", optional = true, features = ["testing"] }
+opentelemetry-otlp = { version = "0.31", optional = true, default-features = false, features = ["http-proto", "reqwest-client", "reqwest-rustls", "trace"] }
+tracing-opentelemetry = { version = "0.32", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "macros", "time"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+
+[lints]
+workspace = true

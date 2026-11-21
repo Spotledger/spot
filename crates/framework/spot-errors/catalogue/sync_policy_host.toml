@@ -1,0 +1,20 @@
+# sync_policy_host codes: sync policy hosted (WP-RTB-02.T8). Lint codes keep their
+# `sync_policy.*` names (see sync_policy.toml).
+
+[[entry]]
+code = "sync_policy_host.default_preset_unknown"
+class = "none"
+summary = "The default sync preset (or its owner scope key type) in `[services.sync_policy]` is not valid."
+explanation_key = "error.sync_policy_host.default_preset_unknown"
+params = []
+remedy = "Set default_preset to one of local, master, record or handover, and default_owner_scope to a valid scope key type."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_policy_host.declaration_invalid"
+class = "none"
+summary = "A policy declared under `[services.sync_policy.declare]` does not parse."
+explanation_key = "error.sync_policy_host.declaration_invalid"
+params = []
+remedy = "Fix the named DocType and key: the keys are sync_class, sync_direction, sync_trigger, sync_owner_scope and sync_exclude_fields."
+since = "0.1.0"

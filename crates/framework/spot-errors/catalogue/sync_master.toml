@@ -1,0 +1,32 @@
+# sync_master codes — master-data and price propagation as events (WP-EDG-04.T1, ADR-062,
+# ADR-063, ADR-065). One [[entry]] per code; see crates/framework/spot-errors/README.md. These are
+# the sender-side and receiver-side vocabulary of the master-data model: the metadata and
+# control-plane surfaces (WP-SYN-01, WP-SYN-02) map them onto the app-facing API, so
+# `class = "none"`.
+
+[[entry]]
+code = "sync_master.invalid_argument"
+class = "none"
+summary = "A value passed to a master-data constructor or routing call is missing, out of range or self-contradictory."
+explanation_key = "error.sync_master.invalid_argument"
+params = []
+remedy = "Pass a value inside the stated range: a non-empty scope key part, a storage-name document type, a version of at least one, a bounded payload."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_master.duplicate_subscription"
+class = "none"
+summary = "Two subscriptions name the same node, so the node registry has an ambiguous entry for it."
+explanation_key = "error.sync_master.duplicate_subscription"
+params = []
+remedy = "Give each node exactly one subscription; merge the two before inserting them."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_master.harness_failed"
+class = "none"
+summary = "The convergence harness could not finish: a simulated branch did not converge under the injected faults, a time overflowed, or an activation invariant was violated."
+explanation_key = "error.sync_master.harness_failed"
+params = []
+remedy = "Inspect the named seed, raise the tick budget or relax the injected faults, and re-run the harness."
+since = "0.1.0"

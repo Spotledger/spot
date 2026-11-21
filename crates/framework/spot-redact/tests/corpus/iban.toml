@@ -1,0 +1,61 @@
+# IBANs kept only when they pass the mod-97 check (ISO 7064); spaces inside survive.
+
+[[case]]
+input = 'pay to GB29NWBK60161331926819 today'
+expected = 'pay to [redacted:iban] today'
+class = 'iban'
+
+[[case]]
+input = 'DE89370400440532013000 credited'
+expected = '[redacted:iban] credited'
+class = 'iban'
+
+[[case]]
+input = 'FR1420041010050500013M02606 wire'
+expected = '[redacted:iban] wire'
+class = 'iban'
+
+[[case]]
+input = 'NL91ABNA0417164300 settled'
+expected = '[redacted:iban] settled'
+class = 'iban'
+
+[[case]]
+input = 'GB29 NWBK 6016 1331 9268 19 in the remittance'
+expected = '[redacted:iban] in the remittance'
+class = 'iban'
+
+[[case]]
+input = 'gb29nwbk60161331926819 lowercase form'
+expected = '[redacted:iban] lowercase form'
+class = 'iban'
+
+[[case]]
+input = 'refused GB29NWBK60161331926818'
+expected = 'refused GB29NWBK60161331926818'
+class = 'iban'
+
+[[case]]
+input = 'US12345678901234567890 is not an IBAN'
+expected = 'US12345678901234567890 is not an IBAN'
+class = 'iban'
+
+[[case]]
+input = 'invoice 2026-10-05 to customer'
+expected = 'invoice 2026-10-05 to customer'
+class = 'iban'
+
+[[case]]
+input = 'BE68539007547034 valid Belgian IBAN'
+expected = '[redacted:iban] valid Belgian IBAN'
+class = 'iban'
+
+[[case]]
+input = 'XX12 too short here'
+expected = 'XX12 too short here'
+class = 'iban'
+
+[[case]]
+input = 'GR16 0110 1250 0000 0001 2300 695 spaced Greece'
+expected = '[redacted:iban] spaced Greece'
+class = 'iban'

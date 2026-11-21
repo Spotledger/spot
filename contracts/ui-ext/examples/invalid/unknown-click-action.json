@@ -1,0 +1,19 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.c",
+      "origin": "app:sample",
+      "props": [],
+      "body": {
+        "node": "control",
+        "control": "button",
+        "text": "Go",
+        "on_click": "sample.ghost"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.unknown_action. on_click names an action this app does not contribute."
+}

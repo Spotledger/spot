@@ -1,0 +1,109 @@
+# access_questions_model codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "access_questions_model.records_skipped"
+class = "none"
+summary = "Stored roles, assignments or duty pins that were malformed were left out of the access model; the count is in the readiness note."
+explanation_key = "error.access_questions_model.records_skipped"
+params = []
+remedy = "Fix or remove the malformed role, assignment or duty pin records."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.duties_undefined"
+class = "none"
+summary = "A stored role names a duty no installed app defines, so the duty is empty in the access model."
+explanation_key = "error.access_questions_model.duties_undefined"
+params = []
+remedy = "Ship the duty in an installed app's duties.toml or remove it from the role."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.duties_not_enforced"
+class = "none"
+summary = "A stored role names a duty whose shipped rights this site's permission engine does not enforce, so the access model does not count them."
+explanation_key = "error.access_questions_model.duties_not_enforced"
+params = []
+remedy = "None until the engine reads duties; grant the rights to the role by name in an app's grants.toml."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.registry_invalid"
+class = "none"
+summary = "The stored roles do not form a registry (an inheritance cycle or a role nested too deep), so no access question is answered."
+explanation_key = "error.access_questions_model.registry_invalid"
+params = []
+remedy = "Remove the cycle or shorten the chain of parent roles."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.directory_unavailable"
+class = "none"
+summary = "The stored roles, assignments or users could not be read, so no access question is answered."
+explanation_key = "error.access_questions_model.directory_unavailable"
+params = []
+remedy = "Restore the database or the served metadata and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.grants_unavailable"
+class = "none"
+summary = "The installed apps' grant, duty or SoD files could not be read or do not parse, so no access question is answered."
+explanation_key = "error.access_questions_model.grants_unavailable"
+params = []
+remedy = "Fix the file that does not parse, or install the missing app."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.snapshot_missing"
+class = "none"
+summary = "The role snapshot the roles service publishes does not exist yet, so no access question is answered."
+explanation_key = "error.access_questions_model.snapshot_missing"
+params = []
+remedy = "Wait for the roles service's first snapshot or fix its role source."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.history_unavailable"
+class = "none"
+summary = "The permission-change history cannot be read, so the question what changed between two dates is refused; the other questions answer."
+explanation_key = "error.access_questions_model.history_unavailable"
+params = []
+remedy = "Restore the audit store and its tables."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.history_too_large"
+class = "none"
+summary = "The requested window holds more journal entries than one question reads."
+explanation_key = "error.access_questions_model.history_too_large"
+params = []
+remedy = "Ask for a narrower date range."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.range_invalid"
+class = "none"
+summary = "The history window ends before it starts."
+explanation_key = "error.access_questions_model.range_invalid"
+params = []
+remedy = "Give a start that is not after the end."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.history_skipped"
+class = "none"
+summary = "Journal entries of the access-change kind could not be interpreted and were left out of the answer; the count is in the readiness note."
+explanation_key = "error.access_questions_model.history_skipped"
+params = []
+remedy = "Inspect the journal with the audit verifier; an entry of an unknown format version needs a newer release."
+since = "0.1.0"
+
+[[entry]]
+code = "access_questions_model.snapshot_unversioned"
+class = "none"
+summary = "No role snapshot port exists on this site, so the access model is rebuilt on a timer only."
+explanation_key = "error.access_questions_model.snapshot_unversioned"
+params = []
+remedy = "Enable the roles service so a role change is seen at once."
+since = "0.1.0"

@@ -1,0 +1,28 @@
+[package]
+name = "spot-leased-sequences"
+description = "The offline `Sequences` a branch runs over hub-leased naming ranges (WP-EDG-03.T3, ADR-062 section 7): allocate inside a leased block, never reach the hub, expose running-low and remaining, and never reuse a number"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The leased range and the high-water allocator a branch runs offline (WP-EDG-03.T1).
+spot-partition = { path = "../spot-partition" }
+# The naming layer this allocator feeds: `Namer::name_for` renders the pattern from a number.
+spot-naming = { path = "../spot-naming" }
+# `Sequences`, `SeriesKey`, `StorageError` and `ErrorKind`: the contract this crate implements.
+spot-storage-contract = { path = "../../../contracts/storage" }
+
+[dev-dependencies]
+# `Document` and the prelude types the naming tests build (the same fixtures the hub-side
+# naming tests use); test-only, never compiled into the crate.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The compiled naming plan the test registry holds.
+spot-plan = { path = "../spot-plan" }
+# `NodeId`: a range lease is always leased to a node, so the tests must name one.
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+
+[lints]
+workspace = true

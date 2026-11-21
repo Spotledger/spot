@@ -1,0 +1,73 @@
+# task task codes of the native API. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "task.not_found"
+class = "none"
+summary = "The task does not exist or the caller cannot see it."
+explanation_key = "error.task.not_found"
+params = []
+remedy = "Check the task id."
+since = "0.1.0"
+
+[[entry]]
+code = "task.already_claimed"
+class = "none"
+summary = "The operation was refused: already claimed."
+explanation_key = "error.task.already_claimed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.delegation_invalid"
+class = "none"
+summary = "The operation was refused: delegation invalid."
+explanation_key = "error.task.delegation_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.not_active"
+class = "none"
+summary = "The operation was refused: not active."
+explanation_key = "error.task.not_active"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.not_claimed_by_caller"
+class = "none"
+summary = "The operation was refused: not claimed by caller."
+explanation_key = "error.task.not_claimed_by_caller"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.outcome_invalid"
+class = "none"
+summary = "The operation was refused: outcome invalid."
+explanation_key = "error.task.outcome_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.segregation"
+class = "none"
+summary = "The operation was refused: segregation."
+explanation_key = "error.task.segregation"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "task.target_invalid"
+class = "none"
+summary = "The operation was refused: target invalid."
+explanation_key = "error.task.target_invalid"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

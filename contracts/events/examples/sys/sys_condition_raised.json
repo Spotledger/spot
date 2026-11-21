@@ -1,0 +1,8 @@
+{
+  "at_millis": 86400000,
+  "id": "LAG_HIGH",
+  "params": {"lag_seconds": "320", "stream": "orders"},
+  "severity": "amber",
+  "subject": "node:branch7",
+  "transition": "raised"
+}

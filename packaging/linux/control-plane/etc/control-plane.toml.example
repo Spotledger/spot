@@ -1,0 +1,56 @@
+# Spotledger control plane configuration (installed as
+# /etc/spot-control-plane/control-plane.toml.example). Copy it to
+# /etc/spot-control-plane/control-plane.toml and edit; the unit does not start
+# without that file. Unknown keys refuse the start. Mode 0640 root:spot-control-plane.
+#
+# THREE DIFFERENT KEYS, never the same file or the same CA:
+#   1. the operator CA   (operator-ca/ca.pem): who may call /cp/v1 (certificate only here)
+#   2. the host CA       (host-ca/ca.pem + ca.key): the control plane issues host and agent
+#                         client certificates with it; its key never leaves this machine
+#   3. the licence key   (licence/): signs licences; not read by this file at all, it is
+#                         listed in the control-plane deployment notes for the module that uses it
+# The listeners must trust different CAs: the service refuses to start otherwise.
+
+region = "eu-1"
+# The audience of signed operator commands.
+audience = "spot-control-plane"
+
+# Administrator public keys (Ed25519, 64 hex characters each). Replace the text below.
+administrator_keys = ["REPLACE-WITH-64-HEX-ADMINISTRATOR-PUBLIC-KEY"]
+
+# The PostgreSQL control database. NEVER a tenant database.
+[database]
+host = "127.0.0.1"
+port = 5432
+dbname = "spot_control"
+user = "spot_control"
+# The NAME of the environment variable holding the password (set in /etc/spot-control-plane/environment, mode 0600).
+password_env = "SPOT_CP_DB_PASSWORD"
+tls = true
+pool_max_size = 16
+
+[operator_listener]
+# Loopback by default; put the operator network address here when it is time.
+listen = "127.0.0.1:8443"
+server_cert = "/etc/spot-control-plane/tls/operator-server.pem"
+server_key = "/etc/spot-control-plane/tls/operator-server.key"
+client_ca = "/etc/spot-control-plane/operator-ca/ca.pem"
+
+[host_listener]
+listen = "127.0.0.1:8444"
+server_cert = "/etc/spot-control-plane/tls/host-server.pem"
+server_key = "/etc/spot-control-plane/tls/host-server.key"
+client_ca = "/etc/spot-control-plane/host-ca/ca.pem"
+
+[host_ca]
+cert = "/etc/spot-control-plane/host-ca/ca.pem"
+key = "/etc/spot-control-plane/host-ca/ca.key"
+common_name = "Spotledger host CA"
+validity_days = 30
+# Written by the service (state directory; the rest of the filesystem is read-only to it).
+revocation_list = "/var/lib/spot-control-plane/revoked.txt"
+
+[[operators]]
+subject = "CN=replace-me"
+principal = "replace-me"
+tenants = ["*"]

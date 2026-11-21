@@ -1,0 +1,6 @@
+{
+  "case": "enum_values",
+  "entry": "isOwner",
+  "args": "owner",
+  "expect": true
+}

@@ -1,0 +1,136 @@
+# support codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "support.audit_failed"
+class = "none"
+summary = "The operation was refused: audit failed."
+explanation_key = "error.support.audit_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.body"
+class = "none"
+summary = "The operation was refused: body."
+explanation_key = "error.support.body"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.command_required"
+class = "none"
+summary = "The operation was refused: command required."
+explanation_key = "error.support.command_required"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.grant_exists"
+class = "none"
+summary = "The operation was refused: grant exists."
+explanation_key = "error.support.grant_exists"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.grant_expired"
+class = "none"
+summary = "The operation was refused: grant expired."
+explanation_key = "error.support.grant_expired"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.grant_not_started"
+class = "none"
+summary = "The operation was refused: grant not started."
+explanation_key = "error.support.grant_not_started"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.grant_revoked"
+class = "none"
+summary = "The operation was refused: grant revoked."
+explanation_key = "error.support.grant_revoked"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.no_grant"
+class = "none"
+summary = "The operation was refused: no grant."
+explanation_key = "error.support.no_grant"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.not_found"
+class = "none"
+summary = "The operation was refused: not found."
+explanation_key = "error.support.not_found"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.request_received"
+class = "none"
+summary = "The operation was refused: request received."
+explanation_key = "error.support.request_received"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.session_close"
+class = "none"
+summary = "The operation was refused: session close."
+explanation_key = "error.support.session_close"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.session_open"
+class = "none"
+summary = "The operation was refused: session open."
+explanation_key = "error.support.session_open"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.store_failed"
+class = "none"
+summary = "The operation was refused: store failed."
+explanation_key = "error.support.store_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.too_many_sessions"
+class = "none"
+summary = "The operation was refused: too many sessions."
+explanation_key = "error.support.too_many_sessions"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "support.write_not_granted"
+class = "none"
+summary = "The operation was refused: write not granted."
+explanation_key = "error.support.write_not_granted"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

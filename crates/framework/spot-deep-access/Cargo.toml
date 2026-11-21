@@ -1,0 +1,26 @@
+[package]
+name = "spot-deep-access"
+description = "Customer-consented, hardware-bound deep-agent sessions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-support-session = { path = "../spot-support-session" }
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+spot-signed-command = { path = "../spot-signed-command" }
+spot-audit-chain = { path = "../spot-audit-chain" }
+spot-iam-access = { path = "../spot-iam-access" }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

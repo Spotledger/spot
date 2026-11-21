@@ -1,0 +1,7 @@
+{
+  "action": "snapshot_taken",
+  "actor": "0192f1c0-0000-7000-8000-000000000005",
+  "dry_run": false,
+  "outcome": "ok",
+  "target": "snap-2026-11-07"
+}

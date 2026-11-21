@@ -1,0 +1,11 @@
+OVERRIDES
+app  kind     target_step  doctype  hook_point   order  reason
+---  -------  -----------  -------  -----------  -----  ---------------------------
+erp  disable  core:c       item     before_save  3      no longer used by this site
+ext  wrap     core:b       item     before_save  2      Wrap core:b
+ext  reorder  core:a       item     before_save  0      Before core:a
+SEAMS
+name      version  provider_app  replaced_by  reason
+--------  -------  ------------  -----------  ---------------
+tax:line  1        tax           local_tax    local tax rules
+tax:line  2        tax                        

@@ -1,0 +1,84 @@
+# Transaction size and name limits, and the open limits.
+
+[[case]]
+id = "lim-01-too-many-writes"
+rule = "SEM-LIM-01"
+title = "a document with ten child rows in a transaction that allows 3 writes"
+max_writes = 3
+op = "write"
+write = ['insert a code="t:a"', 'a.lines label="t:0"', 'a.lines label="t:1"', 'a.lines label="t:2"', 'a.lines label="t:3"', 'a.lines label="t:4"', 'a.lines label="t:5"', 'a.lines label="t:6"', 'a.lines label="t:7"', 'a.lines label="t:8"', 'a.lines label="t:9"']
+expect = { error = "transaction_too_large" }
+
+[[case]]
+id = "lim-01-within-the-limit"
+rule = "SEM-LIM-01"
+title = "a document with two child rows in a transaction that allows 50 writes"
+max_writes = 50
+op = "write"
+write = ['insert a code="t:a"', 'a.lines label="t:1"', 'a.lines label="t:2"']
+expect = { ok = true }
+
+[[case]]
+id = "lim-01-many-documents"
+rule = "SEM-LIM-01"
+title = "twelve documents in one transaction that allows 5 writes"
+max_writes = 5
+op = "write"
+write = ['insert d0 code="t:d0"', 'insert d1 code="t:d1"', 'insert d2 code="t:d2"', 'insert d3 code="t:d3"', 'insert d4 code="t:d4"', 'insert d5 code="t:d5"', 'insert d6 code="t:d6"', 'insert d7 code="t:d7"', 'insert d8 code="t:d8"', 'insert d9 code="t:d9"', 'insert d10 code="t:d10"', 'insert d11 code="t:d11"']
+expect = { error = "transaction_too_large" }
+
+[[case]]
+id = "lim-01-update-with-children"
+rule = "SEM-LIM-01"
+title = "an update that rewrites ten child rows in a transaction that allows 3 writes"
+max_writes = 3
+setup = ['a code="t:a"']
+op = "write"
+write = ['a.lines label="t:0"', 'a.lines label="t:1"', 'a.lines label="t:2"', 'a.lines label="t:3"', 'a.lines label="t:4"', 'a.lines label="t:5"', 'a.lines label="t:6"', 'a.lines label="t:7"', 'a.lines label="t:8"', 'a.lines label="t:9"', 'update a note="t:u"']
+expect = { error = "transaction_too_large" }
+
+[[case]]
+id = "lim-02-long-names-1"
+rule = "SEM-LIM-02"
+title = "entity 1 of two 63-character names that share 62 characters prepares and answers a query"
+catalog = "long"
+op = "query"
+query = { from = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1", select = ["(count)"] }
+expect = { rows = [["i:0"]] }
+
+[[case]]
+id = "lim-02-long-names-2"
+rule = "SEM-LIM-02"
+title = "entity 2 of two 63-character names that share 62 characters prepares and answers a query"
+catalog = "long"
+op = "query"
+query = { from = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2", select = ["(count)"] }
+expect = { rows = [["i:0"]] }
+
+[[case]]
+id = "lim-02-long-field-names"
+rule = "SEM-LIM-02"
+title = "a 63-character field name is readable in a query"
+catalog = "long"
+op = "query"
+query = { from = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1", select = ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1"], order = ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1"] }
+expect = { rows = [] }
+
+[[case]]
+id = "lim-03-long-in-list"
+rule = "SEM-LIM-03"
+title = "an In list of 70,000 integers (open: refused at a stated size or supported)"
+setup = ['a code="t:a" qty=i:5']
+op = "query"
+query = { select = ["code"], filter = "(in-seq qty 70000)" }
+expect = { same_as_reference = true }
+
+[[case]]
+id = "lim-03-in-list-of-a-thousand"
+rule = "SEM-LIM-03"
+title = "an In list of 1,000 integers (open: ADR-069 proposes this as the limit)"
+setup = ['a code="t:a" qty=i:5']
+op = "query"
+query = { select = ["code"], filter = "(in-seq qty 1000)" }
+expect = { same_as_reference = true }
+

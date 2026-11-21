@@ -1,0 +1,28 @@
+[package]
+name = "spot-effect-kit"
+description = "The effect conformance kit (WP-EXT-11.T3, ADR-080): drives post, cancel and correct on a document engine and checks every declared store nets to zero with nothing deleted, receipts match declarations, and reversals pair up"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The contract: controllers, hook contexts, effect declarations, receipts and `DocumentService`.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `Registry` (declared effects per operation) and `check_receipt`.
+spot-seams = { path = "../spot-seams" }
+# `Topic`, in the hook context the wrapper forwards, and JSON arguments of whitelisted methods.
+spot-events-contract = { path = "../../../contracts/events" }
+serde_json = "1"
+
+[dev-dependencies]
+# The sample apps run on the real document engine and the in-memory backend.
+spot-document = { path = "../spot-document" }
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

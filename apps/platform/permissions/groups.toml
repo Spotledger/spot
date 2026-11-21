@@ -1,0 +1,18 @@
+# The protection groups the platform DocTypes declare. `credential` is closed by default and
+# no shipped field grant opens it: no role reads a stored credential; only the system principal
+# (the sign-in service) does, and every read is traced.
+[[entries]]
+name = "credential"
+trace = true
+
+[[entries]]
+name = "login_source"
+
+# The webhook's groups (WP-INT-01.T3). `secret` holds the sealed signing secret: closed by
+# default, traced, and no shipped field grant opens it. `config` is the webhook's configuration.
+[[entries]]
+name = "secret"
+trace = true
+
+[[entries]]
+name = "config"

@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-06.T1: tests for the usage analytics and the screen coverage exporter.
+       WP-UI-06.T2: also generates a known-screen set from Fixtures/screens with the SAME inline
+       task the Analytics project uses, so a test proves a non-empty manifest is read correctly
+       (and that example*.toml is excluded) without waiting for a real screen design. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CA1707;CA1861;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <Import Project="../../src/Spotledger.Client.Analytics/KnownScreens.targets" />
+
+  <ItemGroup>
+    <FixtureScreensManifest Include="$(MSBuildThisFileDirectory)Fixtures/screens/*.toml" />
+  </ItemGroup>
+
+  <Target Name="PrepareFixtureScreens">
+    <PropertyGroup>
+      <FixtureScreensFile>$(IntermediateOutputPath)KnownScreensFixture.g.cs</FixtureScreensFile>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="GenerateFixtureScreens"
+          DependsOnTargets="PrepareFixtureScreens"
+          BeforeTargets="CoreCompile"
+          Inputs="@(FixtureScreensManifest)"
+          Outputs="$(FixtureScreensFile)">
+    <GenerateKnownScreens ManifestDirectory="$(MSBuildThisFileDirectory)Fixtures/screens"
+                          OutputFile="$(FixtureScreensFile)"
+                          Namespace="Spotledger.Client.Analytics.Tests"
+                          ClassName="FixtureScreens" />
+    <ItemGroup>
+      <Compile Include="$(FixtureScreensFile)" />
+      <FileWrites Include="$(FixtureScreensFile)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../src/Spotledger.Client.Analytics/Spotledger.Client.Analytics.csproj" />
+  </ItemGroup>
+</Project>

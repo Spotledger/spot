@@ -1,0 +1,119 @@
+# naming codes: document naming from a compiled naming plan and gapless series allocation
+# (spot-naming, WP-DOC-05). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "naming.unknown_doctype"
+class = "none"
+summary = "The registry holds no compiled naming plan for the DocType."
+explanation_key = "error.naming.unknown_doctype"
+params = []
+remedy = "Give the DocType a naming property, and make sure its plan is in the registry."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.invalid_name"
+class = "none"
+summary = "A value is not a legal record name."
+explanation_key = "error.naming.invalid_name"
+params = []
+remedy = "Use 1 to 140 printable bytes with no leading or trailing whitespace."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.missing_field"
+class = "none"
+summary = "A naming pattern reads a field the document has not set."
+explanation_key = "error.naming.missing_field"
+params = []
+remedy = "Set the field the naming pattern reads before the document is named."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.duplicate"
+class = "none"
+summary = "The generated name is already used by another document."
+explanation_key = "error.naming.duplicate"
+params = []
+remedy = "Choose another name, or make the naming field unique in the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.prompt_required"
+class = "none"
+summary = "This DocType is named by its caller, but no name was supplied."
+explanation_key = "error.naming.prompt_required"
+params = []
+remedy = "Supply the document's name in the naming context."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.pattern_invalid"
+class = "none"
+summary = "The compiled naming plan is not a strategy the namer can run."
+explanation_key = "error.naming.pattern_invalid"
+params = []
+remedy = "Use a series pattern, field:<name>, hash or prompt as the naming property."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.series_key_invalid"
+class = "none"
+summary = "The derived series key is not a legal series key."
+explanation_key = "error.naming.series_key_invalid"
+params = []
+remedy = "Remove control characters from the pattern's text, or shorten the series scope."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.series_backwards"
+class = "none"
+summary = "The next number would hand a number out again."
+explanation_key = "error.naming.series_backwards"
+params = []
+remedy = "Set the next number at or past the series' last allocated number."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.skip_refused"
+class = "none"
+summary = "A gapless-strict series refuses to skip numbers."
+explanation_key = "error.naming.skip_refused"
+params = []
+remedy = "Do not skip numbers on a gapless-strict series; cancel the document instead."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.reserve_refused"
+class = "none"
+summary = "A gapless-strict series refuses a reserved block."
+explanation_key = "error.naming.reserve_refused"
+params = []
+remedy = "Allocate the numbers one at a time, or use the tolerant policy for the series."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.policy_unsupported"
+class = "none"
+summary = "The gap policy does not fit the naming operation."
+explanation_key = "error.naming.policy_unsupported"
+params = []
+remedy = "Use the reserved policy with reserve, and a non-reserved policy with name_for."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.block_exhausted"
+class = "none"
+summary = "A reserved block was consumed past its end."
+explanation_key = "error.naming.block_exhausted"
+params = []
+remedy = "Reserve enough numbers for the bulk operation, or reserve another block."
+since = "0.1.0"
+
+[[entry]]
+code = "naming.storage"
+class = "none"
+summary = "The storage allocator failed while allocating a number."
+explanation_key = "error.naming.storage"
+params = []
+remedy = "Read the wrapped storage error's kind; retry the transaction when it is retryable."
+since = "0.1.0"

@@ -1,0 +1,10 @@
+{
+  "case": "spread_rest",
+  "entry": "combine",
+  "args": {
+    "id": "a"
+  },
+  "expect": {
+    "id": "a"
+  }
+}

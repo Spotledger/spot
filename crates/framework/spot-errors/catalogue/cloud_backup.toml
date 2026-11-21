@@ -1,0 +1,145 @@
+# cloud backup codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "cloud_backup.not_entitled"
+class = "none"
+summary = "The licence for tenant {tenant} does not grant cloud backup."
+explanation_key = "error.cloud_backup.not_entitled"
+params = ["tenant"]
+remedy = "Install a licence for this tenant that includes the cloud_backup feature, or keep using local backups."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.quota_exceeded"
+class = "none"
+summary = "The backup needs {needed} bytes but only {remaining} of the tenant quota remain (limit {limit})."
+explanation_key = "error.cloud_backup.quota_exceeded"
+params = ["limit", "needed", "remaining"]
+remedy = "Raise the tenant's storage quota, delete backups retention no longer protects, or wait for the next metering period."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.object_conflict"
+class = "none"
+summary = "Object {key} already exists with different contents, and cloud objects are immutable."
+explanation_key = "error.cloud_backup.object_conflict"
+params = ["key"]
+remedy = "Upload the chunk as a new generation or take the backup again; never overwrite an existing object."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.chunk_missing"
+class = "none"
+summary = "Chunk {index} of backup {backup_id} is missing from the store."
+explanation_key = "error.cloud_backup.chunk_missing"
+params = ["backup_id", "index"]
+remedy = "Upload the chunk again and re-verify the backup before trusting it."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.chunk_corrupt"
+class = "none"
+summary = "Chunk {index} of backup {backup_id} is corrupted: {reason}."
+explanation_key = "error.cloud_backup.chunk_corrupt"
+params = ["backup_id", "index", "reason"]
+remedy = "Re-upload the chunk as a new generation and verify the backup again; a chunk that still fails is unverified."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.manifest_invalid"
+class = "none"
+summary = "The manifest of backup {backup_id} is not valid: {reason}."
+explanation_key = "error.cloud_backup.manifest_invalid"
+params = ["backup_id", "reason"]
+remedy = "Use a manifest written by this platform version; never edit a stored manifest by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.manifest_signature"
+class = "none"
+summary = "The manifest of backup {backup_id} failed its signature check."
+explanation_key = "error.cloud_backup.manifest_signature"
+params = ["backup_id"]
+remedy = "Treat the backup as untrusted and restore from another verified backup; the manifest was altered or the key is wrong."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.wrong_key"
+class = "none"
+summary = "The recovery key does not open backup {backup_id}."
+explanation_key = "error.cloud_backup.wrong_key"
+params = ["backup_id"]
+remedy = "Enter the recovery phrase printed when cloud backup was enabled; if it is lost, restore is impossible without the escrow key."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.not_found"
+class = "none"
+summary = "No backup {backup_id} exists for tenant {tenant}."
+explanation_key = "error.cloud_backup.not_found"
+params = ["backup_id", "tenant"]
+remedy = "List the tenant's backups and choose an id it holds."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.store"
+class = "none"
+summary = "The backup store failed: {reason}."
+explanation_key = "error.cloud_backup.store"
+params = ["reason"]
+remedy = "Check the store's connectivity and credentials, then retry; an incomplete upload is never listed as verified."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.recovery_phrase"
+class = "none"
+summary = "The recovery phrase is not valid: {reason}."
+explanation_key = "error.cloud_backup.recovery_phrase"
+params = ["reason"]
+remedy = "Re-type the phrase from its printed groups, or use the escrow key if the customer granted escrow."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.delete_refused"
+class = "none"
+summary = "Deleting backup {backup_id} was refused: {reason}."
+explanation_key = "error.cloud_backup.delete_refused"
+params = ["backup_id", "reason"]
+remedy = "Delete only through a retention plan for this tenant; a backup outside the plan stays until retention selects it."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.retention"
+class = "none"
+summary = "Retention refused: {reason}."
+explanation_key = "error.cloud_backup.retention"
+params = ["reason"]
+remedy = "Keep at least one daily, weekly or monthly backup and use counts of 3650 or less."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.state"
+class = "none"
+summary = "Backup {backup_id} is in the wrong state for {operation}: {reason}."
+explanation_key = "error.cloud_backup.state"
+params = ["backup_id", "operation", "reason"]
+remedy = "Finish or restart the interrupted upload; a backup id is never reused and a commit needs every chunk."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.verify_failed"
+class = "none"
+summary = "Backup {backup_id} failed verification: {reason}."
+explanation_key = "error.cloud_backup.verify_failed"
+params = ["backup_id", "reason"]
+remedy = "Re-upload the reported chunks and verify again; a backup that stays unverified is never restorable."
+since = "0.1.0"
+
+[[entry]]
+code = "cloud_backup.restore"
+class = "none"
+summary = "Restoring backup {backup_id} failed at {stage}: {reason}."
+explanation_key = "error.cloud_backup.restore"
+params = ["backup_id", "reason", "stage"]
+remedy = "Keep the checkpoint and retry the restore from the first missing chunk; fix the reported stage first."
+since = "0.1.0"

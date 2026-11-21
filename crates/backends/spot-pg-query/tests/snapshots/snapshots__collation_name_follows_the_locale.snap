@@ -1,0 +1,9 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(&c)
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" ORDER BY "p"."name" COLLATE "spot_ur_pk" ASC NULLS LAST, "p"."name" COLLATE "C" ASC NULLS LAST, "p"."id" ASC OFFSET $1
+$1 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

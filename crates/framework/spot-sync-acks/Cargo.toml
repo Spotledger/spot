@@ -1,0 +1,27 @@
+[package]
+name = "spot-sync-acks"
+description = "The hub's acknowledgement ledger (WP-SYN-05.T2, ADR-065 s1, s3 and s8): applied-prefix acks from nodes become per-node obligation state, deadlines and an escalation ladder driven through the conditions framework, with hub time only and an as-of view per node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The pure derivation: outstanding events, deadlines, the ladder, evidence and the report.
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+# Conditions (OBLIGATION_OVERDUE and its siblings) and the audit sink every transition goes to.
+spot-conditions = { path = "../spot-conditions" }
+# The catalogue the three obligation conditions are taken from (one source of truth).
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+# Stable, derive-based serde on the stored node record, so a store can persist it.
+serde = { version = "1", features = ["derive"] }
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property test: a node's level never decreases without an ack.
+proptest = "1"
+
+[lints]
+workspace = true

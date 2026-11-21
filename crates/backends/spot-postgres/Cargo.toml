@@ -1,0 +1,43 @@
+[package]
+name = "spot-postgres"
+description = "PostgreSQL backend of the storage contract: pool, transactions, savepoints and error mapping (WP-STO-01)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The `testing` module: per-test scratch databases for this and later backend tasks.
+testing = []
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+spot-pg-query = { path = "../spot-pg-query" }
+spot-events-contract = { path = "../../../contracts/events" }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3"] }
+deadpool-postgres = "0.14"
+tokio = { version = "1", default-features = false, features = ["rt", "time", "sync", "net"] }
+tokio-postgres-rustls = "0.13"
+# `ring` is chosen explicitly: rustls panics when two crypto providers are enabled and none is set.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+rustls-native-certs = "0.8"
+bytes = "1"
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# Not used until WP-STO-03.T1; declared here so that task need not edit this file.
+rust_decimal = { version = "1.43", default-features = false, features = ["std", "db-tokio-postgres"] }
+thiserror = "2"
+tracing = "0.1"
+# Per-statement spans and per-request database cost (WP-PLT-15.T2).
+spot-telemetry = { path = "../../framework/spot-telemetry" }
+
+[dev-dependencies]
+spot-storage-fake = { path = "../spot-storage-fake" }
+spot-postgres = { path = ".", features = ["testing"] }
+# A capture layer for the span and redaction assertions.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

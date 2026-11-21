@@ -1,0 +1,23 @@
+# Help for the edge_sync error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "edge_sync.invalid_name"
+what_happened = "A document's document type is not a valid storage name for an edge end."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Use a document type name of lowercase letters, digits and underscores.", "If it keeps happening, tell your administrator and quote the code edge_sync.invalid_name."]
+audience = "operator"
+
+[[help]]
+code = "edge_sync.unknown_doctype"
+what_happened = "A document names a document type the edge schema does not know."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Derive the edge schema from the metadata that defines the document type.", "If it keeps happening, tell your administrator and quote the code edge_sync.unknown_doctype."]
+audience = "operator"
+
+[[help]]
+code = "edge_sync.write_failed"
+what_happened = "The edge writer failed to apply a change."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the edge store and retry the document operation.", "If it keeps happening, tell your administrator and quote the code edge_sync.write_failed."]
+audience = "operator"

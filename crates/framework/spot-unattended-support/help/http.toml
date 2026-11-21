@@ -1,0 +1,9 @@
+# Help for the http error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "http.internal"
+what_happened = "An unexpected server-side failure; the code and details are logged, never shown."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the server logs with the request id; nothing is wrong with the request itself.", "If it keeps happening, tell your administrator and quote the code http.internal."]
+audience = "operator"

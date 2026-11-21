@@ -1,0 +1,46 @@
+# Generated from packaging/spot-agent.service by `spot-agent service install`.
+# The words between at-signs are filled by the installer; do not edit the installed copy by
+# hand (a second `service install` rewrites it).
+[Unit]
+Description=Spotledger host agent
+Documentation=https://github.com/Spotledger/spot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+ExecStart=@BINARY@ --state-dir @STATE_DIR@ run
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+
+# The agent is an unprivileged, outbound-only process: no new privileges (@PRIVILEGE_NOTE@),
+# no capabilities, a read-only system, a private /tmp, only its own directories writable.
+NoNewPrivileges=@NO_NEW_PRIVILEGES@
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=@RESTRICT_SUID@
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+UMask=0077
+ReadWritePaths=@STATE_DIR@
+ReadWritePaths=-@INSTALL_ROOT@
+
+[Install]
+WantedBy=multi-user.target

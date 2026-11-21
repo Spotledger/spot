@@ -1,0 +1,52 @@
+# DEVELOPMENT ONLY. Do not use for production: the database is not backed up,
+# the certificates are throwaway, the password is a placeholder you must set, and
+# both listeners are published on 127.0.0.1 only.
+#
+#   cd packaging/linux/control-plane/compose
+#   ./gen-dev-certs.sh ./dev            # throwaway CAs and certificates (needs openssl)
+#   cp config.dev.toml ./dev/control-plane.toml
+#   podman unshare chown -R 10001:10001 ./dev     # rootless podman: the service user must read the 0600 keys
+#   export SPOT_CP_IMAGE=spot-control-plane:1.2.3
+#   export SPOT_CP_DB_PASSWORD='choose-one'          # not stored in this file
+#   podman compose up -d db && podman compose run --rm control-plane migrate --config /etc/spot-control-plane/control-plane.toml
+#   podman compose up -d
+name: spot-control-plane-dev
+
+services:
+  db:
+    image: docker.io/library/postgres:18
+    environment:
+      POSTGRES_DB: spot_control
+      POSTGRES_USER: spot_control
+      POSTGRES_PASSWORD: ${SPOT_CP_DB_PASSWORD:?set SPOT_CP_DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spot_control -d spot_control"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  control-plane:
+    image: ${SPOT_CP_IMAGE:?set SPOT_CP_IMAGE}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPOT_CP_DB_PASSWORD: ${SPOT_CP_DB_PASSWORD:?set SPOT_CP_DB_PASSWORD}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./dev:/etc/spot-control-plane:ro
+      - cp-state:/var/lib/spot-control-plane
+    ports:
+      - "127.0.0.1:8443:8443"
+      - "127.0.0.1:8444:8444"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  cp-state:

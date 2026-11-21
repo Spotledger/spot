@@ -1,0 +1,32 @@
+# Built-in chain configuration for this crate's own tests (WP-DAG-05.T1).
+#
+# The crate's logic never names an ERP DocType; a deployment overrides this text with its own
+# metadata. Each `[[chain]]` entry lists, for one DocType, the canonical edge-type names that
+# make up that DocType's chain. Each `[[bom]]` entry names the edge from a component record to
+# the record that uses it and the field on the component record carrying the per-unit quantity.
+#
+# The names here are fixtures: `po`, `grn`, `invoice`, `payment` and `item` are the DocTypes the
+# crate's tests build, and the edges are the link fields of that fixture. Every DocType of the
+# order-to-cash chain carries the same edge set, so the same chain is walkable forward (`In`,
+# from a record to the records that link to it) and back (`Out`) from any of its documents.
+
+[[chain]]
+doctype = "po"
+edges = ["grn.po", "invoice.grn", "payment.invoice"]
+
+[[chain]]
+doctype = "grn"
+edges = ["grn.po", "invoice.grn", "payment.invoice"]
+
+[[chain]]
+doctype = "invoice"
+edges = ["grn.po", "invoice.grn", "payment.invoice"]
+
+[[chain]]
+doctype = "payment"
+edges = ["grn.po", "invoice.grn", "payment.invoice"]
+
+[[bom]]
+doctype = "item"
+edge = "item.parent_item"
+qty_field = "qty"

@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Spotledger.Client.Designer.Views"
+             x:Class="Spotledger.Client.Designer.Views.DesignerView">
+  <!-- The designer: the tools the host registered beside it, the palette, the canvas, the
+       inspector, and beneath them the validation panel, the preview and the history. The dialogs
+       and an open tool are overlays, so no separate window is needed and the whole designer is one
+       control a host can drop into a workspace tab. -->
+  <Grid RowDefinitions="Auto,Auto,*,220,Auto" Background="{DynamicResource Color.Surface.Canvas}">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10">
+      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Title}"
+                   FontSize="{DynamicResource Font.Size.Title}"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <TextBlock Text="{Binding SaveStateText}"
+                   VerticalAlignment="Bottom"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+        <Button Content="Undo" Click="OnUndo" ToolTip.Tip="Move the server's op log back one step" />
+        <Button Content="Redo" Click="OnRedo" ToolTip.Tip="Move the server's op log forward one step" />
+        <Button Content="Insert" Click="OnInsert" ToolTip.Tip="Insert the picked palette type (Ctrl+I)" />
+        <Button Content="Delete" Click="OnDelete" ToolTip.Tip="Remove the selected field" />
+        <Button Content="Save" Click="OnSave" />
+        <Button Content="Discard" Click="OnDiscard" />
+        <Button Content="Publish…" Click="OnPublish" />
+      </StackPanel>
+    </Grid>
+
+    <!-- The tools the composition root registered (registered ones only: the shell does not know
+         which tools exist). Opening one shows its view-model through the application's data
+         templates; a tool that fails to build leaves a sentence here instead of a crash. -->
+    <Border Grid.Row="1" Margin="12,0,12,6" IsVisible="{Binding Tools.HasTools}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Tools"
+                   VerticalAlignment="Center"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+        <ItemsControl x:Name="ToolList" ItemsSource="{Binding Tools.Tools}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Content="{Binding Title}"
+                      Command="{Binding OpenCommand}"
+                      ToolTip.Tip="{Binding Description}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{Binding Tools.Message}"
+                   IsVisible="{Binding Tools.HasMessage}"
+                   VerticalAlignment="Center"
+                   TextWrapping="Wrap"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   Foreground="{DynamicResource Color.Semantic.Danger}" />
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="2" ColumnDefinitions="220,*,340">
+      <views:PaletteView Grid.Column="0" />
+      <views:CanvasView Grid.Column="1" />
+      <views:InspectorView Grid.Column="2" />
+    </Grid>
+
+    <TabControl Grid.Row="3" Margin="12,0">
+      <TabItem Header="Validation">
+        <views:ValidationPanelView />
+      </TabItem>
+      <TabItem Header="Preview">
+        <views:PreviewPane />
+      </TabItem>
+      <TabItem Header="History">
+        <Border Padding="10" Background="{DynamicResource Color.Surface.Raised}">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Every accepted change, in the server's op log. Undo and redo move the cursor; nothing here is a client-side stack."
+                       FontSize="{DynamicResource Font.Size.Caption}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource Color.Text.Secondary}" />
+            <ListBox ItemsSource="{Binding History}" MaxHeight="150">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Spacing="0">
+                    <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Color.Text.Primary}" />
+                    <TextBlock Text="{Binding Op}"
+                               FontSize="{DynamicResource Font.Size.Caption}"
+                               Foreground="{DynamicResource Color.Text.Secondary}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
+        </Border>
+      </TabItem>
+    </TabControl>
+
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="12,6">
+      <TextBlock Text="{Binding StatusText}"
+                 TextWrapping="Wrap"
+                 FontSize="{DynamicResource Font.Size.Caption}"
+                 Foreground="{DynamicResource Color.Text.Secondary}" />
+      <TextBlock Grid.Column="1"
+                 Text="{Binding LastCommandText}"
+                 FontSize="{DynamicResource Font.Size.Caption}"
+                 Foreground="{DynamicResource Color.Text.Secondary}" />
+    </Grid>
+
+    <Panel Grid.Row="0" Grid.RowSpan="5">
+      <!-- An open tool covers the designer; its view comes from the host's data templates. -->
+      <Border Margin="12,56,12,40"
+              IsVisible="{Binding Tools.HasActiveTool}"
+              Background="{DynamicResource Color.Surface.Canvas}"
+              BorderBrush="{DynamicResource Color.Border.Strong}"
+              BorderThickness="1">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="10,8">
+            <TextBlock Text="{Binding Tools.ActiveTitle}"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource Color.Text.Primary}" />
+            <Button Grid.Column="1" Content="Back to the designer" Command="{Binding Tools.CloseCommand}" />
+          </Grid>
+          <ContentControl x:Name="ActiveToolView" Content="{Binding Tools.ActiveViewModel}" Margin="8" />
+        </DockPanel>
+      </Border>
+
+      <views:PublishDialog />
+      <views:LinkPickerDialog />
+      <views:ChildTableDialog />
+      <views:FieldDialog />
+    </Panel>
+  </Grid>
+</UserControl>

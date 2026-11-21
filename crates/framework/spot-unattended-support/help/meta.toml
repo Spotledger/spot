@@ -1,0 +1,135 @@
+# Help for the meta error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "meta.declassify_reason"
+what_happened = "A field is declassified without the reviewed reason the decision needs."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Record the non-empty reason for the declassification.", "If it keeps happening, tell your administrator and quote the code meta.declassify_reason."]
+audience = "user"
+
+[[help]]
+code = "meta.inherited_authored"
+what_happened = "A definition authors inherited_groups, which spot-meta alone computes."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove the hand-written inherited_groups; spot-meta computes them from the field's inputs.", "If it keeps happening, tell your administrator and quote the code meta.inherited_authored."]
+audience = "user"
+
+[[help]]
+code = "meta.invalid_name"
+what_happened = "A definition name is not a valid storage name."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use lower-case letters, digits and underscores, starting with a letter.", "If it keeps happening, tell your administrator and quote the code meta.invalid_name."]
+audience = "user"
+
+[[help]]
+code = "meta.mask_invalid"
+what_happened = "A field's mask format is malformed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Set LastChars between 1 and 8, or use the Placeholder mask.", "If it keeps happening, tell your administrator and quote the code meta.mask_invalid."]
+audience = "user"
+
+[[help]]
+code = "meta.mask_missing"
+what_happened = "A field is in a masked protection group but carries no mask format."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the field a MaskFormat so a read_masked grant has a form to show.", "If it keeps happening, tell your administrator and quote the code meta.mask_missing."]
+audience = "user"
+
+[[help]]
+code = "meta.multiple_not_select"
+what_happened = "A field is marked multiple, but only a select field can hold several values."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove `multiple` from the field, or make it a select.", "If it keeps happening, tell your administrator and quote the code meta.multiple_not_select."]
+audience = "user"
+
+[[help]]
+code = "meta.unknown_doctype"
+what_happened = "No document type with this name is installed."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the document type's spelling or install the app that defines it.", "If it keeps happening, tell your administrator and quote the code meta.unknown_doctype."]
+audience = "user"
+
+[[help]]
+code = "meta.unknown_group"
+what_happened = "A field names a protection group the document type does not declare."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Declare the protection group on the document type before putting a field into it.", "If it keeps happening, tell your administrator and quote the code meta.unknown_group."]
+audience = "user"
+
+[[help]]
+code = "meta.validation_failed"
+what_happened = "The document type definition is not valid; the error names each field that failed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix every named field, then save the definition again.", "If it keeps happening, tell your administrator and quote the code meta.validation_failed."]
+audience = "user"
+
+[[help]]
+code = "meta.create_only_table"
+what_happened = "A create-only attribute is set on a child table, where it has no meaning."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove `create_only` from the child table; set it on a field of a parent DocType.", "If it keeps happening, tell your administrator and quote the code meta.create_only_table."]
+audience = "user"
+
+[[help]]
+code = "meta.create_only_allow_on_posted"
+what_happened = "A field is create-only and also allowed to change after posting, which contradict each other."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove either `create_only` or `allow_on_submit` from the field.", "If it keeps happening, tell your administrator and quote the code meta.create_only_allow_on_posted."]
+audience = "user"
+
+[[help]]
+code = "meta.consumer_ref_duplicate"
+what_happened = "A DocType declares more than one consumer reference field."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Keep one consumer reference field per DocType.", "If it keeps happening, tell your administrator and quote the code meta.consumer_ref_duplicate."]
+audience = "user"
+
+[[help]]
+code = "meta.consumer_ref_not_create_only"
+what_happened = "A consumer reference field is not create-only."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Mark the consumer reference field `create_only`; it cannot change after creation.", "If it keeps happening, tell your administrator and quote the code meta.consumer_ref_not_create_only."]
+audience = "user"
+
+[[help]]
+code = "meta.geolocation_not_a_point"
+what_happened = "A geolocation field holds something that is not a single point."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Store one GeoJSON Point in the field, or use a field type that fits the data.", "If it keeps happening, tell your administrator and quote the code meta.geolocation_not_a_point."]
+audience = "user"
+
+[[help]]
+code = "meta.bad_exclusion"
+what_happened = "An exclusion declaration is not valid."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Name an existing range field and non-empty scope fields in the exclusion.", "If it keeps happening, tell your administrator and quote the code meta.bad_exclusion."]
+audience = "user"
+
+[[help]]
+code = "meta.bad_search"
+what_happened = "A search declaration is not valid."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Name existing text fields, use weights A to D, and stay within the field limit.", "If it keeps happening, tell your administrator and quote the code meta.bad_search."]
+audience = "user"
+
+[[help]]
+code = "meta.search_field_protected"
+what_happened = "A protected field was put in the search declaration."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Remove the protected field from the search fields and facets; protected fields never enter the search index.", "If it keeps happening, tell your administrator and quote the code meta.search_field_protected."]
+audience = "user"
+
+[[help]]
+code = "meta.bad_range"
+what_happened = "A range field has an empty, unbounded or malformed value or default."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the range a start and an end, with the start before the end.", "If it keeps happening, tell your administrator and quote the code meta.bad_range."]
+audience = "user"
+
+[[help]]
+code = "meta.backend_unsupported"
+what_happened = "The database in use cannot do what this definition declares."
+why = "The system could not do what was asked in this state."
+what_to_do = ["Use a database that supports exclusions and search, or remove the declaration.", "If it keeps happening, tell your administrator and quote the code meta.backend_unsupported."]
+audience = "admin"

@@ -1,0 +1,21 @@
+# data_policy_pg codes: the PostgreSQL retention ledger (WP-SEC-05.T2). A failed ledger call at run
+# time is the trait's own data_policy.store_failed; these codes cover construction and preparation.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "data_policy_pg.prepare_failed"
+class = "none"
+summary = "The retention ledger tables could not be created in the tenant schema."
+explanation_key = "error.data_policy_pg.prepare_failed"
+params = []
+remedy = "Check that the tenant schema exists, that the database user may create tables in it and that the server is reachable, then retry prepare; the DDL is idempotent."
+since = "0.1.0"
+
+[[entry]]
+code = "data_policy_pg.unsupported_context"
+class = "none"
+summary = "The retention ledger cannot be built here: {reason}."
+explanation_key = "error.data_policy_pg.unsupported_context"
+params = ["reason"]
+remedy = "Build and use the store from a control-plane process, a CLI command or a job worker on a plain thread, with a bridge whose max_in_flight fits the pool; never from a request handler."
+since = "0.1.0"

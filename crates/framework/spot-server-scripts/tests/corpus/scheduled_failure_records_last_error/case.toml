@@ -1,0 +1,10 @@
+kind = "scheduled"
+pattern = "failing scheduled script"
+[expect]
+ok = false
+error_code = "script.thrown"
+[[expect.documents]]
+doctype = "log_entry"
+field = "message"
+value = "never"
+count = 0

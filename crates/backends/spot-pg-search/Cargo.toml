@@ -1,0 +1,39 @@
+[package]
+name = "spot-pg-search"
+description = "The database full-text search projection (WP-STO-13.T1, ADR-087 section 7): the spot_search_doc table with its weighted tsvector and GIN index, maintenance in the write's own transaction, the permission filter, facet counts, projection_lag, the conformance checks and a rebuild"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The catalogue, the search declaration, the query IR and the `StorageError` vocabulary.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `compile` turns the permission filter and the search term into parameterised SQL, and its
+# `SEARCH_TABLE` constants are the one place the projection's names are written down.
+spot-pg-query = { path = "../spot-pg-query" }
+# `PgTransaction`: the projection is maintained and read on the write's own connection.
+spot-postgres = { path = "../spot-postgres" }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3"] }
+rust_decimal = { version = "1.43", default-features = false, features = ["std", "db-tokio-postgres"] }
+# Facet values are read out of the `facets jsonb` column as JSON text.
+serde_json = "1"
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# Binding a `jsonb` parameter (a filter over a JSON field) needs a `ToSql` that writes binary jsonb.
+bytes = "1"
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# The projection lag is reported as a metric, one field per run.
+tracing = "0.1"
+
+[dev-dependencies]
+# Per-test scratch databases: `SPOT_TEST_PG_URL` and `SPOT_REQUIRE_PG=1`, as the neighbouring
+# backend crates do.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The tests name a row's id to check its projection row directly.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[lints]
+workspace = true

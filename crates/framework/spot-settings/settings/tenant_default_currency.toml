@@ -1,0 +1,36 @@
+# Seed setting for tenant.default_currency. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "tenant.default_currency"
+title = "Default Currency"
+summary = "The default currency for the tenant."
+description = "The default currency code used for new documents and reports in this tenant."
+scopes = [
+    "tenant",
+    "company",
+]
+risk = "low"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "currency",
+    "finance",
+]
+help_url = "https://docs.example.com/settings/tenant.default_currency"
+
+[value]
+Enum = [
+    "USD",
+    "EUR",
+    "GBP",
+    "JPY",
+    "INR",
+    "CNY",
+]
+
+[default]
+Text = "USD"
+
+[restart]
+type = "none"

@@ -1,0 +1,8 @@
+kind = "api"
+negative = true
+pattern = "a script that never returns is killed at its timeout"
+timeout_ms = 50
+[input.args]
+[expect]
+ok = false
+error_code = "serverscript.limit_exceeded"

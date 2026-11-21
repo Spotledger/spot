@@ -1,0 +1,74 @@
+# discovery codes: raised by this crate. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "discovery.multicast_unavailable"
+class = "none"
+summary = "Multicast could not be joined for service discovery; advertisements and browsing are unavailable."
+explanation_key = "error.discovery.multicast_unavailable"
+params = []
+remedy = "Check the likely causes: a firewall blocking UDP 5353, a VPN adapter capturing multicast, or no network at all. The service keeps running degraded; a manual address can be used meanwhile."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.record_invalid"
+class = "none"
+summary = "An advertised discovery record is malformed, or carries a name that must not be advertised."
+explanation_key = "error.discovery.record_invalid"
+params = []
+remedy = "Re-check the advertisement configuration; the record is refused, and the server that sent it is not selectable."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.fingerprint_changed"
+class = "none"
+summary = "The server presents a key fingerprint different from the one paired and stored for it."
+explanation_key = "error.discovery.fingerprint_changed"
+params = []
+remedy = "Refuse the connection until an administrator re-pairs with the server; a changed fingerprint can mean a reinstall or an interception."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.pairing_code_invalid"
+class = "none"
+summary = "The pairing code entered does not match the server's current code."
+explanation_key = "error.discovery.pairing_code_invalid"
+params = []
+remedy = "Re-read the code from the server's console and retry; repeated failures lock pairing temporarily."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.pairing_expired"
+class = "none"
+summary = "The pairing code is no longer valid: its window has passed, or it was already used."
+explanation_key = "error.discovery.pairing_expired"
+params = []
+remedy = "Start a new pairing session on the server and enter the fresh code."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.pairing_locked"
+class = "none"
+summary = "Pairing attempts are temporarily locked out after repeated failures."
+explanation_key = "error.discovery.pairing_locked"
+params = []
+remedy = "Wait for the lockout to end, then retry with the correct code; the lockout length is documented in the pairing module."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.manual_address_invalid"
+class = "none"
+summary = "The manually entered server address is not a valid host:port pair."
+explanation_key = "error.discovery.manual_address_invalid"
+params = []
+remedy = "Enter the address as host:port, with the IPv6 host in brackets, and a port from 1 to 65535."
+since = "0.1.0"
+
+[[entry]]
+code = "discovery.trust_store_unavailable"
+class = "none"
+summary = "The trusted-server store could not be read or written."
+explanation_key = "error.discovery.trust_store_unavailable"
+params = []
+remedy = "Check the file's location and permissions; pairing survives a restart only when the store is writable."
+since = "0.1.0"

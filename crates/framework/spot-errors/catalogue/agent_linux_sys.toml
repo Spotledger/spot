@@ -1,0 +1,242 @@
+# The host agent's Linux system modules, part 2 (WP-ADM-04.T2): storage and snapshots,
+# network configuration, certificates, chrony, sysctl and SELinux/AppArmor.
+# Library-internal vocabulary: the agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_linux_sys.command_failed"
+class = "none"
+summary = "A command the agent ran exited with a non-zero status."
+explanation_key = "error.agent_linux_sys.command_failed"
+params = []
+remedy = "Read the command's standard error; correct the argument or the machine state it complained about and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.command_timeout"
+class = "none"
+summary = "A command did not finish inside its timeout."
+explanation_key = "error.agent_linux_sys.command_timeout"
+params = []
+remedy = "Check whether the tool is waiting for input or a lock; retry, or raise the operation's timeout if the machine is genuinely slow."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.command_output_too_large"
+class = "none"
+summary = "A command produced more output than the cap allows, so it was cut and cannot be parsed."
+explanation_key = "error.agent_linux_sys.command_output_too_large"
+params = []
+remedy = "Narrow the command's scope (a smaller path or a filtered listing) and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.tool_missing"
+class = "none"
+summary = "A required tool is not installed on this server."
+explanation_key = "error.agent_linux_sys.tool_missing"
+params = []
+remedy = "Install the package that provides the tool, or use an operation the server supports."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.io"
+class = "none"
+summary = "A filesystem operation on the server failed."
+explanation_key = "error.agent_linux_sys.io"
+params = []
+remedy = "Check the path, its permissions and the free space on its filesystem, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.parse"
+class = "none"
+summary = "A tool produced output the agent could not parse."
+explanation_key = "error.agent_linux_sys.parse"
+params = []
+remedy = "Check the tool's version and locale; the agent expects the documented output shape."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.invalid_argument"
+class = "none"
+summary = "An argument to a Linux system operation failed the module's own validation."
+explanation_key = "error.agent_linux_sys.invalid_argument"
+params = []
+remedy = "Correct the argument in the console or CLI and resubmit the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.unsupported"
+class = "none"
+summary = "The server does not offer the backend or capability the operation needs."
+explanation_key = "error.agent_linux_sys.unsupported"
+params = []
+remedy = "Use an operation the server supports, or install and enable the required backend."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.refused"
+class = "none"
+summary = "One of the modules' safety rules refused the change."
+explanation_key = "error.agent_linux_sys.refused"
+params = []
+remedy = "Read the refusal in the operation's message and satisfy the rule it names before retrying."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.snapshot_missing"
+class = "none"
+summary = "A named filesystem snapshot does not exist."
+explanation_key = "error.agent_linux_sys.snapshot_missing"
+params = []
+remedy = "List the snapshots and use the name the backend reports, or take the snapshot first."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.snapshot_target"
+class = "none"
+summary = "The snapshot provider target cannot carry a filesystem snapshot: a database target has no path."
+explanation_key = "error.agent_linux_sys.snapshot_target"
+params = []
+remedy = "Use a target that names an instance layout, whose data directory the filesystem snapshot can cover."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_revert_required"
+class = "none"
+summary = "A connectivity-affecting network change is awaiting confirmation, or the confirmation window has passed."
+explanation_key = "error.agent_linux_sys.network_revert_required"
+params = []
+remedy = "Confirm the change within its window from the console, or let the agent revert it and resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_revert_expired"
+class = "none"
+summary = "The confirmation window for a network change passed, so the change was reverted."
+explanation_key = "error.agent_linux_sys.network_revert_expired"
+params = []
+remedy = "Resubmit the change with a longer confirmation window, or confirm it promptly from the console."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_revert_corrupt"
+class = "none"
+summary = "A network change is pending but its revert ticket and backup cannot be read."
+explanation_key = "error.agent_linux_sys.network_revert_corrupt"
+params = []
+remedy = "Check the machine's network configuration by hand; then remove the stale network-revert files from the agent state directory."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_revert_schedule"
+class = "none"
+summary = "The independent revert timer for a network change could not be scheduled, so the change was not applied."
+explanation_key = "error.agent_linux_sys.network_revert_schedule"
+params = []
+remedy = "Check that systemd-run is available and the revert command is configured, then resubmit the change."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_revert_busy"
+class = "none"
+summary = "Another process holds the network revert lock (a confirmation or a timed revert is running), so this operation waited five seconds and gave up. Retryable."
+explanation_key = "error.agent_linux_sys.network_revert_busy"
+params = []
+remedy = "Retry in a few seconds; the other operation finishes quickly. If it persists, check for a stuck spot-agent revert process."
+# WP-ADM-04.T7 asked for `since = "0.2.0"`, but spot-errors' `since_is_the_workspace_version`
+# test (outside this task's paths) requires the workspace version, 0.1.0.
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_backup_incomplete"
+class = "none"
+summary = "The previous gateway or DNS servers of the interface could not be read, so the network change was not started: it could not be undone completely."
+explanation_key = "error.agent_linux_sys.network_backup_incomplete"
+params = []
+remedy = "Check that the network tools (nmcli, ip, resolvectl) work on this server and that the interface's connection is named after the interface, then resubmit the change."
+# WP-ADM-04.T6 asked for `since = "0.2.0"`, but spot-errors' `since_is_the_workspace_version`
+# test (outside this task's paths) requires the workspace version, 0.1.0.
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.network_no_backend"
+class = "none"
+summary = "Neither NetworkManager nor systemd-networkd is active on this server."
+explanation_key = "error.agent_linux_sys.network_no_backend"
+params = []
+remedy = "Enable NetworkManager or systemd-networkd, or configure the interface outside the agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.cert_missing"
+class = "none"
+summary = "A named certificate is not present in the system trust store."
+explanation_key = "error.agent_linux_sys.cert_missing"
+params = []
+remedy = "Install the certificate, or correct the name against the trust store's listing."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.cert_invalid"
+class = "none"
+summary = "The supplied certificate is not a PEM certificate the trust store can use."
+explanation_key = "error.agent_linux_sys.cert_invalid"
+params = []
+remedy = "Supply a PEM-encoded certificate, beginning with the certificate header."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.cert_chain"
+class = "none"
+summary = "A certificate does not verify against the system trust store."
+explanation_key = "error.agent_linux_sys.cert_chain"
+params = []
+remedy = "Install the issuing CA into the trust store, or supply the correct certificate."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.time_jump_too_large"
+class = "none"
+summary = "A forced clock step would move the clock further than the refuse-if-large-jump guard allows."
+explanation_key = "error.agent_linux_sys.time_jump_too_large"
+params = []
+remedy = "Investigate why the clock is far off (check the NTP sources), or raise the guard deliberately for this step."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.sysctl_key"
+class = "none"
+summary = "A kernel parameter is not on the Spotledger sysctl allow-list."
+explanation_key = "error.agent_linux_sys.sysctl_key"
+params = []
+remedy = "Set only allow-listed parameters; request the key be added to the catalogue if it is genuinely needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.sysctl_value"
+class = "none"
+summary = "A kernel parameter value is outside the range the allow-list accepts."
+explanation_key = "error.agent_linux_sys.sysctl_value"
+params = []
+remedy = "Choose a value within the parameter's accepted range and resubmit."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.mac_disable_refused"
+class = "none"
+summary = "A mode change would weaken SELinux or AppArmor without the critical-risk flag."
+explanation_key = "error.agent_linux_sys.mac_disable_refused"
+params = []
+remedy = "Keep mandatory access control enforcing; only weaken it with an explicit critical-risk approval."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_linux_sys.mac_unknown"
+class = "none"
+summary = "Neither SELinux nor AppArmor is present, or the mode reported is not recognised."
+explanation_key = "error.agent_linux_sys.mac_unknown"
+params = []
+remedy = "Check the server's mandatory access control configuration, or use a server that runs SELinux or AppArmor."
+since = "0.1.0"

@@ -1,0 +1,4 @@
+# Build artefacts of the standalone real-test crate (its own workspace) and the JUnit XML
+# the container run writes. `tests-real/Cargo.lock` is committed, like every lockfile.
+tests-real/target/
+junit/

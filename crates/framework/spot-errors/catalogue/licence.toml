@@ -1,0 +1,316 @@
+# licence codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "licence.not_yet_valid"
+class = "none"
+summary = "The licence's not_before instant is in the future."
+explanation_key = "error.licence.not_yet_valid"
+params = []
+remedy = "Check the server clock, or install the licence on its start date."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.renewal_due"
+class = "none"
+summary = "The licence is past its renew_after date; running continues with a visible prompt."
+explanation_key = "error.licence.renewal_due"
+params = []
+remedy = "Renew the licence to clear the prompt."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.grace"
+class = "none"
+summary = "The licence is past expiry but inside its grace period, with a visible warning."
+explanation_key = "error.licence.grace"
+params = []
+remedy = "Renew the licence before the grace period ends."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.restricted"
+class = "none"
+summary = "The licence is read-only after grace: open and export stay, new documents stop."
+explanation_key = "error.licence.restricted"
+params = []
+remedy = "Renew or replace the licence to restore writing."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.expired_trial"
+class = "none"
+summary = "The trial is over and nothing runs."
+explanation_key = "error.licence.expired_trial"
+params = []
+remedy = "Start a paid subscription or a new grant."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.renew_first"
+class = "none"
+summary = "The licence must be renewed before anything else can proceed."
+explanation_key = "error.licence.renew_first"
+params = []
+remedy = "Renew the licence; an over trial cannot be renewed with another trial grant."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.clock_suspect"
+class = "none"
+summary = "The clock moved back by more than the tolerance; running like grace with a warning."
+explanation_key = "error.licence.clock_suspect"
+params = []
+remedy = "Verify the server clock and renew to re-anchor."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.clock.steady"
+class = "none"
+summary = "Library-internal clock check: the reading is consistent with the mark."
+explanation_key = "error.licence.clock.steady"
+params = []
+remedy = "For logs and metrics; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.clock.forward"
+class = "none"
+summary = "Library-internal clock check: the clock moved forward and the mark advances."
+explanation_key = "error.licence.clock.forward"
+params = []
+remedy = "For logs and metrics; no action."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.clock.rewind_within_tolerance"
+class = "none"
+summary = "Library-internal clock check: a small rewind was absorbed."
+explanation_key = "error.licence.clock.rewind_within_tolerance"
+params = []
+remedy = "For logs and metrics; watch for repeats."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.clock.rewind_beyond_tolerance"
+class = "none"
+summary = "Library-internal clock check: a rewind beyond tolerance marks the clock suspect."
+explanation_key = "error.licence.clock.rewind_beyond_tolerance"
+params = []
+remedy = "For logs and metrics; the licence runs like grace."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.not_canonical"
+class = "none"
+summary = "The licence payload is not in canonical form."
+explanation_key = "error.licence.not_canonical"
+params = []
+remedy = "Re-issue the licence with the canonical serializer."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.unknown_version"
+class = "none"
+summary = "The licence payload declares a format version this build does not know."
+explanation_key = "error.licence.unknown_version"
+params = []
+remedy = "Update the platform, or re-issue the licence in the supported version."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.serialization"
+class = "none"
+summary = "The licence payload failed to serialize or deserialize."
+explanation_key = "error.licence.serialization"
+params = []
+remedy = "Re-issue the licence; the payload is damaged."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.json"
+class = "none"
+summary = "The licence payload is not valid JSON of the expected shape."
+explanation_key = "error.licence.json"
+params = []
+remedy = "Re-issue the licence; the payload is damaged."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.edition_invalid"
+class = "none"
+summary = "The licence names an edition this build does not know: {edition}."
+explanation_key = "error.licence.edition_invalid"
+params = ["edition"]
+remedy = "Install a build matching the licence's edition."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.holder_invalid"
+class = "none"
+summary = "The licence holder name is not a valid site or tenant name."
+explanation_key = "error.licence.holder_invalid"
+params = []
+remedy = "Re-issue the licence with a correct holder."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.licence_id_invalid"
+class = "none"
+summary = "The licence id is not a valid identifier."
+explanation_key = "error.licence.licence_id_invalid"
+params = []
+remedy = "Re-issue the licence with a correct id."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.licence_id_mismatch"
+class = "none"
+summary = "A renewal's licence id does not match the licence it renews."
+explanation_key = "error.licence.licence_id_mismatch"
+params = []
+remedy = "Renew the licence with the matching id."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.serial_zero"
+class = "none"
+summary = "The licence's serial number is zero; serials start at one."
+explanation_key = "error.licence.serial_zero"
+params = []
+remedy = "Re-issue the licence with a non-zero serial."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.instant_range"
+class = "none"
+summary = "A licence instant is out of representable range or misordered."
+explanation_key = "error.licence.instant_range"
+params = []
+remedy = "Re-issue the licence with correct validity instants."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.window_invalid"
+class = "none"
+summary = "The licence's validity window is misordered (end before start, or negative grace)."
+explanation_key = "error.licence.window_invalid"
+params = []
+remedy = "Re-issue the licence with a correct window."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.grace_too_long"
+class = "none"
+summary = "The licence's grace period exceeds the policy maximum."
+explanation_key = "error.licence.grace_too_long"
+params = []
+remedy = "Re-issue the licence with a shorter grace period."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.kind_invalid"
+class = "none"
+summary = "The licence payload names an unknown kind."
+explanation_key = "error.licence.kind_invalid"
+params = []
+remedy = "Re-issue the licence with a known kind."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.signature_malformed"
+class = "none"
+summary = "The licence signature is not decodable."
+explanation_key = "error.licence.signature_malformed"
+params = []
+remedy = "Re-issue the licence; the signature was damaged in transit."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.signature_invalid"
+class = "none"
+summary = "The licence signature does not verify against any trusted key: {key_id}."
+explanation_key = "error.licence.signature_invalid"
+params = ["key_id"]
+remedy = "Re-issue the licence or add the issuing key to the trusted set."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.key_mismatch"
+class = "none"
+summary = "The licence was signed by a key other than the one its key id names: {key_id}."
+explanation_key = "error.licence.key_mismatch"
+params = ["key_id"]
+remedy = "Re-issue the licence with a consistent signing key."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.key_unknown"
+class = "none"
+summary = "The licence names a key id that is not in the trusted key set: {key_id}."
+explanation_key = "error.licence.key_unknown"
+params = ["key_id"]
+remedy = "Install the issuing key, or re-issue under a trusted key."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.key_expired"
+class = "none"
+summary = "The signing key is past its retirement date: {key_id}."
+explanation_key = "error.licence.key_expired"
+params = ["key_id"]
+remedy = "Rotate to a current signing key and re-issue."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.key_bytes_invalid"
+class = "none"
+summary = "The signing key material does not have the expected length: {key_id}."
+explanation_key = "error.licence.key_bytes_invalid"
+params = ["key_id"]
+remedy = "Re-provision the key from its source."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.key_id_invalid"
+class = "none"
+summary = "The licence names a malformed key id: {key_id}."
+explanation_key = "error.licence.key_id_invalid"
+params = ["key_id"]
+remedy = "Re-issue the licence with a well-formed key id."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.envelope_malformed"
+class = "none"
+summary = "The licence envelope text is not in the SPOT-LICENCE-1 envelope shape."
+explanation_key = "error.licence.envelope_malformed"
+params = []
+remedy = "Send the envelope text exactly as issued, including its header line."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.renewal_invalid"
+class = "none"
+summary = "The renewal payload does not extend the licence correctly."
+explanation_key = "error.licence.renewal_invalid"
+params = []
+remedy = "Renew again from the current licence."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.stale"
+class = "none"
+summary = "The renewal was built for an older serial of this licence."
+explanation_key = "error.licence.stale"
+params = []
+remedy = "Renew the licence's current serial."
+since = "0.1.0"
+
+[[entry]]
+code = "licence.wrong_tenant"
+class = "none"
+summary = "The renewal or licence names another tenant than the installed one."
+explanation_key = "error.licence.wrong_tenant"
+params = []
+remedy = "Issue the licence for the installing tenant."
+since = "0.1.0"

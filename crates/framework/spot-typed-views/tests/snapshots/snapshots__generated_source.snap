@@ -1,0 +1,410 @@
+---
+source: crates/framework/spot-typed-views/tests/snapshots.rs
+expression: generated()
+---
+use spot_app_api::prelude::Decimal;
+use spot_app_api::prelude::{Date, OffsetDateTime, Time};
+use spot_app_api::prelude::{Name, RecordId, Value};
+use spot_app_api::{AppError, AppResult, ChildRow, DocView, Document};
+use spot_app_api::error::ErrorClass;
+use std::collections::BTreeMap;
+/// The type-holding error of the generated getters: a programming error, not user input.
+fn wrong_type(field: &str) -> AppError {
+    AppError::new(
+        ErrorClass::Internal,
+        "generated.document.wrong_type",
+        format!("field `{field}` does not hold the type the view reads"),
+    )
+}
+/// A storage name for a generated accessor: the build checked the spelling, so a
+/// failure here is an `Internal` error, never a panic.
+fn name_of(field: &str) -> AppResult<Name> {
+    Name::new(field)
+        .map_err(|e| {
+            AppError::new(
+                ErrorClass::Internal,
+                "generated.document.invalid_name",
+                e.to_string(),
+            )
+        })
+}
+/// One row field's value: `Null` when the row does not set the field.
+#[must_use]
+pub fn row_value_of<'v>(row: &'v ChildRow, field: &str) -> &'v Value {
+    row.fields.iter().find(|(k, _)| k.as_str() == field).map_or(&Value::Null, |(_, v)| v)
+}
+/// A bool field: `Null` to `None`, otherwise typed, otherwise an error.
+pub fn as_bool_of(value: &Value, field: &str) -> AppResult<Option<bool>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::Bool(b) => Ok(Some(*b)),
+        _ => Err(wrong_type(field)),
+    }
+}
+/// A bytes field: `Null` to `None`, otherwise typed, otherwise an error.
+pub fn as_bytes_of<'v>(value: &'v Value, field: &str) -> AppResult<Option<&'v [u8]>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::Bytes(b) => Ok(Some(b.as_slice())),
+        _ => Err(wrong_type(field)),
+    }
+}
+/// A date field: `Null` to `None`, otherwise typed, otherwise an error.
+pub fn as_date_of(value: &Value, field: &str) -> AppResult<Option<Date>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::Date(d) => Ok(Some(*d)),
+        _ => Err(wrong_type(field)),
+    }
+}
+/// A time field: `Null` to `None`, otherwise typed, otherwise an error.
+pub fn as_time_of(value: &Value, field: &str) -> AppResult<Option<Time>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::Time(t) => Ok(Some(*t)),
+        _ => Err(wrong_type(field)),
+    }
+}
+/// A datetime field: `Null` to `None`, otherwise typed, otherwise an error.
+pub fn as_datetime_of(value: &Value, field: &str) -> AppResult<Option<OffsetDateTime>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::DateTime(dt) => Ok(Some(*dt)),
+        _ => Err(wrong_type(field)),
+    }
+}
+/// Sets one field: the value, or `Null`.
+pub fn generated_set(doc: &mut Document, field: &str, value: Value) -> AppResult<()> {
+    doc.set(name_of(field)?, value);
+    Ok(())
+}
+/// Appends one new row to a child table and returns it, for the row builders.
+pub fn generated_push_row<'d>(
+    doc: &'d mut Document,
+    table: &str,
+    fields: std::collections::BTreeMap<Name, Value>,
+) -> AppResult<&'d ChildRow> {
+    let name = name_of(table)?;
+    let rows = doc.rows_mut(name);
+    rows.push(ChildRow {
+        id: RecordId::new_v7(),
+        fields,
+    });
+    rows.last()
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorClass::Internal,
+                "generated.document.missing_row",
+                format!("the row pushed to `{table}` is not in the table"),
+            )
+        })
+}
+/// The options of the select field: Open, Paid, Overdue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusOption {
+    /// Open
+    Open,
+    /// Paid
+    Paid,
+    /// Overdue
+    Overdue,
+}
+impl StatusOption {
+    /// The stored text of the option.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "Open",
+            Self::Paid => "Paid",
+            Self::Overdue => "Overdue",
+        }
+    }
+    /// The value's stored form: `as_str` is the storage spelling.
+    #[must_use]
+    pub fn as_storage(self) -> &'static str {
+        self.as_str()
+    }
+    /// Parses one stored option. An unknown value is an `AppError`, never a panic:
+    /// the field's options may have been narrowed since the views were built.
+    pub fn parse(text: &str) -> AppResult<Self> {
+        match text {
+            "Open" => Ok(Self::Open),
+            "Paid" => Ok(Self::Paid),
+            "Overdue" => Ok(Self::Overdue),
+            _ => {
+                Err(
+                    AppError::new(
+                        ErrorClass::Internal,
+                        "generated.document.wrong_select_value",
+                        format!("`{text}` is not one of the field's options"),
+                    ),
+                )
+            }
+        }
+    }
+}
+/// One row of the invoice Line child table (`invoice_line`).
+pub struct InvoiceLineRow<'a>(&'a ChildRow);
+impl<'a> InvoiceLineRow<'a> {
+    /// The row's record id.
+    #[must_use]
+    pub fn id(&self) -> RecordId {
+        self.0.id
+    }
+    /// Item (`item`).
+    pub fn item(&self) -> AppResult<Option<&str>> {
+        match row_value_of(self.0, "item") {
+            Value::Null => Ok(None),
+            Value::Text(t) => Ok(Some(t.as_str())),
+            _ => Err(wrong_type("item")),
+        }
+    }
+    /// Quantity (`qty`).
+    pub fn qty(&self) -> AppResult<Option<Decimal>> {
+        match row_value_of(self.0, "qty") {
+            Value::Null => Ok(None),
+            Value::Decimal(d) => Ok(Some(*d)),
+            _ => Err(wrong_type("qty")),
+        }
+    }
+    /// Amount (`amount`).
+    pub fn amount(&self) -> AppResult<Option<Decimal>> {
+        match row_value_of(self.0, "amount") {
+            Value::Null => Ok(None),
+            Value::Decimal(d) => Ok(Some(*d)),
+            _ => Err(wrong_type("amount")),
+        }
+    }
+}
+/// The typed view of the Invoice DocType (posted) (`invoice`).
+pub struct Invoice(Document);
+impl DocView for Invoice {
+    const DOCTYPE: &'static str = "invoice";
+    fn wrap(doc: Document) -> Self {
+        Self(doc)
+    }
+    fn doc(&self) -> &Document {
+        &self.0
+    }
+    fn doc_mut(&mut self) -> &mut Document {
+        &mut self.0
+    }
+    fn into_doc(self) -> Document {
+        self.0
+    }
+}
+impl Invoice {
+    /// Number (`number`).
+    pub fn number(&self) -> AppResult<Option<&str>> {
+        self.0.text("number")
+    }
+    /// Sets number (`number`).
+    pub fn set_number(&mut self, value: Option<&str>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "number", Value::Text(v.to_owned())),
+            None => generated_set(&mut self.0, "number", Value::Null),
+        }
+    }
+    /// Party (`party`).
+    pub fn party(&self) -> AppResult<Option<RecordId>> {
+        self.0.link("party")
+    }
+    /// Sets party (`party`).
+    pub fn set_party(&mut self, value: Option<RecordId>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "party", Value::Id(v)),
+            None => generated_set(&mut self.0, "party", Value::Null),
+        }
+    }
+    /// Posting Date (`posting_date`).
+    pub fn posting_date(&self) -> AppResult<Option<Date>> {
+        as_date_of(self.0.get("posting_date"), "posting_date")
+    }
+    /// Sets posting Date (`posting_date`).
+    pub fn set_posting_date(&mut self, value: Option<Date>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "posting_date", Value::Date(v)),
+            None => generated_set(&mut self.0, "posting_date", Value::Null),
+        }
+    }
+    /// Status (`status`).
+    pub fn status(&self) -> AppResult<Option<StatusOption>> {
+        match self.0.text("status") {
+            Ok(None) => Ok(None),
+            Ok(Some(t)) => StatusOption::parse(t).map(Some),
+            Err(e) => Err(e),
+        }
+    }
+    /// Sets the field from the option (`status`).
+    pub fn set_status(&mut self, value: Option<StatusOption>) -> AppResult<()> {
+        match value {
+            Some(v) => {
+                generated_set(&mut self.0, "status", Value::Text(v.as_str().to_owned()))
+            }
+            None => generated_set(&mut self.0, "status", Value::Null),
+        }
+    }
+    /// An iterator over the typed rows of the lines child table (`lines`).
+    pub fn lines(&self) -> impl Iterator<Item = InvoiceLineRow<'_>> {
+        self.0.rows("lines").iter().map(|row| InvoiceLineRow(row))
+    }
+    /// The mutable rows of the lines child table (`lines`): append here, edit through the typed row getters.
+    pub fn lines_mut(&mut self) -> AppResult<&mut Vec<ChildRow>> {
+        Ok(self.0.rows_mut(name_of("lines")?))
+    }
+    /// Appends one new, empty row to the lines child table (`lines`) and returns it, for the typed row setters.
+    pub fn new_lines(&mut self) -> AppResult<InvoiceLineRow<'_>> {
+        let pushed = generated_push_row(&mut self.0, "lines", BTreeMap::new())?;
+        Ok(InvoiceLineRow(pushed))
+    }
+    /// Total (`total`).
+    pub fn total(&self) -> AppResult<Option<Decimal>> {
+        self.0.decimal("total")
+    }
+    /// Sets total (`total`).
+    pub fn set_total(&mut self, value: Option<Decimal>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "total", Value::Decimal(v)),
+            None => generated_set(&mut self.0, "total", Value::Null),
+        }
+    }
+    /// remarks (`remarks`).
+    pub fn remarks(&self) -> AppResult<Option<&str>> {
+        self.0.text("remarks")
+    }
+    /// Sets remarks (`remarks`).
+    pub fn set_remarks(&mut self, value: Option<&str>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "remarks", Value::Text(v.to_owned())),
+            None => generated_set(&mut self.0, "remarks", Value::Null),
+        }
+    }
+}
+/// The typed view of the Invoice Line DocType (`invoice_line`).
+pub struct InvoiceLine(Document);
+impl DocView for InvoiceLine {
+    const DOCTYPE: &'static str = "invoice_line";
+    fn wrap(doc: Document) -> Self {
+        Self(doc)
+    }
+    fn doc(&self) -> &Document {
+        &self.0
+    }
+    fn doc_mut(&mut self) -> &mut Document {
+        &mut self.0
+    }
+    fn into_doc(self) -> Document {
+        self.0
+    }
+}
+impl InvoiceLine {
+    /// Item (`item`).
+    pub fn item(&self) -> AppResult<Option<&str>> {
+        self.0.text("item")
+    }
+    /// Sets item (`item`).
+    pub fn set_item(&mut self, value: Option<&str>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "item", Value::Text(v.to_owned())),
+            None => generated_set(&mut self.0, "item", Value::Null),
+        }
+    }
+    /// Quantity (`qty`).
+    pub fn qty(&self) -> AppResult<Option<Decimal>> {
+        self.0.decimal("qty")
+    }
+    /// Sets quantity (`qty`).
+    pub fn set_qty(&mut self, value: Option<Decimal>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "qty", Value::Decimal(v)),
+            None => generated_set(&mut self.0, "qty", Value::Null),
+        }
+    }
+    /// Amount (`amount`).
+    pub fn amount(&self) -> AppResult<Option<Decimal>> {
+        self.0.decimal("amount")
+    }
+    /// Sets amount (`amount`).
+    pub fn set_amount(&mut self, value: Option<Decimal>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "amount", Value::Decimal(v)),
+            None => generated_set(&mut self.0, "amount", Value::Null),
+        }
+    }
+}
+/// The typed view of the Party DocType (`party`).
+pub struct Party(Document);
+impl DocView for Party {
+    const DOCTYPE: &'static str = "party";
+    fn wrap(doc: Document) -> Self {
+        Self(doc)
+    }
+    fn doc(&self) -> &Document {
+        &self.0
+    }
+    fn doc_mut(&mut self) -> &mut Document {
+        &mut self.0
+    }
+    fn into_doc(self) -> Document {
+        self.0
+    }
+}
+impl Party {
+    /// Code (`code`).
+    pub fn code(&self) -> AppResult<Option<&str>> {
+        self.0.text("code")
+    }
+    /// Sets code (`code`).
+    pub fn set_code(&mut self, value: Option<&str>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "code", Value::Text(v.to_owned())),
+            None => generated_set(&mut self.0, "code", Value::Null),
+        }
+    }
+    /// active (`active`).
+    pub fn active(&self) -> AppResult<Option<bool>> {
+        as_bool_of(self.0.get("active"), "active")
+    }
+    /// Sets active (`active`).
+    pub fn set_active(&mut self, value: Option<bool>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "active", Value::Bool(v)),
+            None => generated_set(&mut self.0, "active", Value::Null),
+        }
+    }
+    /// About Type (`about_type`).
+    pub fn about_type(&self) -> AppResult<Option<&str>> {
+        self.0.text("about_type")
+    }
+    /// Sets about Type (`about_type`).
+    pub fn set_about_type(&mut self, value: Option<&str>) -> AppResult<()> {
+        match value {
+            Some(v) => {
+                generated_set(&mut self.0, "about_type", Value::Text(v.to_owned()))
+            }
+            None => generated_set(&mut self.0, "about_type", Value::Null),
+        }
+    }
+    /// About (`about`).
+    pub fn about(&self) -> AppResult<Option<RecordId>> {
+        self.0.link("about")
+    }
+    /// Sets about (`about`).
+    pub fn set_about(&mut self, value: Option<RecordId>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "about", Value::Id(v)),
+            None => generated_set(&mut self.0, "about", Value::Null),
+        }
+    }
+    /// since (`since`).
+    pub fn since(&self) -> AppResult<Option<OffsetDateTime>> {
+        as_datetime_of(self.0.get("since"), "since")
+    }
+    /// Sets since (`since`).
+    pub fn set_since(&mut self, value: Option<OffsetDateTime>) -> AppResult<()> {
+        match value {
+            Some(v) => generated_set(&mut self.0, "since", Value::DateTime(v)),
+            None => generated_set(&mut self.0, "since", Value::Null),
+        }
+    }
+}

@@ -1,0 +1,6 @@
+# Pinned tools for check.py (WP-CON-03.T55). The same versions contracts/native-api already
+# pins; installed into a throwaway venv (see contracts/native-api/requirements.txt and its
+# tools/lints/native-api/run.sh for the pattern). Never needed at runtime.
+PyYAML==6.0.3
+jsonschema==4.25.1
+openapi-spec-validator==0.7.2

@@ -1,0 +1,93 @@
+# store_state codes: the store server's durable state (WP-STR-03.T4): the port's refusals and
+# the PostgreSQL setup codes. A bridge or database failure of a call is store_state.backend with a
+# fixed sentence. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "store_state.bad_transition"
+class = "none"
+summary = "The listing state of a version does not allow that transition, or another writer made it first."
+explanation_key = "error.store_state.bad_transition"
+params = []
+remedy = "Read the current listing state with listing(); only a missing row may become pending_review, pending_review may become listed or rejected, and listed may become withdrawn."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.key_unknown"
+class = "none"
+summary = "No publisher key with that id is stored."
+explanation_key = "error.store_state.key_unknown"
+params = []
+remedy = "List the publisher's keys and use an id from the list; a revoked key still has its id."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.duplicate_key_hash"
+class = "none"
+summary = "A publisher key with that hash is already stored."
+explanation_key = "error.store_state.duplicate_key_hash"
+params = []
+remedy = "Generate a fresh random key; never reissue an existing one."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.idempotency_conflict"
+class = "none"
+summary = "The idempotency key is already bound to another request or to another review."
+explanation_key = "error.store_state.idempotency_conflict"
+params = []
+remedy = "Use a new idempotency key for a different request, or retry the original request unchanged."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.review_unknown"
+class = "none"
+summary = "No review with that id is stored."
+explanation_key = "error.store_state.review_unknown"
+params = []
+remedy = "Create the review before updating it or binding an idempotency key to it."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.too_large"
+class = "none"
+summary = "A value is empty, too long or too large for the store state and was refused, not truncated."
+explanation_key = "error.store_state.too_large"
+params = []
+remedy = "Shorten the value to the documented bound (identifiers 128 bytes, reasons 1 KiB, summaries 64 KiB, a revocation list 1 MiB, a listing check 1000 candidates)."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.bad_summary"
+class = "none"
+summary = "A review summary is not one JSON document."
+explanation_key = "error.store_state.bad_summary"
+params = []
+remedy = "Give the review summary as a single valid JSON value."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.backend"
+class = "none"
+summary = "The store state backend failed: the database or the bridge refused or timed out, or a stored row could not be read."
+explanation_key = "error.store_state.backend"
+params = []
+remedy = "Check the database and the bridge limits; the sentence names the bridge code (pg_bridge.busy, timeout, wrong_thread and so on). A wrong_thread refusal means the call came from a tokio thread: call from a plain worker thread."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.bad_setup"
+class = "none"
+summary = "The PostgreSQL store state could not be built: the bridge settings do not hold against the pool, or the caller is inside a current-thread runtime."
+explanation_key = "error.store_state.bad_setup"
+params = []
+remedy = "Build the store from a plain thread of the control-plane process, with a bridge whose max_in_flight is at least one below the pool size minus the bridge reserve."
+since = "0.1.0"
+
+[[entry]]
+code = "store_state.migration_failed"
+class = "none"
+summary = "The store state tables could not be created in the control schema."
+explanation_key = "error.store_state.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, indexes and a trigger function in the spot_control schema and that the server is reachable, then call prepare again."
+since = "0.1.0"

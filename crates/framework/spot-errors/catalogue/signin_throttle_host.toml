@@ -1,0 +1,31 @@
+# signin_throttle_host codes: the hosting of the coordinator sign-in throttle (WP-IAM-11.T23).
+# A credential door that cannot be admitted because the throttle could not count (fail closed)
+# answers `server.unavailable` with Retry-After; the password door answers with the sign-in
+# service's own `login.admission_unavailable`.
+
+[[entry]]
+code = "signin_throttle_host.settings_invalid"
+class = "none"
+summary = "[services.signin_throttle] holds a limit the throttle refuses (a zero capacity or window, or a tenant ceiling slower than the per-source limit)."
+explanation_key = "error.signin_throttle_host.settings_invalid"
+params = []
+remedy = "Give every limit a capacity and a window above zero, and a per-tenant rate at least as fast as the per-source rate."
+since = "0.1.0"
+
+[[entry]]
+code = "signin_throttle_host.salt_unavailable"
+class = "none"
+summary = "The sign-in throttle could not load its salt ring from the secrets service, so the site refuses to start."
+explanation_key = "error.signin_throttle_host.salt_unavailable"
+params = []
+remedy = "Check that [services.secrets] is configured and its key file is readable, then restart."
+since = "0.1.0"
+
+[[entry]]
+code = "signin_throttle_host.coordinator_unavailable"
+class = "none"
+summary = "The coordinator tables of the sign-in throttle could not be prepared in the site database."
+explanation_key = "error.signin_throttle_host.coordinator_unavailable"
+params = []
+remedy = "Check the database connection and that the site's database user may create the coordinator tables."
+since = "0.1.0"

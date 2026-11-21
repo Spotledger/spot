@@ -1,0 +1,10 @@
+# service codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "service.not_configured"
+class = "none"
+summary = "The site has no {service} configured, so the endpoint answers 501."
+explanation_key = "error.service.not_configured"
+params = ["service"]
+remedy = "Configure the named optional service for this site, or do not call its endpoints."
+since = "0.1.0"

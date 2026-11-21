@@ -1,0 +1,25 @@
+doctype = "sales_invoice"
+kind = "list"
+title = "Sales Invoice"
+
+[[columns]]
+field = "customer"
+
+[[columns]]
+field = "amended_from"
+
+[[columns]]
+field = "posting_date"
+
+[[columns]]
+field = "due_date"
+
+[[columns]]
+field = "grand_total"
+
+[[columns]]
+field = "doc_state"
+
+[sort]
+field = "posting_date"
+descending = true

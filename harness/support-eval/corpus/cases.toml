@@ -1,0 +1,101 @@
+# The support-case corpus the scripted policy matches against, in the `spot-remedies` corpus
+# format. It maps evidence signatures to a catalogued remedy; the correct parameters come from
+# the diagnosis's targets, never from an incident's expected resolution.
+
+[[case]]
+id = "job-failed-retry"
+symptom = "A background job failed and its work never completed."
+evidence = ["job.failed", "job.attempts_exhausted"]
+remedy = "job.retry_failed"
+outcome = "resolved"
+
+[case.params]
+job_id = "job-1"
+
+[[case]]
+id = "job-stuck-running"
+symptom = "A job is running but its worker lease expired and nothing progresses."
+evidence = ["job.running", "job.lease_expired"]
+remedy = "job.unstick_running"
+outcome = "resolved"
+
+[case.params]
+job_id = "job-1"
+
+[[case]]
+id = "case-stuck"
+symptom = "A BPM case has no running node and no ready node."
+evidence = ["case.stuck"]
+remedy = "case.unstick"
+outcome = "resolved"
+
+[case.params]
+case_id = "case-1"
+
+[[case]]
+id = "quarantine-held"
+symptom = "A sync item is held in quarantine after replica apply rejected it."
+evidence = ["quarantine.held", "sync.item_quarantined"]
+remedy = "quarantine.retry_all"
+outcome = "resolved"
+
+[[case]]
+id = "cache-poisoned"
+symptom = "A cache namespace serves stale or poisoned entries."
+evidence = ["cache.poisoned", "cache.optimistic"]
+remedy = "cache.flush_namespace"
+outcome = "resolved"
+
+[case.params]
+namespace = "cache"
+
+[[case]]
+id = "permission-cache-stale"
+symptom = "A role or assignment change is not reflected because the permission cache is stale."
+evidence = ["permission.stale", "cache.optimistic"]
+remedy = "cache.flush_namespace"
+outcome = "resolved"
+
+[case.params]
+namespace = "permissions"
+
+[[case]]
+id = "config-cache-stale"
+symptom = "A saved configuration change is not visible because the config cache is stale."
+evidence = ["config.stale", "cache.optimistic"]
+remedy = "cache.flush_namespace"
+outcome = "resolved"
+
+[case.params]
+namespace = "config"
+
+[[case]]
+id = "index-stale-after-upgrade"
+symptom = "An app upgrade left a retrieval index stale."
+evidence = ["index.stale", "app.upgrade_failed"]
+remedy = "index.rebuild_retrieval"
+outcome = "resolved"
+
+[case.params]
+index = "retrieval"
+
+[[case]]
+id = "edge-drift"
+symptom = "An edge holds fewer records than its source."
+evidence = ["edge.drift"]
+remedy = "edge.repair_drift"
+outcome = "resolved"
+
+[case.params]
+edge = "edge-1"
+
+[[case]]
+id = "finance-field-wrong"
+symptom = "A submitted financial record has a wrong derived field."
+evidence = ["document.submitted_financial", "finance.field_wrong"]
+remedy = "document.recompute_field"
+outcome = "resolved"
+
+[case.params]
+document = "doc-1"
+field = "total"

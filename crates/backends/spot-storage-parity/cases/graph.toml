@@ -1,0 +1,646 @@
+# Graph traversal (SEM-GRA-01..08, contracts/storage graph.rs). Every case runs on the fake and on PostgreSQL.
+# The expected nodes were computed by an independent reference traversal; an id orders by the
+# moment its name is first mentioned (setup lines in order, then the start nodes).
+
+[[case]]
+id = "gra-01-a-chain-reports-each-node-once-at-its-depth"
+rule = "SEM-GRA-01"
+title = "a chain a to d gives each node once at its depth, the start at 0"
+catalog = "graph"
+setup = [
+  'd code="t:d"',
+  'c code="t:c" next="id:d"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next", "item:c@2<b:next", "item:d@3<c:next"] }
+
+[[case]]
+id = "gra-01-a-shortcut-gives-the-smaller-depth"
+rule = "SEM-GRA-01"
+title = "c is reachable at depth 1 through ref and at depth 2 through next: reported once, at 1"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b" ref="id:c"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next", "item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:c@1<a:ref", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-01-a-missing-start-node-is-omitted"
+rule = "SEM-GRA-01"
+title = "a start node that does not exist is left out, the other one is reported"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a", "item:zz"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-01-only-missing-start-nodes-give-an-empty-result"
+rule = "SEM-GRA-01"
+title = "when no start node exists the result is empty"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:q", "item:r"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = [] }
+
+[[case]]
+id = "gra-01-two-starts-whose-frontiers-meet-report-the-node-once"
+rule = "SEM-GRA-01"
+title = "two start nodes pointing at one node: it is reported once, the smaller start is its predecessor"
+catalog = "graph"
+setup = [
+  'x code="t:x"',
+  'b code="t:b" next="id:x"',
+  'a code="t:a" next="id:x"',
+]
+op = "traverse"
+traversal = { start = ["item:a", "item:b"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:a@0", "item:x@1<b:next"] }
+
+[[case]]
+id = "gra-01-a-start-inside-the-reach-of-another-stays-at-depth-zero"
+rule = "SEM-GRA-01"
+title = "a start node that another start reaches stays at depth 0"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a", "item:b"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:a@0", "item:c@1<b:next"] }
+
+[[case]]
+id = "gra-01-a-deleted-node-is-no-longer-reachable"
+rule = "SEM-GRA-01"
+title = "a was deleted: incoming from b gives b only"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+  'delete a',
+]
+op = "traverse"
+traversal = { start = ["item:b"], edges = ["item.next"], direction = "in", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0"] }
+
+[[case]]
+id = "gra-01-a-traversal-sees-the-transactions-own-writes"
+rule = "SEM-GRA-01"
+title = "z is inserted in the same transaction as the traversal and is walked from"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+write = [
+  'z code="t:z" next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:z"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:z@0", "item:a@1<z:next", "item:b@2<a:next"] }
+
+[[case]]
+id = "gra-02-nodes-of-one-depth-come-in-id-order"
+rule = "SEM-GRA-02"
+title = "three nodes pointing at the hub come back in id order, which is creation order here"
+catalog = "graph"
+setup = [
+  'hub code="t:hub"',
+  'b code="t:b" next="id:hub"',
+  'c code="t:c" next="id:hub"',
+  'd code="t:d" next="id:hub"',
+]
+op = "traverse"
+traversal = { start = ["item:hub"], edges = ["item.next"], direction = "in", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:hub@0", "item:b@1<hub:next", "item:c@1<hub:next", "item:d@1<hub:next"] }
+
+[[case]]
+id = "gra-02-the-order-is-the-id-not-the-name"
+rule = "SEM-GRA-02"
+title = "created d, c, b the ids order d, c, b: the result follows the id, not the alphabet"
+catalog = "graph"
+setup = [
+  'hub code="t:hub"',
+  'd code="t:d" next="id:hub"',
+  'c code="t:c" next="id:hub"',
+  'b code="t:b" next="id:hub"',
+]
+op = "traverse"
+traversal = { start = ["item:hub"], edges = ["item.next"], direction = "in", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:hub@0", "item:d@1<hub:next", "item:c@1<hub:next", "item:b@1<hub:next"] }
+
+[[case]]
+id = "gra-02-depth-comes-before-entity-and-id"
+rule = "SEM-GRA-02"
+title = "the start item, then depth 1 (item before party), then depth 2"
+catalog = "graph"
+setup = [
+  'p code="t:p" @entity=party',
+  'b code="t:b" owner="id:p"',
+  'a code="t:a" next="id:b" owner="id:p"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next", "item.owner"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next", "party:p@1<a:owner"] }
+
+[[case]]
+id = "gra-02-entity-orders-nodes-of-equal-depth"
+rule = "SEM-GRA-02"
+title = "item sorts before party at the same depth"
+catalog = "graph"
+setup = [
+  'p code="t:p" @entity=party',
+  'a code="t:a" owner="id:p"',
+  'b code="t:b" next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:b"], edges = ["item.next", "item.owner"], direction = "both", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:a@1<b:next", "party:p@2<a:owner"] }
+
+[[case]]
+id = "gra-03-the-smaller-predecessor-wins-a-diamond"
+rule = "SEM-GRA-03"
+title = "p1 and p2 both reach t at depth 2: the predecessor is the one with the smaller id"
+catalog = "graph"
+setup = [
+  't code="t:t"',
+  'p1 code="t:p1" next="id:t"',
+  'p2 code="t:p2" next="id:t"',
+  's code="t:s" next="id:p1" ref="id:p2"',
+]
+op = "traverse"
+traversal = { start = ["item:s"], edges = ["item.next", "item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:s@0", "item:p1@1<s:next", "item:p2@1<s:ref", "item:t@2<p1:next"] }
+
+[[case]]
+id = "gra-03-the-smaller-id-not-the-smaller-name-wins"
+rule = "SEM-GRA-03"
+title = "created p2 first, so p2 has the smaller id and is the predecessor although its name is larger"
+catalog = "graph"
+setup = [
+  't code="t:t"',
+  'p2 code="t:p2" next="id:t"',
+  'p1 code="t:p1" next="id:t"',
+  's code="t:s" next="id:p1" ref="id:p2"',
+]
+op = "traverse"
+traversal = { start = ["item:s"], edges = ["item.next", "item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:s@0", "item:p2@1<s:ref", "item:p1@1<s:next", "item:t@2<p2:next"] }
+
+[[case]]
+id = "gra-03-the-via-names-the-edge-type-used"
+rule = "SEM-GRA-03"
+title = "the predecessor reached t through ref, and the via says ref"
+catalog = "graph"
+setup = [
+  't code="t:t"',
+  'p1 code="t:p1" ref="id:t"',
+  'p2 code="t:p2" next="id:t"',
+  's code="t:s" next="id:p1" ref="id:p2"',
+]
+op = "traverse"
+traversal = { start = ["item:s"], edges = ["item.next", "item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:s@0", "item:p1@1<s:next", "item:p2@1<s:ref", "item:t@2<p1:ref"] }
+
+[[case]]
+id = "gra-04-a-cycle-of-three-terminates"
+rule = "SEM-GRA-04"
+title = "a to b to c to a: each node once"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'b code="t:b"',
+  'c code="t:c"',
+  'update a next="id:b"',
+  'update b next="id:c"',
+  'update c next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 10, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next", "item:c@2<b:next"] }
+
+[[case]]
+id = "gra-04-a-cycle-backwards"
+rule = "SEM-GRA-04"
+title = "the three-cycle followed backwards from a gives c then b"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'b code="t:b"',
+  'c code="t:c"',
+  'update a next="id:b"',
+  'update b next="id:c"',
+  'update c next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "in", max_depth = 10, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:c@1<a:next", "item:b@2<c:next"] }
+
+[[case]]
+id = "gra-04-a-self-loop-reports-nothing-twice"
+rule = "SEM-GRA-04"
+title = "a points at itself: the start is reported once"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'update a next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0"] }
+
+[[case]]
+id = "gra-04-a-two-cycle-with-both-directions"
+rule = "SEM-GRA-04"
+title = "a and b point at each other, followed both ways: two nodes, once each"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'b code="t:b"',
+  'update a next="id:b"',
+  'update b next="id:a"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "both", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-05-outgoing-follows-the-link-forward"
+rule = "SEM-GRA-05"
+title = "from b outgoing: b and c"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:b"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:c@1<b:next"] }
+
+[[case]]
+id = "gra-05-incoming-follows-the-link-backwards"
+rule = "SEM-GRA-05"
+title = "from b incoming: b and a"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:b"], edges = ["item.next"], direction = "in", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:a@1<b:next"] }
+
+[[case]]
+id = "gra-05-both-follows-either-way"
+rule = "SEM-GRA-05"
+title = "from b both: b, then c and a at depth 1 in id order"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:b"], edges = ["item.next"], direction = "both", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:b@0", "item:c@1<b:next", "item:a@1<b:next"] }
+
+[[case]]
+id = "gra-05-a-node-reached-both-ways-appears-once"
+rule = "SEM-GRA-05"
+title = "a and b point at each other: b is reached by one edge each way and appears once"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'b code="t:b" next="id:a"',
+  'update a next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "both", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-06-only-the-named-edge-is-followed-next"
+rule = "SEM-GRA-06"
+title = "with next only, c (reached by ref) is not reached"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b"',
+  'a code="t:a" next="id:b" ref="id:c"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-06-only-the-named-edge-is-followed-ref"
+rule = "SEM-GRA-06"
+title = "with ref only, b is not reached"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b"',
+  'a code="t:a" next="id:b" ref="id:c"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:c@1<a:ref"] }
+
+[[case]]
+id = "gra-06-two-edge-types-are-both-followed"
+rule = "SEM-GRA-06"
+title = "with both edge types, c and b are at depth 1 in id order"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b"',
+  'a code="t:a" next="id:b" ref="id:c"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next", "item.ref"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:c@1<a:ref", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-06-a-link-to-another-entity-is-an-edge"
+rule = "SEM-GRA-06"
+title = "owner points at a party: the party is reached at depth 1"
+catalog = "graph"
+setup = [
+  'p code="t:p" @entity=party',
+  'a code="t:a" owner="id:p"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.owner"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "party:p@1<a:owner"] }
+
+[[case]]
+id = "gra-06-the-parent-of-a-child-entity-is-an-edge-down"
+rule = "SEM-GRA-06"
+title = "from a incoming over parent: its two lines"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'a.lines label="t:one"',
+  'a.lines label="t:two"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item_line.parent"], direction = "in", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item_line:a.lines.1@1<a:parent", "item_line:a.lines.2@1<a:parent"] }
+
+[[case]]
+id = "gra-06-the-parent-of-a-child-entity-is-an-edge-up"
+rule = "SEM-GRA-06"
+title = "from the line outgoing over parent: the line and its document"
+catalog = "graph"
+setup = [
+  'a code="t:a"',
+  'a.lines label="t:one"',
+]
+op = "traverse"
+traversal = { start = ["item_line:a.lines.1"], edges = ["item_line.parent"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { nodes = ["item_line:a.lines.1@0", "item:a@1<a.lines.1:parent"] }
+
+[[case]]
+id = "gra-07-max-depth-one-bounds-the-depth-returned"
+rule = "SEM-GRA-07"
+title = "max_depth 1 returns a and b only"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 1, max_nodes = 100 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-07-max-nodes-equal-to-the-reachable-count-is-ok"
+rule = "SEM-GRA-07"
+title = "three nodes reachable, max_nodes 3: ok"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 3 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next", "item:c@2<b:next"] }
+
+[[case]]
+id = "gra-07-max-nodes-one-less-is-too-large"
+rule = "SEM-GRA-07"
+title = "three nodes reachable, max_nodes 2: traversal_too_large, not a truncated list"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 2 }
+expect = { error = "traversal_too_large" }
+
+[[case]]
+id = "gra-07-start-nodes-count-towards-max-nodes"
+rule = "SEM-GRA-07"
+title = "two start nodes and max_nodes 1 is too large"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a", "item:b"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 1 }
+expect = { error = "traversal_too_large" }
+
+[[case]]
+id = "gra-07-nodes-beyond-max-depth-do-not-count"
+rule = "SEM-GRA-07"
+title = "max_depth 1 and max_nodes 2: c is beyond the depth and not counted"
+catalog = "graph"
+setup = [
+  'c code="t:c"',
+  'b code="t:b" next="id:c"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 1, max_nodes = 2 }
+expect = { nodes = ["item:a@0", "item:b@1<a:next"] }
+
+[[case]]
+id = "gra-07-max-depth-64-returns-65-nodes-of-a-longer-chain"
+rule = "SEM-GRA-07"
+title = "a chain of 66 nodes with max_depth 64: 65 nodes (depth 0 to 64)"
+catalog = "graph"
+setup = [
+  'n65 code="t:n65"',
+  'n64 code="t:n64" next="id:n65"',
+  'n63 code="t:n63" next="id:n64"',
+  'n62 code="t:n62" next="id:n63"',
+  'n61 code="t:n61" next="id:n62"',
+  'n60 code="t:n60" next="id:n61"',
+  'n59 code="t:n59" next="id:n60"',
+  'n58 code="t:n58" next="id:n59"',
+  'n57 code="t:n57" next="id:n58"',
+  'n56 code="t:n56" next="id:n57"',
+  'n55 code="t:n55" next="id:n56"',
+  'n54 code="t:n54" next="id:n55"',
+  'n53 code="t:n53" next="id:n54"',
+  'n52 code="t:n52" next="id:n53"',
+  'n51 code="t:n51" next="id:n52"',
+  'n50 code="t:n50" next="id:n51"',
+  'n49 code="t:n49" next="id:n50"',
+  'n48 code="t:n48" next="id:n49"',
+  'n47 code="t:n47" next="id:n48"',
+  'n46 code="t:n46" next="id:n47"',
+  'n45 code="t:n45" next="id:n46"',
+  'n44 code="t:n44" next="id:n45"',
+  'n43 code="t:n43" next="id:n44"',
+  'n42 code="t:n42" next="id:n43"',
+  'n41 code="t:n41" next="id:n42"',
+  'n40 code="t:n40" next="id:n41"',
+  'n39 code="t:n39" next="id:n40"',
+  'n38 code="t:n38" next="id:n39"',
+  'n37 code="t:n37" next="id:n38"',
+  'n36 code="t:n36" next="id:n37"',
+  'n35 code="t:n35" next="id:n36"',
+  'n34 code="t:n34" next="id:n35"',
+  'n33 code="t:n33" next="id:n34"',
+  'n32 code="t:n32" next="id:n33"',
+  'n31 code="t:n31" next="id:n32"',
+  'n30 code="t:n30" next="id:n31"',
+  'n29 code="t:n29" next="id:n30"',
+  'n28 code="t:n28" next="id:n29"',
+  'n27 code="t:n27" next="id:n28"',
+  'n26 code="t:n26" next="id:n27"',
+  'n25 code="t:n25" next="id:n26"',
+  'n24 code="t:n24" next="id:n25"',
+  'n23 code="t:n23" next="id:n24"',
+  'n22 code="t:n22" next="id:n23"',
+  'n21 code="t:n21" next="id:n22"',
+  'n20 code="t:n20" next="id:n21"',
+  'n19 code="t:n19" next="id:n20"',
+  'n18 code="t:n18" next="id:n19"',
+  'n17 code="t:n17" next="id:n18"',
+  'n16 code="t:n16" next="id:n17"',
+  'n15 code="t:n15" next="id:n16"',
+  'n14 code="t:n14" next="id:n15"',
+  'n13 code="t:n13" next="id:n14"',
+  'n12 code="t:n12" next="id:n13"',
+  'n11 code="t:n11" next="id:n12"',
+  'n10 code="t:n10" next="id:n11"',
+  'n09 code="t:n09" next="id:n10"',
+  'n08 code="t:n08" next="id:n09"',
+  'n07 code="t:n07" next="id:n08"',
+  'n06 code="t:n06" next="id:n07"',
+  'n05 code="t:n05" next="id:n06"',
+  'n04 code="t:n04" next="id:n05"',
+  'n03 code="t:n03" next="id:n04"',
+  'n02 code="t:n02" next="id:n03"',
+  'n01 code="t:n01" next="id:n02"',
+  'n00 code="t:n00" next="id:n01"',
+]
+op = "traverse"
+traversal = { start = ["item:n00"], edges = ["item.next"], direction = "out", max_depth = 64, max_nodes = 100 }
+expect = { nodes = ["item:n00@0", "item:n01@1<n00:next", "item:n02@2<n01:next", "item:n03@3<n02:next", "item:n04@4<n03:next", "item:n05@5<n04:next", "item:n06@6<n05:next", "item:n07@7<n06:next", "item:n08@8<n07:next", "item:n09@9<n08:next", "item:n10@10<n09:next", "item:n11@11<n10:next", "item:n12@12<n11:next", "item:n13@13<n12:next", "item:n14@14<n13:next", "item:n15@15<n14:next", "item:n16@16<n15:next", "item:n17@17<n16:next", "item:n18@18<n17:next", "item:n19@19<n18:next", "item:n20@20<n19:next", "item:n21@21<n20:next", "item:n22@22<n21:next", "item:n23@23<n22:next", "item:n24@24<n23:next", "item:n25@25<n24:next", "item:n26@26<n25:next", "item:n27@27<n26:next", "item:n28@28<n27:next", "item:n29@29<n28:next", "item:n30@30<n29:next", "item:n31@31<n30:next", "item:n32@32<n31:next", "item:n33@33<n32:next", "item:n34@34<n33:next", "item:n35@35<n34:next", "item:n36@36<n35:next", "item:n37@37<n36:next", "item:n38@38<n37:next", "item:n39@39<n38:next", "item:n40@40<n39:next", "item:n41@41<n40:next", "item:n42@42<n41:next", "item:n43@43<n42:next", "item:n44@44<n43:next", "item:n45@45<n44:next", "item:n46@46<n45:next", "item:n47@47<n46:next", "item:n48@48<n47:next", "item:n49@49<n48:next", "item:n50@50<n49:next", "item:n51@51<n50:next", "item:n52@52<n51:next", "item:n53@53<n52:next", "item:n54@54<n53:next", "item:n55@55<n54:next", "item:n56@56<n55:next", "item:n57@57<n56:next", "item:n58@58<n57:next", "item:n59@59<n58:next", "item:n60@60<n59:next", "item:n61@61<n60:next", "item:n62@62<n61:next", "item:n63@63<n62:next", "item:n64@64<n63:next"] }
+
+[[case]]
+id = "gra-08-an-edge-that-is-not-a-link-field-is-refused"
+rule = "SEM-GRA-08"
+title = "item.code is not a link field"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.code"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "gra-08-an-unknown-edge-field-is-refused"
+rule = "SEM-GRA-08"
+title = "item.nothing does not exist"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.nothing"], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "gra-08-depth-zero-is-refused"
+rule = "SEM-GRA-08"
+title = "max_depth 0"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 0, max_nodes = 100 }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "gra-08-depth-above-64-is-refused"
+rule = "SEM-GRA-08"
+title = "max_depth 65"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 65, max_nodes = 100 }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "gra-08-an-empty-edge-list-is-refused"
+rule = "SEM-GRA-08"
+title = "no edge types"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = [], direction = "out", max_depth = 5, max_nodes = 100 }
+expect = { error = "invalid_query" }
+
+[[case]]
+id = "gra-08-zero-max-nodes-is-refused"
+rule = "SEM-GRA-08"
+title = "max_nodes 0"
+catalog = "graph"
+setup = [
+  'b code="t:b"',
+  'a code="t:a" next="id:b"',
+]
+op = "traverse"
+traversal = { start = ["item:a"], edges = ["item.next"], direction = "out", max_depth = 5, max_nodes = 0 }
+expect = { error = "invalid_query" }
+

@@ -1,0 +1,154 @@
+# llm_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "llm_host.settings_invalid"
+class = "none"
+summary = "The [services.llm] table has an unknown key, a value of the wrong type or out of range, a tenant entry that does not validate, or redaction rules that do not compile, so the LLM service cannot start."
+explanation_key = "error.llm_host.settings_invalid"
+params = []
+remedy = "Fix the table named in the message: check each [[services.llm.tenants]] entry (kind, endpoint, model, allowed_hosts, tasks, price, budget) against the LLM service page of the operator guide."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.config_invalid"
+class = "none"
+summary = "The LLM configuration offered for a tenant is refused: the endpoint carries credentials or a query, the allowed hosts do not cover the endpoint, or a budget is set without a price."
+explanation_key = "error.llm_host.config_invalid"
+params = []
+remedy = "Remove credentials and query from the endpoint, add the endpoint's host to allowed_hosts, and give the model a price when you set a budget."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.not_configured"
+class = "none"
+summary = "The tenant has no LLM configuration, so no call to a language model is made."
+explanation_key = "error.llm_host.not_configured"
+params = []
+remedy = "Configure the tenant's provider, endpoint and model, then enter its key."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.task_unknown"
+class = "none"
+summary = "The call names a task that the tenant's LLM configuration does not list, so nothing is sent."
+explanation_key = "error.llm_host.task_unknown"
+params = []
+remedy = "Add the task to the tenant's tasks list, or call one of the tasks it already lists."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.key_missing"
+class = "none"
+summary = "The tenant has no provider key stored, so no call to the provider is made."
+explanation_key = "error.llm_host.key_missing"
+params = []
+remedy = "Enter the tenant's provider key (write-only) in the secrets service and repeat."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.key_unusable"
+class = "none"
+summary = "The tenant's stored provider key cannot be opened with the site's secrets keys, so no call is made."
+explanation_key = "error.llm_host.key_unusable"
+params = []
+remedy = "Enter the provider key again; if it keeps failing, check the site's secrets keyring."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.endpoint_not_allowed"
+class = "none"
+summary = "The provider endpoint is not on the tenant's allowed host list, so nothing is sent to it."
+explanation_key = "error.llm_host.endpoint_not_allowed"
+params = []
+remedy = "Add the endpoint's host to the tenant's allowed_hosts, or correct the endpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.endpoint_denied"
+class = "none"
+summary = "The egress policy refused the provider endpoint (host not allowed by policy, private address or another guard rule), so nothing is sent to it."
+explanation_key = "error.llm_host.endpoint_denied"
+params = []
+remedy = "Allow the host in the egress policy for this tenant, or use a public endpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.budget_exceeded"
+class = "none"
+summary = "The tenant's LLM budget for the current period is spent, so the call is refused before anything is sent."
+explanation_key = "error.llm_host.budget_exceeded"
+params = []
+remedy = "Wait for the next budget period or raise the tenant's budget."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.provider_failed"
+class = "none"
+summary = "The provider answered with an error, timed out or could not be reached, so the call failed."
+explanation_key = "error.llm_host.provider_failed"
+params = []
+remedy = "Check the provider's status and the tenant's key, endpoint and model, then repeat; the send record names the reason."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.store_unavailable"
+class = "none"
+summary = "The LLM service cannot read or write its tables (configuration, usage or send record), so no call is made."
+explanation_key = "error.llm_host.store_unavailable"
+params = []
+remedy = "Check the site database connection and that the LLM tables exist; restart the site if the database was down."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.secrets_unavailable"
+class = "none"
+summary = "The LLM service needs the secrets service to seal and open provider keys and it is not running."
+explanation_key = "error.llm_host.secrets_unavailable"
+params = []
+remedy = "Enable the secrets service for the site and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.egress_unavailable"
+class = "none"
+summary = "The LLM service needs the egress guard to authorise provider calls and it is not running, so no call is made."
+explanation_key = "error.llm_host.egress_unavailable"
+params = []
+remedy = "Enable the egress service with a policy file for the site and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embeddings_not_configured"
+class = "none"
+summary = "An embedding was asked for, but the tenant has no embedding model configured (or no tenant is set for the consumer), so nothing is sent."
+explanation_key = "error.llm_host.embeddings_not_configured"
+params = []
+remedy = "Set embedding_model (and embedding_dimensions) on the tenant's OpenAI-compatible provider configuration, or name that tenant in [services.llm] embedding_tenant and [services.retrieval] provider."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_too_large"
+class = "none"
+summary = "An embedding call carries more texts than max_texts_per_call or a text longer than max_text_bytes, so nothing is sent."
+explanation_key = "error.llm_host.embed_too_large"
+params = []
+remedy = "Split the call into smaller ones, or raise max_texts_per_call (up to 10000) or max_text_bytes (up to 32768) in [services.llm]."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_refused"
+class = "none"
+summary = "A text to embed holds a secret or a financial identifier (the message names only its class), so the whole call is refused and nothing is sent."
+explanation_key = "error.llm_host.embed_refused"
+params = []
+remedy = "Keep secrets and financial identifiers out of the text that is embedded; the caller must strip them before the call."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_dimensions_mismatch"
+class = "none"
+summary = "The tenant's embedding_dimensions differ from the width agent memory's store was prepared with, so memory cannot use the tenant's embeddings."
+explanation_key = "error.llm_host.embed_dimensions_mismatch"
+params = []
+remedy = "Set embedding_dimensions on the tenant to the width the message names, or point embedding_tenant at a tenant with that width."
+since = "0.1.0"

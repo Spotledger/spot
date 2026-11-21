@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-17.T1: the keyboard-first workspace, part 1. A local, per-user, encrypted draft store,
+       the autosave coordinator, draft recovery (a bar on the form and a "Recover drafts" list),
+       and the per-form undo stack with its Edit-menu commands. It plugs into Forms through the
+       seams WP-UI-03.T1 left (IDraftAutosave and the draft's own events) and edits none of them. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- View-model text properties are instance members by design: a binding reads an instance. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
+    <!-- WP-UI-17.T3: the undo stack hands a child table's Ctrl+Z to the form's history (the adapter
+         implements IChildTableHistory) and the host's gate is ChildTableModel.CheckEditable, so the
+         table's types are stated here rather than relied on through Forms. The reverse reference
+         (ChildTable to Workspace) would pull Forms and Shell into ChildTable: it must not exist. -->
+    <ProjectReference Include="../Spotledger.Client.ChildTable/Spotledger.Client.ChildTable.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Forms/Spotledger.Client.Forms.csproj" />
+    <!-- WP-UI-17.T2 (lead decision, 2026-10-24): the split arrangement hosts the real list view, so this
+         project states its dependency on Lists rather than reaching it through Forms. Lists does not
+         reference Workspace: the dependency stays one-way. -->
+    <ProjectReference Include="../Spotledger.Client.Lists/Spotledger.Client.Lists.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.Workspace.Tests" />
+  </ItemGroup>
+</Project>

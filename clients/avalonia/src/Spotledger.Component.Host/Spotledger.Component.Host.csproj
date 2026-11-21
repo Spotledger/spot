@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Spotledger.Component.Host</RootNamespace>
+    <!-- The host of tier B component packages: it reads a signed package, verifies it through
+         the same Ed25519 story as app bundles, loads accepted assemblies into a collectible
+         AssemblyLoadContext (lifetime, not security) and drives install, upgrade and uninstall.
+         It depends on the contract and Avalonia, never on the application's private assemblies. -->
+    <Description>Tier B component package loading, trust and lifecycle for the Spotledger client.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <!-- Ed25519 is not in the BCL. NSec.Cryptography is the same package the SPK-08 desktop probe
+         used on this platform, and it is in the offline package cache. VersionOverride is the
+         central-package-management escape hatch: Directory.Packages.props is outside this task's
+         owned paths, so the version is pinned here instead. -->
+    <PackageReference Include="NSec.Cryptography" VersionOverride="24.4.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The package format, canonicalisation and trust rules are documented next to the code. -->
+    <None Include="README.md" Pack="false" />
+  </ItemGroup>
+</Project>

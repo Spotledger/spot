@@ -1,0 +1,28 @@
+[package]
+name = "spot-agent-linux"
+description = "The host agent's Linux operation modules (WP-ADM-04.T1, blueprint WS22, ADR-44): typed handlers for packages and updates (dnf, apt), systemd services, users and groups, and the firewall (firewalld, ufw, nftables), each with plan, apply and verify, running every command through an injected CommandRunner (argv, no shell) and FileSystem seam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: the operation ids, their parameters and, above all,
+# their risk levels. The Linux module registers the `os.*` operations and the handlers
+# read their arguments back out of the validated invocation.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The host agent's execution core (WP-ADM-03.T1): the `OperationHandler` trait and the
+# `ExecutionPlan` a handler is handed. The module implements the trait; the core decides
+# whether the plan may run at all.
+spot-agent-core = { path = "../spot-agent-core" }
+# Typed errors with stable `agent_linux.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The golden transcripts per distribution family are JSON, and the tests read them.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

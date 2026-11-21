@@ -1,0 +1,23 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "panels": [
+    {
+      "id": "sample.task_overview",
+      "origin": "app:sample",
+      "label": "Overview",
+      "slot": "doc.sidepanel",
+      "doctype": "project",
+      "order": 0,
+      "permission": "project:read",
+      "blocks": [
+        {
+          "type": "text",
+          "markdown": "![x](https://evil.example/p.png)"
+        }
+      ]
+    }
+  ],
+  "$comment": "expect: uiext.raw_html. Images and external links are not part of the markdown subset."
+}

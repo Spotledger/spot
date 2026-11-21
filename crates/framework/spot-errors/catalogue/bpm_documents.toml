@@ -1,0 +1,77 @@
+# bpm_documents codes (WP-BPM-04.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# A Document node reports a failure as a `NodeOutcome::Fail` (the engine's failure vocabulary),
+# not as an `AppError`, so these codes have no error class.
+
+[[entry]]
+code = "bpm_documents.config_invalid"
+class = "none"
+summary = "A Document node's config is malformed: an unknown operation, a missing DocType, or a mapping that is not an object of expressions."
+explanation_key = "error.bpm_documents.config_invalid"
+params = []
+remedy = "Fix the node's operation, DocType and mapping in the process definition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.document_missing"
+class = "none"
+summary = "An update, submit or cancel node names no document to change, or the document it names has no version."
+explanation_key = "error.bpm_documents.document_missing"
+params = []
+remedy = "Give the node a `document` expression that resolves to the record id of an existing document."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.expression_invalid"
+class = "none"
+summary = "A mapping expression, an expected-version expression or a branch condition could not be evaluated, or produced a value the target field cannot hold."
+explanation_key = "error.bpm_documents.expression_invalid"
+params = []
+remedy = "Check the expression against the Case's variables and the target field's type."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.case_file"
+class = "none"
+summary = "Recording the Case file failed: the business-graph edge for a touched document was not written."
+explanation_key = "error.bpm_documents.case_file"
+params = []
+remedy = "Check the edge store and retry the node; a document change is not complete without its Case-file edge."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.principal_invalid"
+class = "none"
+summary = "The Case's acting principal is not a user id the document engine can act as, so the Document node refused to run instead of acting as the system."
+explanation_key = "error.bpm_documents.principal_invalid"
+params = []
+remedy = "Start the Case as a user whose principal is a record id, or name a service principal on the node."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.principal_not_registered"
+class = "none"
+summary = "A Document node names a principal that is not a registered service principal of the tenant (a plain user id never is), or the registry could not be read."
+explanation_key = "error.bpm_documents.principal_not_registered"
+params = []
+remedy = "Name a registered service principal, or remove `principal` so the node acts as the Case's actor. If the registry is down, retry later."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.principal_not_permitted"
+class = "none"
+summary = "The author of the process version may not act as the node's service principal: it lacks the publish permission or the principal's grant, or the author is unknown."
+explanation_key = "error.bpm_documents.principal_not_permitted"
+params = []
+remedy = "Ask a platform administrator for the process.publish_service_principal permission and a grant on the service principal, or remove `principal` from the node."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_documents.principal_audit_failed"
+class = "none"
+summary = "The use of a service principal could not be written to the audit trail, so the node did not act."
+explanation_key = "error.bpm_documents.principal_audit_failed"
+params = []
+remedy = "Retry later; the node did not change any document. If it persists, tell the operator that the audit trail is down."
+since = "0.1.0"

@@ -1,0 +1,35 @@
+# Seed setting for runtime.smtp.host. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "runtime.smtp.host"
+title = "SMTP Host"
+summary = "Hostname of the SMTP server for outgoing email."
+description = "The hostname or IP address of the SMTP server used for sending emails."
+scopes = [
+    "fleet",
+    "group",
+    "server",
+    "tenant",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "email",
+    "smtp",
+]
+help_url = "https://docs.example.com/settings/runtime.smtp.host"
+group = "Email"
+order = 1
+
+[value.Text]
+max_len = 255
+pattern = "^[a-zA-Z0-9.-]+$"
+
+[default]
+Text = "localhost"
+
+[restart]
+type = "service"
+name = "email"

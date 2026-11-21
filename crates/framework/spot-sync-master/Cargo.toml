@@ -1,0 +1,16 @@
+[package]
+name = "spot-sync-master"
+description = "Master-data and price propagation as events (WP-EDG-04.T1, ADR-062, ADR-063, ADR-065): scoped subscriptions and a pure routing function, effective-dated changes that activate by clock rather than by message, a deterministic idempotent fan-out planner, and a 100-branch convergence harness over the sync simulator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `NodeId` (node identity) and the seeded, fault-injecting simulator the convergence harness
+# drives (WP-EDG-02.T1, ADR-062).
+spot-sync-protocol = { path = "../spot-sync-protocol" }
+
+[lints]
+workspace = true

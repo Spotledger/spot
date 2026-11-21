@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-04.T1: the report catalogue and viewer. A thin layer over the grid core (public API
+       only), the field controls, the metadata runtime and the native report operations. No
+       report-specific and no DocType-specific code: everything comes from the report description. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Api/Spotledger.Client.Api.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Grid/Spotledger.Client.Grid.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.Reports.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,47 @@
+# leased_sequences codes: the offline `Sequences` a branch runs over hub-leased naming ranges
+# (spot-leased-sequences, WP-EDG-03.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "leased_sequences.lease_exhausted"
+class = "Unavailable"
+summary = "The branch series `{series}` has fewer than {requested} numbers left in its leased range."
+explanation_key = "error.leased_sequences.lease_exhausted"
+params = ["requested", "series"]
+remedy = "Lease another range from the hub and install it before naming another document of this series."
+since = "0.1.0"
+
+[[entry]]
+code = "leased_sequences.set_next_refused"
+class = "InvalidState"
+summary = "A branch tried to set the series `{series}` to continue at {next}."
+explanation_key = "error.leased_sequences.set_next_refused"
+params = ["next", "series"]
+remedy = "Request a range from the hub; only the hub issues a series' numbers."
+since = "0.1.0"
+
+[[entry]]
+code = "leased_sequences.invalid_count"
+class = "Validation"
+summary = "A block of {count} numbers is not a valid allocation request."
+explanation_key = "error.leased_sequences.invalid_count"
+params = ["count"]
+remedy = "Request at least one number."
+since = "0.1.0"
+
+[[entry]]
+code = "leased_sequences.store"
+class = "Unavailable"
+summary = "The high-water mark of a branch series could not be written, so no number was handed out."
+explanation_key = "error.leased_sequences.store"
+params = []
+remedy = "Check the branch series store and retry the allocation before naming the document."
+since = "0.1.0"
+
+[[entry]]
+code = "leased_sequences.lease_refused"
+class = "InvalidState"
+summary = "The lease offered for the branch series `{series}` was refused: {reason}."
+explanation_key = "error.leased_sequences.lease_refused"
+params = ["reason", "series"]
+remedy = "Keep the held lease; ask the hub for a new range and install it only when it lies above the held range."
+since = "0.1.0"

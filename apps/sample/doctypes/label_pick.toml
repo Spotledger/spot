@@ -1,0 +1,17 @@
+# Label Pick: the table-multiselect child of `project.labels` (WP-DX-05.T1).
+#
+# ADR-068's `table_multiselect` rows hold one link field — the pick of a master.
+# This is the one child DocType the Project's label multi-pick needs; it holds
+# nothing else, so its rows are just "this project carries this label".
+name = "label_pick"
+label = "Label Pick"
+app = "sample"
+module = "projects"
+is_child = true
+
+[[fields]]
+name = "label"
+label = "Label"
+type = "link"
+options = "label"
+required = true

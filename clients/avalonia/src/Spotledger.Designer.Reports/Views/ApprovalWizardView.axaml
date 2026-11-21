@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Designer.Reports.Views.ApprovalWizardView">
+  <!-- The simple approval wizard. DataContext is an ApprovalWizardViewModel. One step shows at a
+       time; Next checks the step, and the last step shows the read-only flow and Publish. -->
+  <Grid RowDefinitions="*,Auto" Margin="8">
+    <StackPanel Spacing="8">
+      <TextBlock x:Name="StepText" Text="{Binding Step}" FontWeight="SemiBold" />
+
+      <StackPanel Spacing="6" x:Name="DocumentStep">
+        <TextBlock Text="Which document needs approval?" />
+        <TextBox x:Name="DocTypeBox" Text="{Binding DocType, Mode=TwoWay}" PlaceholderText="Document type" />
+        <ListBox x:Name="DocTypeList" ItemsSource="{Binding DocTypeChoices}" MaxHeight="120">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBox Text="{Binding Title, Mode=TwoWay}" PlaceholderText="Workflow title" />
+      </StackPanel>
+
+      <StackPanel Spacing="6" x:Name="ApproverStep">
+        <TextBlock Text="Who approves?" />
+        <ComboBox x:Name="ApproverKindBox" />
+        <TextBox Text="{Binding ApproverName, Mode=TwoWay}" PlaceholderText="Role, person or field" />
+      </StackPanel>
+
+      <StackPanel Spacing="6" x:Name="LimitStep">
+        <TextBlock Text="How long do they have, and who is asked after that?" />
+        <NumericUpDown Value="{Binding Limit, Mode=TwoWay}" Minimum="1" />
+        <ComboBox x:Name="UnitBox" />
+        <ComboBox x:Name="EscalationKindBox" />
+        <TextBox Text="{Binding EscalationName, Mode=TwoWay}" PlaceholderText="Role, person or field" />
+      </StackPanel>
+
+      <StackPanel Spacing="6" x:Name="OutcomesStep">
+        <TextBlock Text="What happens when it is approved or rejected?" />
+        <TextBox Text="{Binding ApproveField, Mode=TwoWay}" PlaceholderText="Field to set on approval" />
+        <TextBox Text="{Binding ApproveValue, Mode=TwoWay}" PlaceholderText="Value on approval" />
+        <CheckBox Content="Submit the document on approval" IsChecked="{Binding SubmitOnApprove, Mode=TwoWay}" />
+        <TextBox Text="{Binding RejectField, Mode=TwoWay}" PlaceholderText="Field to set on rejection" />
+        <TextBox Text="{Binding RejectValue, Mode=TwoWay}" PlaceholderText="Value on rejection" />
+      </StackPanel>
+
+      <StackPanel Spacing="6" x:Name="ReviewStep" IsVisible="{Binding IsReview}">
+        <TextBlock Text="The flow" FontWeight="SemiBold" />
+        <ItemsControl ItemsSource="{Binding Flow}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel>
+                <Border BorderThickness="1" BorderBrush="{DynamicResource Color.Border.Strong}" Padding="8">
+                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                </Border>
+                <TextBlock Text="v" HorizontalAlignment="Center" Foreground="{DynamicResource Color.Text.Secondary}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ItemsControl ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Semantic.Danger}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="ResultText" Text="{Binding Result}" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <TextBlock x:Name="ProblemText" Text="{Binding Problem}" TextWrapping="Wrap" Foreground="{DynamicResource Color.Semantic.Danger}" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+      <Button x:Name="BackButton" Content="Back" Command="{Binding BackCommand}" />
+      <Button x:Name="NextButton" Content="Next" Command="{Binding NextCommand}" IsDefault="True" />
+      <Button x:Name="PublishButton" Content="Publish" Command="{Binding PublishCommand}" />
+    </StackPanel>
+  </Grid>
+</UserControl>

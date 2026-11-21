@@ -1,0 +1,35 @@
+[[entry]]
+code = "audit_verify.anchor_mismatch"
+class = "none"
+summary = "The signed head anchor does not match the stored audit chain: a head was rolled back, an entry was rewritten or the anchor itself is forged; the audit service is degraded and an alert was raised."
+explanation_key = "error.audit_verify.anchor_mismatch"
+params = []
+remedy = "Treat it as a possible database-level rewrite: keep the database as it is, compare the anchor file (outside the database role's reach) with the chain, find the first entry that differs and restore it from a backup; never delete or rewrite entries by hand. The alert clears only after a whole clean full verification."
+since = "0.1.0"
+
+[[entry]]
+code = "audit_verify.exactly_once"
+class = "none"
+summary = "An audit event is chained twice, or the appender's event index places it at a different entry than the chain does; the audit service is degraded and an alert was raised."
+explanation_key = "error.audit_verify.exactly_once"
+params = []
+remedy = "Find the duplicate or misplaced entry named by the lane and index; do not delete it (the chain is append-only). Check that exactly one appender runs per lane and that the appender state tables were not edited."
+since = "0.1.0"
+
+[[entry]]
+code = "audit_verify.refused"
+class = "none"
+summary = "An audit read-model call was refused: the caller lacks the audit permission (or the recent step-up for an export), or the page, cursor or window is outside the bounds."
+explanation_key = "error.audit_verify.refused"
+params = []
+remedy = "Ask a Tenant Administrator who holds the audit permission, sign in again for the step-up, or ask for a smaller page or window."
+since = "0.1.0"
+
+[[entry]]
+code = "audit_verify.unavailable"
+class = "none"
+summary = "The audit verification could not read the chain store, the anchor file or its saved state; nothing was advanced and the pass is retried."
+explanation_key = "error.audit_verify.unavailable"
+params = []
+remedy = "Check the database connection, that the anchor path exists and is writable by the server, and that the state file is readable; the next pass retries from the saved cursor."
+since = "0.1.0"

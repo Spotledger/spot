@@ -1,0 +1,23 @@
+[package]
+name = "spot-mail-fake-imap"
+description = "A fake IMAP4rev1 server for harnesses and tests (WP-PLT-11.T15): a scripted mailbox, TLS or STARTTLS with a self-signed or supplied identity. Test code only; it lives outside crates/framework so no product build can reach it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio = { version = "1.47", features = ["macros", "net", "io-util", "rt", "sync", "time"] }
+thiserror = "2"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
+rcgen = "0.14"
+
+[dev-dependencies]
+# The real ingestion client the server is written against.
+spot-mail = { path = "../../../crates/framework/spot-mail" }
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util"] }
+
+[lints]
+workspace = true

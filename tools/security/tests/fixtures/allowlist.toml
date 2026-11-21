@@ -1,0 +1,14 @@
+# Fixture for tools/security/tests. The shipped allowlist.toml stays empty.
+[[exceptions]]
+id = "RUSTSEC-2019-0002"
+package = "ammonia"
+reason = "fixture: unmaintained, accepted until a replacement lands"
+owner = "lead"
+expires = "2999-12-31"
+
+[[exceptions]]
+id = "GHSA-hh2w-p6rv-4g7w"
+package = "System.Text.Json"
+reason = "fixture: expired on purpose, must fail the audit"
+owner = "lead"
+expires = "2020-01-31"

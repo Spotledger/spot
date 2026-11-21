@@ -1,0 +1,32 @@
+# Budgets of the `tier_m` profile (WP-TST-15.T2), set at the README section 4 targets for
+# tier M. They apply on the large self-hosted runner only (L9_RUNNER_LABEL=large; see
+# profiles/tier_m.toml). The lead tightens them to the measured baseline plus 25 percent
+# where that is below the README target, after the baseline run recorded in
+# the project process notes. A miss of a README target is reported, never loosened.
+#
+#   open_form      form open (metadata then one document), p95 300 ms
+#   create_submit  posting (create and post), p95 1000 ms, p99 2500 ms, and at least
+#                  9.5 completed tx/s over the steady phase
+#   all            error rate 0.1 percent over every operation
+#
+# Not expressible in this schema and therefore checked elsewhere: zero failures from deadlock
+# or duplicate numbers (the post-run invariant query in tests/tier_m.rs and the zero-5xx
+# assertion), and serialization-failure retries below 1 percent (needs the server's retry
+# counter; listed under the task report's open questions).
+
+[[budget]]
+profile = "tier_m"
+operation = "all"
+max_error_rate = 0.001
+
+[[budget]]
+profile = "tier_m"
+operation = "open_form"
+p95_ms = 300
+
+[[budget]]
+profile = "tier_m"
+operation = "create_submit"
+p95_ms = 1000
+p99_ms = 2500
+min_throughput = 9.5

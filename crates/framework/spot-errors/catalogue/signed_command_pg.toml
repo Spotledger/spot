@@ -1,0 +1,12 @@
+# signed_command_pg codes: the PostgreSQL NonceStore (WP-ADM-01.T3). A failed claim is the
+# signed-command crate's own cmd.nonce_store refusal; only the setup code is new. One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "signed_command_pg.migration_failed"
+class = "none"
+summary = "The signed-command nonce table could not be created."
+explanation_key = "error.signed_command_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then call prepare again."
+since = "0.1.0"

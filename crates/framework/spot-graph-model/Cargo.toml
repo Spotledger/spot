@@ -1,0 +1,27 @@
+[package]
+name = "spot-graph-model"
+description = "Spotledger graph model in metadata (WS8, WP-GRA-01.T1, ADR-50): a node type per DocType, edge types derived from every Link, DynamicLink and Table field and from relation specs, the edge-type registry with forward and reverse lookups, the model diff, derive problems and a stable text dump"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The effective metadata the model derives from (WP-MET-01.T1). `add_custom_field` and
+# `set_definitions` land in the next derive with no rebuild, so runtime-created DocTypes
+# get their edges exactly like compiled ones.
+spot-meta = { path = "../spot-meta" }
+# `serde` on every public type. No wire format is fixed this task; callers choose one.
+serde = { version = "1", features = ["derive"] }
+# SHA-256 of the canonical edge-type name, as the stable `EdgeTypeId`.
+sha2 = "0.10"
+# Typed errors with stable `graph.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: the model is a pure function of the metadata content.
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,78 @@
+name = "property_setter"
+label = "Property Setter"
+app = "platform"
+module = "customisation"
+title_field = "property"
+
+# A property a site overrides on a DocType or on one of its fields (WP-PLT-16.T1). Only the
+# properties ADR-068 allows a site to override are accepted; a security property can only be
+# tightened. One record per (DocType, field, property): setting it again replaces the value.
+
+[[fields]]
+name = "doctype"
+label = "DocType"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "field"
+label = "Field"
+type = "text"
+max_chars = 63
+in_list_view = true
+description = "The field the property belongs to; empty for a property of the DocType itself."
+
+[[fields]]
+name = "property"
+label = "Property"
+type = "text"
+required = true
+max_chars = 63
+in_list_view = true
+description = "The property key: label, required, read_only, options, ..."
+
+[[fields]]
+name = "value"
+label = "Value"
+type = "long_text"
+description = "The value, in the text form spot-meta reads."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\napplied\nfailed\nremoving\nremoved"
+required = true
+default = "pending"
+in_list_view = true
+in_standard_filter = true
+
+[[fields]]
+name = "reason"
+label = "Reason"
+type = "long_text"
+
+[[fields]]
+name = "intent"
+label = "Intent"
+type = "int"
+required = true
+read_only = true
+
+[[fields]]
+name = "actor"
+label = "Actor"
+type = "text"
+required = true
+max_chars = 140
+read_only = true
+
+[[fields]]
+name = "prior"
+label = "Prior value"
+type = "long_text"
+read_only = true
+description = "The value before a replacement that is still pending; restored if the change fails."

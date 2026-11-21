@@ -1,0 +1,16 @@
+kind = "api"
+pattern = "calculation endpoint with a schema"
+[schema]
+type = "object"
+required = ["qty", "rate"]
+[schema.properties.qty]
+type = "integer"
+[schema.properties.rate]
+type = "number"
+[input.args]
+qty = 7
+rate = 3.33
+[expect]
+ok = true
+[expect.result]
+total = "23.31"

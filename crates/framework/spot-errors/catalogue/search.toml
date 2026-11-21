@@ -1,0 +1,37 @@
+# search codes: full-text search on the resource query (WP-STO-13.T5, contract 0.22.0). One [[entry]] per code.
+
+[[entry]]
+code = "search.unsupported"
+class = "none"
+summary = "This site's database has no search projection for this DocType."
+explanation_key = "error.search.unsupported"
+params = []
+remedy = "Ask an administrator to enable search for the DocType and its database prerequisites, or use a filter."
+since = "0.1.0"
+
+[[entry]]
+code = "search.term_too_long"
+class = "none"
+summary = "The search text is longer than 512 characters."
+explanation_key = "error.search.term_too_long"
+params = []
+remedy = "Shorten the search text."
+since = "0.1.0"
+
+[[entry]]
+code = "search.field_not_searchable"
+class = "none"
+summary = "A named field is not declared searchable or facetable for this DocType."
+explanation_key = "error.search.field_not_searchable"
+params = []
+remedy = "Name only fields the DocType lists as searchable (or facetable) in its metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "search.projection_behind"
+class = "none"
+summary = "The search projection lags past its bound."
+explanation_key = "error.search.projection_behind"
+params = []
+remedy = "Wait for the Retry-After period and search again."
+since = "0.1.0"

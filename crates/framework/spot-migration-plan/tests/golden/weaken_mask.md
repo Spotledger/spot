@@ -1,0 +1,10 @@
+# Release plan: metadata 0 -> 0
+
+- **Risk:** needs review
+- **Estimate:** 2s expected (1s low, 4s high), blocking: online
+- **Changes:** 1 change (schema 0, metadata 1, patches 0, behaviour 0)
+
+## Needs review (1)
+- [metadata] party.secret — The protection of `party.secret` changes. (group=none mask=last_chars(4) tags=[] declassified=none -> group=none mask=last_chars(8) tags=[] declassified=none)
+  - why: protection is weakened: a field becomes less protected or its mask reveals more
+  - instead: keep the protection or mask as it was until a review approves the change

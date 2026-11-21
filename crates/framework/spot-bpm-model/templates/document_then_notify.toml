@@ -1,0 +1,44 @@
+name = "document_then_notify"
+app = "billing"
+title = "Document then notify"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+trigger = "schedule"
+cron = "0 8 * * *"
+
+[[nodes]]
+id = "create_invoice"
+kind = "document"
+action = "create"
+doctype = "Sales Invoice"
+
+[[nodes]]
+id = "post_invoice"
+kind = "document"
+action = "post"
+doctype = "Sales Invoice"
+operation = "post"
+
+[[nodes]]
+id = "notify"
+kind = "integration"
+connector = "email"
+action = "send"
+endpoint = "accounts@example.com"
+terminal = true
+
+[[edges]]
+from = "start"
+to = "create_invoice"
+
+[[edges]]
+from = "create_invoice"
+to = "post_invoice"
+
+[[edges]]
+from = "post_invoice"
+to = "notify"

@@ -1,0 +1,7 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[session_events]]
+event = "login_ok"
+step = "erp_selling:x"

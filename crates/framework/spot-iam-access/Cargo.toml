@@ -1,0 +1,40 @@
+[package]
+name = "spot-iam-access"
+description = "Access rules that join the identity crates (WP-IAM-07.T1, ADR-070 sections 5 and 9): API-key scope as a provable subset of the owner's rights, keys that stop with their owner, impersonation by a support session that records both identities and never grants administrator or break-glass roles, step-up and the no-weaker-method rules, as a pure core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Principal`, `PermissionEngine::can`, `UserPermission`, `Action`, `TENANT_ADMINISTRATOR`: the
+# decision core a key's rights are the owner's rights of.
+spot-permissions = { path = "../spot-permissions" }
+# `Registry`: role inheritance, so a role that inherits a forbidden role is stripped too.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# `StoredApiKey`: the public key id a key record is named by. No secret is handled here.
+spot-auth = { path = "../spot-auth" }
+# `SessionGrant`, `Subject`, `Tier`, `ActionRequest`: the customer-approved support grant.
+spot-support-session = { path = "../spot-support-session" }
+# `UserType` and the anonymised test: the owner's standing.
+spot-iam-directory = { path = "../spot-iam-directory" }
+# `Actor::User { id, via }`: both identities in the form events carry.
+spot-events-contract = { path = "../../../contracts/events" }
+# `RecordId`, the stable user id.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Stable, derive-based serde on every public type.
+serde = { version = "1", features = ["derive"] }
+# The one error type per question, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The metadata the permission snapshot is built from, and the property test.
+spot-meta = { path = "../spot-meta" }
+spot-app-api = { path = "../../../contracts/app-api" }
+proptest = "1"
+serde_json = "1"
+toml = "0.8"
+
+[lints]
+workspace = true

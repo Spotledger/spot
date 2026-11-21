@@ -1,0 +1,37 @@
+# llm_reader codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "llm_reader.settings_invalid"
+class = "none"
+summary = "The [services.llm_reader] table has an unknown key, a value of the wrong type or out of range, so the document reader for model prompts cannot start."
+explanation_key = "error.llm_reader.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled and max_value_chars (1 to 100000) exist."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_reader.site_unavailable"
+class = "none"
+summary = "The host has no site runtime (document engine and permission core) to read documents through, so no reader is provided and prompts cannot include documents."
+explanation_key = "error.llm_reader.site_unavailable"
+params = []
+remedy = "Run the LLM service on a host that serves a site; the LLM service keeps refusing every document read until then."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_reader.not_ready"
+class = "none"
+summary = "The site serves no metadata yet, so the document reader for model prompts cannot decide what a user may read and reads nothing."
+explanation_key = "error.llm_reader.not_ready"
+params = []
+remedy = "Wait for the site to finish starting; check the site's readiness for the metadata problem."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_reader.reads_failed"
+class = "none"
+summary = "Reads for model prompts failed because the document engine or the principal directory could not answer; the callers were told the read was unavailable, not denied."
+explanation_key = "error.llm_reader.reads_failed"
+params = []
+remedy = "Check the site database and the runtime's health; the report clears at the next check that finds no failed read."
+since = "0.1.0"

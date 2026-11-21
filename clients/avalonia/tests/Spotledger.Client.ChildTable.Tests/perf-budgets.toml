@@ -1,0 +1,35 @@
+# Perf budgets for WP-UI-08.T3 (WP-UI-08's acceptance: a 200-row child table is edited by
+# keyboard within budget). Read by PerfBudgetTests; WP-UI-16 reads this file too. Measured on the
+# reference runner (Fedora 44, 6 slow cores, .NET 10); CI runners apply the TestSupport multiplier.
+
+# A scripted session on a 200-row, 8-column table: 600 keystroke steps (navigate, edit a decimal,
+# pick a link from a fake lookup, add rows). Every step is timed from the key event to the
+# handled return, including the commit and the next editor opening.
+[[budget]]
+id = "childtable-key-step"
+metric = "p95"
+max = 16.0
+unit = "ms"
+runner = "reference"
+
+# Paste of 200 rows of 8 cells into the table, as one undoable operation.
+[[budget]]
+id = "childtable-paste-200-rows"
+metric = "p95"
+max = 150.0
+unit = "ms"
+runner = "reference"
+
+# First render of 200 rows: show the control and lay out and paint the first frame.
+[[budget]]
+id = "childtable-first-render-200-rows"
+metric = "p95"
+max = 100.0
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 4.0
+
+[runner.ci-windows]
+multiplier = 4.0

@@ -1,0 +1,37 @@
+# permquery codes: the permission filter compiled onto the storage query IR (WP-PLT-04). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "permquery.field_not_filterable"
+class = "none"
+summary = "The field {path} cannot be used to filter, sort, group or aggregate."
+explanation_key = "error.permquery.field_not_filterable"
+params = ["path"]
+remedy = "Use only fields you may read unmasked, or ask an administrator for access."
+since = "0.1.0"
+
+[[entry]]
+code = "permquery.too_many_shares"
+class = "none"
+summary = "Too many shared documents to list in one filter: {count}."
+explanation_key = "error.permquery.too_many_shares"
+params = ["count"]
+remedy = "Reduce the number of individual shares, or share through a role."
+since = "0.1.0"
+
+[[entry]]
+code = "permquery.filter_too_large"
+class = "none"
+summary = "The permission filter would need {nodes} expression nodes, more than the budget."
+explanation_key = "error.permquery.filter_too_large"
+params = ["nodes"]
+remedy = "Reduce the number of assignments or scope entries."
+since = "0.1.0"
+
+[[entry]]
+code = "permquery.query_too_large"
+class = "none"
+summary = "The query is too large to check for permissions."
+explanation_key = "error.permquery.query_too_large"
+params = []
+remedy = "Split the query or simplify its expressions."
+since = "0.1.0"

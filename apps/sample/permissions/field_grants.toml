@@ -1,0 +1,12 @@
+# The sample app's field grants (WP-DX-05.T1).
+#
+# Field rights need the DocType right behind them (no field `read` without the
+# DocType's `read`). The `confidential` group opens to Project Managers only;
+# Team Members and Viewers hold nothing in the group, so `task.details` stays
+# hidden for them (ADR-068 amendment A1, ADR-070 §12).
+
+[[entries]]
+role = "Project Manager"
+doctype = "task"
+target = { group = "confidential" }
+access = ["read", "update", "report"]

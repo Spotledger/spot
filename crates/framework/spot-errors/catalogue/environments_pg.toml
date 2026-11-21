@@ -1,0 +1,21 @@
+# environments_pg codes: the refusals of the PostgreSQL environment store (WP-ALM-02.T2,
+# ADR-082 class C). Store failures reuse environments.store_failed; only what is new is here.
+# No message carries a set name, a document, SQL or a connection string.
+
+[[entry]]
+code = "environments_pg.row_invalid"
+class = "none"
+summary = "A stored environment set document does not describe a valid set, so it was refused rather than repaired."
+explanation_key = "error.environments_pg.row_invalid"
+params = []
+remedy = "The row was changed outside the store; restore it from a backup or replace it with a valid set through the store."
+since = "0.1.0"
+
+[[entry]]
+code = "environments_pg.setup_failed"
+class = "none"
+summary = "The environment store could not be set up: the bridge configuration does not fit the pool, the runtime is current-thread, or the table could not be prepared."
+explanation_key = "error.environments_pg.setup_failed"
+params = []
+remedy = "Build the store on a plain thread with a bridge sized for the pool (see the README), and check the database and the code in the message."
+since = "0.1.0"

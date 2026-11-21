@@ -1,0 +1,49 @@
+[package]
+name = "spot-journal-audit-job"
+description = "The scheduled journal audit wired (WP-JRN-07.T5, ADR-061 s8): per-tenant isolated runs of the audit runner on a weekly or daily cadence, the red JOURNAL_AUDIT_MISMATCH and JOURNAL_AUDIT_FAILED conditions raised and cleared through the conditions framework, and the platform job handler, all over provider traits so the real stores plug in later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The result model: the first differing record, the verified position, the fingerprint report.
+spot-journal-audit = { path = "../spot-journal-audit" }
+# One tenant's audit: run_audit, the sides and the clock.
+spot-journal-audit-run = { path = "../spot-journal-audit-run" }
+# The condition engine, the registry and the definitions.
+spot-conditions = { path = "../spot-conditions" }
+# The job context and the handler result.
+spot-jobs = { path = "../spot-jobs" }
+# The tenant id and the journal store the rebuild reads.
+spot-journal-store = { path = "../spot-journal-store" }
+# The verifying keys of the signed manifests.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The snapshot key trait.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The keys struct the rebuild takes.
+spot-journal-rebuild = { path = "../spot-journal-rebuild" }
+# The upcaster registry the rebuild takes.
+spot-image-upcast = { path = "../spot-image-upcast" }
+# The blocking pool the heavy audit runs on, and a handle to drive the async rebuild from it.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# Typed errors with stable `journal_audit_job.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "rt-multi-thread", "time"] }
+# The test journal: signed manifest and sealed segments in a memory store.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+serde_json = "1"
+time = "0.3"
+# Dev only: the tests build the registry as the host does (the catalogue, then this crate's
+# own definition). The job needs no catalogue at run time: the host passes the engine.
+spot-sync-conditions = { path = "../spot-sync-conditions" }
+spot-core = { path = "../spot-core" }
+spot-events-contract = { path = "../../../contracts/events" }
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+spot-journal-segment = { path = "../spot-journal-segment" }
+
+[lints]
+workspace = true

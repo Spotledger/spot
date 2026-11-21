@@ -1,0 +1,496 @@
+# agent codes: raised by the spot-agent-tiers crate. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "agent.allow"
+class = "none"
+summary = "The authoriser allowed the action; this is the decision code recorded for an allow, not an error."
+explanation_key = "error.agent.allow"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.unknown_action"
+class = "none"
+summary = "The requested action is not in the action catalogue."
+explanation_key = "error.agent.unknown_action"
+params = []
+remedy = "Add the action to the catalogue with its tier, domain and effect, or request a catalogued action."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.agent_not_active"
+class = "none"
+summary = "The agent is not active, so no action is allowed."
+explanation_key = "error.agent.agent_not_active"
+params = []
+remedy = "Re-activate the agent, or use an active agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.domain_mismatch"
+class = "none"
+summary = "The action belongs to a domain the agent is not registered for."
+explanation_key = "error.agent.domain_mismatch"
+params = []
+remedy = "Use an agent registered for the action's domain."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.above_agent_max_tier"
+class = "none"
+summary = "The action needs a higher tier than the agent's own ceiling, however well it is approved."
+explanation_key = "error.agent.above_agent_max_tier"
+params = []
+remedy = "Raise the agent's maximum tier, or hand the action to a human or a higher-tier agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.tier_needs_approval"
+class = "none"
+summary = "A T3 action run unattended needs a deep-registered agent or a human approval."
+explanation_key = "error.agent.tier_needs_approval"
+params = []
+remedy = "Attach a valid human approval to the request, or register the agent deep."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.approval_invalid"
+class = "none"
+summary = "The approval carried by the request does not validate (an agent approver, or the owner approving their own agent)."
+explanation_key = "error.agent.approval_invalid"
+params = []
+remedy = "Have a different human approver approve the request."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_not_journaled"
+class = "none"
+summary = "A change runs only while the change journal is on, and it is off."
+explanation_key = "error.agent.hard_floor_not_journaled"
+params = []
+remedy = "Turn the change journal on, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_no_snapshot"
+class = "none"
+summary = "A change runs only with a snapshot already taken, and there is none."
+explanation_key = "error.agent.hard_floor_no_snapshot"
+params = []
+remedy = "Take a snapshot, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.hard_floor_financial_route"
+class = "none"
+summary = "A submitted financial record changes only through cancel, amend or a journal entry; a direct edit is always refused."
+explanation_key = "error.agent.hard_floor_financial_route"
+params = []
+remedy = "Use cancel, amend or a journal entry instead of editing the record."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.deep_registered"
+class = "none"
+summary = "Registry event: an agent was registered deep; recorded for the audit trail, not an error."
+explanation_key = "error.agent.deep_registered"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.deep_revoked"
+class = "none"
+summary = "Registry event: an agent's deep registration was revoked; recorded for the audit trail, not an error."
+explanation_key = "error.agent.deep_revoked"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.above_tier"
+class = "none"
+summary = "The action needs a higher tier than the agent holds now."
+explanation_key = "error.agent.above_tier"
+params = []
+remedy = "Raise the agent's tier through the approval flow, or choose an action inside its current tier."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.already_enrolled"
+class = "none"
+summary = "The agent is already enrolled with a gateway."
+explanation_key = "error.agent.already_enrolled"
+params = []
+remedy = "Use the existing enrolment, or remove the agent's state directory before enrolling it again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.audit_failed"
+class = "none"
+summary = "The agent could not append to its local audit log."
+explanation_key = "error.agent.audit_failed"
+params = []
+remedy = "Check that the agent's state directory is writable and has free space, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.config_invalid"
+class = "none"
+summary = "The agent configuration is missing a value or holds an invalid one."
+explanation_key = "error.agent.config_invalid"
+params = []
+remedy = "Correct the named setting in the agent configuration file and start the agent again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.gateway_protocol"
+class = "none"
+summary = "The gateway answered in a form the agent does not understand."
+explanation_key = "error.agent.gateway_protocol"
+params = []
+remedy = "Check that the agent and the gateway run compatible versions, and upgrade the older one."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.handler_failed"
+class = "none"
+summary = "The command handler reported a failure while running the command."
+explanation_key = "error.agent.handler_failed"
+params = []
+remedy = "Read the detail returned with the command result, fix the cause on the host and send the command again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.handler_panicked"
+class = "none"
+summary = "The command handler stopped unexpectedly while running the command."
+explanation_key = "error.agent.handler_panicked"
+params = []
+remedy = "Send the command again; if it fails again, report the code and the agent version to support."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.indeterminate"
+class = "none"
+summary = "The agent stopped while a command was running, so the effect of the command is unknown."
+explanation_key = "error.agent.indeterminate"
+params = []
+remedy = "Check the host state by hand before sending the command again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.invalid"
+class = "none"
+summary = "The gateway reply to the agent was not valid."
+explanation_key = "error.agent.invalid"
+params = []
+remedy = "Check the gateway address and version; the agent retries on its next poll."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.key_store_unavailable"
+class = "none"
+summary = "The agent's key store could not be opened."
+explanation_key = "error.agent.key_store_unavailable"
+params = []
+remedy = "Check the permissions of the agent state directory and the service account that runs the agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.not_enrolled"
+class = "none"
+summary = "The agent is not enrolled, so it cannot talk to a gateway."
+explanation_key = "error.agent.not_enrolled"
+params = []
+remedy = "Enrol the agent with a valid enrolment token first."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_bad_param"
+class = "none"
+summary = "A parameter of the privileged operation is not valid for its template."
+explanation_key = "error.agent.privilege_bad_param"
+params = []
+remedy = "Pass a parameter that matches the operation's declared kind."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_param_count"
+class = "none"
+summary = "The privileged operation request has the wrong number of parameters or is malformed."
+explanation_key = "error.agent.privilege_param_count"
+params = []
+remedy = "Send the number of parameters the operation's template declares."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_refused"
+class = "none"
+summary = "The privileged operation is not on the allow-list."
+explanation_key = "error.agent.privilege_refused"
+params = []
+remedy = "Use an operation from the agent's privilege template list."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_spawn_failed"
+class = "none"
+summary = "The privilege helper could not start the program for the operation."
+explanation_key = "error.agent.privilege_spawn_failed"
+params = []
+remedy = "Check that the program exists on the host and the helper may run it, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_unavailable"
+class = "none"
+summary = "The privilege helper is not available on this host."
+explanation_key = "error.agent.privilege_unavailable"
+params = []
+remedy = "Install and start the privilege helper service, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.privilege_unknown_operation"
+class = "none"
+summary = "The privileged operation name is not in the template list."
+explanation_key = "error.agent.privilege_unknown_operation"
+params = []
+remedy = "Use an operation name from the agent's privilege template list."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.replayed"
+class = "none"
+summary = "The gateway refused the agent's request as a replay of an earlier one."
+explanation_key = "error.agent.replayed"
+params = []
+remedy = "Let the agent retry with a fresh nonce; no action is needed unless it repeats."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.retired"
+class = "none"
+summary = "The agent is retired, so no action is allowed for it."
+explanation_key = "error.agent.retired"
+params = []
+remedy = "Register a new agent for the host; a retired agent cannot be restored."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.revoked"
+class = "none"
+summary = "The gateway revoked this agent's credential."
+explanation_key = "error.agent.revoked"
+params = []
+remedy = "Enrol the agent again with a new enrolment token."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.state_io"
+class = "none"
+summary = "The agent could not read or write its state directory."
+explanation_key = "error.agent.state_io"
+params = []
+remedy = "Check the disk and the directory permissions, then restart the agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.state_permissions"
+class = "none"
+summary = "The agent's state directory or key file has permissions that are too open."
+explanation_key = "error.agent.state_permissions"
+params = []
+remedy = "Restrict the state directory to the agent's service account only."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.suspended"
+class = "none"
+summary = "The agent is suspended, so no action is allowed for it."
+explanation_key = "error.agent.suspended"
+params = []
+remedy = "Resume the agent from the console, or use another active agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.token_invalid"
+class = "none"
+summary = "The enrolment token is not valid, has expired or was already used."
+explanation_key = "error.agent.token_invalid"
+params = []
+remedy = "Create a new enrolment token and enrol again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.transport"
+class = "none"
+summary = "The agent could not complete a request to the gateway."
+explanation_key = "error.agent.transport"
+params = []
+remedy = "Check the network path to the gateway; the agent retries on its own schedule."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.transport_unavailable"
+class = "none"
+summary = "No transport to the gateway is available in this agent build."
+explanation_key = "error.agent.transport_unavailable"
+params = []
+remedy = "Use an agent build that includes the gateway transport."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.unavailable"
+class = "none"
+summary = "The agent registry could not be read, so the action is refused."
+explanation_key = "error.agent.unavailable"
+params = []
+remedy = "Retry later; if it persists, check the control store the registry lives in."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.unregistered"
+class = "none"
+summary = "The agent is not in the agent registry."
+explanation_key = "error.agent.unregistered"
+params = []
+remedy = "Register the agent before it asks for actions."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.unsupported"
+class = "none"
+summary = "The agent does not support the requested operation or handler."
+explanation_key = "error.agent.unsupported"
+params = []
+remedy = "Send an operation the agent advertises, or upgrade the agent."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.usage"
+class = "none"
+summary = "The agent command line was used wrongly."
+explanation_key = "error.agent.usage"
+params = []
+remedy = "Run the agent with --help and correct the arguments."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.wrong_tenant"
+class = "none"
+summary = "The call names a tenant other than the one this host serves."
+explanation_key = "error.agent.wrong_tenant"
+params = []
+remedy = "Send the call to the host that serves the tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.network_recover"
+class = "none"
+summary = "The operation was refused: network recover."
+explanation_key = "error.agent.network_recover"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.revert_executable_unknown"
+class = "none"
+summary = "The stable code of a revert command that cannot be built because the executable path is unknown (a change that cannot be reverted must not start)."
+explanation_key = "error.agent.revert_executable_unknown"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_attention"
+class = "none"
+summary = "Result code: neither the update nor its rollback completed; an operator must look."
+explanation_key = "error.agent.update_attention"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_failed"
+class = "none"
+summary = "Result code: the update could not run (network, layout, trust files)."
+explanation_key = "error.agent.update_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_refused"
+class = "none"
+summary = "Result code: the offer was refused before anything on disk changed."
+explanation_key = "error.agent.update_refused"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_rolled_back"
+class = "none"
+summary = "Result code: the new version did not come up healthy and the previous version is serving."
+explanation_key = "error.agent.update_rolled_back"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_unavailable"
+class = "none"
+summary = "Result code: no update is published for this agent and platform (contract code)."
+explanation_key = "error.agent.update_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.software_keys_not_allowed"
+class = "none"
+summary = "This host has no hardware-backed key store and the operator did not accept software administrator keys."
+explanation_key = "error.agent.software_keys_not_allowed"
+params = []
+remedy = "Enrol again with `--allow-software-keys` to accept software keys (recorded in the audit log), or enrol on a host with a hardware-backed store."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.enrol"
+class = "none"
+summary = "The audit operation id of an enrolment (an audit record, not an error)."
+explanation_key = "error.agent.enrol"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.rotate_key"
+class = "none"
+summary = "The audit operation id of an identity key rotation (an audit record, not an error)."
+explanation_key = "error.agent.rotate_key"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.run"
+class = "none"
+summary = "The audit operation id of an agent start or stop (an audit record, not an error)."
+explanation_key = "error.agent.run"
+params = []
+remedy = "None needed."
+since = "0.1.0"
+
+[[entry]]
+code = "agent.update_check"
+class = "none"
+summary = "The audit operation id of a scheduled self-update check (an audit record, not an error)."
+explanation_key = "error.agent.update_check"
+params = []
+remedy = "None needed."
+since = "0.1.0"

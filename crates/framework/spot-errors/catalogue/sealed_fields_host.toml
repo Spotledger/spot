@@ -1,0 +1,57 @@
+# sealed_fields_host codes: the sealed and encrypted protected fields hosted on a node (WP-SEC-10.T6).
+# The sealing layer's own refusals keep their `sealed_fields.*` codes (see sealed_fields.toml). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sealed_fields_host.settings_invalid"
+class = "none"
+summary = "The [services.sealed_fields] table has an unknown key, a reveal rate outside 1 to 10000 per minute, or the site name is not a usable tenant id, so the service cannot start."
+explanation_key = "error.sealed_fields_host.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled and reveal_per_minute exist."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields_host.unknown_doctype"
+class = "Unavailable"
+summary = "The write is for a DocType (or child table) the protection facts do not know, so no field of it can be judged and the write is refused."
+explanation_key = "error.sealed_fields_host.unknown_doctype"
+params = []
+remedy = "Wait for the metadata to load, or check that the DocType and its child tables are in the served metadata."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields_host.plaintext_refused"
+class = "PermissionDenied"
+summary = "A protected field in a sealed or encrypted group holds a plain value; this node stores only the protected form, so the write is refused."
+explanation_key = "error.sealed_fields_host.plaintext_refused"
+params = []
+remedy = "Write the field through the sealed-field path; never send the value as plain text. The field name is in the message, the value is never."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields_host.field_not_text"
+class = "PermissionDenied"
+summary = "A field in a sealed or encrypted group holds something other than text; the protected form is text, so a number, date or other typed value cannot be stored there."
+explanation_key = "error.sealed_fields_host.field_not_text"
+params = []
+remedy = "Declare the field as text in the DocType, or move it out of the sealed or encrypted group."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields_host.no_encryptor"
+class = "Unavailable"
+summary = "A group is encrypted but no module provides this node's group keys, so the site refuses to start or the write is refused."
+explanation_key = "error.sealed_fields_host.no_encryptor"
+params = []
+remedy = "Enrol the node so it holds the group key, or set the group's class to sealed or everywhere."
+since = "0.1.0"
+
+[[entry]]
+code = "sealed_fields_host.rate_limited"
+class = "none"
+summary = "The user made too many reveals this minute; the hub was not asked."
+explanation_key = "error.sealed_fields_host.rate_limited"
+params = []
+remedy = "Wait for the next minute and reveal again, or raise services.sealed_fields.reveal_per_minute."
+since = "0.1.0"

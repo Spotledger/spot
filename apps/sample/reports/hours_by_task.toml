@@ -1,0 +1,32 @@
+# Hours by task (WP-PLT-14.T3): the sum of the hours logged on each Task since a date, over the
+# Time Entry rows the caller may read. It counts every row, drafts included, because the report
+# declares no state filter. Roles are the ones `permissions/grants.toml` defines.
+name = "hours_by_task"
+label = "Hours by task"
+base = "time_entry"
+roles = ["Project Manager", "Team Member"]
+group_by = ["task"]
+limit = 100
+max_rows = 1000
+
+[[parameters]]
+name = "from_date"
+label = "From date"
+type = "date"
+required = true
+
+[filters]
+field = "work_date"
+op = "ge"
+param = "from_date"
+
+[[columns]]
+field = "task"
+
+[[columns]]
+field = "hours"
+label = "Hours"
+aggregate = "sum"
+
+[[order_by]]
+field = "task"

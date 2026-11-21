@@ -1,0 +1,40 @@
+[package]
+name = "spot-sandbox"
+description = "Sandboxes cloned from production (WP-ALM-05.T1): snapshot, restore into a closed tenant, deterministic field-classification-driven masking, secrets and integrations stripped, outbound effects locked off, and a leak scanner that proves no unmasked personal or financial value survives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The effective metadata: field types, `fetch_from` denormalised copies and `masking` specs.
+spot-meta = { path = "../spot-meta" }
+# The protection facts of WP-SEC-04 (`ProtectionSource`, `DocProtection`, `FieldFacts`) that
+# decide which fields are closed. The sandbox masks the fields the guard protects.
+spot-field-guard = { path = "../spot-field-guard" }
+# `MaskFormat`, so a guard mask spec is honoured as written.
+spot-permissions = { path = "../spot-permissions" }
+# A restored sandbox is a real tenant: `TenantId` comes from the control plane.
+spot-tenancy = { path = "../spot-tenancy" }
+# `EffectClass`, `PolicyTable`, `ClassPolicy` and `OnDiscard`: the sandbox's permanent hold.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# `EgressPolicy`/`TenantPolicy`: the sandbox's deny-all outbound policy.
+spot-egress = { path = "../spot-egress" }
+# Stable serde records for the plan, the policy and the store surfaces.
+serde = { version = "1", features = ["derive"] }
+# Field values in documents, journal and audit rows.
+serde_json = "1"
+# `MaskingPolicy` loads from TOML.
+toml = "0.8"
+# SH(256) for the value digests the leak scanner holds and compares.
+sha2 = "0.10"
+# HMAC-SHA256 for deterministic pseudonymisation keyed per sandbox.
+hmac = "0.12"
+# The per-sandbox key is wiped when the masker finishes.
+zeroize = { version = "1", features = ["derive"] }
+# Typed errors with stable `sandbox.*` codes.
+thiserror = "1"
+
+[lints]
+workspace = true

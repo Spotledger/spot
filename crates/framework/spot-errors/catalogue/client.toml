@@ -1,0 +1,48 @@
+# client codes: raised by the sans-IO client core (spot-client-core, WP-WEB-10.T1) in the
+# client itself, never by the server. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md. No message carries a value: only fixed sentences.
+
+[[entry]]
+code = "client.bad_request"
+class = "none"
+summary = "The request named a method or path the client core does not accept."
+explanation_key = "error.client.bad_request"
+params = []
+remedy = "Use GET, POST, PUT, PATCH or DELETE and a path that starts with a slash."
+since = "0.1.0"
+
+[[entry]]
+code = "client.cache_miss"
+class = "none"
+summary = "The server answered 304 for a read the client cache does not hold."
+explanation_key = "error.client.cache_miss"
+params = []
+remedy = "Repeat the read; the client sends it again without a cached ETag."
+since = "0.1.0"
+
+[[entry]]
+code = "client.network"
+class = "none"
+summary = "The request got no reply and cannot be repeated safely."
+explanation_key = "error.client.network"
+params = []
+remedy = "Check the connection, then repeat the request with an idempotency key or an If-Match version."
+since = "0.1.0"
+
+[[entry]]
+code = "client.unparseable_error"
+class = "none"
+summary = "The server's error answer was not a readable error envelope."
+explanation_key = "error.client.unparseable_error"
+params = []
+remedy = "Report the request id and status to an administrator; the server or a proxy sent a non-standard body."
+since = "0.1.0"
+
+[[entry]]
+code = "client.unparseable_response"
+class = "none"
+summary = "The server's sign-in answer carried no session token."
+explanation_key = "error.client.unparseable_response"
+params = []
+remedy = "Try again; if it repeats, report it to an administrator."
+since = "0.1.0"

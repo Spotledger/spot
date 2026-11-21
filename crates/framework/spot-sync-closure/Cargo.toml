@@ -1,0 +1,22 @@
+[package]
+name = "spot-sync-closure"
+description = "Sender-side dependency closure and bundles (WP-SYN-03.T1, ADR-064): given the in-scope state events of one source transaction and what a destination is known to have, build the bundle (or the ordered prerequisite bundles) that never leaves a record without its dependencies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Record images are JSON values (full-state events, ADR-061); the plain-data reference catalog reads them.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed closure errors.
+thiserror = "2"
+
+[dev-dependencies]
+# Property run on random reference graphs (every reference is earlier, same-bundle or known).
+proptest = "1"
+
+[lints]
+workspace = true

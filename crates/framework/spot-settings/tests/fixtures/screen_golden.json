@@ -1,0 +1,213 @@
+{
+  "screen": {
+    "title": "Settings: runtime",
+    "groups": [
+      {
+        "title": "Email",
+        "settings": [
+          {
+            "key": "runtime.smtp.host",
+            "title": "SMTP Host",
+            "summary": "Hostname of the SMTP server for outgoing email.",
+            "control": {
+              "type": "text",
+              "max_len": 255,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            },
+            "effective": {
+              "value": {
+                "Text": "localhost"
+              }
+            },
+            "origin_text": "default",
+            "default": {
+              "Text": "localhost"
+            },
+            "differs": false,
+            "restart": {
+              "type": "service",
+              "name": "email"
+            },
+            "risk": "medium",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          },
+          {
+            "key": "runtime.smtp.password",
+            "title": "SMTP Password",
+            "summary": "Password for SMTP authentication (secret).",
+            "control": {
+              "type": "secret_input"
+            },
+            "effective": "redacted",
+            "origin_text": "set at fleet",
+            "default": null,
+            "differs": true,
+            "restart": {
+              "type": "service",
+              "name": "email"
+            },
+            "risk": "high",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          }
+        ]
+      },
+      {
+        "title": "runtime > http",
+        "settings": [
+          {
+            "key": "runtime.http.listen_address",
+            "title": "HTTP Listen Address",
+            "summary": "The address and port the HTTP server binds to.",
+            "control": {
+              "type": "text",
+              "max_len": 64,
+              "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}:[0-9]{1,5}$"
+            },
+            "effective": {
+              "value": {
+                "Text": "127.0.0.1:9090"
+              }
+            },
+            "origin_text": "set at server:srv-17",
+            "default": {
+              "Text": "0.0.0.0:8080"
+            },
+            "differs": true,
+            "restart": {
+              "type": "service",
+              "name": "http"
+            },
+            "risk": "medium",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          }
+        ]
+      },
+      {
+        "title": "runtime > jobs",
+        "settings": [
+          {
+            "key": "runtime.jobs.worker_concurrency",
+            "title": "Job Worker Concurrency",
+            "summary": "Maximum number of concurrent job workers.",
+            "control": {
+              "type": "number",
+              "min": 1,
+              "max": 256,
+              "step": 1
+            },
+            "effective": {
+              "value": {
+                "Int": 4
+              }
+            },
+            "origin_text": "default",
+            "default": {
+              "Int": 4
+            },
+            "differs": false,
+            "restart": {
+              "type": "service",
+              "name": "job-runner"
+            },
+            "risk": "medium",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          }
+        ]
+      },
+      {
+        "title": "runtime > logging",
+        "settings": [
+          {
+            "key": "runtime.logging.level",
+            "title": "Log Level",
+            "summary": "Minimum log level for application logs.",
+            "control": {
+              "type": "choice",
+              "options": [
+                "trace",
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ]
+            },
+            "effective": {
+              "value": {
+                "Text": "info"
+              }
+            },
+            "origin_text": "default",
+            "default": {
+              "Text": "info"
+            },
+            "differs": false,
+            "restart": {
+              "type": "none"
+            },
+            "risk": "low",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          }
+        ]
+      },
+      {
+        "title": "runtime > session",
+        "settings": [
+          {
+            "key": "runtime.session.idle_timeout",
+            "title": "Session Idle Timeout",
+            "summary": "Maximum idle time before a session expires.",
+            "control": {
+              "type": "duration"
+            },
+            "effective": {
+              "value": {
+                "Duration": 900
+              }
+            },
+            "origin_text": "set at tenant:acme",
+            "default": {
+              "Duration": 1800
+            },
+            "differs": true,
+            "restart": {
+              "type": "none"
+            },
+            "risk": "low",
+            "deprecated": false,
+            "deprecated_message": null,
+            "visible": true,
+            "can_edit": true
+          }
+        ]
+      }
+    ]
+  },
+  "area_or_path": "runtime",
+  "chain": [
+    "fleet",
+    {
+      "server": "srv-17"
+    },
+    {
+      "tenant": "acme"
+    },
+    {
+      "company": "acme/C1"
+    }
+  ]
+}

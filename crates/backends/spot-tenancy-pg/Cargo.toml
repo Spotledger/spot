@@ -1,0 +1,37 @@
+[package]
+name = "spot-tenancy-pg"
+description = "PostgreSQL control store and provisioning executor for the control plane (WP-CTL-01.T2, ADR-34, ADR-058): the tenant registry and placement map in the control schema, and real schema creation, baseline migration and seeding for a tenant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `ControlStore` trait, the tenant record and the provisioning ports this crate implements.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# The catalog and the record types the baseline migration is planned from.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `database_exists`/`create_database` for a placement database, and the pool config.
+spot-postgres = { path = "../spot-postgres" }
+# The planner for the tenant's baseline migration.
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The framework adapters' `MigrationRunner` seam, which this crate's executor implements.
+spot-tenancy-adapters = { path = "../../framework/spot-tenancy-adapters" }
+# The `AppError` the catalogue codes ride.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The pool the caller builds and the objects checkout returns.
+deadpool-postgres = "0.14"
+tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
+# The runtime the synchronous trait methods block on while awaiting the database.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
+# Tenant ids are UUIDv7 values.
+uuid = { version = "1.26", default-features = false, features = ["std", "v7"] }
+
+[dev-dependencies]
+# Per-test scratch databases and a raw client for the isolation assertions.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,33 @@
+# The `faults` profile (WP-TST-15.T7): the load that runs while a fault is injected. It is the
+# tier M shape (200 sessions, 10 tx/s, the same read-heavy mix as `tier_m`), scaled in
+# tests/faults.rs by L9_LOAD_SCALE (thousandths, default 100: a tenth, 20 sessions at 20
+# arrivals/s) so the smoke fits a PR run; the nightly sets L9_LOAD_SCALE=1000.
+#
+# The faults themselves (tests/faults.rs, src/faults.rs): PostgreSQL connection kill, PostgreSQL
+# restart, disk full at 95 percent, slow disk (cgroup io.max), clock skew of one minute. Those
+# that need privilege or a prepared runner are skipped with a printed reason, never faked.
+#
+# The ledger writers (acknowledged-write accounting) are not part of this profile's mix: they run
+# beside it at about 5 writes per second with idempotency keys.
+name = "faults"
+tier = "M"
+sessions = 200
+ramp_seconds = 10
+steady_seconds = 150
+seed = 20261116
+target_tps = 200
+request_timeout_ms = 10000
+sample_every_seconds = 5
+report = "task_summary"
+
+[think]
+kind = "uniform"
+min_ms = 100
+max_ms = 500
+
+[mix]
+sign_in = 3
+open_form = 50
+list = 37
+report_run = 5
+create_submit = 5

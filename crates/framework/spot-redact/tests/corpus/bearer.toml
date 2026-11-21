@@ -1,0 +1,59 @@
+# Bearer tokens: `Bearer <opaque token>` wherever it appears; the scheme stays.
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'Authorization: Bearer mF_9.B5f-4.1JdMY for user 12'
+expected = 'Authorization: Bearer [redacted:token] for user 12'
+class = 'bearer'
+
+[[case]]
+input = 'bearer 09vX7fKk3QmZp2Wb'
+expected = 'bearer [redacted:token]'
+class = 'bearer'
+
+[[case]]
+input = 'BEARER 09vX7fKk3QmZp2Wb succeeded'
+expected = 'BEARER [redacted:token] succeeded'
+class = 'bearer'
+
+[[case]]
+input = 'Bearer abcdefgh_ijkl'
+expected = 'Bearer [redacted:token]'
+class = 'bearer'
+
+[[case]]
+input = '''Bearer qwertyui1
+Bearer poiuytre2'''
+expected = '''Bearer [redacted:token]
+Bearer [redacted:token]'''
+class = 'bearer'
+
+[[case]]
+input = 'token Bearer abc123xy'
+expected = 'token Bearer [redacted:token]'
+class = 'bearer'
+
+[[case]]
+input = 'session used Bearer Qw12er34Ty56'
+expected = 'session used Bearer [redacted:token]'
+class = 'bearer'
+
+[[case]]
+input = 'the carrier pigeon sang'
+expected = 'the carrier pigeon sang'
+class = 'bearer'
+
+[[case]]
+input = 'Bearer abcdefg'
+expected = 'Bearer abcdefg'
+class = 'bearer'
+
+[[case]]
+input = 'Bearers of good news'
+expected = 'Bearers of good news'
+class = 'bearer'
+
+[[case]]
+input = 'curl -H "Authorization: Bearer Zyxwvuts9876" https://api'
+expected = 'curl -H "Authorization: Bearer [redacted:token]" https://api'
+class = 'bearer'

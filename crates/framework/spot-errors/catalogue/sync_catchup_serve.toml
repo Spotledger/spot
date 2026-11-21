@@ -1,0 +1,100 @@
+# sync_catchup_serve codes: catch-up and bootstrap chunks served by the hub and applied by the node in spot-cli and spot-sync-catchup-host (WP-RTB-02.T14, ADR-066): why a chunk was not served, not applied or not trusted. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_catchup_serve.not_ready"
+class = "none"
+summary = "A prerequisite of catch-up serving or applying is not provided on this node (the director, the journal store and keys, the hub's node scope provider, or the node's apply path), so no chunk is served or applied."
+explanation_key = "error.sync_catchup_serve.not_ready"
+params = []
+remedy = "Run the node with its role's sync services; readiness names what is missing."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.no_verified_snapshot"
+class = "none"
+summary = "No journal snapshot has been verified yet, so a returning node waits instead of being served an unverified base."
+explanation_key = "error.sync_catchup_serve.no_verified_snapshot"
+params = []
+remedy = "Wait for the audit run to verify a snapshot, or take and verify one; the node retries."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.scope_unknown"
+class = "none"
+summary = "The hub has no registered scope for the node asking for a bootstrap."
+explanation_key = "error.sync_catchup_serve.scope_unknown"
+params = []
+remedy = "Enrol the node and register its subscription; a node can never name its own scope."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.bootstrap_refused"
+class = "none"
+summary = "The bootstrap library refused to plan or cut the chunk (its own code is in the log)."
+explanation_key = "error.sync_catchup_serve.bootstrap_refused"
+params = []
+remedy = "See the bootstrap code in the log: another tenant's snapshot, a generation that moved, a cycle too large for one bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.out_of_range"
+class = "none"
+summary = "The chunk asked for is beyond the plan."
+explanation_key = "error.sync_catchup_serve.out_of_range"
+params = []
+remedy = "Restart the bootstrap from the checkpoint the node reports."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.bookkeeping_failed"
+class = "none"
+summary = "The hub's progress bookkeeping for the node failed."
+explanation_key = "error.sync_catchup_serve.bookkeeping_failed"
+params = []
+remedy = "Check the progress table (`spot migrate`) and the database connection; the node resumes at its checkpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.encode_failed"
+class = "none"
+summary = "A chunk could not be written as JSON."
+explanation_key = "error.sync_catchup_serve.encode_failed"
+params = []
+remedy = "Report it: a record image holds a value JSON cannot carry."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.chunk_tampered"
+class = "none"
+summary = "A chunk's hash does not match its body, or the body does not decode; it is refused whole and nothing is applied."
+explanation_key = "error.sync_catchup_serve.chunk_tampered"
+params = []
+remedy = "Ask for the chunk again; if it repeats, check the path between hub and node."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.chunk_out_of_order"
+class = "none"
+summary = "A chunk arrived that is not the next one to apply."
+explanation_key = "error.sync_catchup_serve.chunk_out_of_order"
+params = []
+remedy = "Ask for the chunk the checkpoint names."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.apply_failed"
+class = "none"
+summary = "The node's apply path refused a chunk; the checkpoint did not move, so the chunk is asked for again."
+explanation_key = "error.sync_catchup_serve.apply_failed"
+params = []
+remedy = "See the apply code in the log; fix its cause and let the node retry."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_catchup_serve.checkpoint_failed"
+class = "none"
+summary = "The node's apply checkpoint could not be read or written."
+explanation_key = "error.sync_catchup_serve.checkpoint_failed"
+params = []
+remedy = "Check the progress table (`spot migrate`) and the database connection."
+since = "0.1.0"

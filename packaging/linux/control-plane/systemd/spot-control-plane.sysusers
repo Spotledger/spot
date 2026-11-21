@@ -1,0 +1,2 @@
+# systemd-sysusers(5): the unprivileged control plane account.
+u spot-control-plane - "Spotledger control plane" /var/lib/spot-control-plane /sbin/nologin

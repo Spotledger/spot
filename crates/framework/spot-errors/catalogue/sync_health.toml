@@ -1,0 +1,10 @@
+# sync_health codes: the `HealthError` vocabulary of spot-sync-health (WP-SYN-10.T1, ADR-067 section 6). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_health.negative_contact_time"
+class = "none"
+summary = "Node {node} has a negative last contact time, so it is not hub time."
+explanation_key = "error.sync_health.negative_contact_time"
+params = ["node"]
+remedy = "Pass the ledger row's last contact as hub milliseconds since the Unix epoch; a negative value means the row is corrupt or came from a node clock."
+since = "0.1.0"

@@ -1,0 +1,21 @@
+# registry_pg codes: the PostgreSQL registry index (WP-STR-03.T2). Failures of a call are the
+# registry's own registry.storage refusal; only the setup codes are new. One [[entry]] per code;
+# see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "registry_pg.bad_setup"
+class = "none"
+summary = "The registry index could not be built: the bridge settings do not hold against the pool, or the caller is inside a current-thread runtime."
+explanation_key = "error.registry_pg.bad_setup"
+params = []
+remedy = "Build the store from a plain thread of the control-plane process, with a bridge whose max_in_flight is at least one below the pool size minus the bridge reserve."
+since = "0.1.0"
+
+[[entry]]
+code = "registry_pg.migration_failed"
+class = "none"
+summary = "The registry tables could not be created in the control schema."
+explanation_key = "error.registry_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, indexes and a trigger function in the spot_control schema and that the server is reachable, then call prepare again."
+since = "0.1.0"

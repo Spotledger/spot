@@ -1,0 +1,33 @@
+name = "party"
+label = "Party"
+app = "sample_app"
+module = "billing"
+title_field = "code"
+
+[[fields]]
+name = "code"
+label = "Code"
+type = "text"
+required = true
+unique = true
+
+[[fields]]
+name = "active"
+type = "bool"
+default = "true"
+
+[[fields]]
+name = "about_type"
+label = "About Type"
+type = "text"
+
+[[fields]]
+name = "about"
+label = "About"
+type = "dynamic_link"
+options = "about_type"
+
+[[fields]]
+name = "since"
+type = "datetime"
+default = "2026-01-31T09:30:00Z"

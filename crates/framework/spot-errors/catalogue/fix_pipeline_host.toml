@@ -1,0 +1,46 @@
+# fix_pipeline_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "fix_pipeline_host.settings_invalid"
+class = "none"
+summary = "The [services.fix_pipeline] table has an unknown key or a value out of range, so the fix pipeline cannot start."
+explanation_key = "error.fix_pipeline_host.settings_invalid"
+params = []
+remedy = "Fix the table named in the message; see the fix pipeline page of the operator guide for the keys."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline_host.remedies_unavailable"
+class = "none"
+summary = "The fix pipeline needs the remedy host and it is not running, so there is nothing to apply and the service reports itself degraded."
+explanation_key = "error.fix_pipeline_host.remedies_unavailable"
+params = []
+remedy = "Enable the remedies service and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline_host.world_unavailable"
+class = "none"
+summary = "No world is provided for remedies, so a fix can be neither rehearsed nor verified and the pipeline is not installed."
+explanation_key = "error.fix_pipeline_host.world_unavailable"
+params = []
+remedy = "Install the module that provides the site's world and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline_host.hold_unavailable"
+class = "none"
+summary = "The effect hold is not running while require_effect_hold is on, so no fix is applied."
+explanation_key = "error.fix_pipeline_host.hold_unavailable"
+params = []
+remedy = "Enable the effect hold service, or turn require_effect_hold off only if the site truly has no external effects."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline_host.recovery_failed"
+class = "none"
+summary = "Unfinished fixes found at start could not all be recovered, so they ended failed with evidence kept."
+explanation_key = "error.fix_pipeline_host.recovery_failed"
+params = []
+remedy = "Read the fix journal for the named fixes and repeat the fixes that still matter."
+since = "0.1.0"

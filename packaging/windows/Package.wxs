@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spotledger.msi: per-machine, x64 (WP-PRD-03.T4). WiX 5. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Spotledger" Manufacturer="Spotledger" Version="$(ProductVersion)"
+           UpgradeCode="9DEE1F01-DDA6-495A-9AAA-D4A455B8FD33" Scope="perMachine"
+           InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="Spotledger server, agent and bundled PostgreSQL" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Same UpgradeCode, higher version: stop, upgrade, check, restart. A downgrade is refused. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Spotledger is already installed. Downgrading is not supported; uninstall it first or restore a backup." />
+
+    <!-- Silent install properties. All are Secure (honoured in a elevated, locked-down install). -->
+    <Property Id="INSTALLDIR" Secure="yes" />
+    <Property Id="DATADIR" Secure="yes" />
+    <Property Id="HTTP_PORT" Value="8080" Secure="yes" />
+    <Property Id="ADMIN_EMAIL" Secure="yes" />
+    <Property Id="ENROL_GATEWAY" Secure="yes" />
+    <!-- Hidden: masked as *** in the MSI log; consumed once by the enrolment action. -->
+    <Property Id="ENROL_TOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="LAN_DISCOVERY" Value="0" Secure="yes" />
+    <Property Id="FIREWALL" Value="1" Secure="yes" />
+    <Property Id="REMOVE_DATA" Value="0" Secure="yes" />
+    <SetDirectory Id="INSTALLFOLDER" Value="[INSTALLDIR]" Condition="INSTALLDIR" />
+    <SetDirectory Id="DATAFOLDER" Value="[DATADIR]" Condition="DATADIR" />
+
+    <!-- The updater refuses a build that says it is unsigned. -->
+    <Property Id="BUILD_KIND" Value="$(BuildKind)" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Spotledger" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAFOLDER" Name="Spotledger" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MENUFOLDER" Name="Spotledger" />
+    </StandardDirectory>
+
+    <!-- Features -->
+    <Feature Id="Server" Title="Spotledger Server" Level="1" AllowAdvertise="no" Absent="disallow">
+      <ComponentGroupRef Id="ServerFiles" />
+      <ComponentRef Id="ServerState" />
+      <ComponentRef Id="ServiceFirewallDomain" />
+      <ComponentRef Id="ServiceFirewallPrivate" />
+      <ComponentRef Id="AdminShortcut" />
+    </Feature>
+    <Feature Id="Agent" Title="Spotledger Agent (optional)" Level="2" AllowAdvertise="no">
+      <ComponentGroupRef Id="AgentFiles" />
+    </Feature>
+    <Feature Id="Postgres" Title="Bundled PostgreSQL" Level="1" AllowAdvertise="no">
+      <ComponentGroupRef Id="PostgresFiles" />
+    </Feature>
+
+    <!-- Files come from the payload directory. -->
+    <ComponentGroup Id="ServerFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(PayloadDir)\server\**" />
+      <Files Include="scripts\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="AgentFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(PayloadDir)\agent\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="PostgresFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(PayloadDir)\postgres\**" />
+    </ComponentGroup>
+
+    <!-- State: the data folder survives an uninstall (Permanent); the build kind is recorded. -->
+    <Component Id="ServerState" Directory="DATAFOLDER" Guid="6F2C1C58-4A39-4E1B-9C33-0B0D6C1F4A11">
+      <CreateFolder />
+      <RegistryValue Root="HKLM" Key="Software\Spotledger" Name="BuildKind" Type="string" Value="[BUILD_KIND]" KeyPath="yes" />
+    </Component>
+
+    <!-- Windows Firewall: inbound TCP for the chosen port, Private and Domain profiles only. -->
+    <Component Id="ServiceFirewallDomain" Directory="INSTALLFOLDER" Guid="B0A0B4C2-6E7A-4D0E-8F5A-2D7D3C8E9A21" Condition="FIREWALL = 1">
+      <fire:FirewallException Id="FwServerDomain" Name="Spotledger Server (Domain)" Protocol="tcp" Port="[HTTP_PORT]" Profile="domain" Scope="any" IgnoreFailure="no" />
+      <RegistryValue Root="HKLM" Key="Software\Spotledger" Name="FirewallDomain" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ServiceFirewallPrivate" Directory="INSTALLFOLDER" Guid="C1B1C5D3-7F8B-4E1F-9A6B-3E8E4D9FAB32" Condition="FIREWALL = 1">
+      <fire:FirewallException Id="FwServerPrivate" Name="Spotledger Server (Private)" Protocol="tcp" Port="[HTTP_PORT]" Profile="private" Scope="any" IgnoreFailure="no" />
+      <RegistryValue Root="HKLM" Key="Software\Spotledger" Name="FirewallPrivate" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Start-menu shortcut to the admin entry. -->
+    <Component Id="AdminShortcut" Directory="MENUFOLDER" Guid="D2C2D6E4-8A9C-4F20-8B7C-4F9F5EA0BC43">
+      <util:InternetShortcut Id="AdminUrl" Name="Spotledger Admin" Target="http://localhost:[HTTP_PORT]/admin" />
+      <RemoveFolder Id="RemoveMenu" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="Software\Spotledger" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Custom actions. Deferred, no impersonation: they run as SYSTEM, so none names a path in a
+         user-writable location: the tools are in Program Files (admin-only) or System32. A failed
+         action (Return="check") rolls the whole install back; each has a rollback partner. -->
+    <CustomAction Id="WriteConfig" Execute="deferred" Impersonate="no" Return="check"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\write-config.ps1&quot; -DataDir &quot;[DATAFOLDER]&quot; -Port &quot;[HTTP_PORT]&quot; -AdminEmail &quot;[ADMIN_EMAIL]&quot; -LanDiscovery &quot;[LAN_DISCOVERY]&quot;" />
+    <CustomAction Id="InstallService" Execute="deferred" Impersonate="no" Return="check"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; install --config &quot;[DATAFOLDER]config\spot.toml&quot;" />
+    <CustomAction Id="InstallServiceRollback" Execute="rollback" Impersonate="no" Return="ignore"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; uninstall" />
+    <CustomAction Id="StartService" Execute="deferred" Impersonate="no" Return="check"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; start" />
+    <CustomAction Id="StopServiceBeforeUpgrade" Execute="deferred" Impersonate="no" Return="ignore"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; stop" />
+    <CustomAction Id="UpgradeCompatibilityCheck" Execute="deferred" Impersonate="no" Return="check"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; upgrade --from-staging &quot;[INSTALLFOLDER]&quot; --config &quot;[DATAFOLDER]config\spot.toml&quot;" />
+    <CustomAction Id="EnrolAgent" Execute="deferred" Impersonate="no" Return="check"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-agent.exe&quot; enrol --gateway &quot;[ENROL_GATEWAY]&quot; --token &quot;[ENROL_TOKEN]&quot; --once" />
+    <CustomAction Id="UninstallService" Execute="deferred" Impersonate="no" Return="ignore"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[INSTALLFOLDER]spot-winsvc.exe&quot; uninstall" />
+    <!-- Purge the data folder only when asked (REMOVE_DATA=1), only on a real uninstall, and never
+         a drive root. The tool is System32's cmd.exe, never a path the user chose. -->
+    <CustomAction Id="PurgeData" Execute="deferred" Impersonate="no" Return="ignore"
+        Directory="INSTALLFOLDER"
+        ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c rd /s /q &quot;[DATAFOLDER]&quot;" />
+
+    <InstallExecuteSequence>
+      <Custom Action="StopServiceBeforeUpgrade" Before="RemoveExistingProducts" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="UninstallService" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="PurgeData" After="UninstallService" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND REMOVE_DATA=&quot;1&quot; AND DATADIR&lt;&gt;&quot;[WindowsVolume]&quot;" />
+      <Custom Action="WriteConfig" After="InstallFiles" Condition="NOT REMOVE" />
+      <Custom Action="InstallServiceRollback" Before="InstallService" Condition="NOT REMOVE AND NOT WIX_UPGRADE_DETECTED" />
+      <Custom Action="InstallService" After="WriteConfig" Condition="NOT REMOVE AND NOT WIX_UPGRADE_DETECTED" />
+      <Custom Action="UpgradeCompatibilityCheck" After="WriteConfig" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="EnrolAgent" After="InstallService" Condition="NOT REMOVE AND ENROL_GATEWAY AND ENROL_TOKEN AND &amp;Agent=3" />
+      <Custom Action="StartService" Before="InstallFinalize" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

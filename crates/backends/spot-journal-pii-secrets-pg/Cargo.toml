@@ -1,0 +1,31 @@
+[package]
+name = "spot-journal-pii-secrets-pg"
+description = "The PostgreSQL WrappedKeyStore for the per-subject journal keys (WP-JRN-08.T6, ADR-061 s6 and s9): wrapped keys and erasure tombstones in one table per tenant database, reached through the shared spot-pg-bridge, so a restart keeps every key and a destroy is visible to every node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `WrappedKeyStore` port this crate implements, with `StoredKey` and `PortError`.
+spot-journal-pii-secrets = { path = "../../framework/spot-journal-pii-secrets" }
+# `WrappedKey` and `KeyRef`: the value the table stores (already wrapped, never key material).
+spot-secrets = { path = "../../framework/spot-secrets" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 addendum 1).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# `ExtraTable`: the table is created by the migrator's extra-table hook (WP-STO-12.T3).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# The driver: the statements run on the connection the bridge hands to the closure.
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# Per-test scratch databases and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The `SubjectKeys` trait the full adapter flow is driven through.
+spot-journal-pii = { path = "../../framework/spot-journal-pii" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,5 @@
+error: a whitelisted method must be `async fn`
+  --> tests/ui/not_async.rs:21:5
+   |
+21 |     fn go(&self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |     ^^

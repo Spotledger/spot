@@ -1,0 +1,155 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.a0",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 0,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a1",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 1,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a2",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 2,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a3",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 3,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a4",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 4,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a5",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 5,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    },
+    {
+      "id": "sample.a6",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 6,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.slot_limit. doc.toolbar takes at most 6 items per app and DocType."
+}

@@ -1,0 +1,37 @@
+[package]
+name = "spot-bundle-merge"
+description = "Three-way merge and conflict detection between customization bundles (WP-ALM-03, blueprint WS19): item-wise merge3 over the units spot-custom-bundle defines, section-aware semantic conflicts, the same items checked against a platform upgrade through spot-migration-conflicts, a resolution API and a reviewable text report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The bundle format, its sections and the item decomposition merge3 works on.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# Customisations, FieldSpec, Property, Definition, EffectiveMeta, Registry::build.
+spot-meta = { path = "../spot-meta" }
+# ViewLayer, the unit a `views` item is.
+spot-views = { path = "../spot-views" }
+# The release plan an upgrade check runs against (WP-MIG-01).
+spot-migration-plan = { path = "../spot-migration-plan" }
+# Customisation conflict detection for a release plan (WP-MIG-03), reused via the UpgradeCheck trait.
+spot-migration-conflicts = { path = "../spot-migration-conflicts" }
+# App and host versions.
+semver = "1"
+# Field item bytes are TOML; fixture items are JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+# Stable error enums.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: three-way merges match a reference model, and the merged digest ignores input order.
+proptest = "1"
+# Integration tests reorder a bundle's ZIP entries to prove order independence.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[
+{"op":"percent","amount":"200.00","currency":"USD","rate":"18","expect":"36"},
+{"op":"percent","amount":"99.99","currency":"USD","rate":"7.5","expect":"7.49925"},
+{"op":"percent","amount":"0.01","currency":"USD","rate":"50","expect":"0.005"},
+{"op":"percent","amount":"-80.00","currency":"USD","rate":"12.5","expect":"-10"},
+{"op":"percent","amount":"1000","currency":"USD","rate":"0.01","expect":"0.1"},
+{"op":"percent","amount":"33.33","currency":"USD","rate":"33.33","expect":"11.108889"},
+{"op":"sum","currency":"USD","values":["0.1","0.2"],"expect":"0.3"},
+{"op":"sum","currency":"USD","values":["1.10","2.205","-0.005"],"expect":"3.3"},
+{"op":"sum","currency":"USD","values":["999999999999.99","0.01"],"expect":"1000000000000"},
+{"op":"sum","currency":"USD","values":["-1","1"],"expect":"0"},
+{"op":"sum","currency":"USD","values":[],"expect":"0"},
+{"op":"sum","currency":"USD","values":["0.0000001","0.0000002","0.0000003"],"expect":"0.0000006"},
+{"op":"sum","currency":"USD","values":["5","5","5","5","5","5","5"],"expect":"35"},
+{"op":"sum","currency":"USD","values":["-0.1","-0.2","-0.3"],"expect":"-0.6"}
+]

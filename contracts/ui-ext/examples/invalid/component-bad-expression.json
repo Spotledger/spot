@@ -1,0 +1,27 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.c",
+      "origin": "app:sample",
+      "props": [
+        {
+          "name": "n",
+          "type": "int"
+        }
+      ],
+      "body": {
+        "node": "when",
+        "test": "doc.n >",
+        "then": {
+          "node": "control",
+          "control": "label",
+          "text": "x"
+        }
+      }
+    }
+  ],
+  "$comment": "expect: uiext.expression_invalid. A when test does not parse."
+}

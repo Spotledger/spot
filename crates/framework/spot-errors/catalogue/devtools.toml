@@ -1,0 +1,120 @@
+# devtools codes: the developer debugger and trace viewer (spot-devtools, WP-DX-03).
+# Library-internal vocabulary (ADR-26): raised by the crate, explained by the host.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "devtools.io"
+class = "none"
+summary = "A developer-tools file operation failed."
+explanation_key = "error.devtools.io"
+params = []
+remedy = "Check that the script path exists and is readable, then launch the debug session again."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.protocol"
+class = "none"
+summary = "A Debug Adapter Protocol message was malformed."
+explanation_key = "error.devtools.protocol"
+params = []
+remedy = "Reconnect the debugger; a message without a valid Content-Length or command is refused rather than guessed."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.config"
+class = "none"
+summary = "The developer-tools configuration is invalid."
+explanation_key = "error.devtools.config"
+params = []
+remedy = "Fix the named option: the development token, the bind address or the launch source."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.production"
+class = "none"
+summary = "Debugging was requested for a site marked production."
+explanation_key = "error.devtools.production"
+params = []
+remedy = "Debug a development site; debugging is never enabled on a production site."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.release_build"
+class = "none"
+summary = "Debugging was requested in a release build."
+explanation_key = "error.devtools.release_build"
+params = []
+remedy = "Use a development build; the debug adapter is not compiled into production binaries."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.token"
+class = "none"
+summary = "The development token is missing or incorrect."
+explanation_key = "error.devtools.token"
+params = []
+remedy = "Copy the token the dev server printed when it started and pass it to the debugger."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.bind"
+class = "none"
+summary = "The debug server could not listen on its address."
+explanation_key = "error.devtools.bind"
+params = []
+remedy = "Check that the port is free and that the address belongs to this machine, then start the debugger again."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.not_loopback"
+class = "none"
+summary = "The debug server was asked to bind a non-loopback address without an explicit opt-in."
+explanation_key = "error.devtools.not_loopback"
+params = []
+remedy = "Bind the loopback address, or set allow_remote when a remote debugger is intended."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.script"
+class = "none"
+summary = "A script debug session could not transpile, compile or run the script."
+explanation_key = "error.devtools.script"
+params = []
+remedy = "Fix the named script error and launch the session again."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.session"
+class = "none"
+summary = "The debug session cannot answer the request in its current state."
+explanation_key = "error.devtools.session"
+params = []
+remedy = "Launch a script and pause it before asking for frames, variables or an evaluation."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.pause_timeout"
+class = "none"
+summary = "A paused script was resumed because no debugger command arrived."
+explanation_key = "error.devtools.pause_timeout"
+params = []
+remedy = "Send continue, next, stepIn or stepOut within the pause timeout, or raise the timeout for the session."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.instrument"
+class = "none"
+summary = "A script could not be instrumented for debugging."
+explanation_key = "error.devtools.instrument"
+params = []
+remedy = "Simplify the named statement or report the script; instrumentation never changes a production script."
+since = "0.1.0"
+
+[[entry]]
+code = "devtools.wasm"
+class = "none"
+summary = "A WebAssembly boundary report is invalid."
+explanation_key = "error.devtools.wasm"
+params = []
+remedy = "Check that the host passed the component hash, export name and host-call names it measured."
+since = "0.1.0"

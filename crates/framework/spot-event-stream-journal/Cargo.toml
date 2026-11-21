@@ -1,0 +1,37 @@
+[package]
+name = "spot-event-stream-journal"
+description = "The journal history reader for the event stream (WP-JRN-09.T2, ADR-061 s5 and s6, ADR-078 s4): a JournalHistory port and a JournalReader over the signed manifest, the verified sealed segments and the unsealed tail chunks, plus the seam check that stitches history to the live outbox without a gap or a duplicate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `EventEnvelope` and `Position`.
+spot-events-contract = { path = "../../../contracts/events" }
+# The object-store seam and the per-tenant key layout.
+spot-journal-store = { path = "../spot-journal-store" }
+# The signed manifest and the key windows it is verified under.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+# The sealed segment reader and the hash helpers.
+spot-journal-segment = { path = "../spot-journal-segment" }
+# The reader of unsealed positions (WP-JRN-05.T8) and the chunk decoder trait.
+spot-journal-rebuild-plan = { path = "../spot-journal-rebuild-plan" }
+# Typed errors with stable `eventstream_journal.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Drives the store futures in tests.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# Builds real envelopes through `EventEnvelope::from_record`.
+spot-storage-contract = { path = "../../../contracts/storage" }
+time = { version = "0.3.55", default-features = false, features = ["std", "macros"] }
+serde_json = "1"
+# Signs the test manifests.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The no-gap-no-duplicate seam property.
+proptest = "1"
+
+[lints]
+workspace = true

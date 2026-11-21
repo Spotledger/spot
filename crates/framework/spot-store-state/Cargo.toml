@@ -1,0 +1,17 @@
+[package]
+name = "spot-store-state"
+description = "The store server's own durable state (WP-STR-03.T4): hashed publisher keys, review records and the fail-closed listing state, idempotency keys, revoked keys and bundles with the revocation generation, and the audit log, as a port with a memory double."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `AppName`, `Version` and `Digest`: the identities a listing and a review are keyed by.
+spot-registry = { path = "../spot-registry" }
+# A review summary is validated to be one JSON document before it is stored (never interpreted).
+serde_json = "1"
+
+[lints]
+workspace = true

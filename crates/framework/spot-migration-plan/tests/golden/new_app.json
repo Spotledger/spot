@@ -1,0 +1,124 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "schema/create_table:sales_invoice",
+      "area": "schema",
+      "kind": "schema_add_entity",
+      "rule": "schema/add_entity",
+      "target": "sales_invoice",
+      "description": "Do `create_table:sales_invoice`.",
+      "before": "live schema",
+      "after": "catalogue",
+      "risk": "additive",
+      "blocking": "online"
+    },
+    {
+      "id": "schema/create_index:sales_invoice.idx_customer",
+      "area": "schema",
+      "kind": "schema_add_index",
+      "rule": "schema/add_index",
+      "target": "sales_invoice.idx_customer",
+      "description": "Do `create_index:sales_invoice.idx_customer`.",
+      "before": "live schema",
+      "after": "catalogue",
+      "risk": "additive",
+      "blocking": "online"
+    },
+    {
+      "id": "metadata/sales_invoice/doctype_added",
+      "area": "metadata",
+      "kind": "doc_type_added",
+      "rule": "metadata/doctype_added",
+      "target": "sales_invoice",
+      "description": "DocType `sales_invoice` is added.",
+      "risk": "additive",
+      "blocking": "brief_lock"
+    }
+  ],
+  "risk": "additive",
+  "estimate": {
+    "low": 2,
+    "expected": 23,
+    "high": 206,
+    "per_change": [
+      {
+        "change_id": "metadata/sales_invoice/doctype_added",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "brief_lock",
+        "unknown": false
+      },
+      {
+        "change_id": "schema/create_index:sales_invoice.idx_customer",
+        "low": 0,
+        "expected": 20,
+        "high": 200,
+        "blocking": "online",
+        "unknown": true,
+        "rows_per_second": 50000
+      },
+      {
+        "change_id": "schema/create_table:sales_invoice",
+        "low": 1,
+        "expected": 1,
+        "high": 2,
+        "blocking": "online",
+        "unknown": false
+      }
+    ],
+    "blocking": "brief_lock",
+    "unknown": true
+  },
+  "plan_digest": "9c86e6b0afaddc89224fefbb4dc7a7af8a32653a4fb2c96d28382f0f99cd7dbd",
+  "to": {
+    "apps": [
+      {
+        "name": "erp_selling",
+        "version": "0.2.0",
+        "manifest": {
+          "events": [],
+          "schedules": [],
+          "patches": [],
+          "overrides": [],
+          "capabilities": {
+            "network": [],
+            "email": false,
+            "files": "",
+            "doctypes_read": [],
+            "doctypes_write": []
+          }
+        }
+      }
+    ],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "sales_invoice",
+          "fields": [
+            {
+              "name": "customer",
+              "type": "text"
+            },
+            {
+              "name": "total",
+              "type": "int"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

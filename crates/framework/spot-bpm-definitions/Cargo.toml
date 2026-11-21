@@ -1,0 +1,26 @@
+[package]
+name = "spot-bpm-definitions"
+description = "Durable process definitions for the Business Process engine (WP-BPM-09.T2, ADR-49): the DefinitionStore trait over immutable published versions with their content hash, state, publisher and note, an in-memory reference store, a conformance suite every store runs, and load_into, which rebuilds the engine's ProcessRegistry from the store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `ProcessRegistry` and `ProcessDefinition`: what `load_into` rebuilds from the stored texts.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The text form, the process-name grammar and the content hash a stored version carries.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `OffsetDateTime`: time is always an argument, never read from a clock.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Typed errors with stable `definitions.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

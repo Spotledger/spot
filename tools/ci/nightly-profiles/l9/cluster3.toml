@@ -1,0 +1,13 @@
+# Three-node cluster proofs (WP-TST-15.T6): one test per proof, run one after the other.
+name = "cluster3"
+description = "three spot serve nodes on one PostgreSQL: propagation, leader, failover, rolling restart"
+runner = "large"
+timeout_minutes = 120
+pr_gate = false
+test = "cluster3"
+l9_profile = "cluster3"
+command = ["cargo", "test", "-p", "l9-scale", "--release", "--test", "cluster3", "--", "--nocapture", "--test-threads=1"]
+artefacts = ["target/l9/cluster3.log"]
+
+[env]
+L9_DURATION_SCALE = "1"

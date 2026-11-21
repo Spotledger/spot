@@ -1,0 +1,65 @@
+# Help for the sync_policy error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sync_policy.bad_value"
+what_happened = "A sync policy property value is not valid for its key."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use a class, direction, trigger, scope key type or field name the policy text form accepts.", "If it keeps happening, tell your administrator and quote the code sync_policy.bad_value."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.closed_link"
+what_happened = "A syncing document type links to a document type that never syncs."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Give the linked document type a syncing policy, or stop the link from leaving the origin.", "If it keeps happening, tell your administrator and quote the code sync_policy.closed_link."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.direction_conflict"
+what_happened = "A sync policy's direction contradicts its class."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Match the direction to the class: local sends nothing, master flows down, transactional flows up.", "If it keeps happening, tell your administrator and quote the code sync_policy.direction_conflict."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.excluded_field"
+what_happened = "A field excluded from sync is required, is a link, or does not exist."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Exclude only optional, non-link fields that the document type actually declares.", "If it keeps happening, tell your administrator and quote the code sync_policy.excluded_field."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.excluded_field_received"
+what_happened = "A received document carries a field the policy excludes from sync."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Reject the document; the sender must build its outgoing view without the excluded field.", "If it keeps happening, tell your administrator and quote the code sync_policy.excluded_field_received."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.orphan_queued"
+what_happened = "A sync policy change would leave already queued records undeliverable."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Drain the queued records, or keep a direction that can still deliver them.", "If it keeps happening, tell your administrator and quote the code sync_policy.orphan_queued."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.owner_scope_missing"
+what_happened = "A sync policy flows upward but names no owner scope key type."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Name the owner_scope key type the creating node must hold for a record it sends up.", "If it keeps happening, tell your administrator and quote the code sync_policy.owner_scope_missing."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.unknown_doctype"
+what_happened = "A sync policy is declared for a document type the metadata does not hold."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Declare the policy on a document type the effective metadata holds, or remove the declaration.", "If it keeps happening, tell your administrator and quote the code sync_policy.unknown_doctype."]
+audience = "user"
+
+[[help]]
+code = "sync_policy.unknown_property"
+what_happened = "A sync policy property key is not one this platform knows."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Use one of sync_policy, sync_class, sync_direction, sync_trigger, sync_owner_scope or sync_exclude_fields.", "If it keeps happening, tell your administrator and quote the code sync_policy.unknown_property."]
+audience = "user"

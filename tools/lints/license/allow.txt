@@ -1,0 +1,2 @@
+# Packages allowed to carry a licence other than Apache-2.0.
+# One name per line, each with a "# reason" comment, e.g.:  spot-example  # reason

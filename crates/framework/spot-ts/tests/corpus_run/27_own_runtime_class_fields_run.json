@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "class_fields_run",
+  "args": 3,
+  "expect": 21
+}

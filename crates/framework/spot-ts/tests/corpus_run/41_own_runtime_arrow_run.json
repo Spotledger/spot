@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "arrow_run",
+  "args": 7,
+  "expect": 49
+}

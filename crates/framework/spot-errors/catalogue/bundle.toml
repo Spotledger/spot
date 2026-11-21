@@ -1,0 +1,154 @@
+# bundle codes: raised by this crate. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bundle.bad_archive"
+class = "none"
+summary = "The bytes are not a ZIP archive at all."
+explanation_key = "error.bundle.bad_archive"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.bad_component"
+class = "none"
+summary = "`app.wasm` is not a WebAssembly component, or does not parse as one."
+explanation_key = "error.bundle.bad_component"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.bad_deflate"
+class = "none"
+summary = "An entry does not decompress, or its CRC does not match."
+explanation_key = "error.bundle.bad_deflate"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.bad_manifest"
+class = "none"
+summary = "`manifest.toml` failed in `spot-manifest`."
+explanation_key = "error.bundle.bad_manifest"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.bad_symlink"
+class = "none"
+summary = "A symlink entry; bundles carry plain files and directories only."
+explanation_key = "error.bundle.bad_symlink"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.duplicate_entry"
+class = "none"
+summary = "Two entries normalise to the same name, including two that differ only by case (they collide on Windows)."
+explanation_key = "error.bundle.duplicate_entry"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.host_required"
+class = "none"
+summary = "`requires_host` excludes the host the bundle was opened for."
+explanation_key = "error.bundle.host_required"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.illegal_path"
+class = "none"
+summary = "A name that escapes the bundle or is not a plain relative path."
+explanation_key = "error.bundle.illegal_path"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.import_without_capability"
+class = "none"
+summary = "A known import whose capability the manifest does not declare."
+explanation_key = "error.bundle.import_without_capability"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.missing_asset"
+class = "none"
+summary = "An `[[assets]]` path the manifest declares is not in the bundle."
+explanation_key = "error.bundle.missing_asset"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.missing_entry"
+class = "none"
+summary = "`manifest.toml` or `app.wasm` is absent."
+explanation_key = "error.bundle.missing_entry"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.over_privileged"
+class = "none"
+summary = "The manifest declares beyond the policy."
+explanation_key = "error.bundle.over_privileged"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.too_large"
+class = "none"
+summary = "The archive, one file, or the total inflated size exceeds the limits."
+explanation_key = "error.bundle.too_large"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.too_many_entries"
+class = "none"
+summary = "More entries than the limits allow."
+explanation_key = "error.bundle.too_many_entries"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.undeclared_asset"
+class = "none"
+summary = "A file under `assets/` the manifest does not declare."
+explanation_key = "error.bundle.undeclared_asset"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.unexpected_entry"
+class = "none"
+summary = "An entry that is not `manifest.toml`, `app.wasm` or under `assets/`."
+explanation_key = "error.bundle.unexpected_entry"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"
+
+[[entry]]
+code = "bundle.unknown_import"
+class = "none"
+summary = "The component imports something the host does not know."
+explanation_key = "error.bundle.unknown_import"
+params = []
+remedy = "Correct what the error message names and retry; the message states the offending item."
+since = "0.1.0"

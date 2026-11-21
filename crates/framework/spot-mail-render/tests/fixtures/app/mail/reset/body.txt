@@ -1,0 +1,3 @@
+Hello {{ name }},
+Your reset code is {{ code }}.
+It works for {{ hours }} hours.

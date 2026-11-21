@@ -1,0 +1,199 @@
+# Registry refusal codes (WP-STR-03). Bundle/signing codes pass through their catalogues.
+
+[[entry]]
+code = "registry.digest_mismatch"
+class = "none"
+summary = "Stored or transported bytes differ from the addressed canonical bundle."
+explanation_key = "error.registry.digest_mismatch"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.invalid_bundle"
+class = "none"
+summary = "The bundle validator refused the archive."
+explanation_key = "error.registry.invalid_bundle"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.invalid_cursor"
+class = "none"
+summary = "The cursor is invalid or its query or catalogue snapshot changed."
+explanation_key = "error.registry.invalid_cursor"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.invalid_name"
+class = "none"
+summary = "The app name does not follow manifest naming rules."
+explanation_key = "error.registry.invalid_name"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.invalid_query"
+class = "none"
+summary = "The search request has an invalid page size."
+explanation_key = "error.registry.invalid_query"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.invalid_trust"
+class = "none"
+summary = "The signed revocation list was issued in the future."
+explanation_key = "error.registry.invalid_trust"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.metadata_mismatch"
+class = "none"
+summary = "Indexed release facts differ from the signed bundle or certificate."
+explanation_key = "error.registry.metadata_mismatch"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.not_found"
+class = "none"
+summary = "The requested release, publisher or blob does not exist."
+explanation_key = "error.registry.not_found"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.not_owner"
+class = "none"
+summary = "The authenticated publisher does not own this app name."
+explanation_key = "error.registry.not_owner"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.publisher_inactive"
+class = "none"
+summary = "The publisher is suspended or its identity metadata is inconsistent."
+explanation_key = "error.registry.publisher_inactive"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.reason_required"
+class = "none"
+summary = "A removal operation needs a nonempty explanation."
+explanation_key = "error.registry.reason_required"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.signature_in_future"
+class = "none"
+summary = "The signature claims a time after the verification time."
+explanation_key = "error.registry.signature_in_future"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.storage"
+class = "none"
+summary = "The storage operation failed before completing."
+explanation_key = "error.registry.storage"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.too_large"
+class = "none"
+summary = "The bundle or byte stream exceeds the configured byte limit."
+explanation_key = "error.registry.too_large"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.transfer_invalid"
+class = "none"
+summary = "Ownership transfer evidence, identities or validity window are invalid."
+explanation_key = "error.registry.transfer_invalid"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.transfer_replay"
+class = "none"
+summary = "Ownership generation is stale, exhausted or a self transfer was requested."
+explanation_key = "error.registry.transfer_replay"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.unauthorized"
+class = "none"
+summary = "Publisher authorization is missing, expired or not permitted for this release."
+explanation_key = "error.registry.unauthorized"
+params = []
+remedy = "Sign a fresh private registry authorization and retry as an eligible publisher; public release signatures are not credentials."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.unsafe_path"
+class = "none"
+summary = "A storage path is noncanonical, a symlink or not a regular object."
+explanation_key = "error.registry.unsafe_path"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.version_conflict"
+class = "none"
+summary = "The version already belongs to another bundle or build identity."
+explanation_key = "error.registry.version_conflict"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.version_not_increasing"
+class = "none"
+summary = "The release does not exceed every previously published version."
+explanation_key = "error.registry.version_not_increasing"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.withdrawn"
+class = "none"
+summary = "This release was removed for security and cannot be fetched."
+explanation_key = "error.registry.withdrawn"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"
+
+[[entry]]
+code = "registry.yanked"
+class = "none"
+summary = "This release is unavailable for new installs."
+explanation_key = "error.registry.yanked"
+params = []
+remedy = "Correct the stated refusal and retry; invalid cursors require restarting the search."
+since = "0.1.0"

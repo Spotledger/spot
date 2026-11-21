@@ -1,0 +1,11 @@
+{
+  "diagnostics": [
+    {
+      "code": "ts.eval_not_allowed",
+      "line": 1,
+      "column": 18,
+      "end_line": 1,
+      "end_column": 22
+    }
+  ]
+}

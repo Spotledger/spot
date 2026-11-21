@@ -1,0 +1,66 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "schema/refused/party.amount",
+      "area": "schema",
+      "kind": "schema_blocked",
+      "rule": "schema/blocked",
+      "target": "party.amount",
+      "description": "The backend refuses a schema change: `party.amount` would narrow from numeric(18,4) to numeric(18,2); narrowing can lose digits",
+      "before": "present",
+      "after": "refused",
+      "risk": "destructive",
+      "reason": "`party.amount` would narrow from numeric(18,4) to numeric(18,2); narrowing can lose digits",
+      "blocking": "maintenance_window"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 30,
+    "expected": 60,
+    "high": 120,
+    "per_change": [
+      {
+        "change_id": "schema/refused/party.amount",
+        "low": 30,
+        "expected": 60,
+        "high": 120,
+        "blocking": "maintenance_window",
+        "unknown": false
+      }
+    ],
+    "blocking": "maintenance_window",
+    "unknown": false
+  },
+  "plan_digest": "ca57af4fb635e53980603232832dd70d8d5f85a7dd605fb87687ed66dd4f8ef9",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "amount",
+              "type": "decimal",
+              "scale": 2,
+              "precision": 18
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

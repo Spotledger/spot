@@ -1,0 +1,118 @@
+# dag_exec codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "dag_exec.run_id_invalid"
+class = "none"
+summary = "A run id is not 1 to 64 characters of lower-case letters, digits or underscores, starting with a letter: {raw}."
+explanation_key = "error.dag_exec.run_id_invalid"
+params = ["raw"]
+remedy = "Choose an id matching [a-z][a-z0-9_]{0,63}."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.key_invalid"
+class = "none"
+summary = "The caller-supplied business key is empty or longer than 256 characters."
+explanation_key = "error.dag_exec.key_invalid"
+params = []
+remedy = "Supply a non-empty business key of at most 256 characters."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.run_exists"
+class = "none"
+summary = "A run with this id already exists: {id}."
+explanation_key = "error.dag_exec.run_exists"
+params = ["id"]
+remedy = "Use a fresh run id, or load the existing run."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.key_conflict"
+class = "none"
+summary = "A run with this business key already exists, so the key is not unique: {key}."
+explanation_key = "error.dag_exec.key_conflict"
+params = ["key"]
+remedy = "Use a fresh business key, or load the run the key already names."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.run_not_found"
+class = "none"
+summary = "No run has this id: {id}."
+explanation_key = "error.dag_exec.run_not_found"
+params = ["id"]
+remedy = "Check the run id, or create the run first."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.version_conflict"
+class = "none"
+summary = "The run changed since it was read: found version {current}, expected {expected}."
+explanation_key = "error.dag_exec.version_conflict"
+params = ["current", "expected"]
+remedy = "Reload the run and re-apply the transition at its current version."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.invalid_node"
+class = "none"
+summary = "The node is not part of this run's DAG, or the run does not track it: {node}."
+explanation_key = "error.dag_exec.invalid_node"
+params = ["node"]
+remedy = "Use a node id from the compiled DAG the run was started from."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.invalid_state"
+class = "none"
+summary = "The transition is not allowed in the run's or node's current state: {detail}."
+explanation_key = "error.dag_exec.invalid_state"
+params = ["detail"]
+remedy = "Reload the run and apply a transition its current state allows."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.dag_mismatch"
+class = "none"
+summary = "The compiled DAG does not match the published version: found {current}, expected {expected}."
+explanation_key = "error.dag_exec.dag_mismatch"
+params = ["current", "expected"]
+remedy = "Start the run from the compiled DAG of the published version it pins."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.output_invalid"
+class = "none"
+summary = "A node's output payload is not canonical JSON: a float appears at {path}."
+explanation_key = "error.dag_exec.output_invalid"
+params = ["path"]
+remedy = "Write the number as an integer or a string (ADR-12)."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.time_invalid"
+class = "none"
+summary = "A stored instant is not a valid UTC timestamp: {seconds} seconds, {nanos} nanoseconds."
+explanation_key = "error.dag_exec.time_invalid"
+params = ["nanos", "seconds"]
+remedy = "Store an instant produced from a real UTC timestamp."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.work_failed"
+class = "none"
+summary = "The caller's work failed inside the unit of work, so nothing was stored: {message}."
+explanation_key = "error.dag_exec.work_failed"
+params = ["message"]
+remedy = "Fix the caller's document change and retry the same transition."
+since = "0.1.0"
+
+[[entry]]
+code = "dag_exec.storage_failed"
+class = "none"
+summary = "The storage backend failed while committing the unit of work: {kind}."
+explanation_key = "error.dag_exec.storage_failed"
+params = ["kind"]
+remedy = "Retry the unit of work once the backend is available; nothing was committed."
+since = "0.1.0"

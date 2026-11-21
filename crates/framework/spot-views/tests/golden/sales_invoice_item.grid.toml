@@ -1,0 +1,18 @@
+doctype = "sales_invoice_item"
+kind = "grid"
+title = "Invoice Line"
+
+[[columns]]
+field = "item_code"
+
+[[columns]]
+field = "qty"
+
+[[columns]]
+field = "rate"
+
+[[columns]]
+field = "amount"
+
+[[columns]]
+field = "note"

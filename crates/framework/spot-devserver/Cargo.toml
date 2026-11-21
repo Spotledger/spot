@@ -1,0 +1,57 @@
+[package]
+name = "spot-devserver"
+description = "The local development server with hot reload (WP-DX-02.T1): file watching, incremental metadata/view/script/component reload, a scratch dev site and a reload status endpoint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "spot_devserver"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spot-devserver"
+path = "src/main.rs"
+
+[dependencies]
+# `SiteId` and the `Clock` the watcher and the reloader are driven by (time is always an
+# argument, never read from the machine here).
+spot-core = { path = "../spot-core" }
+# `Definition` and the TOML authoring format the metadata step loads.
+spot-meta = { path = "../spot-meta" }
+# The live snapshot holder: a reload builds a whole new snapshot and swaps it in only when it
+# validated, so a broken change leaves the old version serving.
+spot-meta-live = { path = "../spot-meta-live" }
+# The view definition parsing and save-time validation the view step runs.
+spot-views = { path = "../spot-views" }
+# The TypeScript transpiler the script step runs on save.
+spot-ts-transpile = { path = "../spot-ts-transpile" }
+# The `.d.ts` generator the script step type-checks against.
+spot-dts = { path = "../spot-dts" }
+# The WebAssembly host a rebuilt component is validated and hashed through.
+spot-wasm = { path = "../spot-wasm" }
+# The realtime bus `dev.reloaded` is published on. The `ws` transport is not needed here.
+spot-realtime = { path = "../spot-realtime", default-features = false }
+# The platform file watcher (inotify / ReadDirectoryChangesW) behind the `EventSource` seam.
+notify = "8"
+# UTF-8, cross-platform path handling only (ADR-…: no `OsStr` juggling).
+camino = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+tracing = "0.1"
+# The `spot dev` subcommand definition a clap-based CLI embeds (`cli::register`).
+clap = { version = "4", default-features = false, features = ["std", "help", "usage", "error-context", "derive"] }
+
+[dev-dependencies]
+# Temporary scratch roots for the watcher, site and latency tests.
+tempfile = "3"
+# The start value of a `ManualClock` in the unit tests; the injected clock proves the pipeline
+# never reads the wall clock.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

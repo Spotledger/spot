@@ -1,0 +1,45 @@
+# The host agent's database and Spotledger runtime modules (WP-ADM-06.T1, blueprint WS22,
+# ADR-44). PostgreSQL parameters behind a typed allow-list, replicas and backups, node roles
+# and profiles through the typed settings schema, and upgrades that go through the migration
+# lifecycle (plan, approve, apply) with the engine's rollback evidence returned on a failed
+# verify.
+#
+# Every machine or service access happens through an injected port, so the modules are
+# deterministic, testable without a database, and never read the wall clock.
+[package]
+name = "spot-agent-runtime"
+description = "The host agent's PostgreSQL and Spotledger runtime modules (WP-ADM-06.T1, blueprint WS22, ADR-44): typed PostgreSQL parameters, replicas and backups, node roles and profiles through the shared settings schema, and upgrades routed through the migration lifecycle with automatic rollback on failed verification"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The typed operation catalogue: ids, parameters and risk levels, and the `OperationModule`
+# registration shape.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# The host agent's execution core: the `OperationHandler` trait and the plan it dispatches.
+spot-agent-core = { path = "../spot-agent-core" }
+# The release plan document produced by the migration planner; this crate never invents
+# upgrade steps of its own.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The plan digest an approval authorises; this crate carries it as evidence.
+spot-migration-approval = { path = "../spot-migration-approval" }
+# The apply engine's outcome vocabulary: the restore cause and mechanism are the rollback
+# evidence the module returns when verification fails.
+spot-migration-apply = { path = "../spot-migration-apply" }
+# The typed settings schema and value store: roles and profiles are settings diffs, never
+# files written directly.
+spot-settings = { path = "../spot-settings" }
+# The snapshot provider's verification report, so a backup verify returns the real shape.
+spot-snapshot = { path = "../../backends/spot-snapshot" }
+# Typed errors with stable `agent_runtime.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The instants the fake clock is seeded with.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

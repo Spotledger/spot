@@ -1,0 +1,17 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "components": [
+    {
+      "id": "sample.c",
+      "origin": "app:sample",
+      "props": [],
+      "body": {
+        "node": "control",
+        "control": "iframe"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.schema. Only catalog controls: no iframe, no script."
+}

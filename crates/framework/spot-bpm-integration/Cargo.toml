@@ -1,0 +1,52 @@
+[package]
+name = "spot-bpm-integration"
+description = "Integration nodes for the Business Process engine (WP-BPM-06.T1): HTTP, e-mail and outgoing-webhook handlers, TypeScript code nodes, WASM connector port, data mapping with the shared expression language, credential references resolved through the vault, and redaction so a credential never reaches a log or the execution history"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The engine contract the handlers answer: `NodeOutcome` (Done/Retry/Fail/Wait), the
+# `(case, node, attempt)` idempotency key and the Case id.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The node id a record names.
+spot-dag = { path = "../spot-dag" }
+# The shared expression language (ADR-28) for data mapping and static validation.
+spot-expr = { path = "../spot-expr" }
+# Every outbound HTTP call goes through the egress policy: the guard authorizes, the sender
+# writes to the pinned addresses only.
+spot-egress = { path = "../spot-egress" }
+# Credential references resolve to values through the vault; the value is a redacting type.
+spot-secrets = { path = "../spot-secrets" }
+# The redaction pass that scrubs known secret values inside strings and JSON.
+spot-redact = { path = "../spot-redact" }
+# TypeScript code nodes run on the embedded engine with its time and memory limits.
+spot-ts = { path = "../spot-ts" }
+# E-mail nodes build an `OutgoingMessage` and send it through the mail transport seam.
+spot-mail = { path = "../spot-mail" }
+# Outgoing-webhook nodes sign with the webhooks crate and post through its egress seam.
+spot-webhooks = { path = "../spot-webhooks" }
+# `OffsetDateTime`, the only clock a handler sees (time is an argument).
+spot-app-api = { path = "../../../contracts/app-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+async-trait = "0.1"
+http = "1"
+url = "2"
+time = "0.3"
+tracing = "0.1"
+
+[dev-dependencies]
+# Async tests for the handlers and the ports.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+# The secret-sweep test captures what the handlers log.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The catalogue test proves every raised code has a `bpm_integration.*` entry.
+spot-errors = { path = "../spot-errors" }
+proptest = "1"
+
+[lints]
+workspace = true

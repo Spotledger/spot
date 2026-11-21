@@ -1,0 +1,40 @@
+[package]
+name = "spot-native-api-client"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "Generated Rust client for the Spotledger native API contract (WP-CON-03, ADR-055). The code is produced at build time by build.rs (progenitor) from tools/contract-clients/convert.py's converted contract and is written to OUT_DIR; see tools/contract-clients/README.md."
+
+# An empty [workspace] table keeps this crate out of the repository's product
+# workspace (WP-CON-03.T2): it is built by tools/contract-clients/check.sh only.
+[workspace]
+
+[dependencies]
+# Runtime deps follow progenitor's own quickstart (see README.md). TLS uses
+# reqwest's rustls feature (pure-Rust stack, platform cert store) so the
+# crate needs no OpenSSL; reqwest 0.13 renamed "rustls-tls" to "rustls".
+reqwest = { version = "0.13", default-features = false, features = [
+    "charset",
+    "http2",
+    "json",
+    "query",
+    "stream",
+    "system-proxy",
+    "rustls",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Generated code re-exports progenitor_client types at the crate root and
+# validates string patterns with regress; both are listed in progenitor's own
+# quickstart ("dependencies listed in the generator's documentation").
+progenitor-client = { version = "0.15.0" }
+regress = { version = "0.12.0" }
+
+[build-dependencies]
+progenitor = { version = "0.15.0", default-features = false }
+openapiv3 = "2.2"
+serde_json = "1.0"
+
+[lints.rust]
+unsafe_code = "forbid"

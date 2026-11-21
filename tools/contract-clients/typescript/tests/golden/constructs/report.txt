@@ -1,0 +1,7 @@
+contract client generator (typescript) report
+count generated_methods: 5
+count operations: 5
+count schemas: 10
+APPROXIMATE #/components/schemas/Keyed: `propertyNames` has no TypeScript form; keys stay string
+APPROXIMATE #/components/schemas/NotEmpty: `not` has no TypeScript form; kept as a comment
+summary: 2 approximate, 0 dropped, 0 unrepresentable, 0 findings

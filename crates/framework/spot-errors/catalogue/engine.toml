@@ -1,0 +1,10 @@
+# Engine harness invariant codes.
+
+[[entry]]
+code = "engine.operation"
+class = "none"
+summary = "The engine harness reports an operation that failed, naming the operation and the code it failed with."
+explanation_key = "error.engine.operation"
+params = []
+remedy = "Read the violation's record and its failure code, then fix the path that failed the operation."
+since = "0.1.0"

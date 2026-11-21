@@ -1,0 +1,12 @@
+{
+  "case": "own_runtime",
+  "entry": "destructuring_run",
+  "args": {
+    "a": 9
+  },
+  "expect": [
+    9,
+    2,
+    3
+  ]
+}

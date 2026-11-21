@@ -1,0 +1,36 @@
+[package]
+name = "spot-graph-index"
+description = "Spotledger in-memory per-tenant graph index (WS8, WP-GRA-02.T1, ADR-50): hot graphs on petgraph StableGraph, incremental apply of edge events with a watermark and gap detection, a memory budget with LRU eviction of cold graphs, rebuild from a source, the index-equals-database invariant checker, and the NodeSource/GraphExecutor the query API runs against when a graph is hot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The in-memory graph itself (ADR-50): a stable-node graph so node indices survive removals.
+petgraph = "0.6"
+# Node and edge types are the graph model's (WP-GRA-01): edge types by canonical name.
+spot-graph-model = { path = "../spot-graph-model" }
+# The query seam (`GraphExecutor`, `NodeSource`, `Step`, `walk`) the hot path plugs into.
+spot-graph-query = { path = "../spot-graph-query" }
+# Record keys and typed values: the index stores `NodeRef`s and `Value` edge properties. The
+# query API's public signatures name these types, so an executor cannot be implemented without it.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `serde` on the plain vocabulary types (keys, operations, drift reports). Types that carry a
+# storage `Value` stay un-serialised until the wire form is fixed.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `graph_index.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The same-answers contract suite (`spot_graph_query::contract`), reused unchanged.
+spot-graph-query = { path = "../spot-graph-query", features = ["testing"] }
+# The permission engine the walk asks, and the effective metadata it is built from.
+spot-permissions = { path = "../spot-permissions" }
+spot-meta = { path = "../spot-meta" }
+# Randomised event sequences with duplicates, reordering and restarts.
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+# Budgets of the idle-connection harness (WP-PLT-01.T2). The reasoning for each number is in
+# docs/process/idle-connections.md. A budget is a ceiling: a run that stays under it passes.
+
+[memory]
+# Resident memory per idle HTTP/1.1 or HTTP/2 connection, above the empty-server baseline (KiB).
+http_idle_kib = 100
+# Resident memory per idle WebSocket connection (authenticated, in a room), above baseline (KiB).
+ws_idle_kib = 200
+
+[latency]
+# Busy-client p99 with the idle connections held must be at most
+# `p99_factor` times the empty-server p99 plus `p99_extra_ms`.
+p99_factor = 2
+p99_extra_ms = 20
+
+[faults]
+# Accept errors the server logged while the idle connections were opened and held.
+accept_errors = 0
+# Client connects or handshakes that failed, and busy requests that failed.
+connect_errors = 0
+busy_errors = 0
+# Tokio tasks alive after shutdown beyond those alive before the server started.
+leaked_tasks = 0

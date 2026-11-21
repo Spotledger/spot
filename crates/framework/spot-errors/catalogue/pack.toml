@@ -1,0 +1,200 @@
+# pack codes: app-directory checking, deterministic packing, signing and verification in the
+# spot-pack crate (WP-EXT-07.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "pack.io"
+class = "none"
+summary = "A file or directory of the app could not be read."
+explanation_key = "error.pack.io"
+params = []
+remedy = "Check the file's permissions and that it still exists; the message names the path."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.layout"
+class = "none"
+summary = "A file sits outside the allowed app layout."
+explanation_key = "error.pack.layout"
+params = []
+remedy = "Move the file under doctypes/, permissions/, assets/, fixtures/, patches/ or scripts/, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.path_escape"
+class = "none"
+summary = "A name would escape the app directory and cannot be packed."
+explanation_key = "error.pack.path_escape"
+params = []
+remedy = "Rename the file to a plain relative path with / separators and no `..`, `.` or absolute segments."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.oversized"
+class = "none"
+summary = "A file exceeds the bundle size limits."
+explanation_key = "error.pack.oversized"
+params = []
+remedy = "Shrink or split the named file; the limits are the bundle's, and the message states both sizes."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.too_many_files"
+class = "none"
+summary = "The app carries more files than the bundle limits allow."
+explanation_key = "error.pack.too_many_files"
+params = []
+remedy = "Remove unneeded files; the message states the count and the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.controllers"
+class = "none"
+summary = "The controllers file does not parse in its fixed form."
+explanation_key = "error.pack.controllers"
+params = []
+remedy = "Write `[controllers]` with one quoted `\"step\" = \"reference\"` row per step."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.manifest"
+class = "none"
+summary = "`manifest.toml` failed to parse or validate."
+explanation_key = "error.pack.manifest"
+params = []
+remedy = "Fix the problems the message reports; spot-manifest names each one with its line and column."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.manifest_missing"
+class = "none"
+summary = "The app has no `manifest.toml`."
+explanation_key = "error.pack.manifest_missing"
+params = []
+remedy = "Add a manifest.toml at the app root; every app starts with one."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.doctype"
+class = "none"
+summary = "A DocType definition file failed to load."
+explanation_key = "error.pack.doctype"
+params = []
+remedy = "Fix the definition; the message carries spot-meta's own problem, file, DocType and field."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.permissions"
+class = "none"
+summary = "A permission model file failed to load."
+explanation_key = "error.pack.permissions"
+params = []
+remedy = "Fix the model file; the message carries spot-permissions' own problem and its file or section."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.controller_missing"
+class = "none"
+summary = "A step the manifest names has no controller reference."
+explanation_key = "error.pack.controller_missing"
+params = []
+remedy = "Add a row for the step to controllers.toml, naming its `native:`, `wasm:` or `ts:` controller."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.controller_unknown"
+class = "none"
+summary = "A controller reference does not name a controller this build or component provides."
+explanation_key = "error.pack.controller_unknown"
+params = []
+remedy = "Use a known form (`native:<name>`, `wasm:<export>`, `ts:<path>`) and a name that exists."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.component_missing"
+class = "none"
+summary = "The app names a `wasm:` export but carries no app.wasm component."
+explanation_key = "error.pack.component_missing"
+params = []
+remedy = "Build and place the component as app.wasm, or change the reference to the controller that exists."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.export_missing"
+class = "none"
+summary = "The component does not export the name a `wasm:` reference asks for."
+explanation_key = "error.pack.export_missing"
+params = []
+remedy = "Export the named function from the component, or correct the reference in controllers.toml."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.script"
+class = "none"
+summary = "A `ts:` script is missing or does not transpile cleanly."
+explanation_key = "error.pack.script"
+params = []
+remedy = "Fix the diagnostics the message lists (missing file, syntax, script-tier rules) and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.asset_unpacked"
+class = "none"
+summary = "The manifest declares an asset the app directory does not carry."
+explanation_key = "error.pack.asset_unpacked"
+params = []
+remedy = "Add the file at the declared path, or remove the `[[assets]]` row."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.capability_not_imported"
+class = "none"
+summary = "The manifest declares a capability the component never exercises."
+explanation_key = "error.pack.capability_not_imported"
+params = []
+remedy = "Drop the declaration, or import the function that exercises it; the installer reports the same gap."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.import_without_capability"
+class = "none"
+summary = "The component imports a capability-bearing function the manifest does not declare."
+explanation_key = "error.pack.import_without_capability"
+params = []
+remedy = "Declare the capability in `manifest.toml` (`capabilities.doctypes.read` at least); the installer refuses the same bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.unknown_import"
+class = "none"
+summary = "The component imports something the host does not provide."
+explanation_key = "error.pack.unknown_import"
+params = []
+remedy = "Remove the import or replace it with one of the world's (`log`, `now`, `get-doc`)."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.wasm"
+class = "none"
+summary = "The component does not parse or validate as a WebAssembly component."
+explanation_key = "error.pack.wasm"
+params = []
+remedy = "Rebuild app.wasm as a component; the message states what the parser rejected."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.sign"
+class = "none"
+summary = "Signing a bundle failed."
+explanation_key = "error.pack.sign"
+params = []
+remedy = "Use the publisher key the certificate names, as a readable key file or injected provider."
+since = "0.1.0"
+
+[[entry]]
+code = "pack.verify"
+class = "none"
+summary = "The signature check refused a bundle."
+explanation_key = "error.pack.verify"
+params = []
+remedy = "Read the signing.* code the message names; it states which check refused the bundle."
+since = "0.1.0"

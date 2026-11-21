@@ -1,0 +1,32 @@
+[package]
+name = "spot-bpm-model"
+description = "The Process model of the Spotledger Platform (WP-BPM-01, ADR-49): processes, versions, typed nodes, edges and rules; the reviewable TOML text form; validation that reports every problem at once; compilation onto the spot-dag runtime; and a template library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The DAG definition model and compiler this crate compiles *onto* (ADR-13).
+spot-dag = { path = "../spot-dag" }
+# The shared expression language (ADR-28): edge conditions, rules and data mapping.
+spot-expr = { path = "../spot-expr" }
+# The text form and the unknown-kind config preservation.
+toml = "0.9"
+# Node config structs serialise to canonical JSON for hashing and to TOML for text.
+serde = { version = "1", features = ["derive"] }
+# Canonical JSON for node configs, Case-state variables and content hashing.
+serde_json = "1"
+# SHA-256 content hashing.
+sha2 = "0.10"
+# Typed errors with stable `bpm_model.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+# Tests build unknown-kind configs with a float to prove ADR-12 is enforced.
+toml = "0.9"
+
+[lints]
+workspace = true

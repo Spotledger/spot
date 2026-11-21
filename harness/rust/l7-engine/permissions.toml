@@ -1,0 +1,18 @@
+# The engine's permission matrix (WP-TST-07.T2): six principals crossed with the six lifecycle
+# operations, on the sample app's Time Entry. Each row is one principal, each column one
+# operation; `true` means the decision core allows it against the document facts the test builds
+# (a Time Entry created by `member`, in `draft` for read/update/delete/post and in `posted` for
+# cancel). The matrix is the oracle the permission test asserts against.
+
+principals = ["manager", "member", "viewer", "ghost", "admin", "system"]
+operations = ["read", "create", "update", "delete", "post", "cancel"]
+
+#          read   create update delete post   cancel
+expected = [
+  [true,  true,  true,  true,  true,  true ],  # manager: Project Manager, everything
+  [true,  true,  true,  false, true,  false],  # member: own entries, no delete/cancel
+  [true,  false, false, false, false, false],  # viewer: read only
+  [false, false, false, false, false, false],  # ghost: no roles
+  [true,  true,  true,  true,  true,  true ],  # admin: Tenant Administrator
+  [true,  true,  true,  true,  true,  true ],  # system: the platform
+]

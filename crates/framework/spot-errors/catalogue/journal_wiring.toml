@@ -1,0 +1,217 @@
+# journal_wiring codes: the providers of the hosted journal services in spot-cli (WP-RTB-01.T9, ADR-061): why a journal operation, an audit input or a read of the store was refused or could not be made. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_wiring.read_only"
+class = "none"
+summary = "The journal store handed to the readers refused a write or a delete: only the shipper writes the journal."
+explanation_key = "error.journal_wiring.read_only"
+params = []
+remedy = "The journal is written by the shipper alone; read operations need no change."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.store_unreadable"
+class = "none"
+summary = "The journal store could not be listed or read for an audit, a snapshot listing or the catalogue."
+explanation_key = "error.journal_wiring.store_unreadable"
+params = []
+remedy = "Check that the journal folder exists, is readable and is outside the site's data and code directories."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.manifest_key"
+class = "none"
+summary = "A generation's manifest key could not be built from the site name."
+explanation_key = "error.journal_wiring.manifest_key"
+params = []
+remedy = "The site name must be a usable journal tenant (one safe path component)."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.manifest_invalid"
+class = "none"
+summary = "A stored manifest does not decode."
+explanation_key = "error.journal_wiring.manifest_invalid"
+params = []
+remedy = "Run `spot journal verify`; restore the journal object from its replica."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.manifest_unverified"
+class = "none"
+summary = "A stored manifest does not verify against the site's journal keys; the audit does not run on it."
+explanation_key = "error.journal_wiring.manifest_unverified"
+params = []
+remedy = "Check that the site's key provider is the one that signed the journal; run `spot journal verify`."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.manifest_mismatch"
+class = "none"
+summary = "A stored manifest names another generation or source than its key."
+explanation_key = "error.journal_wiring.manifest_mismatch"
+params = []
+remedy = "Run `spot journal verify`; the journal folder may belong to another site."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.journal_not_ready"
+class = "none"
+summary = "The journal service's handle is not available yet (the site is still starting)."
+explanation_key = "error.journal_wiring.journal_not_ready"
+params = []
+remedy = "Retry once the site is ready."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_not_running"
+class = "none"
+summary = "The journal audit service is not running on this site, so the operation cannot be answered."
+explanation_key = "error.journal_wiring.audit_not_running"
+params = []
+remedy = "Enable `[services.journal_audit]` and run `spot migrate` if its table is missing."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.report_unavailable"
+class = "none"
+summary = "The recovery report could not be assembled."
+explanation_key = "error.journal_wiring.report_unavailable"
+params = []
+remedy = "Check the journal store and the audit history table; retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.exclusions_unreadable"
+class = "none"
+summary = "The document engine is not running, so the excluded entities cannot be counted."
+explanation_key = "error.journal_wiring.exclusions_unreadable"
+params = []
+remedy = "Retry once the site is serving."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.sync_service_absent"
+class = "none"
+summary = "No sync service is running on this node, so the sync operation cannot be executed."
+explanation_key = "error.journal_wiring.sync_service_absent"
+params = []
+remedy = "Run the operation on a node whose role runs the sync services."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.snapshot_take_not_hosted"
+class = "none"
+summary = "The snapshot service takes snapshots on its schedule and has no take-now call."
+explanation_key = "error.journal_wiring.snapshot_take_not_hosted"
+params = []
+remedy = "Wait for the next scheduled snapshot."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.reship_not_hosted"
+class = "none"
+summary = "The shipper resumes from its persisted watermark by itself; there is nothing to re-ship by hand."
+explanation_key = "error.journal_wiring.reship_not_hosted"
+params = []
+remedy = "None; check `journal status` for the shipper's state."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.rebuild_is_offline"
+class = "none"
+summary = "A rebuild runs offline on the node (the CLI), not through the running site."
+explanation_key = "error.journal_wiring.rebuild_is_offline"
+params = []
+remedy = "Stop the site and use `spot journal rebuild`."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.reader_grants_not_wired"
+class = "none"
+summary = "The grant service of the journal access surface is not exposed to the management operations yet."
+explanation_key = "error.journal_wiring.reader_grants_not_wired"
+params = []
+remedy = "Grant journal readers through the journal access routes' own grant operations."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.erase_needs_caller"
+class = "none"
+summary = "Subject erasure needs the requesting user, which this implementation is not bound to."
+explanation_key = "error.journal_wiring.erase_needs_caller"
+params = []
+remedy = "Use the erase command of the CLI on the node."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.policy_is_site_configuration"
+class = "none"
+summary = "The durability policy is `[services.journal]` in the host's configuration and is read at start."
+explanation_key = "error.journal_wiring.policy_is_site_configuration"
+params = []
+remedy = "Edit the configuration and restart the host."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.verify_failed"
+class = "none"
+summary = "The journal verification could not be run (the store or the manifest could not be read)."
+explanation_key = "error.journal_wiring.verify_failed"
+params = []
+remedy = "Check the journal store; retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_rate_limited"
+class = "none"
+summary = "An audit run was asked for less than an hour after the last good one."
+explanation_key = "error.journal_wiring.audit_rate_limited"
+params = []
+remedy = "Wait; a failed run frees the next one at once."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_busy"
+class = "none"
+summary = "Another audit is already running on this host."
+explanation_key = "error.journal_wiring.audit_busy"
+params = []
+remedy = "Retry when it has finished."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_failed"
+class = "none"
+summary = "The audit could not be completed; the failure code is in the audit result row."
+explanation_key = "error.journal_wiring.audit_failed"
+params = []
+remedy = "See `journal audit last` and the audit's own codes."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_not_run"
+class = "none"
+summary = "The audit pass finished without a result for this site (it was not due and was not forced)."
+explanation_key = "error.journal_wiring.audit_not_run"
+params = []
+remedy = "Retry."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.wrong_site"
+class = "none"
+summary = "The operation named another site than this one."
+explanation_key = "error.journal_wiring.wrong_site"
+params = []
+remedy = "Address the command to this site."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_wiring.audit_history_unreadable"
+class = "none"
+summary = "The audit history could not be read, so the last audit cannot be shown."
+explanation_key = "error.journal_wiring.audit_history_unreadable"
+params = []
+remedy = "Check the audit result table (run `spot migrate`) and retry."
+since = "0.1.0"

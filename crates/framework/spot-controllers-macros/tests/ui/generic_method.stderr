@@ -1,0 +1,5 @@
+error: a whitelisted method cannot be generic
+  --> tests/ui/generic_method.rs:21:16
+   |
+21 |     async fn go<T>(&self, _ctx: &mut dyn MethodContext) -> AppResult<()> { Ok(()) }
+   |                ^^^

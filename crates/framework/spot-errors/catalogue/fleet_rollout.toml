@@ -1,0 +1,96 @@
+# fleet_rollout codes: the `fleet_rollout.*` vocabulary of spot-fleet-rollout (WP-MIG-12.T1).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The crate raises its own typed errors (`spot_fleet_rollout::Error` and `MigrateError`), so these
+# are library-internal vocabulary: `class = "none"` describes what each code means, and a remedy
+# states what an operator or caller does about it.
+
+[[entry]]
+code = "fleet_rollout.epoch_ahead"
+class = "none"
+summary = "Node {node} cannot be verified at epoch {requested} while the network is at epoch {current}."
+explanation_key = "error.fleet_rollout.epoch_ahead"
+params = ["current", "node", "requested"]
+remedy = "Verify the node against the network's current epoch, never a future one."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.epoch_overflow"
+class = "none"
+summary = "The network epoch {current} cannot advance further."
+explanation_key = "error.fleet_rollout.epoch_overflow"
+params = ["current"]
+remedy = "Start a new tenant network ledger before the epoch counter is exhausted."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.epoch_regression"
+class = "none"
+summary = "Node {node} cannot move from epoch {previous} back to epoch {requested}."
+explanation_key = "error.fleet_rollout.epoch_regression"
+params = ["node", "previous", "requested"]
+remedy = "Record the node at its current epoch or a newer one; epochs only increase."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.empty_wave"
+class = "none"
+summary = "Wave {wave} selects no node that an earlier wave did not take."
+explanation_key = "error.fleet_rollout.empty_wave"
+params = ["wave"]
+remedy = "Widen the wave's tags, groups, percentage or size, or remove the wave."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.invalid_id"
+class = "none"
+summary = "A {kind} is empty, too long or contains whitespace or control characters."
+explanation_key = "error.fleet_rollout.invalid_id"
+params = ["kind"]
+remedy = "Use a non-empty value of at most 256 bytes with no whitespace or control characters."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.invalid_plan"
+class = "none"
+summary = "The rollout plan is invalid: {reason}."
+explanation_key = "error.fleet_rollout.invalid_plan"
+params = ["reason"]
+remedy = "Fix the named structural rule before resolving or running the plan."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.migrate_failed"
+class = "none"
+summary = "The node migration failed: {message}."
+explanation_key = "error.fleet_rollout.migrate_failed"
+params = ["message"]
+remedy = "Inspect the node's apply log, fix the cause, and resume the rollout explicitly."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.not_paused"
+class = "none"
+summary = "The rollout is not paused."
+explanation_key = "error.fleet_rollout.not_paused"
+params = []
+remedy = "Resume only a rollout that a failure, threshold or operator paused."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.not_running"
+class = "none"
+summary = "The rollout has already finished."
+explanation_key = "error.fleet_rollout.not_running"
+params = []
+remedy = "Abort only a rollout that has not completed every wave."
+since = "0.1.0"
+
+[[entry]]
+code = "fleet_rollout.simulation_failed"
+class = "none"
+summary = "The fleet simulation could not establish an outcome: {message}."
+explanation_key = "error.fleet_rollout.simulation_failed"
+params = ["message"]
+remedy = "Fix the invariant the simulator reported before trusting a rollout result."
+since = "0.1.0"

@@ -1,0 +1,55 @@
+# licensing codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "licensing.already_issued"
+class = "none"
+summary = "The operation was refused: already issued."
+explanation_key = "error.licensing.already_issued"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "licensing.key_unavailable"
+class = "none"
+summary = "The operation was refused: key unavailable."
+explanation_key = "error.licensing.key_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "licensing.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.licensing.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "licensing.revoked"
+class = "none"
+summary = "The operation was refused: revoked."
+explanation_key = "error.licensing.revoked"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "licensing.sign"
+class = "none"
+summary = "The operation was refused: sign."
+explanation_key = "error.licensing.sign"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "licensing.stale_renewal"
+class = "none"
+summary = "The operation was refused: stale renewal."
+explanation_key = "error.licensing.stale_renewal"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

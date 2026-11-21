@@ -1,0 +1,10 @@
+# journal_recovery codes: the refusals of the per-tenant recovery report of spot-journal-recovery (WP-JRN-07.T3, ADR-061 s8 and s9). A refusal is a library-internal vocabulary: it never rides an `AppError`, so every class is `none`. A recovery blocker is not one of these: it is a data row in the report, named by a `recovery.blocker.*` key listed in the crate documentation. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_recovery.fact_unreadable"
+class = "none"
+summary = "The recovery input {input} could not be read, so the report records it as unreadable and the verdict is cannot-confirm, never recoverable."
+explanation_key = "error.journal_recovery.fact_unreadable"
+params = ["input"]
+remedy = "Restore access to the named input (the control plane, the key service, the exclusion registry or the audit history) and build the report again."
+since = "0.1.0"

@@ -1,0 +1,30 @@
+# Help for the bpm_conversations codes: messages between two organisations.
+# One [[help]] per code and locale; see crates/framework/spot-unattended-support/src/help.rs.
+
+[[help]]
+code = "bpm_conversations.audit_failed"
+what_happened = "A message from the partner was refused, but the record of the refusal could not be written. The message was not taken in and the partner was told nothing."
+why = "The audit store is not reachable at the moment, and the platform refuses to decide about a partner's message without a trace of it."
+what_to_do = ["Check the audit store's health, then have the message delivered again.", "If it keeps happening, tell your administrator and quote the code bpm_conversations.audit_failed."]
+audience = "admin"
+
+[[help]]
+code = "bpm_conversations.link_conversation_limit"
+what_happened = "A message from the partner would have opened another conversation on a link that already holds as many as it may. The message was refused and held for review."
+why = "The partner has more conversations open on this link than the limit allows, or an earlier one was left open by mistake."
+what_to_do = ["Finish or cancel the open conversations on that link, then ask the partner to send the message again with a new identifier.", "If the partner legitimately needs more, an administrator can raise the per-link limit."]
+audience = "admin"
+
+[[help]]
+code = "bpm_conversations.link_quarantine_limit"
+what_happened = "A message from the partner was refused, and the space this link may use for refused messages is full. The partner was told the reason, but the message itself was dropped instead of kept for review."
+why = "Many messages from this partner were refused and nobody has reviewed or released them yet."
+what_to_do = ["Review the refused messages held for that link and release the ones that are no longer needed.", "If it keeps happening, tell your administrator and quote the code bpm_conversations.link_quarantine_limit."]
+audience = "admin"
+
+[[help]]
+code = "bpm_conversations.case_collision"
+what_happened = "A message from the partner could not start its request. The internal request reference worked out from that message is already in use by another message's request."
+why = "Two different messages produced the same request reference, which the reference calculation is built to prevent."
+what_to_do = ["Ask the partner to send the message again with a new message identifier.", "If it keeps happening, tell your administrator and quote the code bpm_conversations.case_collision."]
+audience = "admin"

@@ -1,0 +1,8 @@
+name = "customer"
+label = "Customer"
+title_field = "name"
+fields = [
+  { name = "name", type = "text", required = true, unique = true },
+  { name = "region", type = "text" },
+  { name = "tags", type = "table_multiselect", options = "customer_tag" },
+]

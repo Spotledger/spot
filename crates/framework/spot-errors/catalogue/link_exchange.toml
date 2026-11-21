@@ -1,0 +1,199 @@
+# link_exchange codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "link_exchange.invalid_id"
+class = "none"
+summary = "An identifier is not valid."
+explanation_key = "error.link_exchange.invalid_id"
+params = []
+remedy = "Use a UUIDv7 message id and a positive sequence number."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.invalid_conversation"
+class = "none"
+summary = "The conversation name is not valid."
+explanation_key = "error.link_exchange.invalid_conversation"
+params = []
+remedy = "Use 1 to 64 lower-case letters, digits and the characters _ - . :."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.invalid_payload"
+class = "none"
+summary = "The message payload is not usable."
+explanation_key = "error.link_exchange.invalid_payload"
+params = []
+remedy = "Send canonical JSON of at most 256 KiB, nested at most 32 levels, with integers instead of fractions."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.retention_range"
+class = "none"
+summary = "The message retention is outside 1 to 365 days."
+explanation_key = "error.link_exchange.retention_range"
+params = []
+remedy = "Set link.message_retention_days to a whole number from 1 to 365."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.not_found"
+class = "none"
+summary = "No such message."
+explanation_key = "error.link_exchange.not_found"
+params = []
+remedy = "Check the message id."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.store_failed"
+class = "none"
+summary = "The exchange store failed."
+explanation_key = "error.link_exchange.store_failed"
+params = []
+remedy = "Retry; if it persists, check the tenant database."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.conflict"
+class = "none"
+summary = "The exchange state changed underneath the operation."
+explanation_key = "error.link_exchange.conflict"
+params = []
+remedy = "Retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.audit_failed"
+class = "none"
+summary = "The audit trail could not record the action, so it was refused."
+explanation_key = "error.link_exchange.audit_failed"
+params = []
+remedy = "Check the audit store and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.quarantine_failed"
+class = "none"
+summary = "The quarantine could not hold a refused input, so nothing was acknowledged."
+explanation_key = "error.link_exchange.quarantine_failed"
+params = []
+remedy = "Check the quarantine store; the sender keeps the message and sends it again."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.quarantine_count_unavailable"
+class = "none"
+summary = "The input quarantine cannot say how many inputs it holds for a link, so a new refusal is not held."
+explanation_key = "error.link_exchange.quarantine_count_unavailable"
+params = []
+remedy = "Implement `held_count` on the quarantine backend; until then the link's quarantine bound fails closed and refused inputs are dropped after being audited."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.link_mismatch"
+class = "none"
+summary = "The item belongs to another link."
+explanation_key = "error.link_exchange.link_mismatch"
+params = []
+remedy = "Present the item on the link it names."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.identity_mismatch"
+class = "none"
+summary = "The authenticated peer is not the link's peer."
+explanation_key = "error.link_exchange.identity_mismatch"
+params = []
+remedy = "Connect with the identity the link was agreed with."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.bad_signature"
+class = "none"
+summary = "A message or receipt signature did not verify."
+explanation_key = "error.link_exchange.bad_signature"
+params = []
+remedy = "Check that the peer signs with the key pinned in the link."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.unknown_key"
+class = "none"
+summary = "The link holds no pinned key for the peer."
+explanation_key = "error.link_exchange.unknown_key"
+params = []
+remedy = "Complete the link handshake before exchanging messages."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.wrong_kind"
+class = "none"
+summary = "The topic is of the other kind (record or message)."
+explanation_key = "error.link_exchange.wrong_kind"
+params = []
+remedy = "Use the enqueue call that matches the topic's kind in the link."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.schema_unsupported"
+class = "none"
+summary = "The schema version is outside the range the link grants."
+explanation_key = "error.link_exchange.schema_unsupported"
+params = []
+remedy = "Send a schema version inside the granted range."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.busy"
+class = "none"
+summary = "The receiver is busy; the message was not taken."
+explanation_key = "error.link_exchange.busy"
+params = []
+remedy = "Send again later; the sender keeps the message."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.version_unsupported"
+class = "none"
+summary = "The receiver does not support the schema version that was sent."
+explanation_key = "error.link_exchange.version_unsupported"
+params = []
+remedy = "Send a schema version both sides granted."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.not_granted"
+class = "none"
+summary = "The link does not grant this topic in this direction."
+explanation_key = "error.link_exchange.not_granted"
+params = []
+remedy = "Agree a grant for the topic on the link, or stop sending it."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.out_of_order_expired"
+class = "none"
+summary = "The message arrived after it expired or after its place in the conversation passed."
+explanation_key = "error.link_exchange.out_of_order_expired"
+params = []
+remedy = "The sender fills the place automatically; resend the content as a new message if it is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.payload_invalid"
+class = "none"
+summary = "The payload is not valid for the topic."
+explanation_key = "error.link_exchange.payload_invalid"
+params = []
+remedy = "Correct the payload so it matches the topic's schema and field list."
+since = "0.1.0"
+
+[[entry]]
+code = "link_exchange.capacity_exceeded"
+class = "none"
+summary = "The link already holds as much parked work as its limits allow."
+explanation_key = "error.link_exchange.capacity_exceeded"
+params = []
+remedy = "Wait for the receiver to apply or expire what it holds, then send the message again."
+since = "0.1.0"

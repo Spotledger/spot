@@ -1,0 +1,66 @@
+name = "invitation"
+label = "Invitation"
+app = "platform"
+module = "identity"
+title_field = "email"
+
+[[fields]]
+name = "user"
+label = "User"
+type = "link"
+options = "user"
+required = true
+index = true
+in_list_view = true
+description = "The invited user. The roles an invitation names are the assignments made when it was issued; accepting it adds none."
+
+[[fields]]
+name = "email"
+label = "E-mail"
+type = "text"
+required = true
+max_chars = 320
+in_list_view = true
+description = "Where the token was mailed."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\naccepted\nexpired\nrevoked"
+required = true
+default = "pending"
+in_list_view = true
+in_standard_filter = true
+description = "pending, then accepted once, or expired by the clock, or revoked by an administrator. Nothing leaves accepted, expired or revoked."
+
+[[fields]]
+name = "expires_at"
+label = "Expires At"
+type = "datetime"
+required = true
+read_only = true
+
+[[fields]]
+name = "sent_at"
+label = "Sent At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "accepted_at"
+label = "Accepted At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "digest"
+label = "Token Digest"
+type = "text"
+required = true
+unique = true
+index = true
+read_only = true
+no_copy = true
+max_chars = 64
+description = "Lowercase hex of the SHA-256 digest of the invitation token. The token itself is never stored, logged or returned; it travels once, by mail."

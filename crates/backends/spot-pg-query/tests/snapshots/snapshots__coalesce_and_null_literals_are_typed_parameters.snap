@@ -1,0 +1,14 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT COALESCE("p"."visits", $2, $1) AS "visits", COALESCE($4, "p"."credit_limit", CAST($3 AS numeric)) AS "limit", $5 AS "nothing", ("p"."note" IS NULL) AS "no_note" FROM "party" AS "p" ORDER BY "p"."id" ASC OFFSET $6
+$1 = Int8(0)
+$2 = Null(Int8)
+$3 = Int8(0)
+$4 = Null(Numeric)
+$5 = Null(Text)
+$6 = Int8(0)
+columns = ["visits", "limit", "nothing", "no_note"]
+decode = [Int, Decimal { scale: Some(2) }, Text, Bool]
+path = Transactional

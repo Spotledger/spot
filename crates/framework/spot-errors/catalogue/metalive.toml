@@ -1,0 +1,57 @@
+# metalive codes: the live metadata snapshot holder and the invalidation bus (spot-meta-live,
+# WP-MET-03). Library-internal vocabulary (ADR-26): raised by the crate, explained by the host.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "metalive.divergence"
+class = "none"
+summary = "Two nodes hold the same metadata version number with different content."
+explanation_key = "error.metalive.divergence"
+params = []
+remedy = "Stop serving this node and reconcile the metadata from storage before answering requests."
+since = "0.1.0"
+
+[[entry]]
+code = "metalive.build"
+class = "none"
+summary = "Building the next metadata snapshot failed; the previous snapshot is still serving."
+explanation_key = "error.metalive.build"
+params = []
+remedy = "Fix the named metadata or plan errors and apply the change again."
+since = "0.1.0"
+
+[[entry]]
+code = "metalive.unknown_custom_field"
+class = "none"
+summary = "A change tried to remove a custom field the site does not have."
+explanation_key = "error.metalive.unknown_custom_field"
+params = []
+remedy = "Remove only custom fields that were added to this site, spelled exactly as added."
+since = "0.1.0"
+
+[[entry]]
+code = "metalive.store"
+class = "none"
+summary = "The metadata version store could not be read or written."
+explanation_key = "error.metalive.store"
+params = []
+remedy = "Check the storage backend's health and retry the poll or the change."
+since = "0.1.0"
+
+[[entry]]
+code = "metalive.encode"
+class = "none"
+summary = "The metadata definitions could not be encoded to compute their content hash."
+explanation_key = "error.metalive.encode"
+params = []
+remedy = "Report this as a bug: a value built by spot-meta is always encodable."
+since = "0.1.0"
+
+[[entry]]
+code = "metalive.exhausted"
+class = "none"
+summary = "The site's metadata version space is exhausted, so no new version can be minted."
+explanation_key = "error.metalive.exhausted"
+params = []
+remedy = "This cannot happen in practice; report it as a bug."
+since = "0.1.0"

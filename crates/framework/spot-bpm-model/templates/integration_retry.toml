@@ -1,0 +1,42 @@
+name = "integration_retry"
+app = "connect"
+title = "Integration with retry"
+version = 1
+status = "draft"
+
+[[nodes]]
+id = "start"
+kind = "trigger"
+trigger = "webhook"
+path = "/hooks/orders"
+
+[[nodes]]
+id = "call"
+kind = "integration"
+connector = "http"
+action = "post"
+endpoint = "https://example.com/orders"
+timeout_secs = 30
+retry_attempts = 3
+retry_delay_secs = 5
+error = "failed"
+
+[[nodes]]
+id = "done"
+kind = "logic"
+logic = "branch"
+terminal = true
+
+[[nodes]]
+id = "failed"
+kind = "logic"
+logic = "branch"
+terminal = true
+
+[[edges]]
+from = "start"
+to = "call"
+
+[[edges]]
+from = "call"
+to = "done"

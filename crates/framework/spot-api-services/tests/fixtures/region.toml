@@ -1,0 +1,7 @@
+name = "region"
+label = "Region"
+
+[[fields]]
+name = "region_name"
+type = "text"
+required = true

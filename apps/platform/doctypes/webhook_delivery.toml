@@ -1,0 +1,103 @@
+name = "webhook_delivery"
+label = "Webhook Delivery"
+app = "platform"
+module = "integrations"
+
+# The log of webhook delivery attempts (WP-INT-01.T3). Written only by the delivery service
+# (the system principal): every field is read-only and no shipped grant gives create, write or
+# delete. It carries no payload, no header, no URL query and no text from the target: only
+# identifiers, counters, an HTTP status and a short error class code, so a hostile endpoint
+# cannot put content in the log.
+
+[[fields]]
+name = "webhook"
+label = "Webhook"
+type = "link"
+options = "webhook"
+required = true
+read_only = true
+index = true
+in_list_view = true
+in_standard_filter = true
+description = "The webhook this attempt belongs to, by name."
+
+[[fields]]
+name = "event_id"
+label = "Event ID"
+type = "text"
+required = true
+max_chars = 200
+read_only = true
+index = true
+in_list_view = true
+description = "The event's id; with the webhook it is the idempotency key of the delivery series."
+
+[[fields]]
+name = "delivery_id"
+label = "Delivery ID"
+type = "text"
+required = true
+max_chars = 64
+read_only = true
+index = true
+description = "The id of the delivery series, the same for every attempt."
+
+[[fields]]
+name = "attempt"
+label = "Attempt"
+type = "int"
+required = true
+read_only = true
+in_list_view = true
+description = "The attempt number, from 1."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "pending\ndelivered\nretrying\ndead_letter"
+required = true
+read_only = true
+index = true
+in_list_view = true
+in_standard_filter = true
+description = "pending, delivered, retrying or dead_letter."
+
+[[fields]]
+name = "status_code"
+label = "HTTP Status"
+type = "int"
+read_only = true
+in_list_view = true
+description = "The HTTP status the target answered with; empty when there was no response."
+
+[[fields]]
+name = "error_class"
+label = "Error Class"
+type = "text"
+max_chars = 64
+read_only = true
+in_list_view = true
+description = "A short code for the failure (for example timeout or http_error); never a response body or a message from the target."
+
+[[fields]]
+name = "started_at"
+label = "Started At"
+type = "datetime"
+required = true
+read_only = true
+index = true
+in_list_view = true
+
+[[fields]]
+name = "finished_at"
+label = "Finished At"
+type = "datetime"
+read_only = true
+
+[[fields]]
+name = "duration_ms"
+label = "Duration (ms)"
+type = "int"
+read_only = true
+description = "How long the attempt took, in milliseconds."

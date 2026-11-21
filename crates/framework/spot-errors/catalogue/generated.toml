@@ -1,0 +1,37 @@
+# generated codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "generated.document.wrong_type"
+class = "Internal"
+summary = "A generated typed view read a field holding a different type than declared: {field}."
+explanation_key = "error.generated.document.wrong_type"
+params = ["field"]
+remedy = "Rebuild the views against the current DocType; this is a programming error."
+since = "0.1.0"
+
+[[entry]]
+code = "generated.document.invalid_name"
+class = "Internal"
+summary = "A generated accessor produced a storage-refusing name: {name}."
+explanation_key = "error.generated.document.invalid_name"
+params = ["name"]
+remedy = "Report this; the view build should never emit such a name."
+since = "0.1.0"
+
+[[entry]]
+code = "generated.document.missing_row"
+class = "Internal"
+summary = "A row pushed into a child table was not found in the table afterwards: {table}."
+explanation_key = "error.generated.document.missing_row"
+params = ["table"]
+remedy = "Report this; the engine's row push is broken."
+since = "0.1.0"
+
+[[entry]]
+code = "generated.document.wrong_select_value"
+class = "Internal"
+summary = "A stored select value is not one of the field's options after they were narrowed: {value}."
+explanation_key = "error.generated.document.wrong_select_value"
+params = ["value"]
+remedy = "Re-narrow the options keeping stored values, or fix the stored value."
+since = "0.1.0"

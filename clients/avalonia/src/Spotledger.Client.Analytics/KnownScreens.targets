@@ -1,0 +1,360 @@
+<Project>
+
+  <!-- WP-UI-06.T2: the screen id set of Spotledger.Client.Analytics is generated at BUILD time
+       from the screens manifest (tools/ui-coverage/screens/*.toml), so the shipped client reads
+       no file at runtime and can never fall back to a permissive set. This file holds the inline
+       task only; each project that uses it declares its own target (the analytics project for the
+       shipped set, the test project for a fixture manifest that proves a non-empty set is read).
+
+       The parser is deliberately small: it understands the manifest shape - [[screen]] arrays of
+       key = value pairs, basic strings and (possibly multi-line) inline arrays - and fails the
+       build on anything it cannot read, so a malformed manifest is a build error rather than a
+       silently empty id set. A duplicate id fails the build. An empty manifest (today: only
+       example.toml) produces an empty set and the build succeeds; analytics then record no screen
+       at all. The example* exclusion is the same rule as tools/ui-coverage/check.py. -->
+
+  <UsingTask TaskName="GenerateKnownScreens"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ManifestDirectory ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+      <Namespace ParameterType="System.String" Required="false" />
+      <ClassName ParameterType="System.String" Required="false" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // --- small TOML readers (only what the screens manifest uses) -------------------------
+        Func<string, string> stripComment = raw =>
+        {
+            var quoted = false;
+            for (var i = 0; i < raw.Length; i++)
+            {
+                var c = raw[i];
+                if (c == '"')
+                {
+                    if (quoted && i > 0 && raw[i - 1] == '\\')
+                    {
+                        continue;
+                    }
+
+                    quoted = !quoted;
+                }
+                else if (c == '#' && !quoted)
+                {
+                    return raw.Substring(0, i);
+                }
+            }
+
+            return raw;
+        };
+
+        Func<string, int> findAssignment = text =>
+        {
+            var quoted = false;
+            for (var i = 0; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (c == '"')
+                {
+                    if (quoted && i > 0 && text[i - 1] == '\\')
+                    {
+                        continue;
+                    }
+
+                    quoted = !quoted;
+                }
+                else if (c == '=' && !quoted)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        };
+
+        Func<string, bool> wellFormedValue = value =>
+        {
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            var first = value[0];
+            if (first == '"')
+            {
+                if (value.Length < 2 || value[value.Length - 1] != '"')
+                {
+                    return false;
+                }
+
+                var quoted = false;
+                for (var i = 0; i < value.Length; i++)
+                {
+                    var c = value[i];
+                    if (c == '"')
+                    {
+                        if (quoted && i > 0 && value[i - 1] == '\\')
+                        {
+                            continue;
+                        }
+
+                        quoted = !quoted;
+                        if (!quoted && i != value.Length - 1)
+                        {
+                            return false; // trailing text after the closing quote
+                        }
+                    }
+                }
+
+                return !quoted;
+            }
+
+            if (first == '[')
+            {
+                return value[value.Length - 1] == ']';
+            }
+
+            if (first == '{')
+            {
+                return value[value.Length - 1] == '}';
+            }
+
+            // A bare value in TOML is a boolean, a number or a date/time - never a bare word
+            // (a string must be quoted), so `module = demo` is a manifest error.
+            return Regex.IsMatch(value, "^(true|false)$", RegexOptions.CultureInvariant)
+                || Regex.IsMatch(value, "^[+-]?[0-9][0-9A-Za-z+._:-]*$", RegexOptions.CultureInvariant);
+        };
+
+        var directory = new DirectoryInfo(ManifestDirectory);
+        if (!directory.Exists)
+        {
+            Log.LogError("Screens manifest directory not found: " + ManifestDirectory + " (it holds the manifest the analytics id set is generated from).");
+            return false;
+        }
+
+        var idPattern = new Regex("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant);
+        var keyPattern = new Regex("^[A-Za-z0-9_-]+$", RegexOptions.CultureInvariant);
+        var ids = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var failed = false;
+
+        foreach (var file in Directory.GetFiles(directory.FullName, "*.toml").OrderBy(f => f, StringComparer.Ordinal))
+        {
+            var fileName = Path.GetFileName(file);
+            if (fileName.StartsWith("example", StringComparison.Ordinal))
+            {
+                continue; // an example, exactly as check.py excludes it
+            }
+
+            var lines = File.ReadAllLines(file);
+            var inScreen = false;
+            var blockId = (string)null;
+            var blockKeys = new HashSet<string>(StringComparer.Ordinal);
+            var blockStart = 0;
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var text = stripComment(lines[index]).Trim();
+                if (text.Length == 0)
+                {
+                    continue;
+                }
+
+                if (text[0] == '[')
+                {
+                    if (inScreen && blockId == null)
+                    {
+                        Log.LogError(null, "SPOTAN001", null, fileName, blockStart, 0, 0, 0, "screen block without an id (started at line " + blockStart + ")");
+                        failed = true;
+                    }
+
+                    bool isArray;
+                    string table;
+                    if (text.StartsWith("[[", StringComparison.Ordinal))
+                    {
+                        if (!text.EndsWith("]]", StringComparison.Ordinal) || text.Length < 5)
+                        {
+                            Log.LogError(null, "SPOTAN002", null, fileName, index + 1, 0, 0, 0, "unterminated table header: " + text);
+                            failed = true;
+                            continue;
+                        }
+
+                        isArray = true;
+                        table = text.Substring(2, text.Length - 4).Trim();
+                    }
+                    else
+                    {
+                        if (!text.EndsWith("]", StringComparison.Ordinal) || text.Length < 3)
+                        {
+                            Log.LogError(null, "SPOTAN002", null, fileName, index + 1, 0, 0, 0, "unterminated table header: " + text);
+                            failed = true;
+                            continue;
+                        }
+
+                        isArray = false;
+                        table = text.Substring(1, text.Length - 2).Trim();
+                    }
+
+                    if (table.Length == 0)
+                    {
+                        Log.LogError(null, "SPOTAN002", null, fileName, index + 1, 0, 0, 0, "empty table header");
+                        failed = true;
+                        continue;
+                    }
+
+                    inScreen = isArray && table == "screen";
+                    if (inScreen)
+                    {
+                        blockId = null;
+                        blockKeys.Clear();
+                        blockStart = index + 1;
+                    }
+
+                    continue;
+                }
+
+                var equals = findAssignment(text);
+                if (equals <= 0 || equals == text.Length - 1)
+                {
+                    Log.LogError(null, "SPOTAN003", null, fileName, index + 1, 0, 0, 0, "expected key = value, found: " + text);
+                    failed = true;
+                    continue;
+                }
+
+                var key = text.Substring(0, equals).Trim();
+                var value = text.Substring(equals + 1).Trim();
+
+                // A multi-line inline array is legal TOML; join it before validating.
+                if (value.StartsWith("[", StringComparison.Ordinal) && !value.EndsWith("]", StringComparison.Ordinal))
+                {
+                    while (index + 1 < lines.Length && !value.EndsWith("]", StringComparison.Ordinal))
+                    {
+                        index++;
+                        var next = stripComment(lines[index]).Trim();
+                        if (next.Length != 0)
+                        {
+                            value = value + " " + next;
+                        }
+                    }
+                }
+
+                if (!keyPattern.IsMatch(key))
+                {
+                    Log.LogError(null, "SPOTAN004", null, fileName, index + 1, 0, 0, 0, "invalid key: " + key);
+                    failed = true;
+                    continue;
+                }
+
+                if (!wellFormedValue(value))
+                {
+                    Log.LogError(null, "SPOTAN005", null, fileName, index + 1, 0, 0, 0, "malformed value for " + key);
+                    failed = true;
+                    continue;
+                }
+
+                if (!inScreen)
+                {
+                    continue; // tables other than [[screen]] are not the manifest
+                }
+
+                if (!blockKeys.Add(key))
+                {
+                    Log.LogError(null, "SPOTAN006", null, fileName, index + 1, 0, 0, 0, "duplicate key " + key + " in a screen block");
+                    failed = true;
+                    continue;
+                }
+
+                if (key != "id")
+                {
+                    continue;
+                }
+
+                if (!value.StartsWith("\"", StringComparison.Ordinal) || !value.EndsWith("\"", StringComparison.Ordinal) || value.Length < 3)
+                {
+                    Log.LogError(null, "SPOTAN007", null, fileName, index + 1, 0, 0, 0, "the screen id must be a basic string");
+                    failed = true;
+                    continue;
+                }
+
+                blockId = value.Substring(1, value.Length - 2);
+                if (!idPattern.IsMatch(blockId))
+                {
+                    Log.LogError(null, "SPOTAN008", null, fileName, index + 1, 0, 0, 0, "invalid screen id " + blockId + " (expected ^[a-z0-9][a-z0-9._-]{0,63}$)");
+                    failed = true;
+                    continue;
+                }
+
+                if (!seen.Add(blockId))
+                {
+                    Log.LogError(null, "SPOTAN009", null, fileName, index + 1, 0, 0, 0, "duplicate screen id " + blockId);
+                    failed = true;
+                }
+                else
+                {
+                    ids.Add(blockId);
+                }
+            }
+
+            if (inScreen && blockId == null)
+            {
+                Log.LogError(null, "SPOTAN001", null, fileName, lines.Length, 0, 0, 0, "the last screen block has no id");
+                failed = true;
+            }
+        }
+
+        if (failed)
+        {
+            return false;
+        }
+
+        ids.Sort(StringComparer.Ordinal);
+        var builder = new StringBuilder();
+        builder.AppendLine("// <auto-generated>");
+        builder.AppendLine("// Generated by the Spotledger.Client.Analytics build from tools/ui-coverage/screens/*.toml");
+        builder.AppendLine("// (example*.toml excluded). Do not edit: change the manifest and rebuild.");
+        builder.AppendLine("// </auto-generated>");
+        builder.AppendLine("#nullable enable");
+        builder.AppendLine();
+        var targetNamespace = string.IsNullOrEmpty(Namespace) ? "Spotledger.Client.Analytics" : Namespace;
+        var targetClass = string.IsNullOrEmpty(ClassName) ? "KnownScreens" : ClassName;
+        builder.AppendLine("namespace " + targetNamespace + ";");
+        builder.AppendLine();
+        builder.AppendLine("public sealed partial class " + targetClass);
+        builder.AppendLine("{");
+        if (ids.Count == 0)
+        {
+            builder.AppendLine("    internal static string[] ManifestIds() => System.Array.Empty<string>();");
+        }
+        else
+        {
+            builder.AppendLine("    internal static string[] ManifestIds() =>");
+            builder.AppendLine("    [");
+            foreach (var id in ids)
+            {
+                builder.Append("        \"").Append(id).AppendLine("\",");
+            }
+
+            builder.AppendLine("    ];");
+        }
+
+        builder.AppendLine("}");
+        var target = new FileInfo(OutputFile);
+        if (target.Directory != null && !target.Directory.Exists)
+        {
+            target.Directory.Create();
+        }
+
+        File.WriteAllText(OutputFile, builder.ToString(), new UTF8Encoding(false));
+        Log.LogMessage("KnownScreens: " + ids.Count + " screen id(s) from " + directory.FullName);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+</Project>

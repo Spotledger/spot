@@ -1,0 +1,103 @@
+{
+  "client": "entra",
+  "description": "An Entra-style provisioning transcript, written from public behaviour: create a user, pre-check it by userName, deactivate it with the string \"False\", reactivate it, create a group with a member, add the member again, then remove the member.",
+  "steps": [
+    {
+      "name": "create user",
+      "method": "POST",
+      "path": "/Users",
+      "capture": "bob",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "externalId": "entra-bob-1",
+        "userName": "Bob@Contoso.com",
+        "name": { "givenName": "Bob", "familyName": "Smith", "formatted": "Bob Smith" },
+        "displayName": "Bob Smith",
+        "emails": [{ "value": "bob@contoso.com", "type": "work", "primary": true }],
+        "active": true,
+        "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
+          "department": "Engineering",
+          "employeeNumber": "E-1001"
+        }
+      },
+      "expect": { "status": 201, "active": true }
+    },
+    {
+      "name": "pre-check by userName",
+      "method": "GET",
+      "path": "/Users",
+      "query": { "filter": "userName eq \"bob@contoso.com\"" },
+      "expect": { "status": 200, "totalResults": 1 }
+    },
+    {
+      "name": "pre-check finds nothing for another name",
+      "method": "GET",
+      "path": "/Users",
+      "query": { "filter": "userName eq \"nobody@contoso.com\"" },
+      "expect": { "status": 200, "totalResults": 0 }
+    },
+    {
+      "name": "deactivate with the string False",
+      "method": "PATCH",
+      "path": "/Users/{{bob}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [{ "op": "Replace", "path": "active", "value": "False" }]
+      },
+      "expect": { "status": 200, "active": false }
+    },
+    {
+      "name": "read the deactivated user",
+      "method": "GET",
+      "path": "/Users/{{bob}}",
+      "expect": { "status": 200, "active": false }
+    },
+    {
+      "name": "reactivate",
+      "method": "PATCH",
+      "path": "/Users/{{bob}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [{ "op": "Replace", "path": "active", "value": true }]
+      },
+      "expect": { "status": 200, "active": true }
+    },
+    {
+      "name": "create group with a member",
+      "method": "POST",
+      "path": "/Groups",
+      "capture": "engineering",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+        "externalId": "entra-eng-1",
+        "displayName": "Engineering",
+        "members": [{ "value": "{{bob}}", "display": "Bob Smith", "type": "User" }]
+      },
+      "expect": { "status": 201 }
+    },
+    {
+      "name": "add the member again",
+      "method": "PATCH",
+      "path": "/Groups/{{engineering}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [
+          { "op": "Add", "path": "members", "value": [{ "value": "{{bob}}" }] }
+        ]
+      },
+      "expect": { "status": 200 }
+    },
+    {
+      "name": "remove the member by value filter",
+      "method": "PATCH",
+      "path": "/Groups/{{engineering}}",
+      "body": {
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [
+          { "op": "Remove", "path": "members[value eq \"{{bob}}\"]" }
+        ]
+      },
+      "expect": { "status": 200 }
+    }
+  ]
+}

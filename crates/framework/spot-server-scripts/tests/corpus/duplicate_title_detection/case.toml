@@ -1,0 +1,13 @@
+kind = "doc_event"
+event = "validate"
+pattern = "duplicate detection with host.query"
+[[before]]
+key = "o1"
+doctype = "sales_order"
+[before.fields]
+title = "PO-1001"
+[input.fields]
+title = "PO-1001"
+[expect]
+ok = false
+error_fields = ["title"]

@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.PreviewPane">
+  <!-- The preview: the form the server previews, rendered with the real field controls and the
+       sample values it supplies, at desktop width, narrow width or as the list view. Nothing here
+       is ever saved. -->
+  <Border Padding="10" Background="{DynamicResource Color.Surface.Raised}">
+    <Grid RowDefinitions="Auto,*">
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+        <Button Content="Desktop" Click="OnDesktop" />
+        <Button Content="Narrow" Click="OnNarrow" />
+        <Button Content="List" Click="OnList" />
+        <Button Content="Refresh" Click="OnRefresh" />
+        <TextBlock Text="{Binding Preview.Status}"
+                   VerticalAlignment="Center"
+                   Margin="8,0,0,0"
+                   FontSize="{DynamicResource Font.Size.Caption}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Secondary}" />
+      </StackPanel>
+      <ScrollViewer Grid.Row="1">
+        <StackPanel Name="Host" Spacing="8" />
+      </ScrollViewer>
+    </Grid>
+  </Border>
+</UserControl>

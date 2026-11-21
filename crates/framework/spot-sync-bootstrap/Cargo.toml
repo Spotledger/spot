@@ -1,0 +1,29 @@
+[package]
+name = "spot-sync-bootstrap"
+description = "Snapshot bootstrap of a new or restored node (WP-SYN-07.T3, ADR-066 sections 3, 4 and 7): a scoped snapshot at one position split into dependency-ordered bundles that never split a cycle, a resumable cursor, the restored-node start decision, the handover position and admission control for many nodes returning at once"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# SnapshotInfo (position, generation, verified) and ImageRecord: the snapshot this crate reads.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# Limits, RecordKey and the References and Redactor seams: the bundle bounds and the catalog's
+# view of links are the closure crate's, so a bootstrap bundle obeys the same caps as any other.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# The cursor and the plan data have a stable serialised form.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `sync_bootstrap.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The incremental plan the handover test builds from the position after the snapshot.
+spot-sync-catchup = { path = "../spot-sync-catchup" }
+# Property run on random reference graphs.
+proptest = "1"
+
+[lints]
+workspace = true

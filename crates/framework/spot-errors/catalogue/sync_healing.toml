@@ -1,0 +1,29 @@
+# sync_healing codes (WP-SYN-09.T4). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_healing.invalid_settings"
+class = "Validation"
+summary = "The healing settings are not usable: {reason}."
+explanation_key = "error.sync_healing.invalid_settings"
+params = ["reason"]
+remedy = "Set every limit to at least one and the backoff base at or below the backoff cap."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_healing.direction_ambiguous"
+class = "InvalidState"
+summary = "No repair was made for {node} / {scope}: the direction of the repair is not certain."
+explanation_key = "error.sync_healing.direction_ambiguous"
+params = ["node", "scope"]
+remedy = "Give the comparison the owner and mirror roles of both nodes; healing never repairs an owner from a mirror."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_healing.mirror_ahead"
+class = "InvalidState"
+summary = "No repair was made for {node} / {scope}: the mirror holds a newer version than its owner."
+explanation_key = "error.sync_healing.mirror_ahead"
+params = ["node", "scope"]
+remedy = "Investigate why the mirror is ahead of the owner; an operator decides which copy is right."
+since = "0.1.0"

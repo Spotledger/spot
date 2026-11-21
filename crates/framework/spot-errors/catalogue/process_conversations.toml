@@ -1,0 +1,28 @@
+# process_conversations process conversation host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "process_conversations.payload_too_large"
+class = "none"
+summary = "The payload is larger than the site allows."
+explanation_key = "error.process_conversations.payload_too_large"
+params = []
+remedy = "Send a smaller payload."
+since = "0.1.0"
+
+[[entry]]
+code = "process_conversations.rate_limited"
+class = "none"
+summary = "The link delivered more messages this minute than the site allows."
+explanation_key = "error.process_conversations.rate_limited"
+params = []
+remedy = "Slow down and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "process_conversations.thread"
+class = "none"
+summary = "A node's thread did not start or died."
+explanation_key = "error.process_conversations.thread"
+params = []
+remedy = "Start the node again; report the code if it repeats."
+since = "0.1.0"

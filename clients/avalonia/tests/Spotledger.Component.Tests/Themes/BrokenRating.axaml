@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:broken="using:Spotledger.Component.Tests">
+  <!-- Sound styles: tokens only. The package that uses them is broken in the accessibility
+       tree, not in its styling, so the kit's report must be about the missing name. -->
+  <ControlTheme x:Key="{x:Type broken:BrokenRatingView}" TargetType="broken:BrokenRatingView">
+    <Setter Property="Background" Value="{DynamicResource Color.Surface.Raised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Color.Border.Default}" />
+    <Setter Property="Foreground" Value="{DynamicResource Color.Text.Primary}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family.Latin}" />
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="Padding" Value="0" />
+  </ControlTheme>
+</ResourceDictionary>

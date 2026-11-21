@@ -1,0 +1,10 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "l"."id" AS "id", "l"."parent" AS "parent", "l"."parent_field" AS "parent_field", "l"."idx" AS "idx", "l"."amount" AS "amount" FROM "invoice_line" AS "l" WHERE ("l"."parent_field" COLLATE "C" = $1 COLLATE "C") ORDER BY "l"."id" ASC OFFSET $2
+$1 = Text("lines")
+$2 = Int8(0)
+columns = ["id", "parent", "parent_field", "idx", "amount"]
+decode = [Id, Id, Text, Int, Decimal { scale: Some(2) }]
+path = Transactional

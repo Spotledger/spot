@@ -1,0 +1,15 @@
+# The 16 ms toolbar budget (WP-UI-13.T3)
+
+[[budget]]
+id = "uiext.resolve.toolbar"
+metric = "p95"
+max = 16
+unit = "ms"
+runner = "reference"
+
+[runner.ci-linux]
+multiplier = 3.0
+[runner.ci-windows]
+multiplier = 3.0
+[runner.reference]
+multiplier = 1.0

@@ -1,0 +1,59 @@
+{
+  "distro": "fedora",
+  "description": "A Fedora host driven through the dnf, systemd, useradd and firewalld modules: install and remove a package, apply all updates, start a unit, create an account and open a port. Every mutating scenario is re-planned afterwards and must be empty.",
+  "state": {
+    "installed": ["bash", "systemd", "openssh-server", "firewalld"],
+    "updates": [{ "name": "curl", "security": false }],
+    "services": { "nginx.service": { "active": false, "enabled": false } },
+    "users": {},
+    "firewall_backend": "firewalld",
+    "firewall_ports": ["22/tcp"]
+  },
+  "scenarios": [
+    {
+      "name": "install nginx",
+      "op": "os.package.install",
+      "params": { "packages": ["nginx"] },
+      "expect_argv": [["dnf", "-y", "install", "nginx"]],
+      "idempotent": true
+    },
+    {
+      "name": "remove bash",
+      "op": "os.package.remove",
+      "params": { "packages": ["bash"] },
+      "expect_argv": [["dnf", "-y", "remove", "bash"]],
+      "idempotent": true
+    },
+    {
+      "name": "apply all updates",
+      "op": "os.update.apply",
+      "params": {},
+      "expect_argv": [["dnf", "-y", "upgrade"]],
+      "idempotent": true
+    },
+    {
+      "name": "start nginx",
+      "op": "os.service.start",
+      "params": { "unit": "nginx.service" },
+      "expect_argv": [["systemctl", "--no-pager", "start", "nginx.service"]],
+      "idempotent": true
+    },
+    {
+      "name": "create alice",
+      "op": "os.user.create",
+      "params": { "name": "alice" },
+      "expect_argv": [["useradd", "--create-home", "--", "alice"]],
+      "idempotent": true
+    },
+    {
+      "name": "open port 8080",
+      "op": "os.firewall.open",
+      "params": { "port": 8080 },
+      "expect_argv": [
+        ["firewall-cmd", "--permanent", "--add-port", "8080/tcp"],
+        ["firewall-cmd", "--reload"]
+      ],
+      "idempotent": true
+    }
+  ]
+}

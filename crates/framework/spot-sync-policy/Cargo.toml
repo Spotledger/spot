@@ -1,0 +1,24 @@
+[package]
+name = "spot-sync-policy"
+description = "Per-DocType sync policy declared in metadata (WP-EDG-08.T1, ADR-062): the policy text form as a DocType property, resolve into a PolicyTable over effective metadata, the lints that reject an inconsistent policy before runtime, the PolicyLookup seam for spot-partition and spot-sync-master, and the outgoing view that strips excluded fields"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `EffectiveMeta` (and its `Definition`/`FieldSpec`) is the metadata a policy resolves against;
+# `spot_meta::custom::Property`'s key/value text form is the shape this crate's policy property
+# mirrors so it composes with customisation (ADR-05).
+spot-meta = { path = "../spot-meta" }
+# `Document`, `AppError` and `ErrorClass`: the outgoing view is a document, and every lint
+# problem maps onto the platform's typed error (ADR-26).
+spot-app-api = { path = "../../../contracts/app-api" }
+# The stable serde names of the policy text form, exactly as `spot-meta`'s property text uses.
+serde = { version = "1", features = ["derive"] }
+# The TOML body of the `sync_policy` property, the same form `lookup` and `masking` use.
+toml = "0.8"
+
+[lints]
+workspace = true

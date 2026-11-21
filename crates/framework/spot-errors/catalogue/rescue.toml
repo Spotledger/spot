@@ -1,0 +1,197 @@
+# rescue codes: the `rescue.*` vocabulary of spot-rescue (WP-MIG-10.T1). One [[entry]] per code;
+# see crates/framework/spot-errors/README.md.
+#
+# The rescue tool raises its own typed errors (`spot_rescue::Error`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means, and a remedy
+# states what an operator does about it. A blocked item, a rejected re-entry and a failed
+# invariant pass are outcomes in the rescue report, not errors: the run stopped safely and kept
+# every original payload.
+
+[[entry]]
+code = "rescue.no_ticket"
+class = "none"
+summary = "The rescue run has no restore ticket."
+explanation_key = "error.rescue.no_ticket"
+params = []
+remedy = "Obtain a two-person restore approval and pass its ticket to the rescue run."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.ticket_mismatch"
+class = "none"
+summary = "The ticket's snapshot time {ticket} does not match the run's {snapshot_at}."
+explanation_key = "error.rescue.ticket_mismatch"
+params = ["snapshot_at", "ticket"]
+remedy = "Re-approve the restore for the snapshot the run will actually use."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.not_two_person"
+class = "none"
+summary = "The restore ticket names {approvers} distinct approver(s); two are required."
+explanation_key = "error.rescue.not_two_person"
+params = ["approvers"]
+remedy = "Get a second person to approve the restore."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.no_snapshot"
+class = "none"
+summary = "The run names no taken snapshot."
+explanation_key = "error.rescue.no_snapshot"
+params = []
+remedy = "Take a pre-migration snapshot and pass its id to the rescue run."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.snapshot_failed"
+class = "none"
+summary = "The snapshot could not be checked or restored: {message}."
+explanation_key = "error.rescue.snapshot_failed"
+params = ["message"]
+remedy = "Check the snapshot and the restore target; the site stays closed."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.gate_failed"
+class = "none"
+summary = "The maintenance gate failed: {message}."
+explanation_key = "error.rescue.gate_failed"
+params = ["message"]
+remedy = "Check the admission gate; never admit users until it closes and opens reliably."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.journal_failed"
+class = "none"
+summary = "The rescue journal failed: {message}."
+explanation_key = "error.rescue.journal_failed"
+params = ["message"]
+remedy = "Check the journal backend and start the rescue again; it resumes from the outcomes."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.irreversible"
+class = "none"
+summary = "No down-patch plan exists; these patches are irreversible: {patches}."
+explanation_key = "error.rescue.irreversible"
+params = ["patches"]
+remedy = "Do not run down-patches; use the restore-and-re-entry rescue or accept that the change stays."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.invalid_input"
+class = "none"
+summary = "Invalid {what}: {reason}."
+explanation_key = "error.rescue.invalid_input"
+params = ["reason", "what"]
+remedy = "Correct the named argument and start the rescue again."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.killed"
+class = "none"
+summary = "The rescue run was killed at {at}."
+explanation_key = "error.rescue.killed"
+params = ["at"]
+remedy = "Start the rescue again over the same journal; it resumes without repeating items."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.reentry_failed"
+class = "none"
+summary = "Item {key} failed in the old version's engine: {reason}."
+explanation_key = "error.rescue.reentry_failed"
+params = ["key", "reason"]
+remedy = "Read the reason and the preserved original payload, fix the cause, then resume the rescue."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.blocked"
+class = "none"
+summary = "An operation cannot be expressed in the old version and blocks the run."
+explanation_key = "error.rescue.blocked"
+params = []
+remedy = "Read the blocked item's reason and original payload, decide how to express it, then resume."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.invariants_failed"
+class = "none"
+summary = "The invariant pass failed with {violations} violation(s): {details}."
+explanation_key = "error.rescue.invariants_failed"
+params = ["details", "violations"]
+remedy = "Read the violations; the site stays closed until a person clears the rescue."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.down_step_failed"
+class = "none"
+summary = "Down-patch {index} ({id}) failed: {reason}."
+explanation_key = "error.rescue.down_step_failed"
+params = ["id", "index", "reason"]
+remedy = "Read the reason and restore the snapshot by hand; the site stays closed."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.run_mismatch"
+class = "none"
+summary = "The journal is for {found}, not {expected}."
+explanation_key = "error.rescue.run_mismatch"
+params = ["expected", "found"]
+remedy = "Use a new journal for a new rescue identity; never mix two rescues in one journal."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.unknown_doctype"
+class = "none"
+summary = "The old version has no DocType {doctype}."
+explanation_key = "error.rescue.unknown_doctype"
+params = ["doctype"]
+remedy = "Transform or move the document by hand before resuming the rescue."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.unknown_field"
+class = "none"
+summary = "The old version has no field the operation carries."
+explanation_key = "error.rescue.unknown_field"
+params = []
+remedy = "Declare a down-transform for the field or express the item by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.missing_field"
+class = "none"
+summary = "The old version requires a field no transform supplies."
+explanation_key = "error.rescue.missing_field"
+params = []
+remedy = "Declare a default down-transform for the field or express the item by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.unsupported_operation"
+class = "none"
+summary = "The operation cannot be expressed against the restored old version."
+explanation_key = "error.rescue.unsupported_operation"
+params = []
+remedy = "Express the operation by hand and resume the rescue when it can be replayed."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.duplicate_operation"
+class = "none"
+summary = "Two or more operations share one id."
+explanation_key = "error.rescue.duplicate_operation"
+params = []
+remedy = "Read the outbox and document history again; an operation id must be unique."
+since = "0.1.0"
+
+[[entry]]
+code = "rescue.causal_cycle"
+class = "none"
+summary = "The causal links between operations form a cycle."
+explanation_key = "error.rescue.causal_cycle"
+params = []
+remedy = "Read the operation causes; they must form a DAG before re-entry."
+since = "0.1.0"

@@ -1,0 +1,150 @@
+# remedies codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The remedy catalogue framework's stable vocabulary (WP-AI-07.T1): an unknown or invalid remedy,
+# a refusal from the tier authoriser, invalid parameters, a failed precondition, a stale plan, an
+# undo that is unknown, expired or in conflict, an irreversible remedy, the registry's own load
+# errors, and the hard floor's refusal of a direct edit to a submitted financial record.
+
+[[entry]]
+code = "remedies.unknown"
+class = "none"
+summary = "No remedy with the id {remedy} is in the registry."
+explanation_key = "error.remedies.unknown"
+params = ["remedy"]
+remedy = "Use a remedy id from the registry's catalogue."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.refused"
+class = "none"
+summary = "The tier authoriser refused the remedy {remedy} for this agent."
+explanation_key = "error.remedies.refused"
+params = ["remedy"]
+remedy = "Run the remedy from an agent whose tier, domain and hard floor allow it."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.params_invalid"
+class = "none"
+summary = "The parameters for {remedy} do not satisfy its schema."
+explanation_key = "error.remedies.params_invalid"
+params = ["remedy"]
+remedy = "Supply parameters that match the remedy's published JSON Schema."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.precondition_failed"
+class = "none"
+summary = "The precondition for {remedy} is not met, so it must not run."
+explanation_key = "error.remedies.precondition_failed"
+params = ["remedy"]
+remedy = "Diagnose the named fault first; run the remedy once its precondition holds."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.plan_stale"
+class = "none"
+summary = "The plan for {remedy} is stale or forged and is refused."
+explanation_key = "error.remedies.plan_stale"
+params = ["remedy"]
+remedy = "Dry-run the remedy again and apply the plan the dry-run produced."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.undo_unknown"
+class = "none"
+summary = "No undo record exists for the token {token}."
+explanation_key = "error.remedies.undo_unknown"
+params = ["token"]
+remedy = "Use the undo token the apply returned, before it is undone or expires."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.undo_expired"
+class = "none"
+summary = "The undo window for {token} has closed."
+explanation_key = "error.remedies.undo_expired"
+params = ["token"]
+remedy = "Undo inside the configured window, or repair the state with a fresh remedy."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.undo_conflict"
+class = "none"
+summary = "Undo {token} conflicts because {target} changed after the apply."
+explanation_key = "error.remedies.undo_conflict"
+params = ["target", "token"]
+remedy = "Leave the later change in place, or reconcile the named target before undoing."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.irreversible"
+class = "none"
+summary = "The remedy {remedy} cannot be undone."
+explanation_key = "error.remedies.irreversible"
+params = ["remedy"]
+remedy = "Take a snapshot before applying; an irreversible remedy is T3 and needs approval."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.duplicate"
+class = "none"
+summary = "Two remedies declare the id {remedy}."
+explanation_key = "error.remedies.duplicate"
+params = ["remedy"]
+remedy = "Give each remedy a unique id; a remedy id is its stable address."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.invalid_id"
+class = "none"
+summary = "The text {id} is not a valid remedy id."
+explanation_key = "error.remedies.invalid_id"
+params = ["id"]
+remedy = "Name a remedy with dotted lower-case segments, such as a namespace and a name."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.meta_invalid"
+class = "none"
+summary = "The metadata for {remedy} breaks a rule."
+explanation_key = "error.remedies.meta_invalid"
+params = ["remedy"]
+remedy = "Fill the title, declare only real parameters, and make an irreversible remedy T3."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.catalogue_invalid"
+class = "none"
+summary = "The remedy action catalogue did not load."
+explanation_key = "error.remedies.catalogue_invalid"
+params = []
+remedy = "Check the registered remedies' tiers and effects against the tier ladder."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.corpus_invalid"
+class = "none"
+summary = "The corpus at {at} is invalid."
+explanation_key = "error.remedies.corpus_invalid"
+params = ["at"]
+remedy = "Fix the named case so it parses and carries an id, symptom, evidence, remedy and outcome."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.op_failed"
+class = "none"
+summary = "The operation {operation} failed."
+explanation_key = "error.remedies.op_failed"
+params = ["operation"]
+remedy = "Inspect the named typed operation's failure and retry once its cause is gone."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies.hard_floor_financial"
+class = "none"
+summary = "The submitted financial record {document} may change only through cancel, amend or a journal entry."
+explanation_key = "error.remedies.hard_floor_financial"
+params = ["document"]
+remedy = "Cancel, amend or post a journal entry instead of editing the record directly."
+since = "0.1.0"

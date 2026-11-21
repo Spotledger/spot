@@ -1,0 +1,65 @@
+# Help for the tscontroller error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "tscontroller.compile_failed"
+what_happened = "A TypeScript controller module did not compile."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the reported TypeScript diagnostic; the problem names the line and column.", "If it keeps happening, tell your administrator and quote the code tscontroller.compile_failed."]
+audience = "user"
+
+[[help]]
+code = "tscontroller.conformance_fail"
+what_happened = "A test controller raised the failure its test asked for."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["This code belongs to the shared controller conformance suite, not to an app.", "If it keeps happening, tell your administrator and quote the code tscontroller.conformance_fail."]
+audience = "user"
+
+[[help]]
+code = "tscontroller.conformance_failed"
+what_happened = "The controller conformance suite could not build its fixture."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Report this with the fixture details; the suite's own metadata or site id is invalid.", "If it keeps happening, tell your administrator and quote the code tscontroller.conformance_failed."]
+audience = "operator"
+
+[[help]]
+code = "tscontroller.conformance_not_found"
+what_happened = "The conformance suite could not load a document it had just written."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Report this with the fixture details; the fake backend did not store the document.", "If it keeps happening, tell your administrator and quote the code tscontroller.conformance_not_found."]
+audience = "user"
+
+[[help]]
+code = "tscontroller.conformance_wrong"
+what_happened = "A controller did not behave the way the conformance suite requires."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Fix the controller so it behaves like a native one; the check names the difference.", "If it keeps happening, tell your administrator and quote the code tscontroller.conformance_wrong."]
+audience = "operator"
+
+[[help]]
+code = "tscontroller.invalid_module"
+what_happened = "A TypeScript controller module does not match the module contract."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Fix the module's contract() declaration; every problem is reported with its position.", "If it keeps happening, tell your administrator and quote the code tscontroller.invalid_module."]
+audience = "user"
+
+[[help]]
+code = "tscontroller.limit_exceeded"
+what_happened = "A TypeScript controller handler exceeded one of its limits."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Make the handler faster and lighter, or raise its timeout; the operation was rolled back.", "If it keeps happening, tell your administrator and quote the code tscontroller.limit_exceeded."]
+audience = "operator"
+
+[[help]]
+code = "tscontroller.module_missing"
+what_happened = "The installed app bundle carries no controller module for this reference."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Ship the module at the path the ts: reference names, or fix the reference.", "If it keeps happening, tell your administrator and quote the code tscontroller.module_missing."]
+audience = "user"
+
+[[help]]
+code = "tscontroller.result_invalid"
+what_happened = "A TypeScript controller method returned a result that does not match its declared schema."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Return the shape the method declares in its contract(), or change the declaration.", "If it keeps happening, tell your administrator and quote the code tscontroller.result_invalid."]
+audience = "operator"

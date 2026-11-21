@@ -1,0 +1,65 @@
+# committed_delivery codes (WP-DOC-04.T4): the answers of the job that runs committed steps. One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "committed_delivery.bad_args"
+class = "none"
+summary = "The committed-steps job arguments cannot be read."
+explanation_key = "error.committed_delivery.bad_args"
+params = []
+remedy = "Report this to the platform team; the job was enqueued by a different version or was altered."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.wrong_site"
+class = "none"
+summary = "The committed-steps job names a different site than the one that owns it."
+explanation_key = "error.committed_delivery.wrong_site"
+params = []
+remedy = "Report this to the platform team; the job was refused and ran nothing."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.unknown_site"
+class = "none"
+summary = "No runner serves the site of the committed-steps job."
+explanation_key = "error.committed_delivery.unknown_site"
+params = []
+remedy = "Start the host for this site; the job stays failed and can be re-enqueued."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.unknown_step"
+class = "none"
+summary = "The committed-steps job lists a hook point that is not a committed point."
+explanation_key = "error.committed_delivery.unknown_step"
+params = []
+remedy = "Report this to the platform team; the job was refused and ran nothing."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.predecessor_pending"
+class = "none"
+summary = "An earlier write of the same document has committed steps still to run."
+explanation_key = "error.committed_delivery.predecessor_pending"
+params = []
+remedy = "Nothing to do; the job reruns after the earlier job finishes."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.step_unavailable"
+class = "none"
+summary = "A committed step failed with a temporary error."
+explanation_key = "error.committed_delivery.step_unavailable"
+params = []
+remedy = "Nothing to do; the job reruns from the failed step."
+since = "0.1.0"
+
+[[entry]]
+code = "committed_delivery.unavailable"
+class = "none"
+summary = "The committed-steps job could not read or write its progress."
+explanation_key = "error.committed_delivery.unavailable"
+params = []
+remedy = "Nothing to do; the job reruns and resumes where it stopped."
+since = "0.1.0"

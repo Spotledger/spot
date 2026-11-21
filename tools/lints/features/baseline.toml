@@ -1,0 +1,21 @@
+# Committed baseline of tools/lints/features/rules.toml. The gate fails when `non_product`
+# or `[[allow_edge]]` has an entry that is not listed here, so a new entry needs a visible
+# change to this file. A change to this file is a lead-reviewed change. Entries are removed
+# by `python3 tools/lints/features/features_lint.py --regenerate-baseline` after the
+# rules entry is gone.
+
+[non_product]
+count = 7
+packages = [
+  "spot-cluster-redis",
+  "spot-l7-invariants",
+  "spot-l8-isolation",
+  "spot-pg-supervisor",
+  "spot-snapshot",
+  "spot-support-eval",
+  "spot-unattended-support",
+]
+
+[allow_edge]
+count = 0
+edges = []

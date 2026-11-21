@@ -1,0 +1,71 @@
+{
+  "ops": 5000,
+  "results": [
+    {
+      "backend": "in_process",
+      "mean_micros": 11,
+      "operation": "cache_set",
+      "ops": 5000,
+      "ops_per_sec": 86992,
+      "p99_micros": 20
+    },
+    {
+      "backend": "in_process",
+      "mean_micros": 6,
+      "operation": "cache_get",
+      "ops": 5000,
+      "ops_per_sec": 147340,
+      "p99_micros": 4
+    },
+    {
+      "backend": "in_process",
+      "mean_micros": 10,
+      "operation": "lock_acquire_release",
+      "ops": 5000,
+      "ops_per_sec": 97528,
+      "p99_micros": 18
+    },
+    {
+      "backend": "in_process",
+      "mean_micros": 4,
+      "operation": "rate_take",
+      "ops": 5000,
+      "ops_per_sec": 211371,
+      "p99_micros": 5
+    },
+    {
+      "backend": "redis",
+      "mean_micros": 251,
+      "operation": "cache_set",
+      "ops": 5000,
+      "ops_per_sec": 3971,
+      "p99_micros": 1531
+    },
+    {
+      "backend": "redis",
+      "mean_micros": 75,
+      "operation": "cache_get",
+      "ops": 5000,
+      "ops_per_sec": 13249,
+      "p99_micros": 181
+    },
+    {
+      "backend": "redis",
+      "mean_micros": 229,
+      "operation": "lock_acquire_release",
+      "ops": 5000,
+      "ops_per_sec": 4352,
+      "p99_micros": 513
+    },
+    {
+      "backend": "redis",
+      "mean_micros": 98,
+      "operation": "rate_take",
+      "ops": 5000,
+      "ops_per_sec": 10102,
+      "p99_micros": 162
+    }
+  ],
+  "schema": "spot-cluster-redis-bench/1",
+  "url": "redis://127.0.0.1:6380"
+}

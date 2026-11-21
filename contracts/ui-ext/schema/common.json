@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/common.json",
+  "title": "Common definitions",
+  "description": "Names, ids, icon tokens and expression strings shared by every concept.",
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "app": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+      "maxLength": 129,
+      "description": "A namespaced id, `app.name` (ADR-069 section 2)."
+    },
+    "origin": {
+      "type": "string",
+      "pattern": "^app:[a-z][a-z0-9_]*$"
+    },
+    "icon": {
+      "type": "string",
+      "enum": [
+        "add",
+        "edit",
+        "delete",
+        "save",
+        "search",
+        "filter",
+        "refresh",
+        "download",
+        "upload",
+        "print",
+        "share",
+        "settings",
+        "user",
+        "users",
+        "home",
+        "folder",
+        "file",
+        "list",
+        "grid",
+        "calendar",
+        "clock",
+        "check",
+        "close",
+        "warning",
+        "info",
+        "star",
+        "flag",
+        "tag",
+        "link",
+        "mail",
+        "phone",
+        "chart",
+        "money",
+        "box",
+        "truck",
+        "cart",
+        "wrench",
+        "play",
+        "pause",
+        "archive",
+        "lock",
+        "unlock",
+        "eye",
+        "attach",
+        "comment",
+        "history",
+        "more",
+        "arrow_left",
+        "arrow_right",
+        "tasks",
+        "project",
+        "time"
+      ],
+      "x-error": "uiext.unknown_icon",
+      "description": "A token of the closed icon set; never a URL or a path."
+    },
+    "expression": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The shared expression language (docs/expression-language.md). Syntax is checked beyond the schema."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "A translatable key (`key:<id>`) or a literal. Slot-specific length limits are in slot.json."
+    },
+    "order": {
+      "type": "integer",
+      "minimum": -1000,
+      "maximum": 1000,
+      "default": 0
+    },
+    "permission": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$",
+      "description": "A permission reference `<doctype>:<right>` that must exist (ADR-070)."
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 200
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A literal."
+    }
+  }
+}

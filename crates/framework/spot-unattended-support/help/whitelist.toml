@@ -1,0 +1,16 @@
+# Help for the whitelist error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "whitelist.bad_arguments"
+what_happened = "The details sent with this request are not valid for it."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send the arguments the method's schema describes: every required field, the right types, and no fields the schema does not list.", "If it keeps happening, tell your administrator and quote the code whitelist.bad_arguments."]
+audience = "user"
+
+[[help]]
+code = "whitelist.failed"
+what_happened = "The request failed unexpectedly and its changes were undone."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Try again; if it keeps failing, report it to the app's author with the request id.", "If it keeps happening, tell your administrator and quote the code whitelist.failed."]
+audience = "operator"

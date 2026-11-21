@@ -1,0 +1,21 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.open_time",
+      "origin": "app:sample",
+      "label": "Time entries",
+      "icon": "time",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 20,
+      "permission": "time_entry:read",
+      "open": {
+        "destination": "sample.nowhere"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.unknown_destination. The destination is not declared."
+}

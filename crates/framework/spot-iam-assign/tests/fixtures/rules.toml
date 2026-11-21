@@ -1,0 +1,51 @@
+# Rules and users for the reconciler tests.
+
+[[rule]]
+id = "sales"
+name = "Sales staff"
+role = "Sales User"
+when = "facts.department == 'Sales'"
+priority = 1
+
+[[rule]]
+id = "accountants"
+name = "Accountants of their company"
+role = "Accountant"
+when = "facts.department == 'Finance' and facts.position in ['Accountant', 'Senior Accountant']"
+priority = 2
+
+[[rule.scope]]
+link = "Company"
+allowed = "facts.company"
+include_descendants = true
+
+[[rule]]
+id = "auditors"
+name = "Audit project members, for a day"
+role = "Auditor"
+when = "'audit' in facts.projects"
+valid_for_secs = 86400
+priority = 3
+
+[[user]]
+id = "ana"
+[user.facts]
+department = "Sales"
+company = "C1"
+projects = ["audit"]
+
+[[user]]
+id = "ben"
+[user.facts]
+department = "Finance"
+position = "Accountant"
+company = "C1"
+projects = []
+
+[[user]]
+id = "cy"
+[user.facts]
+department = "Finance"
+position = "Senior Accountant"
+company = "C2"
+projects = []

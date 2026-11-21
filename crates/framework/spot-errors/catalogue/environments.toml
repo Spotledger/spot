@@ -1,0 +1,226 @@
+# environment codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "environments.invalid_set"
+class = "none"
+summary = "The environment set is not valid: its name, app set or member ladder breaks a rule."
+explanation_key = "error.environments.invalid_set"
+params = []
+remedy = "Fix the set's name, shared app set or member order and save it again."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.invalid_member"
+class = "none"
+summary = "An environment member cannot take its place in the promotion ladder."
+explanation_key = "error.environments.invalid_member"
+params = []
+remedy = "Order members by a strictly increasing order and a rising dev to test to prod role."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.link_mismatch"
+class = "none"
+summary = "A linked tenant's region class or app set differs from the set's."
+explanation_key = "error.environments.link_mismatch"
+params = []
+remedy = "Link a tenant in the set's region that runs exactly the set's apps."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.tenant_not_active"
+class = "none"
+summary = "A linked tenant is not active, so it cannot receive a bundle."
+explanation_key = "error.environments.tenant_not_active"
+params = []
+remedy = "Activate the tenant or link a different one."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.skip_refused"
+class = "none"
+summary = "The promotion would skip an environment and the policy does not allow it."
+explanation_key = "error.environments.skip_refused"
+params = []
+remedy = "Promote to the next environment in the ladder, or change the set's policy deliberately."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.unknown_member"
+class = "none"
+summary = "The tenant or role is not a member of the environment set."
+explanation_key = "error.environments.unknown_member"
+params = []
+remedy = "Use a tenant and role the set lists, and check the tenant registry."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.store_name_taken"
+class = "none"
+summary = "An environment set with that name already exists."
+explanation_key = "error.environments.store_name_taken"
+params = []
+remedy = "Choose another name or replace the existing set."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.store_not_found"
+class = "none"
+summary = "No environment set with that name exists."
+explanation_key = "error.environments.store_not_found"
+params = []
+remedy = "Check the set's name, or create the set first."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.store_version_conflict"
+class = "none"
+summary = "The environment set changed since it was read."
+explanation_key = "error.environments.store_version_conflict"
+params = []
+remedy = "Read the set again and repeat the change."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.invalid_bundle"
+class = "none"
+summary = "The transport package does not carry a readable customization bundle."
+explanation_key = "error.environments.invalid_bundle"
+params = []
+remedy = "Re-export the bundle from the source environment and send the new package."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.unknown_signer"
+class = "none"
+summary = "The package is signed by a root this store does not trust."
+explanation_key = "error.environments.unknown_signer"
+params = []
+remedy = "Sign with a publisher certificate issued by a root in the store's trust anchor."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.signature_invalid"
+class = "none"
+summary = "The envelope's signature does not verify over its identity and digest."
+explanation_key = "error.environments.signature_invalid"
+params = []
+remedy = "Discard the package and obtain a freshly signed copy from the source environment."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.key_mismatch"
+class = "none"
+summary = "The signing key is not the key the publisher certificate names."
+explanation_key = "error.environments.key_mismatch"
+params = []
+remedy = "Use the key the certificate names, or issue a certificate for this key."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.digest_mismatch"
+class = "none"
+summary = "The envelope's digest is not the digest of the bundle it carries."
+explanation_key = "error.environments.digest_mismatch"
+params = []
+remedy = "Discard the package and obtain an untampered copy from the source environment."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.version_mismatch"
+class = "none"
+summary = "The envelope's bundle version is not the bundle's version."
+explanation_key = "error.environments.version_mismatch"
+params = []
+remedy = "Re-export the bundle so the envelope and the header agree."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.wrong_target"
+class = "none"
+summary = "The package is addressed to another environment set or target."
+explanation_key = "error.environments.wrong_target"
+params = []
+remedy = "Send the package to the environment it names, or export it for this target."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.bundle_revoked"
+class = "none"
+summary = "This exact bundle digest is revoked."
+explanation_key = "error.environments.bundle_revoked"
+params = []
+remedy = "Use a bundle built from a later source revision."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.unresolved_variable"
+class = "none"
+summary = "A placeholder in the bundle has no value in the environment's variables."
+explanation_key = "error.environments.unresolved_variable"
+params = []
+remedy = "Bind the named variable in the target environment before importing."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.invalid_variable"
+class = "none"
+summary = "A variable name or placeholder is malformed, or two variables resolve to one value."
+explanation_key = "error.environments.invalid_variable"
+params = []
+remedy = "Use upper-case letter, digit or underscore names, close every placeholder, and keep values distinct."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.result_mismatch"
+class = "none"
+summary = "The applied target does not capture back to the source bundle digest."
+explanation_key = "error.environments.result_mismatch"
+params = []
+remedy = "Inspect the target's customizations for changes made outside the promotion and re-import."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.chain_broken"
+class = "none"
+summary = "A promotion record's sequence, link, hash or ladder does not hold."
+explanation_key = "error.environments.chain_broken"
+params = []
+remedy = "Keep the records as they were written and re-run the promotions that are missing."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.plan_failed"
+class = "none"
+summary = "Planning the bundle against the target site was refused."
+explanation_key = "error.environments.plan_failed"
+params = []
+remedy = "Read the plan's first problem, fix the target's app versions or metadata, and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.apply_failed"
+class = "none"
+summary = "Writing the accepted plan to the target site failed."
+explanation_key = "error.environments.apply_failed"
+params = []
+remedy = "The target was left unchanged; retry the import after fixing the reported item."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.capture_failed"
+class = "none"
+summary = "The target site could not be captured after the apply."
+explanation_key = "error.environments.capture_failed"
+params = []
+remedy = "Check the target's customizations can be captured, then import again."
+since = "0.1.0"
+
+[[entry]]
+code = "environments.store_failed"
+class = "none"
+summary = "The environment store could not be read or written."
+explanation_key = "error.environments.store_failed"
+params = []
+remedy = "Retry once the store is available, and check its backend if it keeps failing."
+since = "0.1.0"

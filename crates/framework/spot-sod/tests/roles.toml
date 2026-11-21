@@ -1,0 +1,41 @@
+# The seeded role catalogues for the integration tests. Two files: the clean reference pack
+# (no internal conflicts, what the delivered roles must look like) and a pack carrying the
+# Workday finding (one role with both sides of a rule).
+
+# The clean reference pack.
+[[roles]]
+name = "Accounts Payable Clerk"
+duties = ["Maintain supplier master", "Create purchase order", "Post journal entry"]
+
+[[roles]]
+name = "Finance Approver"
+duties = ["Approve payment run", "Approve purchase order", "Release payment"]
+
+[[roles]]
+name = "Ledger Accountant"
+duties = ["Reconcile ledger"]
+
+[[roles]]
+name = "Stock Controller"
+duties = ["Approve stock count"]
+
+[[roles]]
+name = "Expense Submitter"
+duties = ["Submit expense"]
+
+[[roles]]
+name = "Expense Approver"
+duties = ["Approve expense"]
+
+[[roles]]
+name = "Payroll Approver"
+duties = ["Approve payroll"]
+
+[[roles]]
+name = "Platform Administrator"
+duties = ["Administer users"]
+
+# A catalogue with the Workday finding: one role holding both sides of two rules.
+[[roles]]
+name = "Conflict Role"
+duties = ["Maintain supplier master", "Approve payment run", "Post journal entry", "Reconcile ledger"]

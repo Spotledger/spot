@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# Nothing is stopped here. An upgrade restarts a running agent exactly once, in
+# postinst; removing the package leaves a running daemon to the administrator.
+#DEBHELPER#
+
+exit 0

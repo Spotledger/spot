@@ -1,0 +1,10 @@
+# Release plan: metadata 0 -> 0
+
+- **Risk:** additive
+- **Estimate:** 23s expected (2s low, 206s high), blocking: brief lock, some statistics unknown
+- **Changes:** 3 changes (schema 2, metadata 1, patches 0, behaviour 0)
+
+## Additive (3)
+- [schema] sales_invoice — Do `create_table:sales_invoice`. (live schema -> catalogue)
+- [schema] sales_invoice.idx_customer — Do `create_index:sales_invoice.idx_customer`. (live schema -> catalogue)
+- [metadata] sales_invoice — DocType `sales_invoice` is added.

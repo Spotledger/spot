@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-ADM-09.T2: the Admin Center's server tools (overview, services, packages and updates,
+       users, firewall, storage and snapshots, network, certificates) as view-models over typed
+       management-API responses. Every change shows the module's plan preview first, then collects
+       the signatures its risk needs. Plain MVVM on the shell's ObservableObject. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.AdminCenter.Servers.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.AdminCenter/Spotledger.AdminCenter.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,223 @@
+# fix_pipeline codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The fix pipeline's stable vocabulary (WP-AI-08.T1): an invalid id or plan, a tier or approval
+# refusal, a mandatory rehearsal, a failed rehearsal or step, journal and audit failures, a
+# pre-image or snapshot failure, failed verification, a failed rollback and its residue, the undo
+# window and its conflicts, an unavailable or irreversible undo, a transition from the wrong
+# state, and the deterministic kill fault injection uses.
+
+[[entry]]
+code = "fix_pipeline.invalid_id"
+class = "none"
+summary = "The fix id {id} is not valid."
+explanation_key = "error.fix_pipeline.invalid_id"
+params = ["id"]
+remedy = "Use an id that starts with a letter or digit and holds only letters, digits, `-`, `_` and `.`."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.invalid_plan"
+class = "none"
+summary = "The fix plan is invalid: {detail}."
+explanation_key = "error.fix_pipeline.invalid_plan"
+params = ["detail"]
+remedy = "Build the plan from a sealed dry-run or structural plan and seal it again."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.plan_mismatch"
+class = "none"
+summary = "The plan does not match the plan the journal holds."
+explanation_key = "error.fix_pipeline.plan_mismatch"
+params = []
+remedy = "Use the exact plan the journal recorded, or start a new fix."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.tier_not_fixable"
+class = "none"
+summary = "An agent at tier {tier} cannot run a fix because T0 only reads."
+explanation_key = "error.fix_pipeline.tier_not_fixable"
+params = ["tier"]
+remedy = "Run the fix from an agent whose tier allows the change."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.refused"
+class = "none"
+summary = "The fix is refused: {detail}."
+explanation_key = "error.fix_pipeline.refused"
+params = ["detail"]
+remedy = "Run the fix from an agent whose tier and domain allow it."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.approval_required"
+class = "none"
+summary = "The T3 fix needs a human approval and none was supplied."
+explanation_key = "error.fix_pipeline.approval_required"
+params = []
+remedy = "Request approval through the BPM task inbox, or run it as a registered deep agent."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.approval_refused"
+class = "none"
+summary = "The approval for the fix was refused: {detail}."
+explanation_key = "error.fix_pipeline.approval_refused"
+params = ["detail"]
+remedy = "Address the approver's concern and request approval again."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.rehearsal_required"
+class = "none"
+summary = "The T3 fix must be rehearsed before it is applied."
+explanation_key = "error.fix_pipeline.rehearsal_required"
+params = []
+remedy = "Rehearse the plan on a clone before applying it."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.rehearsal_failed"
+class = "none"
+summary = "The rehearsal failed: {detail}."
+explanation_key = "error.fix_pipeline.rehearsal_failed"
+params = ["detail"]
+remedy = "Read the rehearsal evidence, correct the plan and run it again."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.journal_failed"
+class = "none"
+summary = "The fix journal failed: {detail}."
+explanation_key = "error.fix_pipeline.journal_failed"
+params = ["detail"]
+remedy = "Restore the journal backend before any further fix may start."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.audit_failed"
+class = "none"
+summary = "The audit sink failed: {detail}."
+explanation_key = "error.fix_pipeline.audit_failed"
+params = ["detail"]
+remedy = "Restore the audit chain; a fix cannot proceed while the audit log is unavailable."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.pre_image_failed"
+class = "none"
+summary = "The pre-image store failed: {detail}."
+explanation_key = "error.fix_pipeline.pre_image_failed"
+params = ["detail"]
+remedy = "Restore the pre-image store before the fix is applied."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.snapshot_failed"
+class = "none"
+summary = "The snapshot port failed: {detail}."
+explanation_key = "error.fix_pipeline.snapshot_failed"
+params = ["detail"]
+remedy = "Restore snapshot capability before the structural fix is applied."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.step_failed"
+class = "none"
+summary = "Fix step {index} ({id}) failed: {detail}."
+explanation_key = "error.fix_pipeline.step_failed"
+params = ["detail", "id", "index"]
+remedy = "Read the step error; the pipeline rolls the fix back automatically."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.verify_failed"
+class = "none"
+summary = "Verification failed: {detail}."
+explanation_key = "error.fix_pipeline.verify_failed"
+params = ["detail"]
+remedy = "Read the verification report; the pipeline rolls the fix back automatically."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.rollback_failed"
+class = "none"
+summary = "The rollback failed: {detail}."
+explanation_key = "error.fix_pipeline.rollback_failed"
+params = ["detail"]
+remedy = "Restore the snapshot or pre-image by hand and investigate the failed inverse."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.residue_found"
+class = "none"
+summary = "The rollback left {diffs} residual difference(s)."
+explanation_key = "error.fix_pipeline.residue_found"
+params = ["diffs"]
+remedy = "Compare the pre-state and post-rollback fingerprints and restore the remaining records."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.undo_conflict"
+class = "none"
+summary = "Undo conflicts because {target} changed after the fix."
+explanation_key = "error.fix_pipeline.undo_conflict"
+params = ["target"]
+remedy = "Leave the later change in place, or reconcile the named target before undoing."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.undo_expired"
+class = "none"
+summary = "The undo window for the fix closed at {expires_at}."
+explanation_key = "error.fix_pipeline.undo_expired"
+params = ["expires_at"]
+remedy = "Undo inside the configured window, or repair the state with a fresh remedy."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.undo_unavailable"
+class = "none"
+summary = "The fix is in state {state} and cannot be undone."
+explanation_key = "error.fix_pipeline.undo_unavailable"
+params = ["state"]
+remedy = "Undo only a verified fix inside its undo window."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.irreversible"
+class = "none"
+summary = "The fix is irreversible: {detail}."
+explanation_key = "error.fix_pipeline.irreversible"
+params = ["detail"]
+remedy = "Take a snapshot before the fix, or do not run an irreversibly changing plan."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.wrong_state"
+class = "none"
+summary = "The fix is in state {state} and cannot {action}."
+explanation_key = "error.fix_pipeline.wrong_state"
+params = ["action", "state"]
+remedy = "Run the operation the journaled state allows."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.killed"
+class = "none"
+summary = "The fix was killed at {at}."
+explanation_key = "error.fix_pipeline.killed"
+params = ["at"]
+remedy = "Restart the engine and call recover; the journal decides whether to resume or roll back."
+since = "0.1.0"
+
+[[entry]]
+code = "fix_pipeline.internal"
+class = "none"
+summary = "The fix pipeline refused an internal rule: {detail}."
+explanation_key = "error.fix_pipeline.internal"
+params = ["detail"]
+remedy = "Report the broken pipeline rule; do not work around it."
+since = "0.1.0"

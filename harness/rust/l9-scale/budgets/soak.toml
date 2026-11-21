@@ -1,0 +1,24 @@
+# Leak budgets of the `soak` run (WP-TST-15.T5), read by src/leak.rs. This file has its own
+# schema (it is not a `budgets.toml`): the latency and error budgets of the soak are the
+# per-operation ones set in tests/soak.rs. Sampling is every 15 s; the slope is the Theil-Sen
+# estimate over the second half of the run (the first half is warm-up).
+#
+# Every limit is optional: a series that is absent from the run (a metric the server does not
+# export yet) is reported as "not measured", never as a pass.
+[leak]
+# Resident memory of the host: growth under 1 MB per 10 minutes after warm-up.
+rss_kb_per_10min = 1024
+# File descriptors and PostgreSQL connections stay flat: max minus min over the second half
+# within the pool bounds (the connection pool of the launched host is far below 50).
+fd_spread = 50
+pg_connection_spread = 50
+# Job backlog (rows waiting) and outbox lag: p99 bounds and no monotonic growth.
+backlog_p99 = 5000
+outbox_lag_p99_ms = 5000
+# WAL written and log directory growth per completed operation, in kB.
+wal_kb_per_op = 64
+log_kb_per_op = 4
+# Error rate flat: no interval above 0.1 percent (parts per million), no upward trend of more
+# than 1000 ppm per 10 minutes.
+error_ppm_max = 1000
+error_ppm_slope_per_10min = 1000

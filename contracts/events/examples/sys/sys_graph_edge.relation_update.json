@@ -1,0 +1,33 @@
+{
+  "edge_type": "party.contact",
+  "from": {
+    "doctype": "party",
+    "id": "0192f1c0-0000-7000-8000-000000000004"
+  },
+  "graph": "parties",
+  "holder_version": 7,
+  "op": "update",
+  "owner": {
+    "doctype": "party_contact",
+    "id": "0192f1c0-0000-7000-8000-000000000005"
+  },
+  "properties": {
+    "is_primary": {
+      "bool": true
+    },
+    "credit_limit": {
+      "decimal": "25000.00"
+    },
+    "since": {
+      "date": "2026-01-15"
+    },
+    "role": {
+      "text": "billing"
+    },
+    "ended": null
+  },
+  "to": {
+    "doctype": "contact",
+    "id": "0192f1c0-0000-7000-8000-000000000006"
+  }
+}

@@ -1,0 +1,11 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(& ok(& place_with(karachi(MAX_GEO_RADIUS_M)), & geo_cat()))"
+---
+SELECT "x"."name" AS "name" FROM "place" AS "x" WHERE ("x"."pin" && ST_Expand(ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326), CASE WHEN abs($1::float8) + LEAST(180.0, $3::float8 / (100000.0 * cos(radians(LEAST(abs($2::float8) + $3::float8 / 100000.0, 89.999))))) > 180.0 THEN 360.0 ELSE LEAST(180.0, $3::float8 / (100000.0 * cos(radians(LEAST(abs($2::float8) + $3::float8 / 100000.0, 89.999))))) END, $3::float8 / 100000.0) AND ST_DWithin("x"."pin"::geography, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)) ORDER BY "x"."id" ASC OFFSET $4
+$1 = Numeric(67.0011234)
+$2 = Numeric(24.8607345)
+$3 = Int8(500000)
+$4 = Int8(0)
+columns = ["name"]
+decode = [Text]

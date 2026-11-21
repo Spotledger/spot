@@ -1,0 +1,31 @@
+[package]
+name = "spot-bundle"
+description = "Spotledger app bundles (WP-STR-01): the one ZIP an app ships as — manifest, component and assets — validated without running anything, with a canonical digest for signing and the installer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The manifest is already parsed and validated there; spot-bundle passes its errors through.
+spot-manifest = { path = "../spot-manifest" }
+# The ZIP container. Default features off; only DEFLATE (and Stored), nothing else.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# SHA-256 for the canonical digest that signing (WP-STR-02) and the installer (WP-STR-04) use.
+sha2 = "0.10"
+# Parses and validates the component; also walks its import list.
+wasmparser = { version = "0.261", default-features = false, features = ["std", "features", "component-model", "validate"] }
+# Version and VersionReq for the HostInfo the requires_host range is checked against.
+semver = "1"
+# Stable error enums.
+thiserror = "2"
+
+[dev-dependencies]
+# Test components are written as WebAssembly text and assembled here.
+wat = "1"
+# Property tests for path normalisation: arbitrary names never panic and never escape.
+proptest = "1"
+
+[lints]
+workspace = true

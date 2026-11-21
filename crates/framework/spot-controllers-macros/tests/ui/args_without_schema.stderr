@@ -1,0 +1,8 @@
+error[E0599]: no associated function or constant named `method_schema` found for struct `Plain` in the current scope
+  --> tests/ui/args_without_schema.rs:26:61
+   |
+19 | pub struct Plain {
+   | ---------------- associated function or constant `method_schema` not found for this struct
+...
+26 |     async fn go(&self, _ctx: &mut dyn MethodContext, _args: Plain) -> AppResult<()> { Ok(()) }
+   |                                                             ^^^^^ associated function or constant not found in `Plain`

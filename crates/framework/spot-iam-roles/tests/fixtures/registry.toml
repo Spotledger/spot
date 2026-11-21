@@ -1,0 +1,89 @@
+# The fixture tenant: duties, a role ladder (Viewer < Manager < Senior), a clerk, a reference
+# role and an owner-only role. Grants name their owner as their role.
+
+[[duty]]
+name = "view_invoices"
+version = 1
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "view_invoices"
+rights = ["read"]
+[[duty.grants]]
+doctype = "customer"
+role = "view_invoices"
+rights = ["read"]
+
+[[duty]]
+name = "edit_invoices"
+version = 2
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "edit_invoices"
+rights = ["read", "write", "create"]
+
+[[duty]]
+name = "post_invoices"
+version = 1
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "post_invoices"
+rights = ["read", "submit"]
+
+[[duty]]
+name = "cancel_invoices"
+version = 1
+[[duty.grants]]
+doctype = "sales_invoice"
+role = "cancel_invoices"
+rights = ["read", "cancel"]
+
+[[duty]]
+name = "hide_totals"
+version = 1
+[[duty.field_grants]]
+doctype = "sales_invoice"
+role = "hide_totals"
+target = { field = "total" }
+deny = true
+
+[[role]]
+name = "Accounting Viewer"
+origin = { kind = "custom" }
+duties = [{ name = "view_invoices" }]
+
+[[role]]
+name = "Accounting Manager"
+origin = { kind = "custom" }
+parents = ["Accounting Viewer"]
+duties = [{ name = "edit_invoices" }, { name = "post_invoices" }]
+
+[[role]]
+name = "Senior Accountant"
+origin = { kind = "custom" }
+parents = ["Accounting Manager"]
+duties = [{ name = "cancel_invoices" }]
+
+[[role]]
+name = "Clerk"
+origin = { kind = "custom" }
+duties = [{ name = "edit_invoices", version = 2 }]
+
+[[role]]
+name = "Own Invoices"
+origin = { kind = "custom" }
+[[role.direct_grants]]
+doctype = "sales_invoice"
+role = "Own Invoices"
+rights = ["read", "write"]
+if_owner = true
+
+[[role]]
+name = "Core Viewer"
+origin = { kind = "reference", pack = "core", version = 3 }
+duties = [{ name = "view_invoices" }]
+
+[[role]]
+name = "Redacted Viewer"
+origin = { kind = "custom" }
+parents = ["Accounting Viewer"]
+duties = [{ name = "hide_totals" }]

@@ -1,0 +1,145 @@
+# migration site migration lifecycle codes (spot-migration-ops). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "migration.apply_failed"
+class = "none"
+summary = "The migration apply failed."
+explanation_key = "error.migration.apply_failed"
+params = []
+remedy = "Read the run record, then rescue or fix and apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.hold_active"
+class = "none"
+summary = "A hold is active on the migration."
+explanation_key = "error.migration.hold_active"
+params = []
+remedy = "Release the hold, then continue."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.insufficient_space"
+class = "none"
+summary = "The free space is below 2.5 times the snapshot size, so the rehearsal will not start."
+explanation_key = "error.migration.insufficient_space"
+params = []
+remedy = "Free disk space and run the rehearsal again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.not_approved"
+class = "none"
+summary = "The plan has not been approved."
+explanation_key = "error.migration.not_approved"
+params = []
+remedy = "Get the plan approved by a second person."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.not_implemented"
+class = "none"
+summary = "The migration verb is not implemented yet."
+explanation_key = "error.migration.not_implemented"
+params = []
+remedy = "Use a verb that is implemented."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.not_permitted"
+class = "none"
+summary = "The actor lacks the migration permission or is anonymous."
+explanation_key = "error.migration.not_permitted"
+params = []
+remedy = "Use an account that holds the migration permission."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.not_rehearsed"
+class = "none"
+summary = "The plan has not been rehearsed."
+explanation_key = "error.migration.not_rehearsed"
+params = []
+remedy = "Rehearse the plan before applying it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.plan_changed"
+class = "none"
+summary = "The plan's hash differs from the one asked for, or its state moved."
+explanation_key = "error.migration.plan_changed"
+params = []
+remedy = "Read the plan again and retry with its current hash."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.port_unavailable"
+class = "none"
+summary = "A port the migration verb needs is not wired in this host."
+explanation_key = "error.migration.port_unavailable"
+params = []
+remedy = "Run the verb on a host that has the port."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.rehearsal_failed"
+class = "none"
+summary = "A rehearsal failed or ran out of its time budget, and the clone was cleaned up."
+explanation_key = "error.migration.rehearsal_failed"
+params = []
+remedy = "Read the rehearsal report, fix the cause and rehearse again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.rescue_refused"
+class = "none"
+summary = "The rescue was refused."
+explanation_key = "error.migration.rescue_refused"
+params = []
+remedy = "Read the refusal reason and fix its cause."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.risk_requires_review"
+class = "none"
+summary = "The plan's risk class needs a review that has not happened."
+explanation_key = "error.migration.risk_requires_review"
+params = []
+remedy = "Get the plan reviewed."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.self_approval"
+class = "none"
+summary = "The approver is the plan's author."
+explanation_key = "error.migration.self_approval"
+params = []
+remedy = "Ask a different person to approve."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.site_busy"
+class = "none"
+summary = "Another migration or maintenance operation holds the site."
+explanation_key = "error.migration.site_busy"
+params = []
+remedy = "Wait for it to finish and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.store_failed"
+class = "none"
+summary = "A migration store (plan, approval or run) failed."
+explanation_key = "error.migration.store_failed"
+params = []
+remedy = "Check the database and retry."
+since = "0.1.0"
+
+[[entry]]
+code = "migration.unknown_plan"
+class = "none"
+summary = "No stored plan has this hash."
+explanation_key = "error.migration.unknown_plan"
+params = []
+remedy = "Check the plan hash."
+since = "0.1.0"

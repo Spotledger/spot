@@ -1,0 +1,37 @@
+[package]
+name = "spot-data-policy-pg"
+description = "The PostgreSQL ledger half of the retention store (WP-SEC-05.T2, ADR-071, ADR-082 class C): per-item outcomes, run checkpoints and append-only deletion proofs in the tenant's own schema over the shared blocking bridge, composed with a RecordSource port for the live records so apply_item stays atomic and idempotent per run and record"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `RetentionStore` trait this crate implements, its outcome, checkpoint and proof types and
+# the stable `data_policy.*` errors.
+spot-data-policy = { path = "../../framework/spot-data-policy" }
+# The shared blocking bridge every call goes through (ADR-082 addendum 1); no private `block_on`.
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# `TenantId`: the tenant a store belongs to, and the schema name derived from it.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# The driver types the bridge hands to the store's closures.
+tokio-postgres = "0.7"
+# The transaction type a pooled connection opens.
+deadpool-postgres = "0.14"
+# `spawn_blocking`: the record source's effect is synchronous code and must not stall the bridge's
+# async worker.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+# Outcomes, checkpoints and proofs are stored as JSON documents next to their key columns.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# `AuditRecord` for the effect hand-over assertions.
+spot-audit-chain = { path = "../../framework/spot-audit-chain" }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

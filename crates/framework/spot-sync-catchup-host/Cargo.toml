@@ -1,0 +1,34 @@
+[package]
+name = "spot-sync-catchup-host"
+description = "Catch-up and bootstrap hosted (WP-RTB-02.T7, ADR-066): the hub-side director that routes a returning node to live relay, a coalesced dependency-ordered catch-up plan or a snapshot bootstrap, the bounded parallel-bootstrap admission with a retry-after, resumable per-node progress that survives a restart, and the version-skew gate that records a node's decode capability at hello and releases its holds when it upgrades"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The planner: gap summary, mode choice, settings.
+spot-sync-catchup = { path = "../spot-sync-catchup" }
+# The bootstrap admission (parallelism and per-node chunk tokens).
+spot-sync-bootstrap = { path = "../spot-sync-bootstrap" }
+# The version-skew session decision.
+spot-sync-skew = { path = "../spot-sync-skew" }
+# Serving chunks (WP-RTB-02.T14): the closure limits and seams, the snapshot source and image
+# types, the chunk hash and the chunk's JSON body.
+spot-sync-closure = { path = "../spot-sync-closure" }
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+sha2 = "0.10"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+# The durable progress table: one shared, bounded way for synchronous code to reach PostgreSQL.
+spot-pg-bridge = { path = "../../backends/spot-pg-bridge" }
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

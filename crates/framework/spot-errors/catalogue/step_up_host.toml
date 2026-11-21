@@ -1,0 +1,31 @@
+# step_up_host codes: the hosting of the step-up route (WP-IAM-12.T8). The operation answers with the
+# contract's `auth.invalid_credentials`, `auth.totp_required`, `auth.totp_invalid`, `api.rate_limited`,
+# `permission.denied`, `api.invalid_request`, `server.unavailable` and `service.not_configured`; the codes
+# below are the host's own start-up and audit vocabulary.
+
+[[entry]]
+code = "step_up_host.not_mounted"
+class = "none"
+summary = "The step-up route is not mounted because the sign-in stores or the sign-in throttle are not on this site."
+explanation_key = "error.step_up_host.not_mounted"
+params = []
+remedy = "Configure [services.secrets] and [services.signin_throttle] (the sign-in stores are always on), then reload; or set [services.step_up] enabled = false to silence this."
+since = "0.1.0"
+
+[[entry]]
+code = "step_up_host.audit_failed"
+class = "none"
+summary = "A refused step-up could not be written to the event outbox; the caller still received the refusal."
+explanation_key = "error.step_up_host.audit_failed"
+params = []
+remedy = "Check the site database: the outbox write failed, so the refusal is missing from the identity events."
+since = "0.1.0"
+
+[[entry]]
+code = "step_up_host.chain_unavailable"
+class = "none"
+summary = "A step-up was refused because its record could not be written to the identity audit chain; no marker was written."
+explanation_key = "error.step_up_host.chain_unavailable"
+params = []
+remedy = "Check the identity audit chain and its file mirror (disk space, the audit store's protection): an unauditable step-up is never granted. Retry once the audit trail is writable."
+since = "0.1.0"

@@ -1,0 +1,32 @@
+# Seed setting for runtime.jobs.worker_concurrency. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "runtime.jobs.worker_concurrency"
+title = "Job Worker Concurrency"
+summary = "Maximum number of concurrent job workers."
+description = "The maximum number of job workers that can run concurrently. Higher values increase throughput but consume more resources."
+scopes = [
+    "fleet",
+    "group",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "jobs",
+    "performance",
+]
+help_url = "https://docs.example.com/settings/runtime.jobs.worker_concurrency"
+
+[value.Int]
+min = 1
+max = 256
+
+[default]
+Int = 4
+
+[restart]
+type = "service"
+name = "job-runner"

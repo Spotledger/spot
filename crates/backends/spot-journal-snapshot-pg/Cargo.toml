@@ -1,0 +1,37 @@
+[package]
+name = "spot-journal-snapshot-pg"
+description = "Journal snapshots over PostgreSQL (WP-RTB-01.T5, ADR-061 section 6): a consistent image reader (one repeatable-read read-only transaction, the outbox head read in it, paged by primary key, child rows inside their parent's image) that feeds SnapshotWriter, the signing and verifying keys derived from the site's key provider, the snapshot that waits for the journal to reach its position before the signed index is written, and the retention plan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The writer, the reader, `ImageRecord`, `list_snapshots`, `mark_verified` and the seams.
+spot-journal-snapshot = { path = "../../framework/spot-journal-snapshot" }
+# `SnapshotInfo`, the planner's view of a snapshot (retention is planned over it).
+spot-journal-rebuild-plan = { path = "../../framework/spot-journal-rebuild-plan" }
+# The Ed25519 snapshot signer and the manifest-window key set.
+spot-journal-sign = { path = "../../framework/spot-journal-sign" }
+spot-journal-manifest = { path = "../../framework/spot-journal-manifest" }
+# The object store the snapshot is written to.
+spot-journal-store = { path = "../../framework/spot-journal-store" }
+# The derivation purpose of the signing key (one key for manifests and snapshots).
+spot-journal-ship = { path = "../../framework/spot-journal-ship" }
+spot-secrets = { path = "../../framework/spot-secrets" }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# The consistent read: one repeatable-read read-only transaction on the site's backend.
+spot-postgres = { path = "../spot-postgres" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+tokio-postgres = "0.7"
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

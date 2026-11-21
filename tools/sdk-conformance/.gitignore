@@ -1,0 +1,5 @@
+# Build outputs and run artifacts; the runner's Cargo.lock is committed.
+__pycache__/
+runner/target/
+results/
+*.pyc

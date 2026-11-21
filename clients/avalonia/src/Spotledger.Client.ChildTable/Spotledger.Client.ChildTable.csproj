@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-UI-08.T3: the editable child-table control. It joins the custom-drawn grid (T2), the
+       field controls (WP-UI-08.T1) and the metadata runtime's child rows (WP-UI-07.T1/T4) into
+       one table: every mutation goes through the draft's row seam, every edit, undo, redo and
+       row operation is gated on the host's write right and the document state, and the grid is
+       driven only through its public API (WP-UI-08.T5 and T6). No floating point anywhere. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Spotledger.Client.Grid/Spotledger.Client.Grid.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Controls/Spotledger.Client.Controls.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Theme/Spotledger.Client.Theme.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.Client.ChildTable.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,23 @@
+[package]
+name = "spot-release-meta"
+description = "The release metadata contract (WP-MIG-02.T1, ADR-22): every patch declares its intent, DocTypes, risk class, reversibility, idempotency and down-step in TOML, the behaviour changelog names every DocType or seam a release changes, and `check_release` rejects a release that leaves a patch or a divergence undeclared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `PatchDecl` (the app-manifest patch row) and `Risk` (additive/needs_review/destructive) are
+# reused, never redefined here; `SystemDescription::patches` is how this crate sees the patches
+# that exist on disk.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The patch declaration and the changelog are plain serde values.
+serde = { version = "1", features = ["derive"] }
+# The on-disk declaration format.
+toml = "0.8"
+# Typed errors with stable `release_meta.*` codes.
+thiserror = "2"
+
+[lints]
+workspace = true

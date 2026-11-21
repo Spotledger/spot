@@ -1,0 +1,30 @@
+# Help for the sealed_fields_host error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sealed_fields_host.field_not_text"
+what_happened = "A field in a sealed or encrypted group holds something other than text; the protected form is text, so a number, date or other typed value cannot be stored there."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Declare the field as text in the document type, or move it out of the sealed or encrypted group.", "If it keeps happening, tell your administrator and quote the code sealed_fields_host.field_not_text."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields_host.no_encryptor"
+what_happened = "A group is encrypted but no module provides this node's group keys, so the site refuses to start or the write is refused."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Enrol the node so it holds the group key, or set the group's class to sealed or everywhere.", "If it keeps happening, tell your administrator and quote the code sealed_fields_host.no_encryptor."]
+audience = "admin"
+
+[[help]]
+code = "sealed_fields_host.plaintext_refused"
+what_happened = "A protected field in a sealed or encrypted group holds a plain value; this node stores only the protected form, so the write is refused."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Write the field through the sealed-field path; never send the value as plain text. The field name is in the message, the value is never.", "If it keeps happening, tell your administrator and quote the code sealed_fields_host.plaintext_refused."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields_host.unknown_doctype"
+what_happened = "The write is for a document type (or child table) the protection facts do not know, so no field of it can be judged and the write is refused."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Wait for the metadata to load, or check that the document type and its child tables are in the served metadata.", "If it keeps happening, tell your administrator and quote the code sealed_fields_host.unknown_doctype."]
+audience = "admin"

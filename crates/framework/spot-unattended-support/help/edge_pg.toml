@@ -1,0 +1,37 @@
+# Help for the edge_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "edge_pg.decode_failed"
+what_happened = "A stored edge could not be decoded."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the edge tables were written by this version of the edge store.", "If it keeps happening, tell your administrator and quote the code edge_pg.decode_failed."]
+audience = "operator"
+
+[[help]]
+code = "edge_pg.migration_failed"
+what_happened = "The edge tables could not be created."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the database user may create tables and that the server is reachable, then retry prepare.", "If it keeps happening, tell your administrator and quote the code edge_pg.migration_failed."]
+audience = "operator"
+
+[[help]]
+code = "edge_pg.report_not_found"
+what_happened = "The report that was asked for does not exist."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Run the edge_verify job to produce a drift report before repairing.", "If it keeps happening, tell your administrator and quote the code edge_pg.report_not_found."]
+audience = "user"
+
+[[help]]
+code = "edge_pg.unavailable"
+what_happened = "The edge store is unavailable."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check that the database is reachable and retry.", "If it keeps happening, tell your administrator and quote the code edge_pg.unavailable."]
+audience = "admin"
+
+[[help]]
+code = "edge_pg.write_failed"
+what_happened = "The edge store could not apply a change."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check the edge tables and retry the operation.", "If it keeps happening, tell your administrator and quote the code edge_pg.write_failed."]
+audience = "operator"

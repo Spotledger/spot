@@ -1,0 +1,27 @@
+[package]
+name = "spot-iam-assign"
+description = "Assignment sources as a pure reconciler (WP-IAM-04.T1, ADR-070 sections 3 and 4): per-source ownership, desired-state sync for rule and idp sources, assignment rules from business facts in the shared expression language, IdP-managed roles, expiry events, and the refusals that stop one source removing another's"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Assignment`, `Source`, `Scope`, `RoleName`, `Registry`, `expiry_notices`: the model this crate
+# creates, keeps and ends assignments of. Not redefined here.
+spot-iam-roles = { path = "../spot-iam-roles" }
+# The rule condition language. There is no second condition language.
+spot-expr = { path = "../spot-expr" }
+# `UserPermission`: the scope restrictions an assignment carries.
+spot-permissions = { path = "../spot-permissions" }
+serde = { version = "1", features = ["derive"] }
+# Instants are passed in; the crate never reads a clock.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+toml = "0.8"
+proptest = "1"
+
+[lints]
+workspace = true

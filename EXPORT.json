@@ -1,0 +1,21 @@
+{
+  "content_sha256": "b853b4170de4f1c36097b4603f2ebdf7769ede87c6a36289e8f4553a50abb11f",
+  "file_count": 10496,
+  "file_list_sha256": "0d34d82ab68306b8cfbc4b0ae786261977c23ddd5c78ac3fe0ac6d943e2b0f2f",
+  "manifest_sha256": "54df520f73efb8dcf822e72fdc61d56991f8d557732b7e65788bc199a507c466",
+  "patches": {
+    "edits": 136,
+    "files_changed": 41
+  },
+  "scrub": {
+    "files_changed": 231,
+    "ids_removed": 383
+  },
+  "scrub_words": {
+    "citations_rewritten": 29,
+    "files_changed": 225
+  },
+  "source_commit": "37f0bfc8dfa19b52582977021a9b063df99774eb",
+  "source_commit_date_utc": "2026-11-21T19:09:07Z",
+  "tool_version": "1.1.0"
+}

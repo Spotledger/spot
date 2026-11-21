@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/panel.json",
+  "title": "Panel",
+  "description": "A panel: an ordered list of blocks. Every data block names a server query so permissions apply.",
+  "$defs": {
+    "block": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fields"
+          ],
+          "properties": {
+            "type": {
+              "const": "field_list"
+            },
+            "of": {
+              "$ref": "common.json#/$defs/name"
+            },
+            "fields": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "$ref": "common.json#/$defs/name"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ],
+          "properties": {
+            "type": {
+              "const": "key_value"
+            },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "properties": {
+                  "label": {
+                    "$ref": "common.json#/$defs/label"
+                  },
+                  "value": {
+                    "$ref": "common.json#/$defs/expression"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "markdown"
+          ],
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "markdown": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "pattern": "(?s)^(?!.*<[A-Za-z/!?])(?!.*!\\[)(?!.*\\]\\((?!dest:)).*$",
+              "x-error": "uiext.raw_html",
+              "description": "A restricted subset: paragraphs, emphasis, strong, lists, inline code and links of the form `[text](dest:app.name)`. No raw HTML, no images, no external links."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "columns",
+            "max_rows"
+          ],
+          "allOf": [
+            {
+              "required": [
+                "query"
+              ],
+              "x-error": "uiext.query_missing"
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "table"
+            },
+            "query": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "field"
+                ],
+                "properties": {
+                  "field": {
+                    "$ref": "common.json#/$defs/name"
+                  },
+                  "label": {
+                    "$ref": "common.json#/$defs/label"
+                  }
+                }
+              }
+            },
+            "max_rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "open": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "label",
+            "format"
+          ],
+          "allOf": [
+            {
+              "required": [
+                "query"
+              ],
+              "x-error": "uiext.query_missing"
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "stat"
+            },
+            "query": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            },
+            "label": {
+              "$ref": "common.json#/$defs/label"
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "int",
+                "decimal",
+                "percent",
+                "currency"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ],
+          "properties": {
+            "type": {
+              "const": "list_of_links"
+            },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "open"
+                ],
+                "properties": {
+                  "label": {
+                    "$ref": "common.json#/$defs/label"
+                  },
+                  "open": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "destination"
+                    ],
+                    "properties": {
+                      "destination": {
+                        "$ref": "common.json#/$defs/id"
+                      },
+                      "filters": {
+                        "type": "object",
+                        "maxProperties": 8,
+                        "propertyNames": {
+                          "$ref": "common.json#/$defs/name"
+                        },
+                        "additionalProperties": {
+                          "$ref": "common.json#/$defs/expression"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "empty_state"
+            },
+            "text": {
+              "$ref": "common.json#/$defs/label"
+            },
+            "icon": {
+              "$ref": "common.json#/$defs/icon"
+            }
+          }
+        }
+      ]
+    },
+    "panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "origin",
+        "label",
+        "slot",
+        "blocks"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.json#/$defs/id"
+        },
+        "origin": {
+          "$ref": "common.json#/$defs/origin"
+        },
+        "label": {
+          "$ref": "common.json#/$defs/label"
+        },
+        "slot": {
+          "$ref": "slot.json#/$defs/slot"
+        },
+        "doctype": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "order": {
+          "$ref": "common.json#/$defs/order"
+        },
+        "visible_if": {
+          "$ref": "common.json#/$defs/expression"
+        },
+        "permission": {
+          "$ref": "common.json#/$defs/permission"
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/panel"
+}

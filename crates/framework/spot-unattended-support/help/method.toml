@@ -1,0 +1,9 @@
+# Help for the method error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "method.not_found"
+what_happened = "No method, function or seam with this name exists at this version."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the name and version, or install the app that provides it.", "If it keeps happening, tell your administrator and quote the code method.not_found."]
+audience = "user"

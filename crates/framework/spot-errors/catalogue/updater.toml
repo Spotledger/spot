@@ -1,0 +1,334 @@
+# updater codes: the update manifest, its verification and the pure update decision (WP-PRD-03.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "updater.manifest"
+class = "Validation"
+summary = "The update manifest is malformed: {detail}."
+explanation_key = "error.updater.manifest"
+params = ["detail"]
+remedy = "Replace the manifest with one the updater understands; check the format marker and every field."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.key_malformed"
+class = "Validation"
+summary = "A signing key is malformed: {detail}."
+explanation_key = "error.updater.key_malformed"
+params = ["detail"]
+remedy = "Replace the trust anchor entry with a valid Ed25519 public key and its 32-character key id."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.signature_malformed"
+class = "Validation"
+summary = "The update signature is malformed: {detail}."
+explanation_key = "error.updater.signature_malformed"
+params = ["detail"]
+remedy = "Replace update.sig with a valid detached signature document."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.unsigned"
+class = "PermissionDenied"
+summary = "The update is not signed."
+explanation_key = "error.updater.unsigned"
+params = []
+remedy = "Obtain a signed update from the vendor; never apply an unsigned package."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.key_unknown"
+class = "PermissionDenied"
+summary = "The signing key is not trusted: {key_id}."
+explanation_key = "error.updater.key_unknown"
+params = ["key_id"]
+remedy = "Add the release key to the update trust anchor, or obtain an update signed by a trusted key."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.key_not_yet_valid"
+class = "PermissionDenied"
+summary = "The signing key is not yet valid: {key_id}."
+explanation_key = "error.updater.key_not_yet_valid"
+params = ["key_id"]
+remedy = "Trust the key from its valid_from, or wait until the key's window opens."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.key_expired"
+class = "PermissionDenied"
+summary = "The signing key has expired: {key_id}."
+explanation_key = "error.updater.key_expired"
+params = ["key_id"]
+remedy = "Rotate the update trust anchor to a current release key and re-issue the update."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.key_revoked"
+class = "PermissionDenied"
+summary = "The signing key is revoked: {key_id}."
+explanation_key = "error.updater.key_revoked"
+params = ["key_id"]
+remedy = "Do not install this update; obtain one signed by a key that is not revoked."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.revocation_signature"
+class = "PermissionDenied"
+summary = "The revocation list's signature does not verify under its issuer."
+explanation_key = "error.updater.revocation_signature"
+params = []
+remedy = "Replace the revocation list with one signed by a trusted anchor key."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.revocation_stale"
+class = "Validation"
+summary = "The revocation list is older than the one already held: held {held}, offered {offered}."
+explanation_key = "error.updater.revocation_stale"
+params = ["held", "offered"]
+remedy = "Fetch a revocation list with a generation at least as high as the one already held."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.signature"
+class = "PermissionDenied"
+summary = "The update signature does not verify over this manifest."
+explanation_key = "error.updater.signature"
+params = []
+remedy = "Obtain a fresh update; the package may be corrupted or tampered with."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.payload_size"
+class = "Validation"
+summary = "The payload size is wrong: expected {expected} bytes, got {actual} bytes."
+explanation_key = "error.updater.payload_size"
+params = ["actual", "expected"]
+remedy = "Re-download the update package; the transfer was incomplete or corrupted."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.payload_digest"
+class = "Validation"
+summary = "The payload digest is wrong: expected {expected}, got {actual}."
+explanation_key = "error.updater.payload_digest"
+params = ["actual", "expected"]
+remedy = "Re-download the update package; a byte changed in transit or on disk."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.file_size"
+class = "Validation"
+summary = "The size of {path} is wrong: expected {expected} bytes, got {actual} bytes."
+explanation_key = "error.updater.file_size"
+params = ["actual", "expected", "path"]
+remedy = "Reinstall the update package; a file was truncated or replaced."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.file_digest"
+class = "Validation"
+summary = "The digest of {path} is wrong: expected {expected}, got {actual}."
+explanation_key = "error.updater.file_digest"
+params = ["actual", "expected", "path"]
+remedy = "Reinstall the update package; a file changed on disk."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.product"
+class = "Validation"
+summary = "The update is for another product: installed {installed}, offered {offered}."
+explanation_key = "error.updater.product"
+params = ["installed", "offered"]
+remedy = "Use the update published for this product."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.channel"
+class = "Validation"
+summary = "The update channel is not allowed: {channel}."
+explanation_key = "error.updater.channel"
+params = ["channel"]
+remedy = "Point the updater at an allowed channel, or allow this channel in the update policy."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.downgrade"
+class = "InvalidState"
+summary = "An older version than installed is refused: installed {installed}, offered {offered}."
+explanation_key = "error.updater.downgrade"
+params = ["installed", "offered"]
+remedy = "Install a newer version, or roll back deliberately; an update never downgrades."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.digest_changed"
+class = "Validation"
+summary = "The same version has a different payload digest: installed {installed}, offered {offered}."
+explanation_key = "error.updater.digest_changed"
+params = ["installed", "offered"]
+remedy = "Investigate the re-issued package; the same version must not change."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.schema_epoch"
+class = "InvalidState"
+summary = "The update needs a database schema the installed version does not support: installed {installed}, offered {offered}."
+explanation_key = "error.updater.schema_epoch"
+params = ["installed", "offered"]
+remedy = "Apply the intermediate updates that migrate the database to the needed schema epoch."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.min_from"
+class = "Validation"
+summary = "The installed version must step through {via} first: installed {installed}, min_from {min_from}."
+explanation_key = "error.updater.min_from"
+params = ["installed", "min_from", "via"]
+remedy = "Apply the intermediate version the manifest lists, then retry the update."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.not_released"
+class = "Validation"
+summary = "The manifest is dated in the future: released_at {released_at}, now {now}."
+explanation_key = "error.updater.not_released"
+params = ["now", "released_at"]
+remedy = "Check the machine clock and the update source; retry once the release time has passed."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.layout"
+class = "Internal"
+summary = "The update layout is wrong: {detail}."
+explanation_key = "error.updater.layout"
+params = ["detail"]
+remedy = "Repair the install directory so the versions, current, previous and staging paths exist as the updater expects."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.journal"
+class = "Internal"
+summary = "The update journal is not usable: {detail}."
+explanation_key = "error.updater.journal"
+params = ["detail"]
+remedy = "Run the updater's repair or resume step; if the journal cannot be read, restore the last good version and retry the update."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.archive"
+class = "Validation"
+summary = "The update payload archive is not usable: {detail}."
+explanation_key = "error.updater.archive"
+params = ["detail"]
+remedy = "Obtain a fresh, intact update package from the vendor; the archive failed to read or holds a malformed entry."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.archive_escape"
+class = "PermissionDenied"
+summary = "The archive entry {entry} would escape the staging directory."
+explanation_key = "error.updater.archive_escape"
+params = ["entry"]
+remedy = "Do not install this package; report it to the vendor, because its paths try to leave the install directory."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.archive_bomb"
+class = "PermissionDenied"
+summary = "The archive entry {entry} is refused: {detail}."
+explanation_key = "error.updater.archive_bomb"
+params = ["detail", "entry"]
+remedy = "Do not install this package; report it to the vendor, because an entry inflates far beyond the size it declares."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.archive_unlisted"
+class = "Validation"
+summary = "The archive holds {entry}, which the manifest does not list."
+explanation_key = "error.updater.archive_unlisted"
+params = ["entry"]
+remedy = "Obtain a package whose archive matches its signed manifest; an unlisted file is not trusted."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.archive_missing"
+class = "Validation"
+summary = "The archive is missing {entry}, which the manifest lists."
+explanation_key = "error.updater.archive_missing"
+params = ["entry"]
+remedy = "Obtain a complete package; the archive is missing a file the signed manifest names."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.disk_space"
+class = "Unavailable"
+summary = "Not enough free space to unpack the update: need {needed} bytes, {available} free."
+explanation_key = "error.updater.disk_space"
+params = ["available", "needed"]
+remedy = "Free space on the install volume, or point the install at a volume with room, then retry the update."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.disk_full"
+class = "Unavailable"
+summary = "The disk filled up: {detail}."
+explanation_key = "error.updater.disk_full"
+params = ["detail"]
+remedy = "Free space on the install volume, then resume recovery. Check the journal before restarting; a full disk can also prevent rollback and require administrator attention."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.io"
+class = "Unavailable"
+summary = "A filesystem operation failed: {detail}."
+explanation_key = "error.updater.io"
+params = ["detail"]
+remedy = "Check that the install volume is writable and not failing, then retry the update."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.service"
+class = "Unavailable"
+summary = "The service control operation failed: {detail}."
+explanation_key = "error.updater.service"
+params = ["detail"]
+remedy = "Check that the Spotledger service is installed and the account running the update may control it, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.health"
+class = "Unavailable"
+summary = "The new version is not serving: {detail}."
+explanation_key = "error.updater.health"
+params = ["detail"]
+remedy = "Read the new version's log; the update rolled back to the previous version, which still serves."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.hook"
+class = "Unavailable"
+summary = "The data hook failed: {detail}."
+explanation_key = "error.updater.hook"
+params = ["detail"]
+remedy = "Read the backup or migration log; the update rolled back and the data was restored from the backup."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.pointer"
+class = "Internal"
+summary = "A version pointer is not trustworthy: {detail}."
+explanation_key = "error.updater.pointer"
+params = ["detail"]
+remedy = "Repair the current or previous pointer so it names an existing, complete version directory, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "updater.power_cut"
+class = "none"
+summary = "The update was interrupted by a power failure."
+explanation_key = "error.updater.power_cut"
+params = []
+remedy = "Restart the updater; it resumes from its journal and finishes or rolls back the update."
+since = "0.1.0"

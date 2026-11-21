@@ -1,0 +1,37 @@
+[package]
+name = "spot-sync-chaos"
+description = "Chaos and scale suite for sync (WP-SYN-11.T1, ADR-062 section 4, ADR-067 section 7): a seeded World of one hub and N nodes over the real relay, node intake, acknowledgement and bootstrap crates, with cuts at every protocol step, duplicated and reordered traffic, restored nodes, skewed clocks and many nodes returning at once - and one shared checker naming the six guarantees"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The hub relay under test: stream in, per-destination bundles out.
+spot-sync-hub = { path = "../spot-sync-hub" }
+# The node intake under test: apply, park, acknowledge.
+spot-sync-node = { path = "../spot-sync-node" }
+# Bundles, record keys and the reference catalog the bundles are built from.
+spot-sync-closure = { path = "../spot-sync-closure" }
+# The lane a stream entry travels in.
+spot-sync-obligations = { path = "../spot-sync-obligations" }
+# The handshake report the relay's version filter reads.
+spot-sync-skew = { path = "../spot-sync-skew" }
+# Freshness, stamps and the stale-document check the skew scenario asserts.
+spot-sync-freshness = { path = "../spot-sync-freshness" }
+# The restored-node rule, the snapshot session and admission control.
+spot-sync-bootstrap = { path = "../spot-sync-bootstrap" }
+# SnapshotInfo and ImageRecord: what a bootstrap snapshot is.
+spot-journal-snapshot = { path = "../spot-journal-snapshot" }
+# The hub source id a delivery must come from.
+spot-events-contract = { path = "../../../contracts/events" }
+# Record images are JSON values.
+serde_json = "1"
+
+[dev-dependencies]
+# Property run: any reorder window and any duplication pattern still converges.
+proptest = "1"
+
+[lints]
+workspace = true

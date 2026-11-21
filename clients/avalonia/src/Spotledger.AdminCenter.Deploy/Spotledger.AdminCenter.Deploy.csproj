@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-ADM-13.T2: the 'Add server' and 'Create cluster' wizards' view-models over the
+       deployment engine (spot-deploy-wizard, WP-ADM-13.T1) behind an IDeploymentEngine seam.
+       Plain MVVM on the shell's ObservableObject; no secret is kept after it is shown once. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.AdminCenter.Deploy.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+    <ProjectReference Include="../Spotledger.AdminCenter/Spotledger.AdminCenter.csproj" />
+  </ItemGroup>
+</Project>

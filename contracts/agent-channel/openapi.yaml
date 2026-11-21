@@ -1,0 +1,217 @@
+openapi: 3.1.1
+info:
+  title: Spotledger host-agent channel
+  version: 0.1.0
+  summary: "The outbound-only protocol between a host agent and the management gateway (ADR-099)."
+  description: |
+    ## ADR note
+
+    The host agent (`spot-agent-core`, `-enroll`, `-linux`, `-windows`, `-runtime`) is **outbound-only** by design (WP-ADM-02): it opens every connection and nothing connects to it. This contract (`docs/adr/ADR-099-host-agent-channel-contract-v0.1.md`) fixes the protocol between an agent and the management gateway of the control plane (or a site's management API), so that the agent binary and the gateway can be built apart. Draft, awaiting architecture-owner approval.
+
+    ## Calls
+
+    All calls are initiated by the agent over TLS (the agent verifies the gateway's server certificate): `POST /agent/v1/enrol`, `POST /agent/v1/poll` (long poll up to 30 seconds), `POST /agent/v1/results`, `POST /agent/v1/heartbeat`, `GET /agent/v1/update`.
+
+    ## Rules
+
+    - **Every request is signed by the agent key** over the method, path, body digest, timestamp and a request nonce, in the header `X-Spot-Agent-Signature` (`agent_signature`). A nonce is used once (`409 agent.replayed`). **Clock skew:** at most 2 minutes either way; an agent whose clock is wrong falls back to a monotonic clock for its own timers and reports the skew in the heartbeat.
+    - **The gateway cannot forge a command.** The gateway answers only with envelopes signed by an administrator key the agent trusts locally (the trust anchor returned at enrolment). Before it executes, the agent verifies the signature, the audience (its own id), the expiry, the nonce window, the operation risk and its local policy. An operation it has no handler for is refused with `agent.unsupported`.
+    - **At most once.** A command id executes at most once: the agent stores the id before executing. Results carry at most 64 KiB of output, and the agent redacts secrets before sending.
+    - **Revocation.** A revoked agent receives `403 agent.revoked`, stops polling and deletes its local keys. **Key rotation:** the agent generates a new key, enrols it with a fresh one-time token issued by an administrator, and the old key is revoked once the new one polls successfully.
+    - **Update.** The agent accepts only an update manifest signed by the update trust anchor, inside its validity window and not revoked (`spot-updater`). A downgrade is refused unless the manifest is a signed rollback.
+    - **Audit.** Every request that reaches authentication is audited with the agent, the operation and the outcome, refusals included.
+
+    ## Versioning
+
+    Paths are prefixed `/agent/v1`. Additive changes bump the minor version; clients ignore unknown response fields.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://{gateway}
+    description: The management gateway the agent was enrolled with.
+    variables:
+      gateway: {default: gateway.example.test}
+security:
+  - agent_signature: []
+tags:
+  - name: agent
+
+paths:
+  /agent/v1/enrol:
+    post:
+      tags: [agent]
+      operationId: agent_enrol
+      summary: "Enrol an agent with a one-time token"
+      description: |
+        Enrol an agent with a one-time token. The token is used once. Answers the agent id and the
+        gateway's trust anchor (the administrator public key the agent trusts for commands); a used or
+        expired token is `401 agent.token_invalid`. Audience: anyone, no bearer token (the tenant comes
+        from the site). Permission: none (the one-time enrolment token is the credential). Rate class
+        `auth (per source address)`. Takes no `Idempotency-Key`: a repeat is a repeat of the action.
+        Audited: the token id, the source address and the outcome; a refusal is audited too, and no
+        audit record carries a secret.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AgentEnrolRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/AgentEnrolResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /agent/v1/poll:
+    post:
+      tags: [agent]
+      operationId: agent_poll
+      summary: "Long poll for commands"
+      description: |
+        Long poll for commands. Waits up to 30 seconds and answers zero or more signed command
+        envelopes. The body carries the agent id, the last result sequence and a signed liveness. A
+        revoked agent receives `403 agent.revoked` and stops polling. Audience: the enrolled agent
+        behind its request signature (ADR-083: never the consumer audience). Permission: the enrolled
+        agent (its request signature). Rate class `interactive`. Takes no `Idempotency-Key`: a repeat is
+        a repeat of the action. Audited: who, what and the outcome; a refusal is audited too.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AgentPollRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/AgentPollResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /agent/v1/results:
+    post:
+      tags: [agent]
+      operationId: agent_results
+      summary: "Report a command's result"
+      description: |
+        Report a command's result. Output is at most 64 KiB and the agent redacts secrets before
+        sending. The agent signs the result. A command id executes at most once on the agent (it stores
+        the id before executing); an `unsupported` outcome carries the code `agent.unsupported`.
+        Audience: the enrolled agent behind its request signature (ADR-083: never the consumer
+        audience). Permission: the enrolled agent (its request signature). Rate class `interactive`.
+        Requires an `Idempotency-Key`. Audited: the agent, the command id, the outcome and the code; a
+        refusal is audited too, and no audit record carries a secret.
+      parameters:
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AgentResultsRequest"}}}}
+      responses:
+        "200": {description: Done.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /agent/v1/heartbeat:
+    post:
+      tags: [agent]
+      operationId: agent_heartbeat
+      summary: "Telemetry"
+      description: |
+        Telemetry. Counts, sizes and health only; at most 64 KiB. Audience: the enrolled agent behind
+        its request signature (ADR-083: never the consumer audience). Permission: the enrolled agent
+        (its request signature). Rate class `bulk`. Takes no `Idempotency-Key`: a repeat is a repeat of
+        the action. Audited: who, what and the outcome; a refusal is audited too.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/AgentHeartbeatRequest"}}}}
+      responses:
+        "200": {description: Done.}
+        default: {$ref: "#/components/responses/Error"}
+
+  /agent/v1/update:
+    get:
+      tags: [agent]
+      operationId: agent_update_get
+      summary: "The signed update manifest for this agent and platform"
+      description: |
+        The signed update manifest for this agent and platform. The agent accepts only a manifest signed
+        by the update trust anchor, inside its validity window and not revoked (`spot-updater`); a
+        downgrade is refused unless the manifest is a signed rollback. Audience: the enrolled agent
+        behind its request signature (ADR-083: never the consumer audience). Permission: the enrolled
+        agent (its request signature). Rate class `interactive`.
+      parameters:
+        - {"name": "channel", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 40}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/AgentUpdateGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    agent_signature:
+      type: apiKey
+      in: header
+      name: X-Spot-Agent-Signature
+      description: The agent's signature over the method, path, body digest, timestamp and request nonce.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 1 to 128 visible ASCII characters; a replay returns the first answer.
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The version the change is based on, as returned in `ETag`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    SignedCommand:
+      name: X-Spot-Command
+      in: header
+      required: true
+      description: The signed command envelope (base64url of the `spot-signed-command` JSON); it binds the body by its SHA-256 digest.
+      schema: {type: string, maxLength: 16384}
+  responses:
+    Error:
+      description: Any error. The status and `error.code` follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait, on 429 and 503.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    Identifier:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{0,62}$'
+    RecordId:
+      type: string
+      description: A UUIDv7, canonical lower-case hyphenated form.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    ErrorCode:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, request_id]
+          properties:
+            code: {$ref: "#/components/schemas/ErrorCode"}
+            message: {type: string, maxLength: 1000}
+            retryable: {type: boolean, description: True when the same request may succeed later unchanged.}
+            request_id: {type: string, maxLength: 200}
+            details: {type: object, maxProperties: 20, description: "Code-specific data, documented per code; never a secret, a path outside the site root or a stack."}
+    AgentCommand: {"type": "object", "additionalProperties": false, "description": "The command of `spot-signed-command`; `audience` is the agent id.", "required": ["version", "id", "op", "params", "audience", "issuer", "issued_at", "expires_at", "nonce"], "properties": {"version": {"type": "integer", "minimum": 1, "maximum": 1}, "id": {"type": "string", "maxLength": 64, "minLength": 1}, "op": {"type": "string", "maxLength": 120}, "params": {"type": "object", "maxProperties": 50, "additionalProperties": {"type": ["string", "integer", "boolean"], "maxLength": 4000}}, "audience": {"type": "string", "maxLength": 200}, "issuer": {"type": "string", "maxLength": 120}, "issued_at": {"type": "integer", "minimum": 0}, "expires_at": {"type": "integer", "minimum": 0}, "nonce": {"type": "string", "maxLength": 32, "minLength": 32}}}
+    AgentSignedCommand: {"type": "object", "additionalProperties": false, "required": ["command", "signatures"], "properties": {"command": {"$ref": "#/components/schemas/AgentCommand"}, "signatures": {"type": "array", "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["key_id", "signature"], "properties": {"key_id": {"type": "string", "maxLength": 120}, "signature": {"type": "string", "maxLength": 200}}}}, "approvals": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 500}}}}
+    AgentUpdateManifest: {"type": "object", "additionalProperties": false, "required": ["manifest", "proof"], "properties": {"manifest": {"type": "object", "maxProperties": 100, "description": "The signed update manifest of `spot-updater`."}, "proof": {"type": "string", "maxLength": 1024}, "trust_anchor_id": {"type": "string", "maxLength": 120}}}
+    AgentEnrolRequest: {"type": "object", "additionalProperties": false, "required": ["token", "public_key", "platform"], "properties": {"token": {"type": "string", "maxLength": 256, "minLength": 16}, "public_key": {"type": "string", "maxLength": 200}, "attestation": {"type": "string", "maxLength": 16384}, "platform": {"type": "object", "additionalProperties": false, "required": ["os", "arch", "agent_version"], "properties": {"os": {"type": "string", "enum": ["linux", "windows"]}, "arch": {"type": "string", "maxLength": 40}, "agent_version": {"type": "string", "maxLength": 40}}}}}
+    AgentEnrolResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["agent_id", "trust_anchor", "poll_after_ms"], "properties": {"agent_id": {"type": "string", "maxLength": 64}, "trust_anchor": {"type": "string", "maxLength": 4096}, "poll_after_ms": {"type": "integer", "minimum": 0, "maximum": 60000}}}}}
+    AgentPollRequest: {"type": "object", "additionalProperties": false, "required": ["agent_id", "last_result_seq", "liveness"], "properties": {"agent_id": {"type": "string", "maxLength": 64}, "last_result_seq": {"type": "integer", "minimum": 0}, "liveness": {"type": "object", "additionalProperties": false, "required": ["at", "proof"], "properties": {"at": {"type": "string", "format": "date-time", "maxLength": 40}, "proof": {"type": "string", "maxLength": 200}}}}}
+    AgentPollResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["commands"], "properties": {"commands": {"type": "array", "maxItems": 20, "items": {"$ref": "#/components/schemas/AgentSignedCommand"}}}}}}
+    AgentResultsRequest: {"type": "object", "additionalProperties": false, "required": ["command_id", "seq", "outcome", "signature"], "properties": {"command_id": {"type": "string", "maxLength": 64}, "seq": {"type": "integer", "minimum": 1}, "outcome": {"type": "string", "enum": ["succeeded", "failed", "refused", "unsupported"]}, "code": {"type": "string", "maxLength": 100}, "output": {"type": "string", "maxLength": 65536}, "signature": {"type": "string", "maxLength": 200}}}
+    AgentHeartbeatRequest: {"type": "object", "additionalProperties": false, "required": ["agent_id", "at"], "properties": {"agent_id": {"type": "string", "maxLength": 64}, "at": {"type": "string", "format": "date-time", "maxLength": 40}, "series": {"type": "array", "maxItems": 200, "items": {"type": "object", "additionalProperties": false, "required": ["name", "value"], "properties": {"name": {"type": "string", "maxLength": 100}, "labels": {"type": "object", "maxProperties": 10, "additionalProperties": {"type": "string", "maxLength": 100}}, "value": {"type": "string", "maxLength": 40}}}}, "state": {"type": "string", "enum": ["idle", "busy", "degraded"]}}}
+    AgentUpdateGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/AgentUpdateManifest"}}}
+
+x-spot-error-codes:
+  # code: [HTTP status, retryable, meaning]
+  agent.token_invalid: [401, false, "The enrolment token is unknown, expired or already used (one answer for every cause)."]
+  agent.unauthenticated: [401, false, "The request signature is missing, malformed, wrong, outside the clock-skew window, or from an unknown agent."]
+  agent.replayed: [409, false, "The request nonce was already used."]
+  agent.revoked: [403, false, "The agent has been revoked: it must stop polling and delete its local keys."]
+  agent.unsupported: [422, false, "The agent has no handler for the operation (reported by the agent as a result code, and by the gateway for a result it cannot match)."]
+  agent.invalid: [422, false, "The request is not valid; details.fields names field paths only, never values."]
+  agent.not_found: [404, false, "No such command for this agent (the same answer for one that does not exist and one that belongs to another agent)."]
+  agent.body_too_large: [413, false, "The body is larger than the operation allows (64 KiB of output in a result)."]
+  agent.rate_limited: [429, true, "Too many requests; wait for Retry-After."]
+  agent.update_unavailable: [404, false, "No update manifest is published for this agent and platform."]
+  agent.internal: [500, false, "An unexpected server error; the request id identifies it in the logs."]

@@ -1,0 +1,22 @@
+Project `Spotledger.Client` has the following vulnerable packages
+   > [net9.0] Microsoft.Data.SqlClient [>=5.0.0 <5.1.2, )
+      Transitive Package
+         Resolved: 5.1.1
+         Threat Level: High
+         Advertised: https://aka.ms/nugetclp
+         Advisory: https://github.com/advisories/GHSA-8g2q-pp82-688v
+   > [net9.0] System.Text.Json [8.0.0, )
+      Direct Package
+         Resolved: 8.0.4
+         Threat Level: Moderate
+         Advertised: https://aka.ms/nugetclp
+         Advisory: https://github.com/advisories/GHSA-hh2w-p6rv-4g7w
+Project `Spotledger.Client` has no vulnerable packages
+
+Project `Spotledger.Client.Tests` has the following vulnerable packages
+   > [net9.0] Moq
+      Direct Package
+         Resolved: 4.20.69
+         Threat Level: Critical
+         Advertised: https://aka.ms/nugetclp
+Project `Spotledger.Client.Tests` has 1 vulnerable packages

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-12.T2: the client half of the UI effects protocol (ADR-28). Renderer-neutral
+       and pure .NET, so the desktop and the browser heads apply the same bytes: the wire
+       model of `spot-form-effects/schema/effects.v1.json`, a reader that never throws, the
+       applier over the metadata runtime core's draft, and the reconciliation of a server
+       diff with the effects of one event round. No Avalonia reference, no reflection, no
+       floating point (ADR-12): a decimal is the exact string the wire carried. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+  </ItemGroup>
+</Project>

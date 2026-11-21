@@ -1,0 +1,9 @@
+{
+  "case": "non_null_assertion",
+  "entry": "first",
+  "args": [
+    "x",
+    "y"
+  ],
+  "expect": "x"
+}

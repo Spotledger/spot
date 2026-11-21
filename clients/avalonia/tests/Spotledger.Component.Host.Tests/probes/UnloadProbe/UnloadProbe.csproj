@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>UnloadProbe</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- A test fixture that must run in its own process: the xUnit v3 host keeps the assemblies a
+         test loads, so a collectible AssemblyLoadContext cannot be shown collected inside it. This
+         program installs a package, uninstalls it, and reports whether the context was collected. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/Spotledger.Component.Host/Spotledger.Component.Host.csproj" />
+    <ProjectReference Include="../../../../src/Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+  </ItemGroup>
+</Project>

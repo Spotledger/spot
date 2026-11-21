@@ -1,0 +1,27 @@
+# Pinned reference corpus for hygiene gate G7 (WP-TST-13.T2).
+#
+# Chosen by WP-TST-13.T2: the latest stable v16 releases at pin time
+# (no earlier pin exists, so the versions are this task's
+# choice, recorded here). Both tags are lightweight, so the tag SHA
+# equals the commit SHA; both were resolved and verified through the GitHub
+# commits API.
+#
+# Bump procedure (a future task):
+#   1. update repo/tag/commit/url below,
+#   2. run: python3 tools/lints/hygiene/reference.py --print-digests
+#   3. paste the printed sha256 values into the entries,
+#   4. rerun: python3 tools/lints/hygiene/reference.py --check-pin
+
+[[references]]
+repo = "frappe/frappe"
+tag = "v16.35.0"
+commit = "012667b9c4e7f66d5e1ff5858d2e922331d4300a"
+url = "https://github.com/frappe/frappe/archive/012667b9c4e7f66d5e1ff5858d2e922331d4300a.tar.gz"
+sha256 = "e99221fef7955b8ca41bbd0e2e5f12fbe4119396ea1e5e4b9fad1b7b04884480"
+
+[[references]]
+repo = "frappe/erpnext"
+tag = "v16.36.1"
+commit = "fb78e58b8c037bcff4f90b7361ad81ff7b1c42ba"
+url = "https://github.com/frappe/erpnext/archive/fb78e58b8c037bcff4f90b7361ad81ff7b1c42ba.tar.gz"
+sha256 = "5757a4000f3f37a2463ac086c6f024852b7f87f5d633eedea9facc1f09690de3"

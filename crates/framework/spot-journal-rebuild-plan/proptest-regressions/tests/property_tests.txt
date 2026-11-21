@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0efb5ff242d70fa1bf9bed4c28cdcf40e09ae4e721c2d81373a9a499f8b63f7c # shrinks to (catalog, backup, target) = (JournalCatalog { snapshots: [SnapshotInfo { position: 1, generation: 1, verified: true, taken_at_millis: 1 }], segments: [SegmentRange { generation: 1, first_seq: 1, last_seq: 1 }, SegmentRange { generation: 2, first_seq: 1, last_seq: 1 }], forks: [ForkInfo { generation: 2, from_position: 1 }] }, None, At(0))

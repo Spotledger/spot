@@ -1,0 +1,24 @@
+# The support-case corpus: known symptoms of the platform's own infrastructure and the remedy
+# that resolves each. Loaded and validated by `spot-remedies`' corpus loader; matched by the
+# deterministic `suggest` matcher (no LLM). One `[[case]]` per row; `params` is the remedy's
+# parameter template.
+
+[[case]]
+id = "job-failed-retry"
+symptom = "A background job failed and its work never completed."
+evidence = ["job.failed", "job.attempts_exhausted"]
+remedy = "job.retry_failed"
+outcome = "resolved"
+
+[case.params]
+job_id = "job-17"
+
+[[case]]
+id = "job-stuck-running"
+symptom = "A job is running but its worker lease expired and nothing progresses."
+evidence = ["job.running", "job.lease_expired"]
+remedy = "job.unstick_running"
+outcome = "resolved"
+
+[case.params]
+job_id = "job-23"

@@ -1,0 +1,21 @@
+{
+  "entity_schema": 2,
+  "image": {
+    "email": {
+      "$erased": 1,
+      "erased_at": null,
+      "purpose": "notifications"
+    },
+    "id": "0192f1c0-0000-7000-8000-000000000001",
+    "name": "Customer one",
+    "phone": {
+      "$pii": 1,
+      "aad_hash": "YWFkLWhhc2gtZXhhbXBsZS1hYWQtaGFzaC1leGFtcGxl",
+      "ct": "Y2lwaGVydGV4dC1leGFtcGxlLWFuZC10YWc",
+      "nonce": "bm9uY2UtZXhhbXBsZS0yNC1ieXRlcw",
+      "subject": "0192f1c0-0000-7000-8000-0000000000a1"
+    },
+    "version": 4
+  },
+  "op": "update"
+}

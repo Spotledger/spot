@@ -1,0 +1,44 @@
+[package]
+name = "spot-identity-conformance"
+description = "The ADR-083 conformance suite (Appendix A, B1 to B5 and B7): every staff route refuses a consumer token, the consumer listener mounts exactly the marked routes, the portal role allow-list holds, audiences do not move, defaults are closed (WP-IAM-11.T6). Test code only: no production crate may depend on it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The suite's tests build the real routers and sign-in service; nothing is optional. The feature
+# exists so the acceptance command `--all-features` has something to enable and so a future
+# real-PostgreSQL rig can be switched on without changing the command.
+pg = []
+
+[dependencies]
+# The route table, `router_for` and the audience marks under test.
+spot-http = { path = "../../../crates/framework/spot-http" }
+# Audience, Clock.
+spot-core = { path = "../../../crates/framework/spot-core" }
+
+[dev-dependencies]
+# The fake app services of spot-http's test support.
+spot-http = { path = "../../../crates/framework/spot-http", features = ["testing"] }
+# The real sign-in service, the in-memory session store and the test-only admission.
+spot-login = { path = "../../../crates/framework/spot-login", features = ["testing"] }
+spot-sessions = { path = "../../../crates/framework/spot-sessions" }
+spot-auth = { path = "../../../crates/framework/spot-auth" }
+spot-iam-directory = { path = "../../../crates/framework/spot-iam-directory" }
+# Barrier 3: the portal allow-list.
+spot-iam-roles = { path = "../../../crates/framework/spot-iam-roles" }
+# spot-http's own test support (the fake app services) is included by path, so it needs what it
+# needs: the stub host and the transport pieces.
+spot-app-api = { path = "../../../contracts/app-api" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+axum = { version = "0.8.9", features = ["http2"] }
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1"
+base64 = "0.22"
+time = "0.3"
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "time", "sync", "io-util", "test-util"] }
+
+[lints]
+workspace = true

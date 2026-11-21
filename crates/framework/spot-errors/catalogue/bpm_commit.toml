@@ -1,0 +1,41 @@
+# bpm_commit codes (WP-BPM-15.T2). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+#
+# These errors are raised on the host-driven path of a request's commit points; they never ride an
+# `AppError`, so they have no error class.
+
+[[entry]]
+code = "bpm_commit.invalid_config"
+class = "none"
+summary = "A commit point's config is not in its documented form."
+explanation_key = "error.bpm_commit.invalid_config"
+params = []
+remedy = "Give the commit point no config, or only a short printable label."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_commit.invalid_declaration"
+class = "none"
+summary = "A commit point or the effects a node declares are outside their bounds or name a node the process lacks."
+explanation_key = "error.bpm_commit.invalid_declaration"
+params = []
+remedy = "Declare effects only for nodes of the process, none for a commit point, and no more classes per node than the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_commit.not_commit_point"
+class = "none"
+summary = "A commit was asked at a node the process does not mark as a commit point."
+explanation_key = "error.bpm_commit.not_commit_point"
+params = []
+remedy = "Commit only at a node of kind commit that the region plan was built with."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_commit.hold_failed"
+class = "none"
+summary = "The request-scoped hold refused or failed, so the held effects were not released or discarded as asked."
+explanation_key = "error.bpm_commit.hold_failed"
+params = []
+remedy = "Read the wrapped hold code: retry the commit point after a dispatch failure or when the site state is readable again."
+since = "0.1.0"

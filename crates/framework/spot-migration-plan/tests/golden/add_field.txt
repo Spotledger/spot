@@ -1,0 +1,8 @@
+Release plan: metadata 0 -> 0
+Risk: additive
+Estimate: 3s expected (2s low, 6s high), blocking: brief lock
+2 changes (schema 1, metadata 1, patches 0, behaviour 0)
+
+Additive (2)
+  - [schema] party.note — Do `add_column:party.note`. (live schema -> catalogue)
+  - [metadata] party.note — Field `party.note` is added. (absent -> Text)

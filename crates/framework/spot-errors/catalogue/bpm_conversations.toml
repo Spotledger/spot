@@ -1,0 +1,265 @@
+# bpm_conversations codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Conversations across organisations (spot-bpm-conversations, ADR-080 section 5, WP-BPM-12.T2).
+# These codes never ride an AppError: they are step failure codes, rejection reasons and
+# errors of the conversation driver, so every class is "none".
+
+[[entry]]
+code = "bpm_conversations.contract_unknown"
+class = "none"
+summary = "The contract, or the version a message names, is not one this tenant holds."
+explanation_key = "error.bpm_conversations.contract_unknown"
+params = []
+remedy = "Add the contract version to the tenant's contracts before running the conversation, or have the partner use a held version."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.message_unknown"
+class = "none"
+summary = "The message is not one the contract defines, or it arrived on a topic the contract does not give it."
+explanation_key = "error.bpm_conversations.message_unknown"
+params = []
+remedy = "Send only messages the contract defines, on the topic it names."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.wrong_direction"
+class = "none"
+summary = "The message does not travel between these roles in this direction."
+explanation_key = "error.bpm_conversations.wrong_direction"
+params = []
+remedy = "Send the message from the role the contract names as its sender to the role it names as its receiver."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.out_of_order"
+class = "none"
+summary = "The contract does not allow this message after the previous message of the conversation."
+explanation_key = "error.bpm_conversations.out_of_order"
+params = []
+remedy = "Follow the contract's order rules; the allowed next messages are listed in the contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.step_exhausted"
+class = "none"
+summary = "The step this message takes was already taken as often as the contract allows."
+explanation_key = "error.bpm_conversations.step_exhausted"
+params = []
+remedy = "Do not repeat the step, or raise its bound in a new version of the contract."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.conversation_ended"
+class = "none"
+summary = "The conversation has already ended in one of the contract's outcomes."
+explanation_key = "error.bpm_conversations.conversation_ended"
+params = []
+remedy = "Start a new conversation instead of continuing an ended one."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.schema_unsupported"
+class = "none"
+summary = "The message's schema version is not the one the contract defines."
+explanation_key = "error.bpm_conversations.schema_unsupported"
+params = []
+remedy = "Send the schema version the contract version names."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.payload_invalid"
+class = "none"
+summary = "The payload does not fit the contract message's field list."
+explanation_key = "error.bpm_conversations.payload_invalid"
+params = []
+remedy = "Send exactly the fields the contract message defines, each with the type and length it allows."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.header_invalid"
+class = "none"
+summary = "The message does not say which contract message it is."
+explanation_key = "error.bpm_conversations.header_invalid"
+params = []
+remedy = "Carry the reserved bpm.message field naming contract, version and message."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.wrong_peer"
+class = "none"
+summary = "The sender is not the role the link's peer plays in this contract."
+explanation_key = "error.bpm_conversations.wrong_peer"
+params = []
+remedy = "Send each message from the participant the contract gives that message to."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.not_entry"
+class = "none"
+summary = "The message cannot start a conversation under this contract."
+explanation_key = "error.bpm_conversations.not_entry"
+params = []
+remedy = "Open the conversation with one of the contract's starting messages."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.payload_missing"
+class = "none"
+summary = "The send step has no payload to send: its payload variable is missing or is not an object."
+explanation_key = "error.bpm_conversations.payload_missing"
+params = []
+remedy = "Map the message payload into the variable the send step names before the step runs."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.config_invalid"
+class = "none"
+summary = "A send or wait step's configuration is not usable."
+explanation_key = "error.bpm_conversations.config_invalid"
+params = []
+remedy = "Fix the step's contract, message, mapping or time limit in the process definition."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.no_conversation"
+class = "none"
+summary = "The request has no conversation for this contract yet."
+explanation_key = "error.bpm_conversations.no_conversation"
+params = []
+remedy = "Send the conversation's first message before waiting for a reply."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.no_peer"
+class = "none"
+summary = "No link reaches the role this message is addressed to."
+explanation_key = "error.bpm_conversations.no_peer"
+params = []
+remedy = "Connect the tenant to the partner that plays this role, and route the contract to that link."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.field_not_granted"
+class = "none"
+summary = "The link's grant does not let every field of the message cross."
+explanation_key = "error.bpm_conversations.field_not_granted"
+params = []
+remedy = "Add the message's fields, and the bpm.message field, to the grant of the contract topic."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.send_failed"
+class = "none"
+summary = "The link exchange refused to queue the message."
+explanation_key = "error.bpm_conversations.send_failed"
+params = []
+remedy = "Check the link's state and the grant for the topic, then run the step again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.rejected"
+class = "none"
+summary = "The receiver rejected the message."
+explanation_key = "error.bpm_conversations.rejected"
+params = []
+remedy = "Read the rejection code on the message, fix the cause and send the message again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.wait_timeout"
+class = "none"
+summary = "The wait for a message ran out of time."
+explanation_key = "error.bpm_conversations.wait_timeout"
+params = []
+remedy = "Check whether the peer is reachable, or let the request take its timeout path."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.delivery_expired"
+class = "none"
+summary = "The message expired before the receiver confirmed it."
+explanation_key = "error.bpm_conversations.delivery_expired"
+params = []
+remedy = "Check the link, then send the message again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.conversation_cancelled"
+class = "none"
+summary = "The peer cancelled the conversation."
+explanation_key = "error.bpm_conversations.conversation_cancelled"
+params = []
+remedy = "Let the request take the compensation path the process declares for a cancellation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.case_collision"
+class = "none"
+summary = "The Case id derived for an arriving message already belongs to a Case a different message started, so the conversation is not bound to it."
+explanation_key = "error.bpm_conversations.case_collision"
+params = []
+remedy = "Send the message again under a new message id; if it repeats, the Case id derivation is broken and the platform team must look at it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.audit_failed"
+class = "none"
+summary = "The gate's audit trail could not be written, so the refusal failed closed and nothing was stored or acknowledged."
+explanation_key = "error.bpm_conversations.audit_failed"
+params = []
+remedy = "Check the audit sink's health and deliver the message again; nothing was taken in."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.link_conversation_limit"
+class = "none"
+summary = "The link already holds as many open conversations as this tenant lets one link hold, so the message that would have opened another was refused."
+explanation_key = "error.bpm_conversations.link_conversation_limit"
+params = []
+remedy = "Finish or cancel the open conversations on the link, or raise the per-link bound, then send the message again under a new message id."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.link_quarantine_limit"
+class = "none"
+summary = "The link already holds as many refused messages in the quarantine as this tenant lets one link hold, so a further refusal was answered but its input was dropped instead of held."
+explanation_key = "error.bpm_conversations.link_quarantine_limit"
+params = []
+remedy = "Review and release the quarantined inputs of that link, or raise the per-link bound."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.store_failed"
+class = "none"
+summary = "The conversation store failed."
+explanation_key = "error.bpm_conversations.store_failed"
+params = []
+remedy = "Retry; if it persists, check the conversation store's health."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.conflict"
+class = "none"
+summary = "The conversation changed under a writer that did not retry."
+explanation_key = "error.bpm_conversations.conflict"
+params = []
+remedy = "Reload the conversation and try again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.too_long"
+class = "none"
+summary = "The conversation holds more history than a request may carry."
+explanation_key = "error.bpm_conversations.too_long"
+params = []
+remedy = "Review the contract for a loop that is not bounded, or end the conversation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_conversations.resolve_failed"
+class = "none"
+summary = "A waiting step could not be completed."
+explanation_key = "error.bpm_conversations.resolve_failed"
+params = []
+remedy = "The completion is retried on the next pass; if it persists, check the request's state."
+since = "0.1.0"

@@ -1,0 +1,127 @@
+# migration_approval codes: review and approval of a release plan (spot-migration-approval, WP-MIG-04). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "migration_approval.bad_policy"
+class = "none"
+summary = "The approval policy is not valid: {message}."
+explanation_key = "error.migration_approval.bad_policy"
+params = ["message"]
+remedy = "Fix the policy setting: a destructive plan needs at least two approvers, a review at least one, and the expiry must be positive."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.plan_changed"
+class = "none"
+summary = "Approvals exist only for a different version of this plan."
+explanation_key = "error.migration_approval.plan_changed"
+params = []
+remedy = "Review the changed plan and approve it again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.not_enough_approvals"
+class = "none"
+summary = "The plan has {valid} valid approval(s) and needs {required}."
+explanation_key = "error.migration_approval.not_enough_approvals"
+params = ["required", "valid"]
+remedy = "Obtain approval from further distinct approvers holding the required role."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.rejected"
+class = "none"
+summary = "The plan was rejected by {by}."
+explanation_key = "error.migration_approval.rejected"
+params = ["by"]
+remedy = "Address the rejection; the approver must approve again, or the plan must change and be approved afresh."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.expired"
+class = "none"
+summary = "Every approval of this plan has expired."
+explanation_key = "error.migration_approval.expired"
+params = []
+remedy = "Approve the plan again."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.signature_required"
+class = "none"
+summary = "{approver} has no verified hardware signature on the approval."
+explanation_key = "error.migration_approval.signature_required"
+params = ["approver"]
+remedy = "Approve again with a hardware signature over the plan digest."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.not_permitted"
+class = "none"
+summary = "This approver may not act on this plan: {reason}."
+explanation_key = "error.migration_approval.not_permitted"
+params = ["reason"]
+remedy = "Ask an approver with the required role who did not author the plan."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.backend"
+class = "none"
+summary = "The approval store or the audit sink failed: {message}."
+explanation_key = "error.migration_approval.backend"
+params = ["message"]
+remedy = "Retry; nothing was recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.audit_unavailable"
+class = "none"
+summary = "The action was not taken because it could not be audited: {message}."
+explanation_key = "error.migration_approval.audit_unavailable"
+params = ["message"]
+remedy = "Restore the audit chain and retry; an approval that cannot be recorded is not given."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.bad_command"
+class = "none"
+summary = "The command is not understood: {message}."
+explanation_key = "error.migration_approval.bad_command"
+params = ["message"]
+remedy = "Use plan show, approve, reject or status with the documented options."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.author_unknown"
+class = "none"
+summary = "No author is recorded for this plan, so it cannot be approved."
+explanation_key = "error.migration_approval.author_unknown"
+params = []
+remedy = "Register the plan with its author when it is created (ApprovalService::register_plan_at), then approve it."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.author_conflict"
+class = "none"
+summary = "This plan is already registered with a different author."
+explanation_key = "error.migration_approval.author_conflict"
+params = []
+remedy = "The author of a plan is set once at creation and cannot change; create a new plan if the author differs."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.role_not_held"
+class = "none"
+summary = "The signed-in identity does not hold the role {role}."
+explanation_key = "error.migration_approval.role_not_held"
+params = ["role"]
+remedy = "Act in a role the signed-in identity holds, or ask an administrator to grant the role."
+since = "0.1.0"
+
+[[entry]]
+code = "migration_approval.key_not_bound"
+class = "none"
+summary = "A trusted signing key is not bound to one approver."
+explanation_key = "error.migration_approval.key_not_bound"
+params = []
+remedy = "Configure each trusted approval key with the subject of the one person who holds it."
+since = "0.1.0"

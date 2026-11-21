@@ -1,0 +1,31 @@
+[package]
+name = "spot-journal-access"
+description = "The journal access surface (WP-JRN-09.T4, ADR-061 s7 surface 2): the journal_reader grant model (default off, named external principals, expiring, every grant audited), the manifest-gated reader that serves the signed manifest and sealed segments with byte ranges, and the access audit record of every call"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The object store seam and the key layout every key is built through.
+spot-journal-store = { path = "../spot-journal-store" }
+# The signed manifest: the list of segments a reader may be served.
+spot-journal-manifest = { path = "../spot-journal-manifest" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# The PostgreSQL grant store and access audit: the site's own pool, its transactions and the
+# outbox the audit events are enqueued in (ADR-11, ADR-053), as `spot-conditions-pg` does.
+spot-postgres = { path = "../../backends/spot-postgres" }
+spot-storage-contract = { path = "../../../contracts/storage" }
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+futures = "0.3"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "sync"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,39 @@
+[package]
+name = "spot-bpm-request-authority"
+description = "The production request authority (WP-BPM-13.T3, ADR-080): a request grant is `rg1.<base64url(payload)>.<base64url(tag)>`, an HMAC-SHA256 under a server secret resolved from the vault on every call, binding the request, the step, the attempt, the acting person and an absolute expiry the engine passes; the small request store the engine implements; and `is_grant_shaped` for the edges"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `AppError` and `ErrorClass`: the refusal an edge hands back carries this crate's stable code
+# and class unchanged, so the caller sees `bpm_request_authority.*` in its own envelope.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The `RequestAuthority` port this crate implements, and its `VerifiedRequest`: there is exactly
+# one definition of the port, in the governance crate (WP-BPM-08.T2).
+spot-bpm-governance = { path = "../spot-bpm-governance" }
+# The `Clock` port: time enters this crate only as an argument or through this port, never from a
+# direct wall-clock read (ADR-12 keeps time out of arithmetic, the project coding rules keep it out of logic).
+spot-core = { path = "../spot-core" }
+# `SecretBytes`: the secret a grant is signed under is zeroed on drop and prints `[redacted]`, so
+# it cannot reach a `Debug` line, a log record or an error message.
+spot-secrets = { path = "../spot-secrets" }
+# base64url without padding, the grant's two parts.
+base64 = "0.22"
+# HMAC-SHA256, the same primitive `spot-webhooks` signs payloads with.
+ring = { version = "0.17", features = ["std"] }
+# Constant-time tag comparison, so a forged tag cannot be recovered byte by byte from timing.
+subtle = "2"
+# The one error type, with stable `bpm_request_authority.*` codes.
+thiserror = "2"
+# The absolute expiry a payload carries and the arithmetic that caps a lifetime.
+time = "0.3"
+
+[dev-dependencies]
+# Assert every code this crate raises has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+
+[lints]
+workspace = true

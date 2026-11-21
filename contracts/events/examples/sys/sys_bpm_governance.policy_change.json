@@ -1,0 +1,15 @@
+{
+  "actor": "system",
+  "at": 1793608157957000,
+  "kind": "bpm.governance.policy_change",
+  "masked": true,
+  "on_behalf_of": null,
+  "payload": {
+    "company": {"Text": "Acme Trading"},
+    "detail": {"Text": "sales_invoice set to process_only"},
+    "doctype": {"Text": "sales_invoice"},
+    "mode": {"Text": "process_only"},
+    "policy": {"Text": "bpm.governance.policy"}
+  },
+  "subject": null
+}

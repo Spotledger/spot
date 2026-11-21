@@ -1,0 +1,18 @@
+# The sample connector's manifest.
+[connector]
+id = "echo-http"
+name = "Echo HTTP"
+version = "0.1.0"
+world = "connector"
+auth = ["none"]
+endpoints = ["api.example.test"]
+
+[limits]
+fuel = 100000000
+wall-clock-ms = 1000
+memory-bytes = 16777216
+host-calls = 1000
+output-bytes = 1048576
+kv-bytes = 65536
+
+secrets = []

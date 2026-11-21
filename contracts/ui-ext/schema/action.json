@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.spotledger.example/ui-ext/0.1.0/action.json",
+  "title": "Action",
+  "description": "A declarative action placed in an action slot. Exactly one effect.",
+  "$defs": {
+    "destination_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destination"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "common.json#/$defs/id"
+        },
+        "filters": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "$ref": "common.json#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "common.json#/$defs/expression"
+          }
+        }
+      }
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doctype",
+        "method"
+      ],
+      "properties": {
+        "doctype": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "method": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "args": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "$ref": "common.json#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "common.json#/$defs/expression"
+          }
+        },
+        "then": {
+          "oneOf": [
+            {
+              "const": "refresh"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "open"
+              ],
+              "properties": {
+                "open": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "destination"
+                  ],
+                  "properties": {
+                    "destination": {
+                      "$ref": "common.json#/$defs/id"
+                    },
+                    "filters": {
+                      "type": "object",
+                      "maxProperties": 8,
+                      "propertyNames": {
+                        "$ref": "common.json#/$defs/name"
+                      },
+                      "additionalProperties": {
+                        "$ref": "common.json#/$defs/expression"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "const": "show_message"
+            },
+            {
+              "const": "download"
+            }
+          ]
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "origin",
+        "label",
+        "slot"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.json#/$defs/id"
+        },
+        "origin": {
+          "$ref": "common.json#/$defs/origin"
+        },
+        "label": {
+          "$ref": "common.json#/$defs/label"
+        },
+        "icon": {
+          "$ref": "common.json#/$defs/icon"
+        },
+        "slot": {
+          "$ref": "slot.json#/$defs/slot"
+        },
+        "doctype": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "order": {
+          "$ref": "common.json#/$defs/order"
+        },
+        "visible_if": {
+          "$ref": "common.json#/$defs/expression"
+        },
+        "enabled_if": {
+          "$ref": "common.json#/$defs/expression"
+        },
+        "permission": {
+          "$ref": "common.json#/$defs/permission"
+        },
+        "confirm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "call": {
+          "$ref": "#/$defs/call"
+        },
+        "open": {
+          "$ref": "#/$defs/destination_ref"
+        },
+        "navigate_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A path under one of the app's own declared routes. Never a scheme or host."
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "call"
+              ]
+            },
+            {
+              "required": [
+                "open"
+              ]
+            },
+            {
+              "required": [
+                "navigate_url"
+              ]
+            }
+          ],
+          "x-error": "uiext.effect_invalid"
+        }
+      ]
+    }
+  },
+  "$ref": "#/$defs/action"
+}

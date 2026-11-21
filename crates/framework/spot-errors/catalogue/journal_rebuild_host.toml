@@ -1,0 +1,172 @@
+# journal_rebuild_host codes: the hosted journal rebuild of spot-journal-rebuild-host (WP-RTB-01.T6, ADR-061 s6): why an offline rebuild of a site's database was refused or stopped. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_rebuild_host.site_running"
+class = "none"
+summary = "A live node holds the site's lease, so the rebuild is refused: a rebuild is offline only."
+explanation_key = "error.journal_rebuild_host.site_running"
+params = []
+remedy = "Stop the site, then run the rebuild again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.base_not_in_journal"
+class = "none"
+summary = "The recorded head of the restored backup is not a position the journal holds."
+explanation_key = "error.journal_rebuild_host.base_not_in_journal"
+params = []
+remedy = "Restore a backup whose head the journal contains, or rebuild into an empty database."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.tenant_mismatch"
+class = "none"
+summary = "The journal, a manifest or a snapshot index belongs to another tenant than the site's."
+explanation_key = "error.journal_rebuild_host.tenant_mismatch"
+params = []
+remedy = "Point the rebuild at the journal of this site's own tenant."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.projector_missing"
+class = "none"
+summary = "A derived entity an owner flagged has no registered projector."
+explanation_key = "error.journal_rebuild_host.projector_missing"
+params = []
+remedy = "Register a projector for the entity, or stop flagging it as derived."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.plan_refused"
+class = "none"
+summary = "The planner refused: no segments, no base, a gap, or a target inside an abandoned generation."
+explanation_key = "error.journal_rebuild_host.plan_refused"
+params = []
+remedy = "Read the plan with --dry-run and choose a target the journal covers."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.target_unresolved"
+class = "none"
+summary = "The target (before a timestamp) cannot be resolved to a journal position."
+explanation_key = "error.journal_rebuild_host.target_unresolved"
+params = []
+remedy = "Name the position as generation:seq."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.checkpoint_for_other_plan"
+class = "none"
+summary = "A saved checkpoint belongs to a different plan, so resuming would mix two rebuilds."
+explanation_key = "error.journal_rebuild_host.checkpoint_for_other_plan"
+params = []
+remedy = "Finish that rebuild with its own plan, or discard the half-built target explicitly."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.checkpoint_failed"
+class = "none"
+summary = "The rebuild checkpoint could not be read or written."
+explanation_key = "error.journal_rebuild_host.checkpoint_failed"
+params = []
+remedy = "Check the database of the site being rebuilt."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.incomplete"
+class = "none"
+summary = "A previous rebuild of this database did not finish, so the site must not serve it."
+explanation_key = "error.journal_rebuild_host.incomplete"
+params = []
+remedy = "Finish the rebuild from its checkpoint, or discard the target and start again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.rebuild_failed"
+class = "none"
+summary = "The executor refused or failed (its own code is in the message); the checkpoint stays."
+explanation_key = "error.journal_rebuild_host.rebuild_failed"
+params = []
+remedy = "Fix the cause named by the code and run the rebuild again to resume."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.feed_failed"
+class = "none"
+summary = "The outbox position could not be adopted, or the fork's generation could not be opened."
+explanation_key = "error.journal_rebuild_host.feed_failed"
+params = []
+remedy = "Check the feed of the rebuilt database; a head already past the position is a regression."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.projector_failed"
+class = "none"
+summary = "A projector failed while recomputing derived entities."
+explanation_key = "error.journal_rebuild_host.projector_failed"
+params = []
+remedy = "Fix the projector and run the rebuild again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.invariant_failed"
+class = "none"
+summary = "An invariant of the rebuilt database does not hold."
+explanation_key = "error.journal_rebuild_host.invariant_failed"
+params = []
+remedy = "Do not serve the database; compare it with the journal and rebuild again."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.journal_failed"
+class = "none"
+summary = "The journal could not be read."
+explanation_key = "error.journal_rebuild_host.journal_failed"
+params = []
+remedy = "Check the journal store and the manifest's verification."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.apply_refused"
+class = "none"
+summary = "The operation was refused: apply refused."
+explanation_key = "error.journal_rebuild_host.apply_refused"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.db_unavailable"
+class = "none"
+summary = "The operation was refused: db unavailable."
+explanation_key = "error.journal_rebuild_host.db_unavailable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.entity"
+class = "none"
+summary = "The operation was refused: entity."
+explanation_key = "error.journal_rebuild_host.entity"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.id"
+class = "none"
+summary = "The operation was refused: id."
+explanation_key = "error.journal_rebuild_host.id"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_rebuild_host.label"
+class = "none"
+summary = "The operation was refused: label."
+explanation_key = "error.journal_rebuild_host.label"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

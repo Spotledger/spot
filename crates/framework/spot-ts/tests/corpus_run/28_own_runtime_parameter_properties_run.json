@@ -1,0 +1,15 @@
+{
+  "case": "own_runtime",
+  "entry": "parameter_properties_run",
+  "args": 3,
+  "expect": {
+    "sum": 7,
+    "x": 3,
+    "tag": "p",
+    "ownKeys": [
+      "x",
+      "y",
+      "tag"
+    ]
+  }
+}

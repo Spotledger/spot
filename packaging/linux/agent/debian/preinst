@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+# Downgrade is refused. dpkg passes the old version as $2 on "upgrade" (this
+# covers a package file with a lower version too). @DEB_VERSION@ is the version
+# this package was built as; build_agent.py substitutes it when staging.
+# Removing the package (state is kept) and installing the older one is the way back.
+if [ "$1" = "upgrade" ] && [ -n "${2:-}" ]; then
+	if dpkg --compare-versions "$2" gt "@DEB_VERSION@"; then
+		echo "spot-agent: refusing to downgrade from $2 to @DEB_VERSION@" >&2
+		exit 1
+	fi
+fi
+
+#DEBHELPER#
+
+exit 0

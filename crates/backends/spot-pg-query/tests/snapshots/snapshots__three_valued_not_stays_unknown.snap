@@ -1,0 +1,10 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name" FROM "party" AS "p" WHERE (NOT ("p"."name" COLLATE "C" = $1 COLLATE "C")) ORDER BY "p"."id" ASC OFFSET $2
+$1 = Text("x")
+$2 = Int8(0)
+columns = ["name"]
+decode = [Text]
+path = Transactional

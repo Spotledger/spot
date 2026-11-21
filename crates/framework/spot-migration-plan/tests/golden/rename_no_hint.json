@@ -1,0 +1,85 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "metadata/party/field_added/new_name",
+      "area": "metadata",
+      "kind": "field_added",
+      "rule": "metadata/field_added",
+      "target": "party.new_name",
+      "description": "Field `party.new_name` is added.",
+      "before": "absent",
+      "after": "Text",
+      "risk": "additive",
+      "blocking": "brief_lock"
+    },
+    {
+      "id": "metadata/party/field_removed/old_name",
+      "area": "metadata",
+      "kind": "field_removed",
+      "rule": "metadata/field_removed",
+      "target": "party.old_name",
+      "description": "Field `party.old_name` is removed.",
+      "before": "Text",
+      "after": "absent",
+      "risk": "destructive",
+      "reason": "removing a field discards its values and may be a rename without a hint",
+      "alternative": "if this is a rename, add a rename hint; otherwise stop using the field first and drop it later",
+      "blocking": "maintenance_window"
+    }
+  ],
+  "risk": "destructive",
+  "estimate": {
+    "low": 2,
+    "expected": 4,
+    "high": 8,
+    "per_change": [
+      {
+        "change_id": "metadata/party/field_added/new_name",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "brief_lock",
+        "unknown": false
+      },
+      {
+        "change_id": "metadata/party/field_removed/old_name",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "maintenance_window",
+        "unknown": false
+      }
+    ],
+    "blocking": "maintenance_window",
+    "unknown": false
+  },
+  "plan_digest": "26af9a8f7f2c65fac1d53a560762a04156bc27c315e18552c7ecaf50dad42966",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "new_name",
+              "type": "text"
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

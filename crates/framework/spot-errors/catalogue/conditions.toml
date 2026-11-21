@@ -1,0 +1,20 @@
+# conditions codes: the conditions framework's own refusals (WP-SYN-09.T2, ADR-067 s1). One
+# [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "conditions.unknown_id"
+class = "none"
+summary = "No registered condition has the id {id}."
+explanation_key = "error.conditions.unknown_id"
+params = ["id"]
+remedy = "Register the condition before raising or clearing it, and spell its id in upper snake case (`MISSING_DEP`)."
+since = "0.1.0"
+
+[[entry]]
+code = "conditions.duplicate_id"
+class = "none"
+summary = "A condition with the id {id} is already registered."
+explanation_key = "error.conditions.duplicate_id"
+params = ["id"]
+remedy = "Use the registered definition, or give the new condition an id of its own; ids are stable names, never updated in place."
+since = "0.1.0"

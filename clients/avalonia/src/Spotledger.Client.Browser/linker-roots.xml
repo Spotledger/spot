@@ -1,0 +1,29 @@
+<!--
+  Linker roots of the browser build (WP-UI-09.T1). Read by the IL trimmer through TrimmerRootDescriptor in
+  Spotledger.Client.Browser.csproj. Everything not named here and not reachable from the entry point is removed.
+
+  Why these assemblies are rooted (SPK-07 REPORT, risk 1):
+  The theme and control resources are loaded by URI at run time:
+      SpotledgerTheme.MergeTokenResources    -> new ResourceInclude("avares://Spotledger.Client.Theme/Tokens.axaml")
+      BrowserApp.Initialize                  -> new ResourceInclude("avares://Spotledger.Client.Controls/Themes/Controls.axaml")
+  The trimmer cannot see a URI, so it removes the compiled XAML types behind it and the app stops at start-up
+  with "No precompiled XAML found for avares://Spotledger.Client.Theme/Tokens.axaml". Rooting the assemblies that
+  own compiled XAML keeps those types. The cost is size (the whole assemblies stay).
+
+  How to remove a root: make the library load its resources without a URI (a typed style or resource class
+  the code references), then delete the root and check the published size in assets.json. Those libraries
+  are outside WP-UI-09.T1; the PR lists the change under Open questions.
+
+  Not rooted on purpose: Spotledger.Client.Api (its System.Text.Json reflection use is an open trim warning,
+  not a missing-type crash) and the Rust calculation module (it is a separate .wasm, not an assembly).
+-->
+<linker>
+  <!-- Owns Tokens.axaml and the token resource dictionary. -->
+  <assembly fullname="Spotledger.Client.Theme" preserve="all" />
+  <!-- Owns Themes/Controls.axaml: the field controls of a document form. -->
+  <assembly fullname="Spotledger.Client.Controls" preserve="all" />
+  <!-- Owns the SpotGrid control theme, applied through the controls' styles. -->
+  <assembly fullname="Spotledger.Client.Grid" preserve="all" />
+  <!-- Owns ServerPickerView, LoginView and ShellView: Avalonia creates them from compiled XAML. -->
+  <assembly fullname="Spotledger.Client.Shell" preserve="all" />
+</linker>

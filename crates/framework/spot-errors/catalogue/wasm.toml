@@ -1,0 +1,109 @@
+# wasm codes: the WebAssembly component host of spot-wasm (WP-EXT-05). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "wasm.out_of_fuel"
+class = "none"
+summary = "The call used all of its fuel."
+explanation_key = "error.wasm.out_of_fuel"
+params = []
+remedy = "Reduce the work the app does or raise the fuel limit."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.timeout"
+class = "none"
+summary = "The call ran past its wall-clock limit."
+explanation_key = "error.wasm.timeout"
+params = []
+remedy = "Make the app faster or raise the time limit."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.memory"
+class = "none"
+summary = "The app asked for more memory or table elements than its limit."
+explanation_key = "error.wasm.memory"
+params = []
+remedy = "Reduce the app's memory use or raise the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.trap"
+class = "none"
+summary = "The app trapped: unreachable code, a bad access, a stack overflow or a failed instantiation."
+explanation_key = "error.wasm.trap"
+params = []
+remedy = "Fix the app; the host and other calls are unaffected."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.too_many_host_calls"
+class = "none"
+summary = "The app made more host calls than its limit."
+explanation_key = "error.wasm.too_many_host_calls"
+params = []
+remedy = "Reduce the host calls the app makes or raise the limit."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.bad_component"
+class = "none"
+summary = "The bytes are not a valid component of the shape the host needs."
+explanation_key = "error.wasm.bad_component"
+params = []
+remedy = "Rebuild the app as a component for the platform's world."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.missing_export"
+class = "none"
+summary = "The component has no such export."
+explanation_key = "error.wasm.missing_export"
+params = []
+remedy = "Export the function the caller names."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.capability_denied"
+class = "none"
+summary = "The app imports or called something it was not granted."
+explanation_key = "error.wasm.capability_denied"
+params = []
+remedy = "Grant the capability in the app's manifest or remove the call."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.output_too_large"
+class = "none"
+summary = "The result is larger than the call's output limit."
+explanation_key = "error.wasm.output_too_large"
+params = []
+remedy = "Return less data from the app."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.bad_arguments"
+class = "none"
+summary = "The arguments do not fit the export's parameter types."
+explanation_key = "error.wasm.bad_arguments"
+params = []
+remedy = "Pass arguments that match the export's signature."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.app_error"
+class = "none"
+summary = "The export returned its own error value; the host did not fail."
+explanation_key = "error.wasm.app_error"
+params = []
+remedy = "Handle the app's error value."
+since = "0.1.0"
+
+[[entry]]
+code = "wasm.internal"
+class = "none"
+summary = "Something inside the host failed that no app caused."
+explanation_key = "error.wasm.internal"
+params = []
+remedy = "Report the failure with the request details."
+since = "0.1.0"

@@ -1,0 +1,118 @@
+# journal_access codes: the journal access surface of spot-journal-access (WP-JRN-09.T4, ADR-061 s7 surface 2): the journal_reader grant rules and the reasons a read through the access routes is refused. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_access.not_administrator"
+class = "none"
+summary = "Only a tenant administrator may grant, renew, revoke or list journal_reader grants; a journal_reader cannot grant the role."
+explanation_key = "error.journal_access.not_administrator"
+params = []
+remedy = "Ask a tenant administrator to make the change."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.grant_invalid"
+class = "none"
+summary = "The grant request is malformed: an empty or over-long id, an administrator granting to themselves, or a lifetime of zero days."
+explanation_key = "error.journal_access.grant_invalid"
+params = []
+remedy = "Name a different principal and a lifetime of at least one day."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.lifetime_exceeded"
+class = "none"
+summary = "The requested lifetime is longer than the limit: max_grant_days (default 30, hard cap 365) for a grant, 7 days for a new external principal's grant."
+explanation_key = "error.journal_access.lifetime_exceeded"
+params = []
+remedy = "Ask for a shorter lifetime, or renew an external grant explicitly after it is made."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.grant_exists"
+class = "none"
+summary = "The principal already holds a live journal_reader grant."
+explanation_key = "error.journal_access.grant_exists"
+params = []
+remedy = "Renew the existing grant instead of making a second one."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.grant_unknown"
+class = "none"
+summary = "No live grant has that id; it does not exist or it was revoked."
+explanation_key = "error.journal_access.grant_unknown"
+params = []
+remedy = "List the grants and use the id of a live one."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.store_failed"
+class = "none"
+summary = "The grant store (table spot_journal_grant) cannot be reached or is missing."
+explanation_key = "error.journal_access.store_failed"
+params = []
+remedy = "Run spot migrate on the site, then check the database connection."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.clock_unreadable"
+class = "none"
+summary = "The clock cannot be read, so a grant lifetime cannot be computed and no read is allowed."
+explanation_key = "error.journal_access.clock_unreadable"
+params = []
+remedy = "Check the host clock; the call is refused until it can be read."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.settings_invalid"
+class = "none"
+summary = "The journal access settings are outside their bounds."
+explanation_key = "error.journal_access.settings_invalid"
+params = []
+remedy = "Set max_grant_days from 1 to 365 and a positive concurrency and daily byte budget."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.denied"
+class = "none"
+summary = "The caller holds no usable journal_reader grant and is not a tenant administrator, or the grant expired, was revoked or is void."
+explanation_key = "error.journal_access.denied"
+params = []
+remedy = "Ask a tenant administrator for a journal_reader grant."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.not_found"
+class = "none"
+summary = "The generation, segment or range named is not a sealed segment listed in the signed manifest, or the path is not canonical."
+explanation_key = "error.journal_access.not_found"
+params = []
+remedy = "List the generations with journal_info_get and read the manifest to learn the segments."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.rate_limited"
+class = "none"
+summary = "The principal already streams the maximum number of segments or has used its daily byte budget."
+explanation_key = "error.journal_access.rate_limited"
+params = []
+remedy = "Retry after the time in Retry-After."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.audit_unavailable"
+class = "none"
+summary = "The access audit record could not be written, so nothing was served."
+explanation_key = "error.journal_access.audit_unavailable"
+params = []
+remedy = "Retry; check the site's outbox and database."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_access.read_failed"
+class = "none"
+summary = "The journal could not be read: the store failed, the manifest did not verify, or a segment did not match its recorded hash."
+explanation_key = "error.journal_access.read_failed"
+params = []
+remedy = "Check the journal store and the verification status; a hash mismatch is a recovery problem, not a retry."
+since = "0.1.0"

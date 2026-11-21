@@ -1,0 +1,26 @@
+[package]
+name = "spot-bpm-contract"
+description = "The process contract of a conversation across organisations (WP-BPM-12, ADR-080 section 5): the participants by role, the messages and the fields that may cross, the order rules, timeouts and outcome states; a deterministic TOML text form; a content hash; a checker that reports every problem at once; conformance of a process half against the contract; and a version diff with additive/breaking classification for running conversations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The process half of the conversation: `ProcessVersion`, its nodes and their
+# configs. A contract is checked *against* a process, never compiled on its own.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The text form: one reviewable TOML document per contract version.
+toml = "0.9"
+# The JSON Schema subset a payload is checked against, and canonical payloads.
+serde_json = "1"
+# Typed text-form errors.
+thiserror = "2"
+
+[dev-dependencies]
+# Mutation property tests over contract edits.
+proptest = "1"
+
+[lints]
+workspace = true

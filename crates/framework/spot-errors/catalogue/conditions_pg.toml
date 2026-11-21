@@ -1,0 +1,30 @@
+# conditions_pg codes: the durable PostgreSQL store behind spot-conditions (WP-RTB-01.T2): load
+# and apply of a site's open conditions, written with the matching outbox event in one
+# transaction. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "conditions_pg.migration_failed"
+class = "none"
+summary = "The condition store's tables (spot_condition_open, spot_condition_history) could not be created."
+explanation_key = "error.conditions_pg.migration_failed"
+params = []
+remedy = "Check that the site's database user may create tables, then restart the site so it prepares the store again."
+since = "0.1.0"
+
+[[entry]]
+code = "conditions_pg.unavailable"
+class = "none"
+summary = "The condition store could not complete a read or a write: no connection, a failed statement, or a transaction that aborted."
+explanation_key = "error.conditions_pg.unavailable"
+params = []
+remedy = "Check the site's database; a raise made while the store is down is kept in memory and is retried once it answers again."
+since = "0.1.0"
+
+[[entry]]
+code = "conditions_pg.corrupt"
+class = "none"
+summary = "A stored condition row does not decode: an id or a severity this build does not know, or parameters that are not a flat object of text values."
+explanation_key = "error.conditions_pg.corrupt"
+params = []
+remedy = "Do not edit the row by hand. Compare the build's registered conditions with the row, and if it predates a renamed or removed condition, remove it only after confirming with the condition's history."
+since = "0.1.0"

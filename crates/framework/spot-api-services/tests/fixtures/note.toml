@@ -1,0 +1,31 @@
+name = "note"
+label = "Note"
+is_posted = true
+title_field = "title"
+
+[[fields]]
+name = "title"
+label = "Title"
+type = "text"
+required = true
+max_chars = 80
+
+[[fields]]
+name = "score"
+type = "int"
+
+[[fields]]
+name = "amount"
+type = "decimal"
+scale = 2
+precision = 12
+default = "0.00"
+
+[[fields]]
+name = "day"
+type = "date"
+
+[[fields]]
+name = "rows"
+type = "table"
+options = "note_row"

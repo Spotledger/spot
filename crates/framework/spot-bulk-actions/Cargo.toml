@@ -1,0 +1,26 @@
+[package]
+name = "spot-bulk-actions"
+description = "Bulk lifecycle actions (WP-DOC-09.T6): one action (update, post, cancel, delete, correct or a whitelisted method) applied to many existing documents through the app API's DocumentService, one engine call per document, per-document outcomes, bounded concurrency, stop after N failures, cancellation, idempotent re-run and a dry run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `DocumentService`, `Invocation`, `DocumentPatch`, `AppError`, `ErrorClass` and the prelude types.
+spot-app-api = { path = "../../../contracts/app-api" }
+# A whitelisted method's arguments are JSON in the native API value encoding.
+serde_json = "1"
+# Derived command ids longer than the command-id limit are hashed (already in the workspace).
+sha2 = "0.10"
+# `FuturesUnordered`: the bounded set of calls in flight (no spawning, so no 'static bound on
+# the service reference).
+futures = "0.3"
+
+[dev-dependencies]
+# Async tests drive the doubles on a current-thread runtime.
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

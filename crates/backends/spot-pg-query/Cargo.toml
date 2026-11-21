@@ -1,0 +1,28 @@
+[package]
+name = "spot-pg-query"
+description = "Compiles the storage query IR to parameterised PostgreSQL text (WP-STO-02.T1); pure code, no I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Decimal parameters and decoded values (ADR-12); maps to PostgreSQL NUMERIC.
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+# Date, time and timestamp parameters.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+# The plan reader of the index-coverage check parses `EXPLAIN (FORMAT JSON)` output
+# (ADR-045, WP-STO-02.T10).
+serde_json = "1"
+
+[dev-dependencies]
+# Snapshot corpus of compiled SQL and parameters.
+insta = "1"
+# Injection and determinism properties.
+proptest = "1"
+
+[lints]
+workspace = true

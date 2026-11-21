@@ -1,0 +1,23 @@
+# Fixture manifest for the known-screen generation test (owned by WP-UI-06.T2).
+# It is not a real design: it only proves the build reads a non-empty manifest.
+
+[[screen]]
+id = "demo.invoice.list"
+title = "Demo invoice list"
+module = "demo"
+kind = "list"
+design_ref = "docs/ui/designs/demo.md#list"
+required_states = ["default", "empty"]
+priority = "p1"
+
+[[screen]]
+id = "demo.invoice.form"
+title = "Demo invoice form"
+module = "demo"
+kind = "form"
+design_ref = "docs/ui/designs/demo.md#form"
+required_states = [
+  "default",
+  "error",
+]
+priority = "p0"

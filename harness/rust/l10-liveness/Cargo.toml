@@ -1,0 +1,15 @@
+[package]
+name = "spot-l10-liveness"
+description = "L10 metadata liveness suite (WP-TST-11): scripted scenarios proving every metadata change takes effect without a rebuild or restart, over any LivenessHost"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The metadata model the suite runs on today (`Registry`, `EffectiveMeta`, the change inputs).
+spot-meta = { path = "../../../crates/framework/spot-meta" }
+
+[lints]
+workspace = true

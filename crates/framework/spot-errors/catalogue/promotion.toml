@@ -1,0 +1,196 @@
+# promotion codes: the `promotion.*` vocabulary of spot-promotion (WP-ALM-04, WS19, ADR-22).
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# The pipeline raises its own typed errors (`spot_promotion::PromotionError`), so these are
+# library-internal vocabulary: `class = "none"` describes what each code means and a remedy says
+# what an operator does about it. A failed rehearsal or verification is also an outcome recorded
+# in the migration audit store, not only an error.
+
+[[entry]]
+code = "promotion.bad_id"
+class = "none"
+summary = "The promotion id is empty, too long or holds a character a run id may not use."
+explanation_key = "error.promotion.bad_id"
+params = []
+remedy = "Use a non-empty id of at most 256 characters from letters, digits, dot, underscore, colon and dash."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.not_found"
+class = "none"
+summary = "No promotion with this id is stored."
+explanation_key = "error.promotion.not_found"
+params = []
+remedy = "Check the id, or list the stored promotions and use the id the request returned."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.duplicate"
+class = "none"
+summary = "A promotion with this id already exists."
+explanation_key = "error.promotion.duplicate"
+params = []
+remedy = "Use a new id; a promotion id is never reused, even after a failure."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.bad_state"
+class = "none"
+summary = "The promotion is not in the state this step starts from."
+explanation_key = "error.promotion.bad_state"
+params = []
+remedy = "Read the promotion journal and run the lifecycle step its current state allows."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.bundle_mismatch"
+class = "none"
+summary = "The bundle in hand is not the bundle the promotion was requested for."
+explanation_key = "error.promotion.bundle_mismatch"
+params = []
+remedy = "Use the exact bundle whose digest the promotion records, or request a new promotion."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.plan_failed"
+class = "none"
+summary = "The bundle could not be planned against the target."
+explanation_key = "error.promotion.plan_failed"
+params = []
+remedy = "Resolve the bundle problem the message names, then plan the promotion again."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.blocked"
+class = "none"
+summary = "A blocking conflict or refused change stops the promotion before anything is written."
+explanation_key = "error.promotion.blocked"
+params = []
+remedy = "Resolve every blocking merge or release conflict and rebuild the bundle, then plan again."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.nothing_to_promote"
+class = "none"
+summary = "The bundle would change nothing on the target."
+explanation_key = "error.promotion.nothing_to_promote"
+params = []
+remedy = "Confirm the target is meant to receive this bundle; there is no plan to approve or apply."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.plan_changed"
+class = "none"
+summary = "The plan in hand is not the plan that was approved."
+explanation_key = "error.promotion.plan_changed"
+params = []
+remedy = "Review and approve the plan that will actually run; approval never covers a changed plan."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.approval_required"
+class = "none"
+summary = "The target environment's policy requires approvals that are missing, rejected or stale."
+explanation_key = "error.promotion.approval_required"
+params = []
+remedy = "Collect the approvals the policy names from people who hold its role, then apply again."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.rehearsal_required"
+class = "none"
+summary = "The target environment's policy requires a rehearsal before apply."
+explanation_key = "error.promotion.rehearsal_required"
+params = []
+remedy = "Run the promotion's rehearsal on a clone and let it pass before applying."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.rehearsal_failed"
+class = "none"
+summary = "The rehearsal reported a failure; apply is refused and the target was never written."
+explanation_key = "error.promotion.rehearsal_failed"
+params = []
+remedy = "Read the recorded rehearsal report, fix what it found and request a new promotion."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.apply_failed"
+class = "none"
+summary = "Writing the bundle to the target failed."
+explanation_key = "error.promotion.apply_failed"
+params = []
+remedy = "Read the applier's reason, correct it and request a new promotion; the target was not written."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.verify_failed"
+class = "none"
+summary = "Verification found the target does not match the approved plan, so it was restored."
+explanation_key = "error.promotion.verify_failed"
+params = []
+remedy = "Inspect the verification findings and the restored target before trying again."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.restore_failed"
+class = "none"
+summary = "Restoring the target to its pre-apply state failed."
+explanation_key = "error.promotion.restore_failed"
+params = []
+remedy = "Treat the target as needing a person: inspect it and restore it from its snapshot by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.audit_failed"
+class = "none"
+summary = "A promotion transition could not be recorded in the migration audit store."
+explanation_key = "error.promotion.audit_failed"
+params = []
+remedy = "Restore the audit store, resume the promotion and let it record the run before continuing."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.store_failed"
+class = "none"
+summary = "The promotion store or the approval store could not be read or written."
+explanation_key = "error.promotion.store_failed"
+params = []
+remedy = "Restore the store and load the promotion again; the journal shows the last completed step."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.policy_invalid"
+class = "none"
+summary = "The environment approval or rehearsal policy is not usable."
+explanation_key = "error.promotion.policy_invalid"
+params = []
+remedy = "Fix the policy: a destructive plan needs two approvers, a review at least one, and a positive expiry."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.bad_route"
+class = "none"
+summary = "The promotion does not advance the environment ladder by one role."
+explanation_key = "error.promotion.bad_route"
+params = []
+remedy = "Promote to the next environment in the set (dev to test, test to prod) in the same environment set."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.environment_mismatch"
+class = "none"
+summary = "The target site is not in the environment the promotion targets."
+explanation_key = "error.promotion.environment_mismatch"
+params = []
+remedy = "Apply the promotion to a site of the environment it names (same set, role and tenant), or request a new promotion for the right one."
+since = "0.1.0"
+
+[[entry]]
+code = "promotion.approval_refused"
+class = "none"
+summary = "The approval service refused the approval or rejection: the plan has no recorded author, the role is not one the identity holds or not the one the policy needs, or the approver authored the plan."
+explanation_key = "error.promotion.approval_refused"
+params = []
+remedy = "Approve with an identity that holds the required role and did not request the promotion; if the author is unknown, plan the promotion again so its author is registered."
+since = "0.1.0"

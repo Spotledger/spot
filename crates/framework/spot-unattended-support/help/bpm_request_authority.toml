@@ -1,0 +1,44 @@
+# Help for the bpm_request_authority error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "bpm_request_authority.command_id_reserved"
+what_happened = "The idempotency key you sent looks like a request grant, which only the engine may issue, so it was refused."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send an ordinary idempotency key of your own choosing.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.command_id_reserved."]
+audience = "user"
+
+[[help]]
+code = "bpm_request_authority.identifier_blank"
+what_happened = "A request grant was asked for without a request, a step or an acting person, so it was not issued."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Start the action again from the request step itself.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.identifier_blank."]
+audience = "user"
+
+[[help]]
+code = "bpm_request_authority.lifetime_too_long"
+what_happened = "A request grant was asked for with an expiry that is already past or more than fifteen minutes away, so it was not issued."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Start the action again so the grant is issued with a fresh expiry.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.lifetime_too_long."]
+audience = "user"
+
+[[help]]
+code = "bpm_request_authority.attempt_not_current"
+what_happened = "The request or step is no longer open, or this is no longer its current attempt, so no grant was issued."
+why = "The item is in a state that does not allow this action right now."
+what_to_do = ["Reload the request to see where it stands, then act on its current step.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.attempt_not_current."]
+audience = "user"
+
+[[help]]
+code = "bpm_request_authority.secret_unavailable"
+what_happened = "The secret that signs request grants could not be read from the vault, so the action was refused."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the configured secret exists in the site's vault and holds at least sixteen bytes, then try again.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.secret_unavailable."]
+audience = "operator"
+
+[[help]]
+code = "bpm_request_authority.actor_not_typed"
+what_happened = "A request was refused because the person it acts for was not named as a kind of principal and an id."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Send the full actor text of the invocation, which names the kind of principal as well as its id, never a bare id.", "If it keeps happening, tell your administrator and quote the code bpm_request_authority.actor_not_typed."]
+audience = "user"

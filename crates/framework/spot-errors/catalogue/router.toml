@@ -1,0 +1,37 @@
+# router codes: task routing, fallback and budgets of spot-llm-router (WP-AI-03). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "router.config_invalid"
+class = "none"
+summary = "The routing table or a budget is not valid; the error lists every problem found."
+explanation_key = "error.router.config_invalid"
+params = []
+remedy = "Fix each listed problem in the routing configuration, then load it again."
+since = "0.1.0"
+
+[[entry]]
+code = "router.task_unrouted"
+class = "none"
+summary = "The request named no task, or a task the routing table does not know."
+explanation_key = "error.router.task_unrouted"
+params = []
+remedy = "Name a task from the routing table, or add a route for the task."
+since = "0.1.0"
+
+[[entry]]
+code = "router.routes_exhausted"
+class = "none"
+summary = "Every route for the task was tried and failed, or was skipped."
+explanation_key = "error.router.routes_exhausted"
+params = []
+remedy = "Check the providers behind the task's routes, or add another route as a fallback."
+since = "0.1.0"
+
+[[entry]]
+code = "router.budget_exceeded"
+class = "none"
+summary = "A budget in scope is spent, so the call was refused before reaching a provider."
+explanation_key = "error.router.budget_exceeded"
+params = []
+remedy = "Raise the budget for the scope, or wait for its period to reset."
+since = "0.1.0"

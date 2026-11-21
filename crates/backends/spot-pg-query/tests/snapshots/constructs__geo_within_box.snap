@@ -1,0 +1,12 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(& ok(& place_with(t), & geo_cat()))"
+---
+SELECT "x"."name" AS "name" FROM "place" AS "x" WHERE ("x"."pin" && ST_MakeEnvelope($1::float8, $2::float8, $3::float8, $4::float8, 4326)) ORDER BY "x"."id" ASC OFFSET $5
+$1 = Numeric(66.9000000)
+$2 = Numeric(24.7000000)
+$3 = Numeric(67.2500000)
+$4 = Numeric(25.0000000)
+$5 = Int8(0)
+columns = ["name"]
+decode = [Text]

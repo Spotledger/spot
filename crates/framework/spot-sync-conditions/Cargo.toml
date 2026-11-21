@@ -1,0 +1,19 @@
+[package]
+name = "spot-sync-conditions"
+description = "The conditions catalogue for the journal and sync (WP-SYN-09.T3, ADR-067 section 2): every named condition with severity, subject kind, detector and clear-check keys, debounce, escalation, response steps and operator commands, as data the conditions engine loads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The framework the catalogue fills: definitions, registry, severities, milliseconds.
+spot-conditions = { path = "../spot-conditions" }
+# Stable derive-based serde on the catalogue entry, so a deployment can export it.
+serde = { version = "1", features = ["derive"] }
+# The one validation error, with a stable code.
+thiserror = "2"
+
+[lints]
+workspace = true

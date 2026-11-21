@@ -1,0 +1,199 @@
+# meta codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "meta.unknown_doctype"
+class = "UnknownDocType"
+summary = "No DocType with this name is installed."
+explanation_key = "error.meta.unknown_doctype"
+params = []
+remedy = "Check the DocType's spelling or install the app that defines it."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.validation_failed"
+class = "Validation"
+summary = "The DocType definition is not valid; the error names each field that failed."
+explanation_key = "error.meta.validation_failed"
+params = []
+remedy = "Fix every named field, then save the definition again."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.invalid_name"
+class = "Validation"
+summary = "A definition name is not a valid storage name."
+explanation_key = "error.meta.invalid_name"
+params = []
+remedy = "Use lower-case letters, digits and underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.unknown_group"
+class = "Validation"
+summary = "A field names a protection group the DocType does not declare."
+explanation_key = "error.meta.unknown_group"
+params = []
+remedy = "Declare the protection group on the DocType before putting a field into it."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.mask_missing"
+class = "Validation"
+summary = "A field is in a masked protection group but carries no mask format."
+explanation_key = "error.meta.mask_missing"
+params = []
+remedy = "Give the field a MaskFormat so a read_masked grant has a form to show."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.mask_invalid"
+class = "Validation"
+summary = "A field's mask format is malformed."
+explanation_key = "error.meta.mask_invalid"
+params = []
+remedy = "Set LastChars between 1 and 8, or use the Placeholder mask."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.declassify_reason"
+class = "Validation"
+summary = "A field is declassified without the reviewed reason the decision needs."
+explanation_key = "error.meta.declassify_reason"
+params = []
+remedy = "Record the non-empty reason for the declassification."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.inherited_authored"
+class = "Validation"
+summary = "A definition authors inherited_groups, which spot-meta alone computes."
+explanation_key = "error.meta.inherited_authored"
+params = []
+remedy = "Remove the hand-written inherited_groups; spot-meta computes them from the field's inputs."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.multiple_not_select"
+class = "Validation"
+summary = "A field is marked multiple, but only a select field can hold several values."
+explanation_key = "error.meta.multiple_not_select"
+params = []
+remedy = "Remove `multiple` from the field, or make it a select."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.control_not_applicable"
+class = "none"
+summary = "A control hint does not apply to the field's type, so the client falls back to its default control."
+explanation_key = "error.meta.control_not_applicable"
+params = []
+remedy = "Choose a control that applies to the field's type, or remove the hint."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.create_only_table"
+class = "Validation"
+summary = "A create-only attribute is set on a child table, where it has no meaning."
+explanation_key = "error.meta.create_only_table"
+params = []
+remedy = "Remove `create_only` from the child table; set it on a field of a parent DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.create_only_allow_on_posted"
+class = "Validation"
+summary = "A field is create-only and also allowed to change after posting, which contradict each other."
+explanation_key = "error.meta.create_only_allow_on_posted"
+params = []
+remedy = "Remove either `create_only` or `allow_on_submit` from the field."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.consumer_ref_duplicate"
+class = "Validation"
+summary = "A DocType declares more than one consumer reference field."
+explanation_key = "error.meta.consumer_ref_duplicate"
+params = []
+remedy = "Keep one consumer reference field per DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.consumer_ref_not_create_only"
+class = "Validation"
+summary = "A consumer reference field is not create-only."
+explanation_key = "error.meta.consumer_ref_not_create_only"
+params = []
+remedy = "Mark the consumer reference field `create_only`; it cannot change after creation."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.geolocation_not_a_point"
+class = "Validation"
+summary = "A geolocation format is set on a field that is not a point."
+explanation_key = "error.meta.geolocation_not_a_point"
+params = []
+remedy = "Use the geolocation format only on a geo field."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.bad_exclusion"
+class = "Validation"
+summary = "An exclusion declaration is not valid."
+explanation_key = "error.meta.bad_exclusion"
+params = []
+remedy = "Fix the exclusion so it names existing fields it can be enforced on."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.bad_search"
+class = "Validation"
+summary = "A search declaration is not valid."
+explanation_key = "error.meta.bad_search"
+params = []
+remedy = "Fix the search declaration so it names searchable fields."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.search_field_protected"
+class = "Validation"
+summary = "A search declaration names a protected field."
+explanation_key = "error.meta.search_field_protected"
+params = []
+remedy = "Remove the protected field from the search declaration."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.bad_range"
+class = "Validation"
+summary = "A range field or its element type is not valid."
+explanation_key = "error.meta.bad_range"
+params = []
+remedy = "Use a supported element type for the range."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.backend_unsupported"
+class = "Validation"
+summary = "The configured backend cannot do what this declaration needs."
+explanation_key = "error.meta.backend_unsupported"
+params = []
+remedy = "Use a backend that supports the declaration, or remove it."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.app_kind_approximated"
+class = "none"
+summary = "A geo or range field is described to the app API as JSON, because the app API has no field kind for it yet."
+explanation_key = "error.meta.app_kind_approximated"
+params = []
+remedy = "No action is needed; the view becomes typed when the app API gains the kind."
+since = "0.1.0"
+
+[[entry]]
+code = "meta.geolocation_deprecated"
+class = "none"
+summary = "The geolocation format of a json field is a deprecated alias for a geo field with format point."
+explanation_key = "error.meta.geolocation_deprecated"
+params = []
+remedy = "Declare a geo field with format point instead; a value that is not a single point cannot move to it."
+since = "0.1.0"

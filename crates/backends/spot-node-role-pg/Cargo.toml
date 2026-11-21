@@ -1,0 +1,27 @@
+[package]
+name = "spot-node-role-pg"
+description = "PostgreSQL store of the node role a site first started as (WP-RTB-03.T5): the spot_node_role_state table, a read and an upsert, so the host holds no SQL"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# Test helpers that drop and create the table. Off by default; the production binary never enables it.
+testing = []
+
+[dependencies]
+# The connection pool the caller builds; the store owns its one table.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+
+[dev-dependencies]
+# This crate with its test helpers on, so every test runs with or without --features testing.
+spot-node-role-pg = { path = ".", features = ["testing"] }
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

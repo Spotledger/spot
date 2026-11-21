@@ -1,0 +1,122 @@
+name = "scheduled_script"
+label = "Scheduled Script"
+app = "scripting"
+module = "scripting"
+title_field = "name"
+
+# A Scheduled Script is TypeScript that runs on a cron schedule, as the user named in `run_as`
+# (never as a system principal; if that user is missing or disabled the run is refused). The
+# source must export on_run({ ctx }); ctx carries the schedule name, the slot's scheduled_for
+# in UTC and the run's deduplication_key.
+
+[[fields]]
+name = "name"
+label = "Name"
+type = "text"
+required = true
+unique = true
+max_chars = 140
+in_list_view = true
+description = "The script's name; also the schedule's name."
+
+[[fields]]
+name = "enabled"
+label = "Enabled"
+type = "bool"
+default = "true"
+in_list_view = true
+in_standard_filter = true
+description = "Whether the script is scheduled. A script that keeps failing is disabled automatically."
+
+[[fields]]
+name = "cron"
+label = "Cron"
+type = "text"
+required = true
+max_chars = 120
+in_list_view = true
+description = "When it runs: six fields, seconds first (second minute hour day-of-month month day-of-week)."
+
+[[fields]]
+name = "time_zone"
+label = "Time Zone"
+type = "text"
+default = "UTC"
+max_chars = 64
+description = "The IANA zone the cron fields are read in, for example Asia/Karachi or UTC."
+
+[[fields]]
+name = "missed_run"
+label = "Missed Run"
+type = "select"
+options = "skip\nrun_once"
+default = "skip"
+description = "What to do with runs missed while the scheduler was down: skip them, or run once."
+
+[[fields]]
+name = "queue"
+label = "Queue"
+type = "select"
+options = "default\nshort\nlong"
+default = "default"
+description = "The job queue the run goes on."
+
+[[fields]]
+name = "run_as"
+label = "Run As"
+type = "text"
+required = true
+max_chars = 140
+in_list_view = true
+description = "The user the script runs as. It can read and write only what this user can; if the user is missing or disabled the run is refused."
+
+[[fields]]
+name = "script"
+label = "Script"
+type = "long_text"
+format = "code"
+syntax = "typescript"
+required = true
+description = "The TypeScript source. It must export on_run({ ctx }); every diagnostic is reported here on save."
+
+[[fields]]
+name = "timeout_ms"
+label = "Timeout (ms)"
+type = "int"
+default = "200"
+in_list_view = true
+description = "The per-run wall-clock deadline in milliseconds; at most the site maximum (2 s)."
+
+[[fields]]
+name = "compiled_hash"
+label = "Compiled Hash"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 64
+description = "The hash of the compiled source, written when the script saves."
+
+[[fields]]
+name = "last_error"
+label = "Last Error"
+type = "long_text"
+read_only = true
+no_copy = true
+description = "The last failure, if any, for the admin listing."
+
+[[fields]]
+name = "disabled_reason"
+label = "Disabled Reason"
+type = "text"
+read_only = true
+no_copy = true
+max_chars = 500
+description = "Why the script was disabled automatically, when it was."
+
+[[fields]]
+name = "last_run_count"
+label = "Last Run Count"
+type = "int"
+read_only = true
+no_copy = true
+description = "How many times the script has run since it was last saved."

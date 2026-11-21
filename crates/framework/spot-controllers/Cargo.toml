@@ -1,0 +1,33 @@
+[package]
+name = "spot-controllers"
+description = "The controller registry (WP-DOC-10.T1): native, WASM and TypeScript controllers registered per app and DocType, the default controller for any DocType, manifest-driven loading, and the ADR-51 step attachment through spot-seams"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The extension contract: `Controller`, `StepDecl`, `MethodDecl`, `StepOverride` and `AppError`.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The step registry a controller's steps are installed into (ADR-51), and its `Conflict` type.
+spot-seams = { path = "../spot-seams" }
+# The app manifest a controller is loaded from (ADR-17).
+spot-manifest = { path = "../spot-manifest" }
+# `Controller::call_method` takes and returns `serde_json::Value`; the contract does not
+# re-export serde_json.
+serde_json = "1"
+
+[dev-dependencies]
+# The document engine and the in-memory backend, for the end-to-end invocation test.
+spot-document = { path = "../spot-document" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# Effective metadata and a clock, to build the engine in tests.
+spot-meta = { path = "../spot-meta" }
+spot-core = { path = "../spot-core" }
+tokio = { version = "1", features = ["macros", "rt"] }
+# The sample app: its manifest and controllers are the real two-controller fixture.
+spot-sample-app = { path = "../../apps/spot-sample-app" }
+
+[lints]
+workspace = true

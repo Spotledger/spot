@@ -1,0 +1,46 @@
+# sync_rebuild_wiring codes: the production providers of process distribution and the offline rebuild in spot-cli (WP-RTB-01.T10, ADR-061, ADR-062): why a piece is off, stalled or refuses to vouch. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_rebuild_wiring.hub_queue_full"
+class = "none"
+summary = "The hub stream queue holds as many process records as the hub sync service has not yet taken; the new record was not queued."
+explanation_key = "error.sync_rebuild_wiring.hub_queue_full"
+params = []
+remedy = "Check that the hub sync service is running; raise `queue_capacity` only if it is slow, not stopped."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_rebuild_wiring.no_invariant_registered"
+class = "none"
+summary = "The rebuild's invariant suite has no check registered, so the rebuild is not reported as sound."
+explanation_key = "error.sync_rebuild_wiring.no_invariant_registered"
+params = []
+remedy = "Register the document counts, graph edges and financial fingerprint checks for the rebuild."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_rebuild_wiring.pins_unreadable"
+class = "none"
+summary = "The Cases pinned to each process version cannot be counted (the BPM case table cannot be read); no process version is retired."
+explanation_key = "error.sync_rebuild_wiring.pins_unreadable"
+params = []
+remedy = "Check the BPM case table and the database connection; counting resumes by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_rebuild_wiring.hub_sink_refused"
+class = "none"
+summary = "The hub sync service refused a hub-authored process record; it stays queued and is retried with backoff."
+explanation_key = "error.sync_rebuild_wiring.hub_sink_refused"
+params = []
+remedy = "Check the hub sync service; nothing is lost while the record is queued."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_rebuild_wiring.hub_sink_absent"
+class = "none"
+summary = "No hub sync service provides the master record sink on this node, so the hub side of process distribution is off."
+explanation_key = "error.sync_rebuild_wiring.hub_sink_absent"
+params = []
+remedy = "Run process publication on a node whose role runs the hub sync service."
+since = "0.1.0"

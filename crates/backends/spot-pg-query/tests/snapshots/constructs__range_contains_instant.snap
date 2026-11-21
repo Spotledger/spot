@@ -1,0 +1,10 @@
+---
+source: crates/backends/spot-pg-query/tests/constructs.rs
+expression: "render(&\nok(& slot_with(\"at\", RangeTest::Contains(Value::DateTime(t0))), & cat))"
+---
+SELECT $1 AS "one" FROM "slot" AS "x" WHERE ("x"."at" @> $2) ORDER BY "x"."id" ASC OFFSET $3
+$1 = Int8(1)
+$2 = TimestampTz(1970-01-01 0:00:00.0 +00:00:00)
+$3 = Int8(0)
+columns = ["one"]
+decode = [Int]

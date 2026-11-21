@@ -1,0 +1,46 @@
+[package]
+name = "spot-journal-audit-pg"
+description = "The PostgreSQL sides of the journal audit (WP-JRN-07.T6, ADR-061 s8): a live side that reads the tenant database inside one held read-only REPEATABLE READ transaction and answers the head position, the sorted record summaries and the financial fingerprints as of that position, and a throwaway scratch schema the rebuild applies into that is always dropped"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The test hooks a real-database test needs (the read-only probe and the scratch name):
+# never part of a host's build.
+testing = []
+
+[dependencies]
+# The catalogue (entities, fields, kinds), the panic-free `Name` rules and `FieldType`.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `RecordSummary`, `content_digest`, `Fingerprint`, `Amount` and `Position`: the types both
+# sides answer in, and the digest the in-memory sides use.
+spot-journal-audit = { path = "../../framework/spot-journal-audit" }
+# The two seams this crate implements: `LiveSide` and `ScratchSide`.
+spot-journal-audit-run = { path = "../../framework/spot-journal-audit-run" }
+# The feed position `ApplySink::commit` receives (the trait's own type).
+spot-events-contract = { path = "../../../contracts/events" }
+# `ApplySink` and the images the rebuild hands a sink.
+spot-journal-rebuild = { path = "../../framework/spot-journal-rebuild" }
+# The one shared, bounded way for synchronous code to reach PostgreSQL (ADR-082 class C).
+spot-pg-bridge = { path = "../spot-pg-bridge" }
+# The driver: the statements run on the connection the bridge hands to the closure.
+tokio-postgres = "0.7"
+# The held transaction's request queue: an unbounded channel awaited inside the bridge's call.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# The canonical body JSON of a record image (ADR-055), which the digest covers.
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases, and the backend whose pool the bridge borrows.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+spot-journal-audit-pg = { path = ".", features = ["testing"] }
+# The document image a sink receives (`Image::new`), which the tests apply to a scratch side.
+spot-image-upcast = { path = "../../framework/spot-image-upcast" }
+# The test runtime: the harness creates the tenant database's tables before the bridge runs.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread"] }
+
+[lints]
+workspace = true

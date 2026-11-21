@@ -1,0 +1,30 @@
+[package]
+name = "spot-support-grants"
+description = "Support-session grants for the control plane (WP-CTL-07.T1): customer-approved, scoped and time-boxed grants for the support agent, scope and expiry enforcement on every action, revocation and extension by a new approval, and the customer's own record of every session and action in the tenant audit chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The scoped, time-boxed session model this crate grants, checks, extends and revokes.
+spot-support-session = { path = "../spot-support-session" }
+# Agent identities and tiers: a support agent's registered domain and maximum tier bind
+# every grant made to it.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# The tenant's own tamper-evident audit chain, where every session and action is recorded.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# Stable, derive-based serde on every persisted record.
+serde = { version = "1", features = ["derive"] }
+# Typed errors with stable `support_grants.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The serde round trip of a grant, as JSON.
+serde_json = "1"
+# Property tests: an allow implies every check passed.
+proptest = "1"
+
+[lints]
+workspace = true

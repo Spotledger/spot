@@ -1,0 +1,19 @@
+# deep_access_pg codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "deep_access_pg.migration_failed"
+class = "none"
+summary = "The schema could not be created."
+explanation_key = "error.deep_access_pg.migration_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "deep_access_pg.store_failed"
+class = "none"
+summary = "A statement failed or no connection was available."
+explanation_key = "error.deep_access_pg.store_failed"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

@@ -1,0 +1,48 @@
+# journal_protect codes: the entry transforms of spot-journal-protect (WP-JRN-08.T4, ADR-061 s3 and
+# s6): the refusals of protecting a state image on the way into the journal and of revealing it on
+# the way out of a rebuild. No message carries a plaintext, a ciphertext, a key or a nonce.
+
+[[entry]]
+code = "journal_protect.spec_unavailable"
+class = "none"
+summary = "The source of personal-field descriptions could not say whether an entity has personal fields, so its state image was not written."
+explanation_key = "error.journal_protect.spec_unavailable"
+params = []
+remedy = "Restore the metadata source that describes personal fields and write the entry again; an entity is never treated as having no personal fields because its description could not be read."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_protect.entry_invalid"
+class = "none"
+summary = "A relay line or a state image could not be transformed: it is not an event envelope, a state entry has no subject version or no object data, or an image is not an object."
+explanation_key = "error.journal_protect.entry_invalid"
+params = []
+remedy = "Find the writer that produced the malformed line or image in the outbox; the line was not written, because whether it carries personal fields cannot be told."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_protect.identity_mismatch"
+class = "none"
+summary = "An image carries an id or a version of its own that differs from the record identity of its entry or snapshot record, so a personal-field envelope would be bound to the wrong record."
+explanation_key = "error.journal_protect.identity_mismatch"
+params = []
+remedy = "Correct the writer so the image's id and version match the entry's subject and subject version; nothing was written."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_protect.protect_failed"
+class = "none"
+summary = "A personal field could not be sealed on the way into the journal (no key for its subject, the key store is down, no nonce, a malformed image), so the entry was not written."
+explanation_key = "error.journal_protect.protect_failed"
+params = []
+remedy = "The underlying journal_pii code says why. Create the subject's key before the record is written, or restore the key store, then write the entry again; the journal never takes a personal value in clear."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_protect.reveal_failed"
+class = "none"
+summary = "A personal field could not be revealed during a rebuild (the key store is unavailable, or an envelope was tampered with or moved to another record), so the rebuild stopped."
+explanation_key = "error.journal_protect.reveal_failed"
+params = []
+remedy = "The underlying journal_pii code says why. Restore the key store and run the rebuild again; a rebuild never replaces a field with the erasure placeholder unless the subject's key was destroyed."
+since = "0.1.0"

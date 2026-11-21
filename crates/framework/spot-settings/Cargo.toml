@@ -1,0 +1,32 @@
+[package]
+name = "spot-settings"
+description = "The typed settings schema (WP-ADM-07, blueprint WS22, ADR-44): every setting typed and documented, scopes with inheritance, resolution, validation, search, differs-from-default, and generated screen models"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Reuse ParamType, ParamValue, Risk and the public value check from spot-mgmt-ops, so a
+# setting can be set through an operation without translation and validation lives in one place.
+spot-mgmt-ops = { path = "../spot-mgmt-ops" }
+# Derive-based serde on every public data type.
+serde = { version = "1", features = ["derive"] }
+# TOML parsing for SettingSpec files (the seed catalogue is compiled in).
+toml = "0.8"
+# JSON serialisation for canonical hashing of change sets and effective values.
+serde_json = "1"
+# SHA-256 for stable hashing of effective values and change sets.
+sha2 = "0.10"
+# Typed errors with stable settings.* codes.
+thiserror = "2"
+# Accent folding for search (already in the workspace lockfile).
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+# Property tests for resolution equivalence to the naive model.
+proptest = "1"
+
+[lints]
+workspace = true

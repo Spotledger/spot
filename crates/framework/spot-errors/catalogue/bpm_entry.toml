@@ -1,0 +1,147 @@
+# bpm_entry codes (WP-BPM-13.T1): process-first entry for the Business Process engine: the form
+# step and its draft ownership, the process_only guard, batch start for imports and the run
+# label. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_entry.owned_by_request"
+class = "Validation"
+summary = "A draft record owned by a running request was changed from another channel; it can be changed only through that request's steps."
+explanation_key = "error.bpm_entry.owned_by_request"
+params = []
+remedy = "Open the request named in the error and change the draft there, or cancel the request to release the draft."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.start_process"
+class = "Validation"
+summary = "A record type in a process_only scope was created directly; it is created only by starting its entry process, which the error names."
+explanation_key = "error.bpm_entry.start_process"
+params = []
+remedy = "Start the entry process named in the error as the calling principal instead of creating the record."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.config_invalid"
+class = "Validation"
+summary = "A form step or an entry setting did not parse or is incomplete."
+explanation_key = "error.bpm_entry.config_invalid"
+params = []
+remedy = "Correct the form step configuration or the entry setting so it names a valid record type and process."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.form_invalid"
+class = "Validation"
+summary = "The values entered in a form step failed the record type's validation; the step stays open and the field errors are returned."
+explanation_key = "error.bpm_entry.form_invalid"
+params = []
+remedy = "Correct the marked fields and submit the form again."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.draft_failed"
+class = "Internal"
+summary = "A draft record could not be created, updated, released or discarded through its lifecycle."
+explanation_key = "error.bpm_entry.draft_failed"
+params = []
+remedy = "Check the record type's lifecycle and the request's permissions, then retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.step_not_open"
+class = "InvalidState"
+summary = "A form step's task is not open, or the person completing it was not given it."
+explanation_key = "error.bpm_entry.step_not_open"
+params = []
+remedy = "Open the task from the inbox of the assigned person, or reassign it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.no_assignee"
+class = "Validation"
+summary = "A form step resolved to nobody to ask, so the request parks instead of guessing a person."
+explanation_key = "error.bpm_entry.no_assignee"
+params = []
+remedy = "Name a user, a role with members or an approver rule that resolves to someone."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.inbox"
+class = "Unavailable"
+summary = "The task inbox could not be reached when opening, checking or completing a form task."
+explanation_key = "error.bpm_entry.inbox"
+params = []
+remedy = "Check the task service and retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.commit_failed"
+class = "Internal"
+summary = "The form step's transition and its draft write could not be committed together, so nothing was stored."
+explanation_key = "error.bpm_entry.commit_failed"
+params = []
+remedy = "Retry the step; the request is exactly where it was."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.batch_state"
+class = "InvalidState"
+summary = "A batch run is in a state that does not allow the call: it already ran to the end, or it has not finished and must be resumed."
+explanation_key = "error.bpm_entry.batch_state"
+params = []
+remedy = "Resume the unfinished batch, or start a new batch with a new start key."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.batch_limit"
+class = "Validation"
+summary = "A batch run reached its configured limit of skipped or failed items and stopped."
+explanation_key = "error.bpm_entry.batch_limit"
+params = []
+remedy = "Fix the reported items or raise the limit, then resume the batch."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.batch_failed"
+class = "Internal"
+summary = "A batch run could not be started, stored or read, or its item source stopped."
+explanation_key = "error.bpm_entry.batch_failed"
+params = []
+remedy = "Check the batch store and the request service, then resume the batch."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.settings"
+class = "Unavailable"
+summary = "An entry setting or a mode could not be read."
+explanation_key = "error.bpm_entry.settings"
+params = []
+remedy = "Check the settings store and that the entry settings are registered, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.audit"
+class = "Unavailable"
+summary = "The audit entry for a refusal or a mode change could not be written, so the operation failed closed and nothing was changed."
+explanation_key = "error.bpm_entry.audit"
+params = []
+remedy = "Check the audit sink and retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.label_invalid"
+class = "Validation"
+summary = "A run label override was blank."
+explanation_key = "error.bpm_entry.label_invalid"
+params = []
+remedy = "Supply a non-blank label, or remove the override to use the default."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_entry.scope_invalid"
+class = "Validation"
+summary = "A create named a company or unit that is unknown or not allowed for the acting person, so the create was refused."
+explanation_key = "error.bpm_entry.scope_invalid"
+params = []
+remedy = "Create the record in a company or unit the acting person is assigned to, or ask an administrator for access."
+since = "0.1.0"

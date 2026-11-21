@@ -1,0 +1,163 @@
+# journal_manifest codes: the signed journal manifest of spot-journal-manifest (WP-JRN-03.T2, ADR-061 s5 and s8): the model's invariant refusals, the append-only growth refusals, the signature and key-window refusals, and the decoder's refusal. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_manifest.source_invalid"
+class = "none"
+summary = "A manifest has no source id."
+explanation_key = "error.journal_manifest.source_invalid"
+params = []
+remedy = "Name the source (a tenant site, or a site and partition) the manifest belongs to."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.generation_invalid"
+class = "none"
+summary = "A manifest or a segment summary carries generation zero, and stream generations start at one."
+explanation_key = "error.journal_manifest.generation_invalid"
+params = []
+remedy = "Use the generation the source reports; a source's first generation is 1."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.segment_generation"
+class = "none"
+summary = "A segment summary in a manifest belongs to a different generation than the manifest."
+explanation_key = "error.journal_manifest.segment_generation"
+params = []
+remedy = "List one generation's segments per manifest; a new generation needs its own manifest and a fork record."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.segment_range_invalid"
+class = "none"
+summary = "A segment summary's position range is reversed or starts below position one, or its entry count does not fill the range."
+explanation_key = "error.journal_manifest.segment_range_invalid"
+params = []
+remedy = "Take the range and the entry count from the sealed segment's header; they must agree and start at position one or later."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.append_gap"
+class = "none"
+summary = "An appended segment starts after the position the manifest expects next, so positions in between would be unlisted."
+explanation_key = "error.journal_manifest.append_gap"
+params = []
+remedy = "Seal and append the missing segments first, then append the later one."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.append_overlap"
+class = "none"
+summary = "An appended segment repeats positions the manifest already lists."
+explanation_key = "error.journal_manifest.append_overlap"
+params = []
+remedy = "Append only positions the manifest does not list yet; a re-sealed segment of a listed range cannot be appended."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.history_rewritten"
+class = "none"
+summary = "A segment's previous hash does not match the segment before it, so appending it would rewrite the chain."
+explanation_key = "error.journal_manifest.history_rewritten"
+params = []
+remedy = "Append the segment that links to the hash of the segment the manifest lists last, and keep the earlier summaries unchanged."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.generation_change"
+class = "none"
+summary = "A segment of another generation was offered to a manifest without a fork record opening that generation."
+explanation_key = "error.journal_manifest.generation_change"
+params = []
+remedy = "Open the new generation with a fork record that names the abandoned generation's last valid position, then append its segments."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.fork_invalid"
+class = "none"
+summary = "A fork record does not open a later generation, names no position, has no reason, or the fork history is incomplete or out of order."
+explanation_key = "error.journal_manifest.fork_invalid"
+params = []
+remedy = "Record one fork per generation from 2 to the manifest's own, in order, each with a position the abandoned generation holds and a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.manifest_gap"
+class = "none"
+summary = "The segments a manifest lists leave positions between them, or before the first one, unlisted."
+explanation_key = "error.journal_manifest.manifest_gap"
+params = []
+remedy = "List every sealed segment of the generation from position one without a hole."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.duplicate_segment"
+class = "none"
+summary = "A manifest lists the same positions twice."
+explanation_key = "error.journal_manifest.duplicate_segment"
+params = []
+remedy = "List each sealed segment of the generation once; drop the repeated summary."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.previous_manifest_invalid"
+class = "none"
+summary = "The previous-manifest link contradicts the manifest's generation: a first-generation manifest carries one, or a later one carries none."
+explanation_key = "error.journal_manifest.previous_manifest_invalid"
+params = []
+remedy = "Leave the link empty on the first generation's manifest and set it to the previous manifest's hash after a fork."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.format_invalid"
+class = "none"
+summary = "The bytes are not the canonical encoding of a signed manifest: they end early, carry trailing data, or would re-encode to different bytes."
+explanation_key = "error.journal_manifest.format_invalid"
+params = []
+remedy = "Read the manifest through the canonical decoder; if the stored bytes are damaged, restore the manifest from another copy."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.signature_invalid"
+class = "none"
+summary = "The manifest's Ed25519 signature does not verify under the key it names."
+explanation_key = "error.journal_manifest.signature_invalid"
+params = []
+remedy = "Treat the manifest as altered: restore the signed manifest from another copy and re-run the journal verification."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.key_unknown"
+class = "none"
+summary = "The verifying key set holds no key with the id the manifest names."
+explanation_key = "error.journal_manifest.key_unknown"
+params = []
+remedy = "Add the tenant journal key that signed the manifest to the verifying set, with the generations it signed."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.key_not_valid_for_generation"
+class = "none"
+summary = "The key is known but its rotation window does not cover the manifest's generation."
+explanation_key = "error.journal_manifest.key_not_valid_for_generation"
+params = []
+remedy = "Extend the key's window to the generations it signed, or verify the manifest with the key that covered its generation."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.key_window_invalid"
+class = "none"
+summary = "A key window is empty or starts at generation zero, or the same key id already has a window that shares a generation with it."
+explanation_key = "error.journal_manifest.key_window_invalid"
+params = []
+remedy = "Give each key id one window that starts at generation one or later and does not overlap another window of the same id."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_manifest.key_invalid"
+class = "none"
+summary = "The bytes are not an Ed25519 public key."
+explanation_key = "error.journal_manifest.key_invalid"
+params = []
+remedy = "Add the key as the 32 bytes of the tenant journal key's public key."
+since = "0.1.0"

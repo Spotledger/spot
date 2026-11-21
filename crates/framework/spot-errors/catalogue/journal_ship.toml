@@ -1,0 +1,100 @@
+# journal_ship codes: the journal shipper of spot-journal-ship and its host service (WP-RTB-01.T3, ADR-061 s1, s4, s5 and s10): the outbox reader, the watermark, the one-writer lease, the protect step and the continuous verification. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_ship.outbox_unavailable"
+class = "none"
+summary = "The shipper could not read the site's outbox (database down or pool exhausted); it keeps the watermark and retries with backoff."
+explanation_key = "error.journal_ship.outbox_unavailable"
+params = []
+remedy = "Check the site's database; the shipper resumes by itself and ships what accumulated. Nothing is lost while the outbox barrier holds entries back."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.outbox_invalid"
+class = "none"
+summary = "The outbox holds something the shipper cannot ship in order (an entry that is not an event envelope, positions that are not consecutive, a page that spans two generations), so it stopped advancing instead of skipping it."
+explanation_key = "error.journal_ship.outbox_invalid"
+params = []
+remedy = "Find the entry named by the log position, repair or remove the cause in the outbox, then restart the site; never edit the journal."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.outbox_gap"
+class = "none"
+summary = "An entry the journal never received is no longer in the outbox (it was pruned before it was shipped), so the recoverable record would have a hole; the shipper stopped and raised JOURNAL_GAP."
+explanation_key = "error.journal_ship.outbox_gap"
+params = []
+remedy = "Do not skip ahead. Restore the missing range from a database backup or a replica, or accept the gap explicitly through the recovery path, then restart the shipper."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.generation_unmatched"
+class = "none"
+summary = "The outbox is in a later generation than the journal has ever held (a restore happened before any history was shipped), so there is no earlier generation to fork from."
+explanation_key = "error.journal_ship.generation_unmatched"
+params = []
+remedy = "Start the journal from the restored database through the recovery path (reseal from database); do not create a manifest by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.protect_failed"
+class = "none"
+summary = "A line could not be protected (personal-field sealing failed: the key store or the field description was unavailable), so nothing was written for the batch."
+explanation_key = "error.journal_ship.protect_failed"
+params = []
+remedy = "Fix the key store or the personal-field description named in the log; the shipper retries by itself and never writes an unprotected line."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.store_down"
+class = "none"
+summary = "The journal store is unreachable or the relay asked for a resume; the shipper retries with backoff and keeps every entry in the outbox."
+explanation_key = "error.journal_ship.store_down"
+params = []
+remedy = "Restore access to the journal target (network, permissions, free space). Under degrade the site keeps trading and RPO_BREACH is raised after the grace period; under halt writes are refused until the store returns."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.relay_stopped"
+class = "none"
+summary = "The relay stopped with a failure a retry cannot cure by itself (another writer, a bad batch or a broken chain)."
+explanation_key = "error.journal_ship.relay_stopped"
+params = []
+remedy = "Look at the relay code in the log; for another writer stop the other node, for a broken chain follow the journal-hosting recovery steps."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.watermark_failed"
+class = "none"
+summary = "The shipper's watermark (journal_ship_state) could not be read or written; the shipper does not advance without persisting the position."
+explanation_key = "error.journal_ship.watermark_failed"
+params = []
+remedy = "Run `spot migrate` if the table is missing, or check the database connection; the shipper resumes by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.config_invalid"
+class = "none"
+summary = "The journal configuration is unusable (an unknown key, a policy without its target, a key reference the provider cannot derive from)."
+explanation_key = "error.journal_ship.config_invalid"
+params = []
+remedy = "Correct the site file's [journal] table and the [services.journal] table; unknown keys are refused."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.target_unsafe"
+class = "none"
+summary = "The journal's folder target is not a directory the process can write, does not exist, or is inside the site's own data or code directory."
+explanation_key = "error.journal_ship.target_unsafe"
+params = []
+remedy = "Point the target at a separate, writable directory (ideally another disk or a mounted share), outside the data and code directories."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_ship.chain_damaged"
+class = "none"
+summary = "The continuous verification found the stored journal chain damaged (a hash, a link, the manifest signature or a listed segment does not check out); the shipper stopped advancing and raised JOURNAL_GAP."
+explanation_key = "error.journal_ship.chain_damaged"
+params = []
+remedy = "Follow the recovery steps in docs/runbooks/journal-recovery.md: compare the verification findings with the replica, restore the damaged object, then restart the shipper. Never write on top of a broken chain."
+since = "0.1.0"

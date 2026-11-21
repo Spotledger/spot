@@ -1,0 +1,30 @@
+# Google API keys: `AIza` plus thirty-five `[0-9A-Za-z_-]` characters (39 in all).
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'AIzaSyD-1234567890abcdefghijklmnopqrstu'
+expected = '[redacted:google_api_key]'
+class = 'google_api_key'
+
+[[case]]
+input = 'maps call failed with AIzaSyA1234567890abcdefghijklmnopqrstuv'
+expected = 'maps call failed with [redacted:google_api_key]'
+class = 'google_api_key'
+
+# Too short to be a key.
+[[case]]
+input = 'AIzaShort is a placeholder'
+expected = 'AIzaShort is a placeholder'
+class = 'google_api_key'
+
+# No word boundary on the left.
+[[case]]
+input = 'xAIzaSyD-1234567890abcdefghijklmnopqrstu'
+expected = 'xAIzaSyD-1234567890abcdefghijklmnopqrstu'
+class = 'google_api_key'
+
+# A key inside a query string: the parameter name stays, the value redacts.
+[[case]]
+input = 'https://maps.example.com/api?key=AIzaSyD-1234567890abcdefghijklmnopqrstu'
+expected = 'https://maps.example.com/api?key=[redacted:google_api_key]'
+class = 'google_api_key'

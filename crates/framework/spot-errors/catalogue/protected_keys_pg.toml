@@ -1,0 +1,59 @@
+# protected_keys_pg codes: the PostgreSQL key store of the protected-group key hierarchy
+# (WP-SEC-10.T4) and the `KeyStore` port's own refusals. Hierarchy refusals (unknown group, revoked
+# node, retired epoch, ...) keep their protected_keys.* codes. Messages name ids, groups and
+# epochs, or are fixed sentences; never key material, SQL, a driver message or a parameter.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "protected_keys_pg.epoch_conflict"
+class = "none"
+summary = "The epoch of group {group} changed while the call was being made, so nothing was written."
+explanation_key = "error.protected_keys_pg.epoch_conflict"
+params = ["group"]
+remedy = "Another hub rotated or revoked first. Read the group's current epoch and the keys the node holds again, then repeat the rotation or revocation if it is still needed."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys_pg.bad_input"
+class = "none"
+summary = "The key store refused an argument that is empty, too long, out of range or in the wrong shape."
+explanation_key = "error.protected_keys_pg.bad_input"
+params = []
+remedy = "Pass a wrapped key of 40 to 4096 bytes, a non-zero epoch, an actor of at most 128 characters without control characters and a page size from 1 to 500."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys_pg.store_failed"
+class = "none"
+summary = "The key store could not complete the call; the database or the bridge failed."
+explanation_key = "error.protected_keys_pg.store_failed"
+params = []
+remedy = "Check that the database is reachable and the call comes from a plain thread outside any async runtime. A timed-out write may or may not have applied: read the state before repeating it."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys_pg.corrupt"
+class = "none"
+summary = "A stored key row cannot be read back or disagrees with itself."
+explanation_key = "error.protected_keys_pg.corrupt"
+params = []
+remedy = "Do not use the row. Restore the key tables from a backup and report the corruption."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys_pg.bad_setup"
+class = "none"
+summary = "The key store could not be built: the tenant name is not usable, or the bridge settings do not hold against the pool."
+explanation_key = "error.protected_keys_pg.bad_setup"
+params = []
+remedy = "Give the store a non-empty tenant of at most 128 characters without control characters, and a bridge whose max_in_flight is at least one below the pool size minus the bridge reserve."
+since = "0.1.0"
+
+[[entry]]
+code = "protected_keys_pg.migration_failed"
+class = "none"
+summary = "The key store tables could not be created."
+explanation_key = "error.protected_keys_pg.migration_failed"
+params = []
+remedy = "Check that the database user may create tables, indexes, triggers and functions and that the server is reachable, then call prepare again."
+since = "0.1.0"

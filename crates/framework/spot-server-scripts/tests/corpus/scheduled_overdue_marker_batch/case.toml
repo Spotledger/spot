@@ -1,0 +1,6 @@
+kind = "scheduled"
+pattern = "overdue marker over many documents"
+unsupported = "a single run is limited to 100 host calls, so 500 documents cannot be touched in one run; the run is cut off with serverscript.limit_exceeded and the script must page"
+[expect]
+ok = false
+error_code = "serverscript.limit_exceeded"

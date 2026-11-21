@@ -1,0 +1,166 @@
+# agent_windows_sys codes: raised by the spot-agent-windows-sys crate (WP-ADM-05.T2).
+# Library-internal vocabulary: the agent bridges these onto the wire result; none of them
+# is raised through AppError, so every class is `none`.
+
+[[entry]]
+code = "agent_windows_sys.vss_failed"
+class = "none"
+summary = "The Volume Shadow Copy service refused the operation: {reason}."
+explanation_key = "error.agent_windows_sys.vss_failed"
+params = ["reason"]
+remedy = "Check that the shadow copy service is running and that the volume is eligible, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.shadow_not_found"
+class = "none"
+summary = "No shadow copy with id {id} exists."
+explanation_key = "error.agent_windows_sys.shadow_not_found"
+params = ["id"]
+remedy = "List the shadow copies and use an id that still exists."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.volume_set_empty"
+class = "none"
+summary = "A shadow copy needs at least one volume."
+explanation_key = "error.agent_windows_sys.volume_set_empty"
+params = []
+remedy = "Name the volumes to shadow; a take always covers the volume that holds the data."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.backup_start_failed"
+class = "none"
+summary = "Entering PostgreSQL backup mode failed: {reason}."
+explanation_key = "error.agent_windows_sys.backup_start_failed"
+params = ["reason"]
+remedy = "Check the database connection and that no other backup mode is active, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.backup_stop_failed"
+class = "none"
+summary = "Leaving PostgreSQL backup mode failed for label {label}: {reason}."
+explanation_key = "error.agent_windows_sys.backup_stop_failed"
+params = ["label", "reason"]
+remedy = "Run pg_backup_stop with the reported label; the guard retries once, then the operator must clear backup mode."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.backup_not_active"
+class = "none"
+summary = "PostgreSQL is not in backup mode."
+explanation_key = "error.agent_windows_sys.backup_not_active"
+params = []
+remedy = "Enter backup mode with pg_backup_start before trying to leave it."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.backup_already_active"
+class = "none"
+summary = "PostgreSQL is already in backup mode with label {label}."
+explanation_key = "error.agent_windows_sys.backup_already_active"
+params = ["label"]
+remedy = "Leave the active backup mode with its label before entering a new one."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.invalid_thumbprint"
+class = "none"
+summary = "The thumbprint {thumbprint} is not 40 or 64 hex digits."
+explanation_key = "error.agent_windows_sys.invalid_thumbprint"
+params = ["thumbprint"]
+remedy = "Use the certificate's SHA-1 (40 hex) or SHA-256 (64 hex) thumbprint; spaces and colons are ignored."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.unknown_store"
+class = "none"
+summary = "The certificate store {store} is not one of Root, CA or My."
+explanation_key = "error.agent_windows_sys.unknown_store"
+params = ["store"]
+remedy = "Use one of the LocalMachine stores root, ca or my."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.certificate_not_found"
+class = "none"
+summary = "No certificate with thumbprint {thumbprint} is in the {store} store."
+explanation_key = "error.agent_windows_sys.certificate_not_found"
+params = ["store", "thumbprint"]
+remedy = "Import the certificate first, or use a thumbprint that is in the store."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.private_key_export_refused"
+class = "none"
+summary = "Refusing to export the private key of certificate {thumbprint}."
+explanation_key = "error.agent_windows_sys.private_key_export_refused"
+params = ["thumbprint"]
+remedy = "Only the public part of a certificate leaves the machine; the private key stays in the store."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.certificate_expired"
+class = "none"
+retired = true
+summary = "Certificate {thumbprint} is not valid at the requested instant."
+explanation_key = "error.agent_windows_sys.certificate_expired"
+params = ["thumbprint"]
+remedy = "Renew the certificate and bind the renewed one to the HTTPS endpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.certificate_not_valid"
+class = "none"
+summary = "Certificate {thumbprint} is not valid at the requested instant: {reason}."
+explanation_key = "error.agent_windows_sys.certificate_not_valid"
+params = ["reason", "thumbprint"]
+remedy = "Renew the certificate (if expired) or wait until it reaches NotBefore (if not yet valid), then bind again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.chain_invalid"
+class = "none"
+summary = "The chain of certificate {thumbprint} does not validate: {reason}."
+explanation_key = "error.agent_windows_sys.chain_invalid"
+params = ["reason", "thumbprint"]
+remedy = "Install the missing intermediate or root certificate, then bind again."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.bind_failed"
+class = "none"
+summary = "Binding the certificate to the HTTPS endpoint failed: {reason}."
+explanation_key = "error.agent_windows_sys.bind_failed"
+params = ["reason"]
+remedy = "Check the host name and port, and that the certificate is valid and trusted, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.restore_unsupported"
+class = "none"
+summary = "The VSS snapshot adapter cannot restore: {reason}."
+explanation_key = "error.agent_windows_sys.restore_unsupported"
+params = ["reason"]
+remedy = "Restore the instance from the block image through the host's instance-restore path."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.invalid_operation_id"
+class = "none"
+summary = "The operation id {id} is not valid: {reason}."
+explanation_key = "error.agent_windows_sys.invalid_operation_id"
+params = ["id", "reason"]
+remedy = "Fix the operation id in the module; it is a static authoring mistake and never a runtime input."
+since = "0.1.0"
+
+[[entry]]
+code = "agent_windows_sys.io"
+class = "none"
+summary = "A Windows system module operation failed underneath the request."
+explanation_key = "error.agent_windows_sys.io"
+params = []
+remedy = "Retry once the underlying tool, store or filesystem is healthy; nothing was left half-done."
+since = "0.1.0"

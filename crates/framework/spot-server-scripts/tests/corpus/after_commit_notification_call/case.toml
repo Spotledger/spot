@@ -1,0 +1,8 @@
+kind = "doc_event"
+event = "after_commit"
+pattern = "after_commit calling a whitelisted method"
+[input.fields]
+title = "PO-3003"
+[expect]
+ok = true
+method_calls = 1

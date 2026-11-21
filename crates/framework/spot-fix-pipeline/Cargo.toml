@@ -1,0 +1,44 @@
+[package]
+name = "spot-fix-pipeline"
+description = "The fix pipeline for agent actions (WP-AI-08.T1, ADR-26, WS13): plan, rehearse on a snapshot, apply against pre-images or a snapshot, verify, roll back automatically with a residue check, a write-ahead change journal and an undo window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# The backend-independent test doubles (a fake world, pre-image store, snapshot, executor,
+# verifier, rehearsal and approval port) are public so integration tests and later tasks can
+# drive the pipeline without a database.
+testing = []
+
+[dependencies]
+# Agent identity, the T0 to T3 ladder and the human Approval a T3 fix carries.
+spot-agent-tiers = { path = "../spot-agent-tiers" }
+# The T1/T2 remedy dry-run (`Plan`), its metadata, risk and undo kind that a fix plan is
+# normalised from.
+spot-remedies = { path = "../spot-remedies" }
+# The rehearsal engine's `Fingerprint` and `InvariantReport`: the pre/post/rollback state and
+# the residue check are its fingerprint engine.
+spot-rehearsal = { path = "../spot-rehearsal" }
+# The AI audit chain's `AuditRecord`; every transition maps onto one valid record.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# T3 structural plans: a customisation bundle apply plan.
+spot-custom-bundle = { path = "../spot-custom-bundle" }
+# T3 structural plans: a release (migration) plan.
+spot-migration-plan = { path = "../spot-migration-plan" }
+# The plan, the journal and every artefact derive serde for a durable backend.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `fix_pipeline.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory doubles live behind the `testing` feature of this very crate.
+spot-fix-pipeline = { path = ".", features = ["testing"] }
+# Property tests: any injected failure ends either verified or byte-identical to the pre-state.
+proptest = "1"
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WP-IAM-10.T1: the identity administration screens' view-models and workflows (users,
+       roles and duties, scoped assignments with the separation-of-duties check, SSO and SCIM,
+       access review, emergency access, the four answerable questions). Presentation over an
+       IIdentityGateway; plain MVVM on the shell's ObservableObject. Secrets are shown once and
+       never kept. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spotledger.AdminCenter.Identity.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Shell/Spotledger.Client.Shell.csproj" />
+  </ItemGroup>
+</Project>

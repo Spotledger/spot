@@ -1,0 +1,37 @@
+[package]
+name = "spot-redact"
+description = "Secret and personal-data redaction for logs, errors, telemetry and support bundles (WP-PRD-08.T1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Base64 encodings of registered secrets for known-secret matching.
+base64 = "0.22"
+serde_json = "1"
+# Linear-time matching only: `regex` never backtracks catastrophically.
+regex = "1.13"
+serde = { version = "1", features = ["derive"] }
+# The registry digest: salted SHA-256 plus length, never the plaintext.
+sha2 = "0.10"
+# The `SecretString` the caller registers a known secret from.
+spot-secrets = { path = "../spot-secrets" }
+toml = "0.8"
+# Registered secrets are wiped when the redactor drops.
+zeroize = "1"
+# The redacting `MakeWriter` (feature `tracing`) is the only subscriber dependency.
+tracing-subscriber = { version = "0.3", optional = true, default-features = false, features = ["fmt"] }
+
+[dev-dependencies]
+# Property tests: idempotence, bounded growth, no panics on arbitrary bytes.
+proptest = "1"
+
+[features]
+default = []
+# The redacting log writer for `tracing-subscriber` (WP-PRD-08.T1 deliverable 5).
+tracing = ["dep:tracing-subscriber"]
+
+[lints]
+workspace = true

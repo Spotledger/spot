@@ -1,0 +1,46 @@
+# consumer_admission codes: the pre-work admission layer of spot-consumer-admission (WP-IAM-11.T14). The file name sets the prefix. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "consumer_admission.bad_destination"
+class = "none"
+summary = "The destination cannot be canonicalised: an empty value, a non-ASCII local part or domain, an e-mail without one @ and a dot-separated domain, or a phone without a leading + and 8 to 15 digits."
+explanation_key = "error.consumer_admission.bad_destination"
+params = []
+remedy = "Send the destination exactly as the person typed it (the service canonicalises it) and ask for a full e-mail address or a phone number in + country-code form."
+since = "0.1.0"
+
+[[entry]]
+code = "consumer_admission.unavailable"
+class = "none"
+summary = "The attempt could not be counted because the coordinator failed or the throttle salt is unavailable, so it is refused."
+explanation_key = "error.consumer_admission.unavailable"
+params = []
+remedy = "Check that the coordinator (database or Redis) and the secrets key provider are reachable and healthy, then try the attempt again; never treat this code as an allow."
+since = "0.1.0"
+
+[[entry]]
+code = "consumer_admission.rate_limited"
+class = "none"
+summary = "Too many attempts for this account, destination, source or tenant, or a second one-time code was asked for the same destination inside the resend cooldown."
+explanation_key = "error.consumer_admission.rate_limited"
+params = []
+remedy = "Wait for the time the response gives, then try again; a resend inside the cooldown always answers with the time that is left."
+since = "0.1.0"
+
+[[entry]]
+code = "consumer_admission.bad_policy"
+class = "none"
+summary = "The admission policy is unusable: a code cost of zero, a resend cooldown that is zero or longer than a day, or a cooldown armed without the coordinator it needs."
+explanation_key = "error.consumer_admission.bad_policy"
+params = []
+remedy = "Give a code request a cost of at least one unit, keep the resend cooldown between one millisecond and one day, and build the service with the coordinator when a cooldown is armed."
+since = "0.1.0"
+
+[[entry]]
+code = "consumer_admission.bad_request"
+class = "none"
+summary = "The attempt cannot be priced: a tenant that is not a plain id of 1 to 64 printable ASCII bytes without a colon, a blank or over-long account name, or a purpose missing the destination or account it counts."
+explanation_key = "error.consumer_admission.bad_request"
+params = []
+remedy = "Pass the plain tenant id, the account name as typed, and the destination every code request and registration needs."
+since = "0.1.0"

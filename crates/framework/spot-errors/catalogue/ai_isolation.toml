@@ -1,0 +1,82 @@
+# ai_isolation codes: the AI workload isolation gate of spot-ai-isolation (WP-AI-05.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "ai_isolation.busy"
+class = "none"
+summary = "AI admission is full at the named scope (node, agent or tenant), so the call was refused rather than queued without a bound."
+explanation_key = "error.ai_isolation.busy"
+params = []
+remedy = "Retry when an admitted call finishes, or raise the pool size or the concurrency limit for that scope."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.rate_limited"
+class = "none"
+summary = "The request rate for this agent or tenant is spent; the error carries how long until a retry may succeed."
+explanation_key = "error.ai_isolation.rate_limited"
+params = []
+remedy = "Wait for the retry delay, or lower the agent's call rate."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.deadline_exceeded"
+class = "none"
+summary = "A call's or a session's deadline had already passed, so the call was refused."
+explanation_key = "error.ai_isolation.deadline_exceeded"
+params = []
+remedy = "Start a new session, or give the session a longer deadline."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.circuit_open"
+class = "none"
+summary = "The circuit breaker for this agent or tenant is open, so the call failed at once instead of waiting on a struggling dependency."
+explanation_key = "error.ai_isolation.circuit_open"
+params = []
+remedy = "Wait for the breaker's next probe, and fix what made the calls fail."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.limit_exceeded"
+class = "none"
+summary = "A per-call bound was exceeded: the call asked for more rows or bytes than one AI call may carry."
+explanation_key = "error.ai_isolation.limit_exceeded"
+params = []
+remedy = "Ask for fewer rows or a smaller result, or page the request."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.cancelled"
+class = "none"
+summary = "The call was cancelled before it completed; its database statement was cancelled and its permit released."
+explanation_key = "error.ai_isolation.cancelled"
+params = []
+remedy = "Nothing: the caller asked for the cancellation."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.shed"
+class = "none"
+summary = "Interactive load is above the high threshold and AI admission has shrunk to zero, so the AI call was shed first to keep human traffic served."
+explanation_key = "error.ai_isolation.shed"
+params = []
+remedy = "Retry later, when interactive load has fallen and AI admission has recovered."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.invalid_argument"
+class = "none"
+summary = "An argument is outside its range: an empty or over-long identity, a zero pool size, a non-positive timeout, or a pool setting that does not fit."
+explanation_key = "error.ai_isolation.invalid_argument"
+params = []
+remedy = "Pass a valid identity and a positive pool setting."
+since = "0.1.0"
+
+[[entry]]
+code = "ai_isolation.coordinator_unavailable"
+class = "none"
+summary = "The cluster-wide coordinator could not be reached to take the AI request token, so the call was refused."
+explanation_key = "error.ai_isolation.coordinator_unavailable"
+params = []
+remedy = "Check the coordination store and try again; a failed call may be retried."
+since = "0.1.0"

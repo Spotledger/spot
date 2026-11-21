@@ -1,0 +1,23 @@
+[package]
+name = "spot-spatial-text"
+description = "The one cell-text form of geo points and ranges (WP-DOC-09.T7), exact and with no floating point, shared by the import engine and the CSV/NDJSON export so that export then import round-trips"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `GeoPoint`, `RangeValue`, `RangePoint` and `RangeOf`.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# Exact decimals (ADR-12): every number is parsed and printed as a `Decimal`.
+rust_decimal = "1"
+# Dates and instants, built from calendar fields by hand so the text form is exact and stable.
+time = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# Format then parse is the identity for generated points and ranges.
+proptest = "1"
+
+[lints]
+workspace = true

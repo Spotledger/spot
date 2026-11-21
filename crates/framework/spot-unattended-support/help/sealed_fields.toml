@@ -1,0 +1,65 @@
+# Help for the sealed_fields error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "sealed_fields.audit_unavailable"
+what_happened = "The reveal could not be audited, so nothing was released."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Restore the audit sink and reveal again.", "If it keeps happening, tell your administrator and quote the code sealed_fields.audit_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "sealed_fields.group_undeclared"
+what_happened = "The service asked for a group of protected fields it has not been declared for."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Declare the group the service reads in its manifest.", "If it keeps happening, tell your administrator and quote the code sealed_fields.group_undeclared."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields.home_only"
+what_happened = "This group of protected fields is not copied to branches, so it cannot be read here."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["View the field at the hub, or ask the tenant to change the group's sync class.", "If it keeps happening, tell your administrator and quote the code sealed_fields.home_only."]
+audience = "admin"
+
+[[help]]
+code = "sealed_fields.hub_unavailable"
+what_happened = "The hub did not answer, so the operation could not be completed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Check the node's connection to the hub and try again.", "If it keeps happening, tell your administrator and quote the code sealed_fields.hub_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "sealed_fields.node_revoked"
+what_happened = "This branch has been revoked, so it can hold no key and show no protected value."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Register a new node identity; a revoked node is never reinstated.", "If it keeps happening, tell your administrator and quote the code sealed_fields.node_revoked."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields.reveal_bulk_denied"
+what_happened = "Bulk reveal is for service principals only."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Reveal one document at a time, or declare the group in a service manifest.", "If it keeps happening, tell your administrator and quote the code sealed_fields.reveal_bulk_denied."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields.reveal_denied"
+what_happened = "The field cannot be revealed for this principal and document."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Ask for the reveal right on the field's protection group.", "If it keeps happening, tell your administrator and quote the code sealed_fields.reveal_denied."]
+audience = "user"
+
+[[help]]
+code = "sealed_fields.reveal_offline"
+what_happened = "Reveal needs a live connection to the hub and this node is offline."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Reconnect to the hub and reveal again; the masked form works offline.", "If it keeps happening, tell your administrator and quote the code sealed_fields.reveal_offline."]
+audience = "admin"
+
+[[help]]
+code = "sealed_fields.sealed_unreadable"
+what_happened = "This protected field was written on this machine and can only be read at the hub."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Read the value at the hub, where the sealing key is held.", "If it keeps happening, tell your administrator and quote the code sealed_fields.sealed_unreadable."]
+audience = "user"

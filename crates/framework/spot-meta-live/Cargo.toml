@@ -1,0 +1,49 @@
+[package]
+name = "spot-meta-live"
+description = "Versioned, hot-swappable metadata snapshots (WP-MET-03.T1): the atomic `LiveMeta` holder, the `InvalidationBus` with in-process and database-polling backends, and the cross-node `Follower`"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# The database-backed `VersionStore`: the storage contract's document ops on one reserved
+# `meta_version` record. The default build needs no storage at all; WP-PLT-19 builds the
+# optional Redis backend on the same `VersionStore` trait.
+storage = ["dep:spot-storage-contract"]
+
+[dependencies]
+# `SiteId` and `Clock` — the only ways this crate names a tenant and reads time.
+spot-core = { path = "../spot-core" }
+# The effective metadata (`EffectiveMeta`, `Definition`, `Customisations`) the snapshots hold.
+spot-meta = { path = "../spot-meta" }
+# The compiled plans (`PlanSet`, `DocPlan`) a snapshot carries alongside the metadata.
+spot-plan = { path = "../spot-plan" }
+# The lock-free pointer readers take: a request holding an `Arc<Snapshot>` never blocks on a swap.
+arc-swap = "1"
+# The `Stream` a bus subscription is: the host drives it, the crate spawns nothing.
+futures-core = "0.3"
+# SHA-256 of a snapshot's canonical form (the content hash two nodes compare).
+sha2 = "0.10"
+# Canonical serialisation of the definitions the content hash is taken over.
+serde_json = "1"
+# Typed errors with stable `metalive.*` codes.
+thiserror = "2"
+# The broadcast fan-out of the in-process bus.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# `storage`-gated: the document ops of the reserved version record.
+spot-storage-contract = { path = "../../../contracts/storage", optional = true }
+
+[dev-dependencies]
+# The apply/adopt sequence property test of WP-MET-03.T3.
+proptest = "1"
+# `ManualClock::new` takes a wall-clock start; the tests never sleep or read the system clock.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# `#[tokio::test]`, the multi-thread runtime the 64-reader race runs on, and the broadcast
+# channel the bus tests drive.
+tokio = { version = "1", default-features = false, features = ["sync", "macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

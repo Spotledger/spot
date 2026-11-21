@@ -1,0 +1,23 @@
+# Help for the agent_memory_pg error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "agent_memory_pg.migration_failed"
+what_happened = "The agent memory tables, or the vector extension they need, could not be created in the tenant's memory database."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the memory role owns its database and may create tables there and that the server is reachable, then run prepare again.", "If it keeps happening, tell your administrator and quote the code agent_memory_pg.migration_failed."]
+audience = "operator"
+
+[[help]]
+code = "agent_memory_pg.extension_missing"
+what_happened = "The database server has no vector extension, so a memory database cannot be prepared on it."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Install the pgvector extension on the server, then provision the memory database again.", "If it keeps happening, tell your administrator and quote the code agent_memory_pg.extension_missing."]
+audience = "operator"
+
+[[help]]
+code = "agent_memory_pg.provision_failed"
+what_happened = "The tenant's memory database could not be provisioned at one of its steps."
+why = "The system hit a problem of its own that you could not have prevented."
+what_to_do = ["Check that the control-plane role may create databases and roles on the server, then provision the tenant again. Provisioning resumes where it stopped.", "If it keeps happening, tell your administrator and quote the code agent_memory_pg.provision_failed."]
+audience = "operator"

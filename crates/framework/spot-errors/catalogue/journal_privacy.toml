@@ -1,0 +1,64 @@
+# journal_privacy codes: personal-field protection and erasure hosted (WP-RTB-01.T8, ADR-061 s3 and s6): the personal-field declarations, the protect step of the journal shipper and erase_subject. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "journal_privacy.subject_missing"
+class = "none"
+summary = "A personal field is declared without the field that identifies its data subject, so it could not be sealed and would reach the journal in clear; the declaration set is refused."
+explanation_key = "error.journal_privacy.subject_missing"
+params = []
+remedy = "Add `subject = \"<field>\"` (a record-level value such as the owner or person id) to the declaration of the field named in the error."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.declaration_invalid"
+class = "none"
+summary = "A personal-field declaration cannot be built: a path or subject path does not parse, or the purpose or retention class is empty."
+explanation_key = "error.journal_privacy.declaration_invalid"
+params = []
+remedy = "Correct the declaration of the entity and field named in the error."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.protection_missing"
+class = "none"
+summary = "Personal fields are declared but nothing can protect them (no key provider, or the wrapped-key table is missing), so the journal shipper refuses every line instead of writing a personal value in clear."
+explanation_key = "error.journal_privacy.protection_missing"
+params = []
+remedy = "Configure [services.secrets] for the site and run `spot migrate` so the wrapped-key table exists; the shipper resumes by itself."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.permission_denied"
+class = "none"
+summary = "The requester does not hold the permission to erase a data subject (journal.erase_subject); nothing was destroyed and the refusal is recorded."
+explanation_key = "error.journal_privacy.permission_denied"
+params = []
+remedy = "Ask a user who holds the data-protection role to perform the erasure."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.retention_forbids"
+class = "none"
+summary = "Every personal field of the subject is held under a retention class that forbids erasing it, so nothing was erased; the entity and field are named, never a value."
+explanation_key = "error.journal_privacy.retention_forbids"
+params = []
+remedy = "Wait until the retention period of the class ends, or change the policy through the data-policy process; do not delete journal data by hand."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.subject_invalid"
+class = "none"
+summary = "The data-subject id is empty."
+explanation_key = "error.journal_privacy.subject_invalid"
+params = []
+remedy = "Pass the subject's id."
+since = "0.1.0"
+
+[[entry]]
+code = "journal_privacy.key_store"
+class = "none"
+summary = "The subject key store or the audit sink failed, so nothing is claimed as erased."
+explanation_key = "error.journal_privacy.key_store"
+params = []
+remedy = "Check the database and the key provider, then repeat the erasure: it is idempotent."
+since = "0.1.0"

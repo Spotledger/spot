@@ -1,0 +1,48 @@
+# bpm_governance codes (WP-BPM-08.T1): the pre-create guard for process-first operation, its
+# audit of every exception and refusal, and the policy settings it reads. One [[entry]] per code;
+# see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "bpm_governance.outside_process_denied"
+class = "Validation"
+summary = "A governed record type was created outside its running request, with neither a valid request context nor the outside-process permission and a reason."
+explanation_key = "error.bpm_governance.outside_process_denied"
+params = []
+remedy = "Start the process that creates the record type, or hold the outside-process permission and supply a reason."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_governance.reason_required"
+class = "Validation"
+summary = "The outside-process permission was held, but the reason was blank or shorter than the configured floor."
+explanation_key = "error.bpm_governance.reason_required"
+params = []
+remedy = "Supply a non-blank reason of at least the configured length, or create the record inside its process."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_governance.policy_invalid"
+class = "Validation"
+summary = "A stored governance policy names an unknown mode, or an entry that is not `doctype=mode`."
+explanation_key = "error.bpm_governance.policy_invalid"
+params = []
+remedy = "Correct the `bpm.governance.policy` setting so every entry is `doctype=mode`, with mode `free`, `governed` or `process_only`."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_governance.settings"
+class = "Internal"
+summary = "A governance setting could not be read, or the governance settings registry could not be built."
+explanation_key = "error.bpm_governance.settings"
+params = []
+remedy = "Check the settings store and that the governance settings are registered, then retry the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_governance.audit"
+class = "Unavailable"
+summary = "The governance audit entry could not be written, so the operation failed closed and nothing was changed."
+explanation_key = "error.bpm_governance.audit"
+params = []
+remedy = "Check the outbox and the database connection, then retry the operation with the same command id."
+since = "0.1.0"

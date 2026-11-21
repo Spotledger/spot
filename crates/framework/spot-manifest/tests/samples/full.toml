@@ -1,0 +1,103 @@
+# Exercises every manifest category. `tests/manifest.rs::full_sample` parses it and
+# checks the typed values, `step_decls()` and `overrides()`.
+[app]
+name = "erp_selling"
+version = "0.3.1"
+title = "Selling"
+requires_host = ">=0.1, <0.2"
+depends = [{ app = "spot_foundation", version = "^0.2" }]
+
+[[events]]
+doctype = "Sales Invoice"
+event = "validate_save"
+step = "erp_selling:check_credit_limit"
+priority = 500
+budget_ms = 200
+
+[[events]]
+doctype = "Sales Invoice"
+event = "post_committed"
+step = "erp_selling:notify_whatsapp"
+budget_ms = 400
+
+[[events]]
+doctype = "Customer"
+event = "field_changed:credit_limit"
+step = "erp_selling:recheck_limit"
+
+[[session_events]]
+event = "login"
+step = "erp_selling:warm_price_cache"
+budget_ms = 100
+
+[[boot]]
+step = "erp_selling:boot_defaults"
+
+[[schedules]]
+name = "reprice_open_orders"
+cron = "0 */15 * * * *"
+step = "erp_selling:reprice_open_orders"
+queue = "long"
+budget_ms = 600000
+
+[[schedules]]
+name = "nightly_digest"
+cron = "0 0 2 * * *"
+step = "erp_selling:nightly_digest"
+
+[[overrides]]
+target = "erp_accounts:post_gl"
+kind = "wrap"
+by = "erp_selling:post_gl_with_commission"
+reason = "Commission accrual on posting"
+
+[[overrides]]
+target = "erp_accounts:legacy_report"
+kind = "disable"
+reason = "Replaced by erp_selling:commission_report"
+
+[[seams]]
+provide = { name = "tax.calculate", version = 1 }
+
+[[seams]]
+replace = { name = "erp_accounts:report_render", version = 2, reason = "Commission rows" }
+
+[[methods]]
+doctype = "Sales Invoice"
+name = "make_payment"
+mutates = true
+
+[[functions]]
+module = "pricing"
+name = "quote_price"
+http = ["GET", "POST"]
+guest = false
+
+[[fixtures]]
+doctype = "Role"
+file = "fixtures/roles.json"
+
+[[patches]]
+id = "2026_09_rename_price_list_field"
+file = "patches/2026_09_rename_price_list_field.toml"
+intent = "data"
+reversible = false
+idempotent = true
+
+[[patches]]
+id = "2026_10_add_commission_column"
+file = "patches/2026_10_add_commission_column.toml"
+intent = "schema"
+
+[[routes]]
+path = "/portal/orders"
+step = "erp_selling:portal_orders"
+
+[[assets]]
+path = "assets/selling.css"
+
+[capabilities]
+network = ["api.fbr.gov.pk:443"]
+email = true
+files = "read_write"
+doctypes = { read = ["Customer"], write = ["Sales Invoice"] }

@@ -1,0 +1,166 @@
+# bpm_integration codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The integration nodes of the Business Process engine (spot-bpm-integration, WP-BPM-06.T1).
+# All are `class = "none"`: these never ride an AppError, the engine turns them into a
+# `NodeOutcome::Fail` (the error branch) or a `NodeOutcome::Retry`.
+
+[[entry]]
+code = "bpm_integration.config_invalid"
+class = "none"
+summary = "Node `{node}` has an invalid integration config: {detail}."
+explanation_key = "error.bpm_integration.config_invalid"
+params = ["detail", "node"]
+remedy = "Fix the node's config to the shape its kind needs."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.url_invalid"
+class = "none"
+summary = "The URL is invalid: {detail}."
+explanation_key = "error.bpm_integration.url_invalid"
+params = ["detail"]
+remedy = "Use an absolute http or https URL."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.credential_host_mismatch"
+class = "none"
+summary = "Node `{node}` refused to send its credential to a host its configuration does not name."
+explanation_key = "error.bpm_integration.credential_host_mismatch"
+params = ["node"]
+remedy = "Write the host in the node's `url`, or list it in `allowed_hosts`; a host taken from Case data is never trusted with a credential."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.template_invalid"
+class = "none"
+summary = "A template placeholder is invalid: {detail}."
+explanation_key = "error.bpm_integration.template_invalid"
+params = ["detail"]
+remedy = "Fix the placeholder to name a path the node's context provides."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.mapping_invalid"
+class = "none"
+summary = "The mapping target `{target}` is invalid: {detail}."
+explanation_key = "error.bpm_integration.mapping_invalid"
+params = ["detail", "target"]
+remedy = "Fix the target or its expression against the shared expression language."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.mapping_evaluate"
+class = "none"
+summary = "The mapping target `{target}` could not be evaluated: {detail}."
+explanation_key = "error.bpm_integration.mapping_evaluate"
+params = ["detail", "target"]
+remedy = "Check that the expression's fields exist at run time and divide by no zero."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.credential_missing"
+class = "none"
+summary = "No credential is stored under `{reference}`."
+explanation_key = "error.bpm_integration.credential_missing"
+params = ["reference"]
+remedy = "Store the credential in the vault, or fix the reference the node names."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.secret_resolve_failed"
+class = "none"
+summary = "The credential `{reference}` could not be resolved: {detail}."
+explanation_key = "error.bpm_integration.secret_resolve_failed"
+params = ["detail", "reference"]
+remedy = "Re-seal the credential under its associated data, or check the vault key."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.egress_denied"
+class = "none"
+summary = "The egress policy denied the call: {code}."
+explanation_key = "error.bpm_integration.egress_denied"
+params = ["code"]
+remedy = "Add the destination to the tenant's egress allow list, or stop calling it."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.transport_failed"
+class = "none"
+summary = "The call failed: {detail}."
+explanation_key = "error.bpm_integration.transport_failed"
+params = ["detail"]
+remedy = "Retry within the node's policy, or fix the endpoint the node calls."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.timeout"
+class = "none"
+summary = "The call timed out after {seconds} seconds."
+explanation_key = "error.bpm_integration.timeout"
+params = ["seconds"]
+remedy = "Raise the node's timeout, or make the endpoint answer sooner."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.http_status"
+class = "none"
+summary = "The endpoint answered with status {status}."
+explanation_key = "error.bpm_integration.http_status"
+params = ["status"]
+remedy = "Give the node a status rule for this code, or fix the endpoint's answer."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.mail_transient"
+class = "none"
+summary = "The mail transport failed transiently: {detail}."
+explanation_key = "error.bpm_integration.mail_transient"
+params = ["detail"]
+remedy = "Retry within the node's policy once the mail server is reachable."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.mail_permanent"
+class = "none"
+summary = "The mail transport failed permanently: {detail}."
+explanation_key = "error.bpm_integration.mail_permanent"
+params = ["detail"]
+remedy = "Fix the message, the address or the SMTP credential."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.webhook_failed"
+class = "none"
+summary = "The webhook delivery failed: {detail}."
+explanation_key = "error.bpm_integration.webhook_failed"
+params = ["detail"]
+remedy = "Check the endpoint and the signing credential, then retry within policy."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.connector_failed"
+class = "none"
+summary = "The connector `{connector}` failed: {detail}."
+explanation_key = "error.bpm_integration.connector_failed"
+params = ["connector", "detail"]
+remedy = "Check the connector's operation and its input, then retry within policy."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.script_failed"
+class = "none"
+summary = "The code node `{node}` failed: {code}."
+explanation_key = "error.bpm_integration.script_failed"
+params = ["code", "node"]
+remedy = "Fix the script the code node runs."
+since = "0.1.0"
+
+[[entry]]
+code = "bpm_integration.script_limit"
+class = "none"
+summary = "The code node `{node}` hit a limit: {detail}."
+explanation_key = "error.bpm_integration.script_limit"
+params = ["detail", "node"]
+remedy = "Raise the node's script limits, or make the script finish within them."
+since = "0.1.0"

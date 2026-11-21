@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Spotledger.Client.Designer.Views.LinkPickerDialog">
+  <!-- The link picker: search the site's DocTypes and choose the one the link field points at.
+       The results come from the server, so a link can only target a DocType that exists. -->
+  <Border Background="#88000000" IsVisible="{Binding LinkPicker.IsOpen}">
+    <Border MaxWidth="480" Margin="24" Padding="16" CornerRadius="6"
+            Background="{DynamicResource Color.Surface.Raised}"
+            BorderBrush="{DynamicResource Color.Border.Strong}"
+            BorderThickness="1">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding LinkPicker.Prompt}"
+                   FontSize="{DynamicResource Font.Size.Heading}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Color.Text.Primary}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Text="{Binding LinkPicker.Query, Mode=TwoWay}" PlaceholderText="Search DocTypes" />
+          <Button Grid.Column="1" Content="Search" Margin="4,0,0,0" Command="{Binding LinkPicker.SearchCommand}" />
+        </Grid>
+        <TextBlock Text="The field's label" FontSize="{DynamicResource Font.Size.Caption}" Foreground="{DynamicResource Color.Text.Secondary}" />
+        <TextBox Text="{Binding LinkPicker.FieldLabel, Mode=TwoWay}" />
+        <ListBox ItemsSource="{Binding LinkPicker.Results}"
+                 MaxHeight="220"
+                 SelectedItem="{Binding LinkPicker.Selected, Mode=TwoWay}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+          <Button Content="Cancel" Command="{Binding LinkPicker.CancelCommand}" />
+          <Button Content="Choose" Command="{Binding LinkPicker.ChooseCommand}" CommandParameter="{Binding LinkPicker.Selected}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Border>
+</UserControl>

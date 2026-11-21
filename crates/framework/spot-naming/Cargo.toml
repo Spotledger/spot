@@ -1,0 +1,33 @@
+[package]
+name = "spot-naming"
+description = "Document naming (WP-DOC-05): generate a record name from the compiled naming plan (series, field:, hash, prompt), derive the series key, and allocate gapless numbers from the storage transaction's Sequences"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The compiled naming plan (`NamingPlan`, `NamingPart`): the pattern is parsed once, never here.
+spot-plan = { path = "../spot-plan" }
+# The `Document` handle the name is generated for, and the prelude value types.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `Sequences`, `SeriesKey`, `Transaction` and the typed storage errors.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `SiteId`: which tenant a name belongs to.
+spot-core = { path = "../spot-core" }
+# Instants, calendar dates and UTC offsets for the date parts of a name.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+# Typed `naming.*` errors, with one entry per code in `spot-errors`'s catalogue.
+thiserror = "2"
+
+[dev-dependencies]
+# The in-memory backend the allocation tests run on.
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+# The PostgreSQL backend and its per-test scratch-database harness: the L7 gapless load test.
+spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
+# The async tests run on a Tokio runtime.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

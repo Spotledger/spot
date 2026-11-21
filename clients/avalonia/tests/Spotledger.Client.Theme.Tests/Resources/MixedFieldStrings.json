@@ -1,0 +1,25 @@
+{
+  "$comment": "The daily mixed-field cases: Urdu label or name with a Latin code, a number, a date or a phone. Used by the bidi tests and by the font-coverage boundary test, never by the pure-Urdu no-tofu check.",
+  "strings": [
+    { "id": "mixed.mixed-invoice", "category": "mixed", "text": "رسید نمبر INV-2026-0042 مورخہ 2026-10-28 کو جاری ہوئی" },
+    { "id": "mixed.mixed-item", "category": "mixed", "text": "شے SKU-1234-A کی مقدار 12 درجن ہے" },
+    { "id": "mixed.mixed-iban", "category": "mixed", "text": "بینک اکاؤنٹ PK36SCBL0000001123456702 میں رقم منتقل کریں" },
+    { "id": "mixed.mixed-phone", "category": "mixed", "text": "گاہک کا فون +92 300 1234567 ہے" },
+    { "id": "mixed.mixed-amount", "category": "mixed", "text": "کل رقم 1,234.50 روپے واجب الادا ہے" },
+    { "id": "mixed.mixed-branch", "category": "mixed", "text": "برانچ BR-07 سے آرڈر SO-9941 موصول ہوا" },
+    { "id": "mixed.mixed-code", "category": "mixed", "text": "کوڈ ACC-4409 کے تحت ادائیگی درج کریں" },
+    { "id": "mixed.mixed-mixed", "category": "mixed", "text": "احمد رضا (SKU-77) نے 45 یونٹ آرڈر کیے" },
+    { "id": "mixed.mixed-date", "category": "mixed", "text": "تاریخ 2026-01-15 سے 2026-03-31 تک کی رپورٹ" },
+    { "id": "mixed.mixed-email", "category": "mixed", "text": "رابطہ: accounts@example.com پر کریں" },
+    { "id": "mixed.mixed-ref", "category": "mixed", "text": "حوالہ نمبر PO-2026-1188 کا بل وصول ہوا" },
+    { "id": "mixed.mixed-qty", "category": "mixed", "text": "مقدار 250 کلوگرام، شرح 18.75 روپے فی کلو" },
+    { "id": "mixed.mixed-rate", "category": "mixed", "text": "شرح 9,875.25 اور رعایت 2.5 فیصد" },
+    { "id": "mixed.mixed-cheque", "category": "mixed", "text": "چیک نمبر 004512 بینک سے کلیئر ہوا" },
+    { "id": "mixed.mixed-plate", "category": "mixed", "text": "گاڑی LEB-4471 سے مال لدا گیا" },
+    { "id": "mixed.mixed-percent", "category": "mixed", "text": "کل منافع 12.75 فیصد رہا" },
+    { "id": "mixed.mixed-unit", "category": "mixed", "text": "درجن میں 144 عدد ہوتے ہیں" },
+    { "id": "mixed.mixed-warehouse", "category": "mixed", "text": "گودام WH-02 میں 320 بوریاں موجود ہیں" },
+    { "id": "mixed.mixed-ledger", "category": "mixed", "text": "کھاتہ 1001-002 کا بقایا 58,400.00 ہے" },
+    { "id": "mixed.mixed-note", "category": "mixed", "text": "نوٹ: آرڈر 48 گھنٹے میں تیار ہوگا" }
+  ]
+}

@@ -1,0 +1,67 @@
+# sync_node_pg codes: the edge's durable PostgreSQL receiving state (WP-RTB-02.T2). One [[entry]]
+# per code; see crates/framework/spot-errors/README.md.
+#
+# No message carries SQL, a record image, a payload or a row value.
+
+[[entry]]
+code = "sync_node_pg.prepare_failed"
+class = "none"
+summary = "The node's receiving tables could not be created in the database."
+explanation_key = "error.sync_node_pg.prepare_failed"
+params = []
+remedy = "Check that the database user may create tables and indexes and that the server is reachable, then retry prepare."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.unsupported_context"
+class = "none"
+summary = "The node store cannot be built here."
+explanation_key = "error.sync_node_pg.unsupported_context"
+params = []
+remedy = "Build the node store on a plain thread, with a bridge no wider than its pool, and a valid tenant name."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.tables_missing"
+class = "none"
+summary = "A table the node needs is missing, so the node does not receive."
+explanation_key = "error.sync_node_pg.tables_missing"
+params = []
+remedy = "Run the migrator or prepare so that every node table exists, then start the node again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.state_invalid"
+class = "none"
+summary = "Stored node state cannot be read back, so none of it is used."
+explanation_key = "error.sync_node_pg.state_invalid"
+params = []
+remedy = "The stored hold set, horizons or row is damaged or over its bound; restore it from a backup or clear it and let the hub redeliver."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.checkpoint_ahead"
+class = "none"
+summary = "A checkpoint above what the applied ledger holds was refused."
+explanation_key = "error.sync_node_pg.checkpoint_ahead"
+params = []
+remedy = "Store the checkpoint only after the records up to it are applied; the apply path does this in its own transaction."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.apply_refused"
+class = "none"
+summary = "A bundle was refused and nothing of it was stored."
+explanation_key = "error.sync_node_pg.apply_refused"
+params = []
+remedy = "Read the replica_apply reason code in the message: an ownership or shape refusal is held in quarantine, a storage failure is retried when the hub redelivers the bundle."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node_pg.store_failed"
+class = "none"
+summary = "The node store could not complete the call."
+explanation_key = "error.sync_node_pg.store_failed"
+params = []
+remedy = "Check the database and the bridge (the message carries the pg_bridge code); the call is safe to retry."
+since = "0.1.0"

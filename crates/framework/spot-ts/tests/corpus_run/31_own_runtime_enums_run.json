@@ -1,0 +1,16 @@
+{
+  "case": "own_runtime",
+  "entry": "enums_run",
+  "args": null,
+  "expect": {
+    "s": "down",
+    "n": 1,
+    "c": 10,
+    "reverse": "B",
+    "inline": 8,
+    "names": [
+      "Up",
+      "Down"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Help for the auth error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "auth.password_policy"
+what_happened = "The new password breaks the password policy; the violated rules are listed."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Choose a password that meets every listed rule.", "If it keeps happening, tell your administrator and quote the code auth.password_policy."]
+audience = "user"
+
+[[help]]
+code = "auth.session_not_found"
+what_happened = "No session with this id exists for you; it is unknown, already ended or not yours."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["List your sessions again and pick one from the list.", "If it keeps happening, tell your administrator and quote the code auth.session_not_found."]
+audience = "user"

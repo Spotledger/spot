@@ -1,0 +1,75 @@
+# AWS access key ids: one of the ten four-letter prefixes plus sixteen [A-Z0-9]
+# characters, anchored on word boundaries (a bare key id in free text, no key name).
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'AKIAIOSFODNN7EXAMPLE'
+expected = '[redacted:aws_key_id]'
+class = 'aws_key_id'
+
+[[case]]
+input = 'upload failed for ASIAIOSFODNN7EXAMPLE'
+expected = 'upload failed for [redacted:aws_key_id]'
+class = 'aws_key_id'
+
+# Every documented prefix: IAM users, STS sessions, permission sets and the rest.
+[[case]]
+input = '''AGPAIOSFODNN7EXAMPLE
+AIDAIOSFODNN7EXAMPLE
+AROAIOSFODNN7EXAMPLE
+AIPAIOSFODNN7EXAMPLE
+ANPAIOSFODNN7EXAMPLE
+ANVAIOSFODNN7EXAMPLE
+ABIAIOSFODNN7EXAMPLE
+ACCAIOSFODNN7EXAMPLE'''
+expected = '''[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]
+[redacted:aws_key_id]'''
+class = 'aws_key_id'
+
+# A key named in the line still redacts to the kind, not to the key name.
+[[case]]
+input = 'token=AKIAIOSFODNN7EXAMPLE logged'
+expected = 'token=[redacted:aws_key_id] logged'
+class = 'aws_key_id'
+
+# Punctuation is not eaten: only the key id itself becomes the marker.
+[[case]]
+input = '(AKIAIOSFODNN7EXAMPLE), retry'
+expected = '([redacted:aws_key_id]), retry'
+class = 'aws_key_id'
+
+# Sixteen upper-case letters or digits, nothing else.
+[[case]]
+input = 'AKIA1234567890123456'
+expected = '[redacted:aws_key_id]'
+class = 'aws_key_id'
+
+# A longer run of key-id characters is refused outright: no partial redaction.
+[[case]]
+input = 'AKIAIOSFODNN7EXAMPLEX'
+expected = 'AKIAIOSFODNN7EXAMPLEX'
+class = 'aws_key_id'
+
+# No word boundary on the left: part of a longer identifier.
+[[case]]
+input = 'ref xAKIAIOSFODNN7EXAMPLE'
+expected = 'ref xAKIAIOSFODNN7EXAMPLE'
+class = 'aws_key_id'
+
+# Lower-case is not the AWS alphabet.
+[[case]]
+input = 'AKIAiosfodnn7example'
+expected = 'AKIAiosfodnn7example'
+class = 'aws_key_id'
+
+# Under two minutes of noise: an id inside a JSON string still redacts.
+[[case]]
+input = '{"aws_access_key_id": "AKIAIOSFODNN7EXAMPLE", "region": "eu-west-1"}'
+expected = '{"aws_access_key_id": "[redacted:aws_key_id]", "region": "eu-west-1"}'
+class = 'aws_key_id'

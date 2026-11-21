@@ -1,0 +1,113 @@
+# perm codes: loading the permission model of spot-permissions (WP-PLT-03). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "perm.parse_failed"
+class = "none"
+summary = "A permission model document is not valid TOML or has the wrong shape."
+explanation_key = "error.perm.parse_failed"
+params = []
+remedy = "Fix the syntax or the key named in the error; a key the model does not know is an error."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.unknown_field"
+class = "none"
+summary = "A permission model document uses a key the model does not accept."
+explanation_key = "error.perm.unknown_field"
+params = []
+remedy = "Remove or correct the unknown key."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.missing"
+class = "none"
+summary = "A permission model entry lacks a required value, or holds an empty set where one is not allowed."
+explanation_key = "error.perm.missing"
+params = []
+remedy = "Give the entry the missing value."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.value_invalid"
+class = "none"
+summary = "A permission model value has the wrong shape, such as a record id that is not canonical."
+explanation_key = "error.perm.value_invalid"
+params = []
+remedy = "Correct the value to the documented form."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.inconsistent"
+class = "none"
+summary = "The permission model contradicts itself or the metadata, for example a duplicate grant or an unknown DocType."
+explanation_key = "error.perm.inconsistent"
+params = []
+remedy = "Remove the duplicate or fix the name the entry refers to."
+since = "0.1.0"
+
+# WP-PLT-03.T3 (named app permissions). The brief asked these codes to start at `since = "0.2.0"`;
+# they carry the workspace version instead, because `spot-errors`'s `since_is_the_workspace_version`
+# test requires every entry to seed at 0.1.0 until the workspace itself moves to 0.2.0.
+
+[[entry]]
+code = "perm.app_permission_duplicate"
+class = "none"
+summary = "Two installed apps declare an app permission with the same name."
+explanation_key = "error.perm.app_permission_duplicate"
+params = []
+remedy = "Rename one app's permission (prefix it with the app's name) and install again; permission names are one flat namespace per site."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app_permission_invalid_name"
+class = "none"
+summary = "An app permission name is not valid: it must be 1 to 64 bytes of lowercase letters, digits and underscore, starting with a letter."
+explanation_key = "error.perm.app_permission_invalid_name"
+params = []
+remedy = "Correct the name to the documented form; names are exact and case-sensitive."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app.system"
+class = "none"
+summary = "An app permission was allowed because the platform itself is acting."
+explanation_key = "error.perm.app.system"
+params = []
+remedy = "None needed; this is the platform acting as itself."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app.granted"
+class = "none"
+summary = "An app permission was allowed because a role the user is assigned holds it."
+explanation_key = "error.perm.app.granted"
+params = []
+remedy = "None needed; the reason names the assignment and role."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app.not_granted"
+class = "none"
+summary = "An app permission was denied because none of the user's assigned roles holds it."
+explanation_key = "error.perm.app.not_granted"
+params = []
+remedy = "Grant the permission to a role the user is assigned, through the role editor."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app.unknown"
+class = "none"
+summary = "An app permission was denied because no installed app declares it."
+explanation_key = "error.perm.app.unknown"
+params = []
+remedy = "Install the app that declares the permission, or correct the name the method requires."
+since = "0.1.0"
+
+[[entry]]
+code = "perm.app.invalid_name"
+class = "none"
+summary = "An app permission was denied because the requested name is not a valid permission name."
+explanation_key = "error.perm.app.invalid_name"
+params = []
+remedy = "Correct the permission name the method declares."
+since = "0.1.0"

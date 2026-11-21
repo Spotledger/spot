@@ -1,0 +1,31 @@
+[package]
+name = "spot-links"
+description = "The engine's link logic (WP-DOC-06.T1): link validation on every write (target exists, right DocType, dynamic-link type allowed, not cancelled where forbidden), the where-used query, and delete/cancel refusals that list the referencing documents instead of a bare reference violation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Document`, `DocTypeDef`, `FieldKind`, `AppError`/`FieldPath` and the prelude query IR.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The effective metadata: the DocTypes, their fields and the graph they derive.
+spot-meta = { path = "../spot-meta" }
+# The graph model derived from Link fields: where-used reuses its incoming reference edges.
+spot-graph-model = { path = "../spot-graph-model" }
+# The query IR and rows the batched existence and where-used queries run.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# The grouped referrers the typed errors carry in their details.
+serde_json = "1"
+
+[dev-dependencies]
+# The real engine over the in-memory backend: the tests drive documents through it.
+spot-document = { path = "../spot-document" }
+spot-storage-fake = { path = "../../backends/spot-storage-fake" }
+spot-seams = { path = "../spot-seams" }
+spot-core = { path = "../spot-core" }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

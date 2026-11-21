@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xunit v3 test projects are executables. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Avalonia.Headless.XUnit 12 brings xunit v3; do not also reference xunit 2. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- probes/ holds a separate project built into this folder. Its sources and its bin/obj are not
+         part of this assembly: the default glob would compile HostileComponent.cs twice over and
+         pull in the child's generated assembly attributes. -->
+    <Compile Remove="probes/**/*.cs" />
+    <None Remove="probes/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Spotledger.Component.Host/Spotledger.Component.Host.csproj" />
+    <ProjectReference Include="../../src/Spotledger.Component.Contract/Spotledger.Component.Contract.csproj" />
+    <!-- The sample package the tests build, sign and load: its compiled DLL is the payload. -->
+    <ProjectReference Include="../../samples/Acme.RatingComponent/Acme.RatingComponent.csproj" />
+    <!-- A probe that references application-private code: built, never referenced, so the only way
+         its assembly can enter the process is the loader. -->
+    <ProjectReference Include="probes/HostileProbe/HostileProbe.csproj" ReferenceOutputAssembly="false" />
+    <!-- The process that measures the collectible-context teardown: built here, run by a test. -->
+    <ProjectReference Include="probes/UnloadProbe/UnloadProbe.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The Rust-generated cross-language vectors. -->
+    <None Include="Vectors/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CopyHostileProbe" AfterTargets="Build">
+    <!-- The confinement test reads the probe's bytes from this folder. -->
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/probes/HostileProbe/bin/$(Configuration)/net10.0/HostileProbe.dll"
+          DestinationFolder="$(OutDir)probes"
+          Condition="Exists('$(MSBuildProjectDirectory)/probes/HostileProbe/bin/$(Configuration)/net10.0/HostileProbe.dll')" />
+  </Target>
+</Project>

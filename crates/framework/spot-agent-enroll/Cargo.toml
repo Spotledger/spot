@@ -1,0 +1,43 @@
+[package]
+name = "spot-agent-enroll"
+description = "Spotledger host agent identity and enrolment (blueprint WS22, WP-ADM-02.T1): Ed25519 identity keys (software file store, hardware-backed extension point), one-time enrolment tokens with checksum groups, the three-message challenge-response enrolment exchange with server pinning, and the persisted agent identity — protocol logic and key handling only, with no sockets and no inbound port"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The one cryptographic dependency (pre-approved, same as spot-license): Ed25519
+# signatures. `std` only, no RNG features — key material is filled here from the
+# OS CSPRNG by hand, exactly as spot-auth fills its secret bytes.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Secret bytes (key seeds, nonces, token bits, agent ids) come from the OS CSPRNG.
+rand = { version = "0.9", features = ["os_rng"] }
+# SHA-256 for token digests at rest, server-key fingerprints and the transcript's
+# token-hash prefix.
+sha2 = "0.10"
+# Constant-time comparison of stored token digests at lookup.
+subtle = "2"
+# Secret material is wiped on drop.
+zeroize = { version = "1", features = ["derive"] }
+# The three protocol messages are plain serde types a later transport carries.
+serde = { version = "1", features = ["derive"] }
+# The persisted agent identity and the key store file are TOML.
+toml = "0.8"
+# Base64 (standard, padded) for keys, signatures and nonces on the wire.
+base64 = "0.22"
+# The one error type, with stable machine-readable codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: random byte flips in exchanged messages never complete an enrolment.
+proptest = "1"
+# Per-test scratch directories for the file key store and the persisted identity.
+tempfile = "3"
+# The transport (later task) will carry the message types as JSON; the property test
+# flips bytes in exactly that serialization, so serde_json is test-only here.
+serde_json = "1"
+
+[lints]
+workspace = true

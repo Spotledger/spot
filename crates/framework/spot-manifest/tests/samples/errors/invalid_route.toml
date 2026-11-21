@@ -1,0 +1,7 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[routes]]
+path = "portal/orders"
+step = "erp_selling:run"

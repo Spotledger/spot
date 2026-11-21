@@ -1,0 +1,75 @@
+[Unit]
+Description=Spotledger control plane
+Documentation=https://spotledger.example/docs/operations/
+After=network-online.target postgresql.service
+Wants=network-online.target
+# Nothing starts until an operator has written a configuration; the package
+# installs only a template (control-plane.toml.example).
+ConditionPathExists=/etc/spot-control-plane/control-plane.toml
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+# The control plane does not implement sd_notify; Type=simple is correct.
+# Liveness is GET /cp/v1/live on the operator listener (client certificate required).
+Type=simple
+User=spot-control-plane
+Group=spot-control-plane
+UMask=0077
+
+StateDirectory=spot-control-plane
+StateDirectoryMode=0700
+ConfigurationDirectory=spot-control-plane
+ConfigurationDirectoryMode=0750
+LogsDirectory=spot-control-plane
+LogsDirectoryMode=0750
+RuntimeDirectory=spot-control-plane
+RuntimeDirectoryMode=0750
+
+# The database password and other secrets: KEY=VALUE, mode 0600, owner spot-control-plane.
+EnvironmentFile=-/etc/spot-control-plane/environment
+ExecStart=/usr/bin/spot-control-plane run --config /etc/spot-control-plane/control-plane.toml
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spot-control-plane
+
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=40s
+TimeoutStartSec=90s
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Sandboxing: the same directives as the host unit (packaging/linux/systemd/spot.service),
+# plus MemoryDenyWriteExecute because the control plane runs no WASM or script engine.
+# No privileges at all: two TCP listeners above 1024, PostgreSQL over TCP/Unix socket,
+# writes only its state directory.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/var/lib/spot-control-plane
+
+[Install]
+WantedBy=multi-user.target

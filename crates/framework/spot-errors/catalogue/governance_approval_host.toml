@@ -1,0 +1,10 @@
+# governance_approval_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "governance_approval_host.unavailable"
+class = "none"
+summary = "The approval launcher is not set (no grant gate or no process host), so grants that need approval are refused."
+explanation_key = "error.governance_approval_host.unavailable"
+params = []
+remedy = "Enable the governance and process services and restart the site."
+since = "0.1.0"

@@ -1,0 +1,38 @@
+[package]
+name = "l3-http"
+description = "L3 HTTP behaviour suite (WP-TST-10.T2): the framework's behaviour over the real stack, the real server binary path, HTTP, sessions, permissions and PostgreSQL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The product host: site creation, app install and seed, the `serve` assembly and reload.
+spot-cli = { path = "../../../crates/framework/spot-cli" }
+# A scratch PostgreSQL database per run, its drop guard and the leaked-database sweep.
+spot-postgres = { path = "../../../crates/backends/spot-postgres", features = ["testing"] }
+# Sign-in windows the fixture shortens so a lockout is provable without sleeping.
+spot-login = { path = "../../../crates/framework/spot-login" }
+spot-sessions = { path = "../../../crates/framework/spot-sessions" }
+# Password policy, verifiers and the one-time first sign-in secret.
+spot-auth = { path = "../../../crates/framework/spot-auth" }
+# The system clock the second-factor cases read (WP-PLT-02.T9).
+spot-core = { path = "../../../crates/framework/spot-core" }
+# The mail intake cases (WP-PLT-11.T13) build messages and seal the account password.
+spot-mail-fake-imap = { path = "../spot-mail-fake-imap" }
+spot-secrets = { path = "../../../crates/framework/spot-secrets" }
+
+# Reads the text out of a printed PDF, at the version spot-print uses.
+lopdf = "0.42"
+
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "fs"] }
+
+[dev-dependencies]
+# The channel list the field-security cases enumerate (`Channel::ALL`), so a case file can fail
+# when a channel has no case (WP-SEC-04.T17 reads it; WP-TST-10.T6 adds the dependency).
+spot-field-guard = { path = "../../../crates/framework/spot-field-guard" }
+
+[lints]
+workspace = true

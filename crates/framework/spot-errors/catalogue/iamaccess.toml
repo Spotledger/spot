@@ -1,0 +1,101 @@
+# iamaccess codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# The access rules that join the identity crates (spot-iam-access) raise these; the API layer maps them.
+
+[[entry]]
+code = "iamaccess.scope_excess"
+class = "none"
+summary = "An API key asks for a right its owner does not hold."
+explanation_key = "error.iamaccess.scope_excess"
+params = []
+remedy = "Remove the excess rights from the key, or give the owner the role first."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.scope_empty"
+class = "none"
+summary = "An API key scope allows nothing, or a rule names no action."
+explanation_key = "error.iamaccess.scope_empty"
+params = []
+remedy = "Give the key at least one rule with at least one action."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.key_owner_type"
+class = "none"
+summary = "Only a service or internal user can own an API key."
+explanation_key = "error.iamaccess.key_owner_type"
+params = []
+remedy = "Create the key under a service or internal user."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.key_owner_inactive"
+class = "none"
+summary = "An API key cannot be created for a disabled or anonymised user."
+explanation_key = "error.iamaccess.key_owner_inactive"
+params = []
+remedy = "Create the key under an enabled user."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.key_not_usable"
+class = "none"
+summary = "The API key cannot be used."
+explanation_key = "error.iamaccess.key_not_usable"
+params = []
+remedy = "Use a valid key, or ask an administrator for a new one."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.impersonation_not_allowed"
+class = "none"
+summary = "This principal may not impersonate this user."
+explanation_key = "error.iamaccess.impersonation_not_allowed"
+params = []
+remedy = "Open a customer-approved support session as a support principal and pick an ordinary enabled user."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.impersonation_grant_invalid"
+class = "none"
+summary = "The support session does not allow impersonation now."
+explanation_key = "error.iamaccess.impersonation_grant_invalid"
+params = []
+remedy = "Ask the customer to approve a support session that covers impersonation and is currently valid."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.impersonation_expired"
+class = "none"
+summary = "The impersonation session is over."
+explanation_key = "error.iamaccess.impersonation_expired"
+params = []
+remedy = "Start a new impersonation under a valid support session."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.step_up_required"
+class = "none"
+summary = "This operation needs a recent strong sign-in."
+explanation_key = "error.iamaccess.step_up_required"
+params = []
+remedy = "Sign in again with your strongest method and repeat the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.method_sso_not_allowed"
+class = "none"
+summary = "A single sign-on session cannot switch to a user that does not allow single sign-on."
+explanation_key = "error.iamaccess.method_sso_not_allowed"
+params = []
+remedy = "Sign out and sign in as that user with one of the methods they allow."
+since = "0.1.0"
+
+[[entry]]
+code = "iamaccess.method_weaker"
+class = "none"
+summary = "A session cannot move to a weaker sign-in method."
+explanation_key = "error.iamaccess.method_weaker"
+params = []
+remedy = "Sign in again with a method at least as strong as the current one."
+since = "0.1.0"

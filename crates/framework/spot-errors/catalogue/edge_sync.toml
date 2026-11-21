@@ -1,0 +1,56 @@
+# edge_sync codes (WP-DAG-04.T1). One [[entry]] per code; see
+# crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "edge_sync.invalid_name"
+class = "Internal"
+summary = "A document's DocType is not a valid storage name for an edge end: {name}."
+explanation_key = "error.edge_sync.invalid_name"
+params = ["name"]
+remedy = "Use a DocType name of lowercase letters, digits and underscores."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_sync.unknown_doctype"
+class = "Internal"
+summary = "A document names a DocType the edge schema does not know: {doctype}."
+explanation_key = "error.edge_sync.unknown_doctype"
+params = ["doctype"]
+remedy = "Derive the edge schema from the metadata that defines the DocType."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_sync.write_failed"
+class = "Internal"
+summary = "The edge writer failed to apply a change: {message}."
+explanation_key = "error.edge_sync.write_failed"
+params = ["message"]
+remedy = "Check the edge store and retry the document operation."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_sync.missing_edge"
+class = "none"
+summary = "A document implies an edge the edge store does not hold: {edge}."
+explanation_key = "error.edge_sync.missing_edge"
+params = ["edge"]
+remedy = "Repair the drift by adding the missing edge."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_sync.extra_edge"
+class = "none"
+summary = "The edge store holds an edge no document implies: {edge}."
+explanation_key = "error.edge_sync.extra_edge"
+params = ["edge"]
+remedy = "Repair the drift by removing the extra edge."
+since = "0.1.0"
+
+[[entry]]
+code = "edge_sync.edge_mismatch"
+class = "none"
+summary = "An edge's properties differ from the document's: {edge}."
+explanation_key = "error.edge_sync.edge_mismatch"
+params = ["edge"]
+remedy = "Repair the drift by updating the edge's properties."
+since = "0.1.0"

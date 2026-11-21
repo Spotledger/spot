@@ -1,0 +1,16 @@
+# The connector guest template. This is its own workspace: a connector is built outside the
+# platform workspace, for `wasm32-wasip2`, and installed as a component.
+[workspace]
+
+[package]
+name = "my-connector"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# A component is a cdylib.
+crate-type = ["cdylib"]
+
+[dependencies]
+# Generates the guest bindings from `wit/connector.wit`.
+wit-bindgen = "0.57"

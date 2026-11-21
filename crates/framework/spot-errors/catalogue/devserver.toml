@@ -1,0 +1,93 @@
+# devserver codes: the local development server's reload pipeline (spot-devserver,
+# WP-DX-02). Library-internal vocabulary (ADR-26): raised by the crate, explained by the host.
+# One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "devserver.io"
+class = "none"
+summary = "A file operation in the development server failed."
+explanation_key = "error.devserver.io"
+params = []
+remedy = "Check that the watched root exists and that the file is readable and writable."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.watch"
+class = "none"
+summary = "The platform file watcher could not be started or failed."
+explanation_key = "error.devserver.watch"
+params = []
+remedy = "Check the watched root and the platform limits on watched directories, then restart the dev server."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.unknown_step"
+class = "none"
+summary = "A change no reload step handles reached the pipeline."
+explanation_key = "error.devserver.unknown_step"
+params = []
+remedy = "Check the classifier's directories and the registered reload steps; the change was not applied."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.metadata"
+class = "none"
+summary = "The metadata change did not build; the previous snapshot is still serving."
+explanation_key = "error.devserver.metadata"
+params = []
+remedy = "Fix the named metadata or plan errors and save again; the live version was left untouched."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.view"
+class = "none"
+summary = "A view did not parse or did not validate; the previous views still serve."
+explanation_key = "error.devserver.view"
+params = []
+remedy = "Fix the named view errors and save again; nothing was swapped into the runtime."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.script"
+class = "none"
+summary = "A script did not transpile or did not type-check; the previous script still serves."
+explanation_key = "error.devserver.script"
+params = []
+remedy = "Fix the named script diagnostics and save again; the engine keeps the last good version."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.build"
+class = "none"
+summary = "The project build command a component change triggers failed."
+explanation_key = "error.devserver.build"
+params = []
+remedy = "Fix the build error shown in the output, or configure the build command with the dev server."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.component"
+class = "none"
+summary = "A rebuilt WebAssembly component did not validate or load."
+explanation_key = "error.devserver.component"
+params = []
+remedy = "Fix the component and save again; the running component was left unchanged."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.site"
+class = "none"
+summary = "A scratch development site operation failed."
+explanation_key = "error.devserver.site"
+params = []
+remedy = "Check the scratch root's permissions and free space, then run the operation again."
+since = "0.1.0"
+
+[[entry]]
+code = "devserver.config"
+class = "none"
+summary = "The development server configuration is invalid."
+explanation_key = "error.devserver.config"
+params = []
+remedy = "Fix the named option: the site name, the watched path or the status address."
+since = "0.1.0"

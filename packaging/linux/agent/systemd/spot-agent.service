@@ -1,0 +1,74 @@
+[Unit]
+Description=Spotledger host agent
+Documentation=https://spotledger.example/docs/operations/
+After=network-online.target
+Wants=network-online.target
+# Enrolment is an explicit operator action (`spot-agent enrol --gateway URL
+# --token-file FILE`); until it has happened there is no identity and nothing
+# for the daemon to do, so the unit refuses to start instead of idling.
+ConditionPathExists=/var/lib/spot-agent/agent.key
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+# spot-agent does not implement sd_notify; Type=simple is correct.
+Type=simple
+User=spot-agent
+Group=spot-agent
+UMask=0077
+
+StateDirectory=spot-agent
+StateDirectoryMode=0700
+RuntimeDirectory=spot-agent
+RuntimeDirectoryMode=0700
+
+ExecStart=/usr/bin/spot-agent --state-dir /var/lib/spot-agent run
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spot-agent
+
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=30s
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Sandboxing. Privilege design (decision recorded in packaging/linux/agent/README.md):
+# the daemon itself holds no capability (AmbientCapabilities is empty). The few
+# privileged operations run through `sudo -n /usr/libexec/spot-agent/spot-agent-priv
+# run <name>`, whose sudoers drop-in is generated from the helper's template table.
+# sudo is a setuid program, and NoNewPrivileges=true would stop it from gaining
+# root, so NoNewPrivileges is OFF here and only here. In exchange the bounding set
+# is a short explicit list (the ceiling for what a root helper child can do) and
+# the helper path is the single exact entry in sudoers.
+NoNewPrivileges=false
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# The state directory, and the one directory the cert.install template writes to
+# (the leading "-" ignores a host that has no such directory). Nothing else.
+ReadWritePaths=/var/lib/spot-agent -/etc/pki/ca-trust/source/anchors
+
+[Install]
+WantedBy=multi-user.target

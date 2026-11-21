@@ -1,0 +1,131 @@
+# A minimal X12 810 invoice (our own definition, WP-INT-06.T1).
+id = "x12_810"
+syntax = "x12"
+version = "004010"
+title = "Invoice"
+functional_group = "IN"
+
+[[segment]]
+tag = "ST"
+min = 1
+max = 1
+[[segment.element]]
+name = "set_id"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1
+
+[[segment]]
+tag = "BIG"
+min = 1
+max = 1
+[[segment.element]]
+name = "date"
+kind = "date"
+min = 1
+max = 1
+[[segment.element]]
+name = "invoice_number"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "po_date"
+kind = "date"
+min = 0
+max = 1
+[[segment.element]]
+name = "po_number"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "N1"
+min = 0
+max = 200
+[[segment.element]]
+name = "entity"
+kind = "identifier"
+min = 1
+max = 1
+[[segment.element]]
+name = "name"
+kind = "text"
+min = 0
+max = 1
+[[segment.element]]
+name = "qualifier"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "identification"
+kind = "identifier"
+min = 0
+max = 1
+
+[[segment]]
+tag = "IT1"
+min = 0
+max = 0
+[[segment.element]]
+name = "line"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "quantity"
+kind = "decimal"
+min = 0
+max = 1
+[[segment.element]]
+name = "unit"
+kind = "identifier"
+min = 0
+max = 1
+[[segment.element]]
+name = "unit_price"
+kind = "decimal"
+min = 0
+max = 1
+
+[[segment]]
+tag = "TDS"
+min = 0
+max = 1
+[[segment.element]]
+name = "amount"
+kind = "decimal"
+min = 1
+max = 1
+
+[[segment]]
+tag = "CTT"
+min = 0
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 0
+max = 1
+
+[[segment]]
+tag = "SE"
+min = 1
+max = 1
+[[segment.element]]
+name = "count"
+kind = "numeric"
+min = 1
+max = 1
+[[segment.element]]
+name = "control"
+kind = "identifier"
+min = 1
+max = 1

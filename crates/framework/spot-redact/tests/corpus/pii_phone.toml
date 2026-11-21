@@ -1,0 +1,41 @@
+# Phone numbers (the `pii` class, off by default; conservative shapes only).
+
+[[case]]
+input = 'call +44 20 7946 0958 today'
+expected = 'call [redacted:phone] today'
+class = 'pii_phone'
+
+[[case]]
+input = '+1-415-555-2671 desk line'
+expected = '[redacted:phone] desk line'
+class = 'pii_phone'
+
+[[case]]
+input = '(415) 555-2671 in the header'
+expected = '[redacted:phone] in the header'
+class = 'pii_phone'
+
+[[case]]
+input = 'office +49 89 636 48018'
+expected = 'office [redacted:phone]'
+class = 'pii_phone'
+
+[[case]]
+input = 'extension 1234'
+expected = 'extension 1234'
+class = 'pii_phone'
+
+[[case]]
+input = '+3 units shipped'
+expected = '+3 units shipped'
+class = 'pii_phone'
+
+[[case]]
+input = 'date 2026-10-05'
+expected = 'date 2026-10-05'
+class = 'pii_phone'
+
+[[case]]
+input = 'amount +45.5 reported'
+expected = 'amount +45.5 reported'
+class = 'pii_phone'

@@ -1,0 +1,10 @@
+{
+  "name": "spot-sample-guest-js",
+  "private": true,
+  "type": "module",
+  "description": "The sample app guest in JavaScript (jco componentize / ComponentizeJS), WP-STR-07.T1",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.23.0",
+    "@bytecodealliance/jco": "^1.39.0"
+  }
+}

@@ -1,0 +1,34 @@
+[package]
+name = "spot-bpm-effect-checks"
+description = "Design-time checks for the effects of a Business Process (WS8, WP-BPM-15.T3, ADR-080 section 6.8): undo edges past irreversible effects, record types with effects but no declared reversal, empty commit points, rewinds that would duplicate a record, unknown effect classes, never-held effects in a held region, the effect badges of the designer, the preview of a test run and the publish gate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `Operation`, `EffectKind`, `Reversal`, `Reversibility`, `OperationReceipt`: the contract
+# vocabulary the declarations and the receipts speak.
+spot-app-api = { path = "../../../contracts/app-api" }
+# `Registry::effects`, `check_receipt`: what the steps of a record type declare.
+spot-seams = { path = "../spot-seams" }
+# `ProcessVersion`, `Node`, `Edge`, `NodeId`: the process the checks read.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# `KIND_COMMIT`: the one spelling of the commit point's node kind.
+spot-bpm-commit = { path = "../spot-bpm-commit" }
+# `PolicyTable`, `EffectClass`: which classes are never held.
+spot-effect-hold = { path = "../spot-effect-hold" }
+# Typed errors with stable `bpm_effect_checks.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# The commit point is an unknown-kind node with a TOML config table.
+toml = "0.9"
+# Registries are built from a small fake app (controllers declaring effects).
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

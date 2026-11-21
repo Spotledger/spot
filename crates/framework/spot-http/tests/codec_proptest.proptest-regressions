@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 569e618f9dca0b10bf2b70eeee9d7a9b7f582be35348d93a92b601b8b2d6a1fa # shrinks to values = [("name", String("")), ("flag", Bool(false)), ("count", Number(0)), ("price", String("1000.10000")), ("due", String("2026-09-29")), ("logged", String("00:00:00")), ("stamped", String("2026-09-29T10:00:00Z")), ("extra", Null), ("content", String(""))]

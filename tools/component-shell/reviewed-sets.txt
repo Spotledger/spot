@@ -1,0 +1,11 @@
+# Set files a reviewer read and approved, for the --reviewed-set fallback only.
+#
+# One SHA-256 per line: the digest of the *bytes* of a tenant set file, which is what
+# `python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" set.toml`
+# prints. A set file whose digest is not on this list is refused.
+#
+# This file is empty on purpose. The store publishes root-signed trust material, so no tenant set file
+# needs the fallback, and an empty list is the only defensible default: adding a line here means a
+# reviewer vouched for the keys in that set file by reading them, which is exactly what the
+# signed mode exists to stop being necessary. Land such a line in its own reviewed change, with the
+# reviewer's name and the reason in the commit message.

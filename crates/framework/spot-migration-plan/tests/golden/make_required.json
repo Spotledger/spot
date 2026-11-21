@@ -1,0 +1,66 @@
+{
+  "from_version": 0,
+  "to_version": 0,
+  "changes": [
+    {
+      "id": "metadata/party/field_required/name",
+      "area": "metadata",
+      "kind": "field_required_changed",
+      "rule": "metadata/field_required_set",
+      "target": "party.name",
+      "description": "Field `party.name` becomes required.",
+      "before": "false",
+      "after": "true",
+      "risk": "needs_review",
+      "reason": "existing records may have no value for it",
+      "alternative": "add it optional, backfill it, then make it required in a later release",
+      "blocking": "brief_lock"
+    }
+  ],
+  "risk": "needs_review",
+  "estimate": {
+    "low": 1,
+    "expected": 2,
+    "high": 4,
+    "per_change": [
+      {
+        "change_id": "metadata/party/field_required/name",
+        "low": 1,
+        "expected": 2,
+        "high": 4,
+        "blocking": "brief_lock",
+        "unknown": false
+      }
+    ],
+    "blocking": "brief_lock",
+    "unknown": false
+  },
+  "plan_digest": "fc7283a78ba216324055fae96cb1d9702692c6b9e09cc797f232f02d3a6b5932",
+  "to": {
+    "apps": [],
+    "doctypes": [
+      {
+        "definition": {
+          "name": "party",
+          "fields": [
+            {
+              "name": "name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        },
+        "permissions": [],
+        "views": {}
+      }
+    ],
+    "methods": [],
+    "seam_steps": [],
+    "applied_patches": [],
+    "rename_hints": [],
+    "stats": {
+      "tables": {}
+    },
+    "meta_version": 0
+  }
+}

@@ -1,0 +1,51 @@
+# Email addresses (the `pii` class, off by default in every shipped policy).
+
+[[case]]
+input = 'mail admin@shop.example.com now'
+expected = 'mail [redacted:email] now'
+class = 'pii_email'
+
+[[case]]
+input = 'a.b+c@sub.domain.co.uk'
+expected = '[redacted:email]'
+class = 'pii_email'
+
+[[case]]
+input = 'jane.doe@internal'
+expected = 'jane.doe@internal'
+class = 'pii_email'
+
+[[case]]
+input = 'reach x@ for details'
+expected = 'reach x@ for details'
+class = 'pii_email'
+
+[[case]]
+input = 'two: ops@example.org, dev@example.net copy'
+expected = 'two: [redacted:email], [redacted:email] copy'
+class = 'pii_email'
+
+[[case]]
+input = 'quoted "ops@example.org" in text'
+expected = 'quoted "[redacted:email]" in text'
+class = 'pii_email'
+
+[[case]]
+input = 'no local part: @example.org dropped'
+expected = 'no local part: @example.org dropped'
+class = 'pii_email'
+
+[[case]]
+input = 'trailing dot user@example.com. is kept safe'
+expected = 'trailing dot [redacted:email]. is kept safe'
+class = 'pii_email'
+
+[[case]]
+input = 'the clock strikes at noon'
+expected = 'the clock strikes at noon'
+class = 'pii_email'
+
+[[case]]
+input = 'UPPER@EXAMPLE.COM folds to one rule'
+expected = '[redacted:email] folds to one rule'
+class = 'pii_email'

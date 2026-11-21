@@ -1,0 +1,5 @@
+# Installed by `run.sh` (npm ci); never committed.
+node_modules/
+
+# Measurement output: raw per-run samples and the result JSON the gate reads.
+results/

@@ -1,0 +1,44 @@
+# Help for the fieldguard error codes. One [[help]] per code and locale; see
+# crates/framework/spot-unattended-support/src/help.rs for the fields.
+
+[[help]]
+code = "fieldguard.audit_unavailable"
+what_happened = "The audit record of a reveal could not be written, so nothing was revealed."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry shortly; if it persists, the audit consumer is behind and an operator must clear it.", "If it keeps happening, tell your administrator and quote the code fieldguard.audit_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "fieldguard.reason_required"
+what_happened = "A reveal needs a reason, and none was given."
+why = "The information given did not meet a rule the system checks before it saves anything."
+what_to_do = ["Say why the value is needed; the reason is kept in the audit record.", "If it keeps happening, tell your administrator and quote the code fieldguard.reason_required."]
+audience = "user"
+
+[[help]]
+code = "fieldguard.reveal_bulk_refused"
+what_happened = "Bulk reveal is for back-end services holding the bulk right; a person cannot use it."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Reveal one document at a time, or run the work as a service with the reveal_bulk right.", "If it keeps happening, tell your administrator and quote the code fieldguard.reveal_bulk_refused."]
+audience = "user"
+
+[[help]]
+code = "fieldguard.trace_unavailable"
+what_happened = "The field access trace could not take a record, so the protected value was withheld."
+why = "A service the action needs is not available at the moment."
+what_to_do = ["Retry shortly; if it persists, the trace consumer is behind and an operator must clear it.", "If it keeps happening, tell your administrator and quote the code fieldguard.trace_unavailable."]
+audience = "admin"
+
+[[help]]
+code = "fieldguard.undeclared_system_access"
+what_happened = "A background job read a protected field that it has not been declared to use."
+why = "Your account does not have the permission this action needs."
+what_to_do = ["Declare the protection group in the actor's manifest, or stop reading the field.", "If it keeps happening, tell your administrator and quote the code fieldguard.undeclared_system_access."]
+audience = "user"
+
+[[help]]
+code = "fieldguard.unknown_doctype"
+what_happened = "The document type has no protection facts, so nothing of it can leave through this channel."
+why = "The item asked for does not exist, or you are not allowed to see it."
+what_to_do = ["Check the document type name, or load the metadata that defines it.", "If it keeps happening, tell your administrator and quote the code fieldguard.unknown_doctype."]
+audience = "user"

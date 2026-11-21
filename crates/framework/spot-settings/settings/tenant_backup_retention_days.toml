@@ -1,0 +1,30 @@
+# Seed setting for tenant.backup.retention_days. This is an example owned by the platform; do not edit directly.
+# The platform tasks will manage these settings.
+
+key = "tenant.backup.retention_days"
+title = "Backup Retention Days"
+summary = "Number of days to retain automated backups."
+description = "How many days to keep automated backups before they are purged. Set to 0 to keep forever (not recommended)."
+scopes = [
+    "tenant",
+    "company",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "backup",
+    "retention",
+]
+help_url = "https://docs.example.com/settings/tenant.backup.retention_days"
+
+[value.Int]
+min = 0
+max = 3650
+
+[default]
+Int = 30
+
+[restart]
+type = "none"

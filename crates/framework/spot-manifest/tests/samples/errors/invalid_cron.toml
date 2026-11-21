@@ -1,0 +1,8 @@
+[app]
+name = "erp_selling"
+version = "0.1.0"
+
+[[schedules]]
+name = "a"
+cron = "0 61 * * * *"
+step = "erp_selling:a"

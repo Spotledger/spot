@@ -1,0 +1,11 @@
+{
+  "diagnostics": [
+    {
+      "code": "ts.decorator_not_supported",
+      "line": 5,
+      "column": 1,
+      "end_line": 5,
+      "end_column": 8
+    }
+  ]
+}

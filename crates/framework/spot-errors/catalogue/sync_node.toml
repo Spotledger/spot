@@ -1,0 +1,38 @@
+# sync_node codes: the receiving side of sync in spot-sync-node (WP-SYN-04.T1, ADR-064). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+# Library vocabulary: the sync runtime maps these onto conditions (ADR-067), so `class = "none"`.
+
+[[entry]]
+code = "sync_node.foreign_source"
+class = "none"
+summary = "A delivery came from {source_id}, which is not the hub this node is configured for."
+explanation_key = "error.sync_node.foreign_source"
+params = ["source_id"]
+remedy = "Drop the delivery and check the transport: only the configured hub may send bundles to this node."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node.reference_unreadable"
+class = "none"
+summary = "A link in a {entity} record cannot be resolved from the metadata: {field}."
+explanation_key = "error.sync_node.reference_unreadable"
+params = ["entity", "field"]
+remedy = "Update the node's metadata to the hub's version, or have the hub fix the record's link, then request the bundle again."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node.invalid_limits"
+class = "none"
+summary = "A parking limit is zero."
+explanation_key = "error.sync_node.invalid_limits"
+params = []
+remedy = "Set the parking bundle count, byte size and maximum age above zero."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_node.too_many_tenants"
+class = "none"
+summary = "The node already serves its maximum of {limit} tenants; a delivery for a new tenant was refused."
+explanation_key = "error.sync_node.too_many_tenants"
+params = ["limit"]
+remedy = "Check that the hub only sends bundles for tenants this node is meant to serve; if the node really serves more tenants, raise the node's tenant cap in its configuration."
+since = "0.1.0"

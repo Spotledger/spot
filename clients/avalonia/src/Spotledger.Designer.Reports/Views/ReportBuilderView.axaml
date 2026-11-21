@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Spotledger.Designer.Reports.Views"
+             x:Class="Spotledger.Designer.Reports.Views.ReportBuilderView">
+  <!-- The report builder. DataContext is a ReportBuilderViewModel. Every control is a plain
+       button, list, box or check box, so the whole builder works by keyboard. -->
+  <Grid ColumnDefinitions="280,*" RowDefinitions="Auto,*,Auto" Margin="8">
+    <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+      <Button x:Name="UndoButton" Content="Undo" Command="{Binding UndoCommand}" HotKey="Ctrl+Z" />
+      <Button x:Name="RedoButton" Content="Redo" Command="{Binding RedoCommand}" HotKey="Ctrl+Y" />
+      <Button x:Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" HotKey="Ctrl+S" />
+      <Button x:Name="PublishButton" Content="Publish" Command="{Binding PublishCommand}" />
+      <Button x:Name="RunButton" Content="Run" Command="{Binding RunCommand}" />
+      <TextBlock x:Name="StatusText" Text="{Binding Status}" VerticalAlignment="Center" Foreground="{DynamicResource Color.Text.Secondary}" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1" Margin="0,0,8,0">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Report on" FontWeight="SemiBold" />
+        <TextBox x:Name="BaseSearch" PlaceholderText="Search record types" />
+        <ListBox x:Name="BaseList" ItemsSource="{Binding BaseChoices}" MaxHeight="120">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Button x:Name="UseBaseButton" Content="Report on this" Click="OnUseBase" />
+
+        <TextBlock Text="Fields" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <ListBox x:Name="Palette" ItemsSource="{Binding FieldChoices}" MaxHeight="260" />
+        <Button x:Name="AddColumnButton" Content="Add as column" Click="OnAddColumn" />
+        <Button x:Name="GroupButton" Content="Group by this" Click="OnGroup" />
+        <Button x:Name="SortAscButton" Content="Sort A to Z" Click="OnSortAsc" />
+        <Button x:Name="SortDescButton" Content="Sort Z to A" Click="OnSortDesc" />
+        <Button Content="Clear sorting" Click="OnClearSort" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <ScrollViewer Grid.Row="1" Grid.Column="1">
+      <StackPanel Spacing="10">
+        <TextBlock Text="Heading" FontWeight="SemiBold" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBox x:Name="LabelBox" MinWidth="240" PlaceholderText="Report heading" />
+          <Button x:Name="SetLabelButton" Content="Set heading" Click="OnSetLabel" />
+        </StackPanel>
+
+        <TextBlock Text="Columns" FontWeight="SemiBold" />
+        <ListBox x:Name="ColumnList" ItemsSource="{Binding Draft.Columns}" MaxHeight="160">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock>
+                <Run Text="{Binding Field}" />
+                <Run Text="{Binding Aggregate}" FontStyle="Italic" />
+              </TextBlock>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button x:Name="RemoveColumnButton" Content="Remove column" Click="OnRemoveColumn" />
+          <ComboBox x:Name="AggregateBox" MinWidth="110" />
+          <Button x:Name="SetAggregateButton" Content="Summarise column" Click="OnSetAggregate" />
+          <Button x:Name="TotalButton" Content="Total this column" Click="OnToggleTotal" />
+        </StackPanel>
+        <TextBlock x:Name="GroupLine" Text="{Binding GroupText}" />
+        <TextBlock x:Name="SortLine" Text="{Binding SortText}" />
+        <TextBlock x:Name="TotalsLine" Text="{Binding TotalsText}" />
+
+        <TextBlock Text="Chart" FontWeight="SemiBold" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <ComboBox x:Name="ChartKindBox" MinWidth="110" />
+          <ComboBox x:Name="ChartXBox" MinWidth="140" ItemsSource="{Binding ColumnFields}" PlaceholderText="Across" />
+          <Button x:Name="SetChartButton" Content="Draw chart" Click="OnSetChart" />
+          <Button x:Name="ClearChartButton" Content="No chart" Click="OnClearChart" />
+        </StackPanel>
+        <ListBox x:Name="ChartSeriesList" ItemsSource="{Binding ColumnFields}" SelectionMode="Multiple,Toggle" MaxHeight="100" />
+        <TextBlock x:Name="ChartLine" Text="{Binding ChartText}" />
+
+        <TextBlock Text="Filters" FontWeight="SemiBold" />
+        <ListBox x:Name="FilterList" ItemsSource="{Binding FilterLines}" MaxHeight="100" />
+        <Button x:Name="RemoveFilterButton" Content="Remove filter" Click="OnRemoveFilter" HorizontalAlignment="Left" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <ComboBox x:Name="FilterOperator" MinWidth="110" />
+          <TextBox x:Name="FilterBox" PlaceholderText="Value" MinWidth="140" />
+          <CheckBox x:Name="FilterYes" Content="Yes (for yes/no fields)" />
+          <CheckBox x:Name="FilterIsParameter" Content="Let the viewer choose" />
+          <Button x:Name="AddFilterButton" Content="Add filter" Click="OnAddFilter" />
+        </StackPanel>
+
+        <TextBlock Text="Share with" FontWeight="SemiBold" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBox x:Name="RolesBox" MinWidth="240" PlaceholderText="Roles, separated by commas" />
+          <Button x:Name="ShareButton" Content="Share" Click="OnShare" />
+        </StackPanel>
+
+        <TextBlock Text="To fix or check" FontWeight="SemiBold" />
+        <ItemsControl x:Name="IssueList" ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock TextWrapping="Wrap">
+                <Run Text="{Binding SeverityText}" FontWeight="SemiBold" />
+                <Run Text=" - " />
+                <Run Text="{Binding Message}" />
+                <Run Text=" " />
+                <Run Text="{Binding Remedy}" />
+              </TextBlock>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="Preview" FontWeight="SemiBold" />
+        <v:RowsTableView x:Name="PreviewTable" DataContext="{Binding Preview}" />
+
+        <TextBlock Text="Run the published report" FontWeight="SemiBold" />
+        <ItemsControl x:Name="ParameterList" ItemsSource="{Binding ParameterInputs}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" MinWidth="120" />
+                <TextBox Text="{Binding Text, Mode=TwoWay}" MinWidth="160" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <v:RowsTableView x:Name="RunTable" DataContext="{Binding RunResult}" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <TextBlock x:Name="PublishText" Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding PublishMessage}" Foreground="{DynamicResource Color.Text.Secondary}" />
+  </Grid>
+</UserControl>

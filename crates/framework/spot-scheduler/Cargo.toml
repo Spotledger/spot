@@ -1,0 +1,42 @@
+[package]
+name = "spot-scheduler"
+description = "Scheduling decisions for manifest schedules: DST-correct cron firing, missed-run policies with deduplication keys, leases with strictly-increasing fencing tokens (WP-PLT-07)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# `ScheduleSub`, `Queue` and `Cron`: the manifest's `[[schedules]]` entries.
+spot-manifest = { path = "../spot-manifest" }
+# `Clock`, so every time this crate reads comes from an injected source.
+spot-core = { path = "../spot-core" }
+# `StepName` (the app's step a schedule runs), via the one crate apps may depend on.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The scheduler's cron grammar; the manifest accepts exactly what this crate can run. Its
+# iterator is typed on chrono, which stays an implementation detail of `wall.rs`: candidates
+# are enumerated as naive wall times and resolved to instants by jiff.
+cron = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+# IANA time zones. Chosen over a `time` extension because jiff 0.2 is already in the lock via
+# lopdf/typst, its tzdb is compiled in (no system tzdata), and its DST gap/ambiguity handling is
+# explicit (jiff's own Zoned semantics), which the DST tests lean on.
+jiff = { version = "0.2", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+  "serde",
+] }
+# Typed errors with stable `scheduler.*` codes.
+thiserror = "1"
+# RunSlot keys and lease records cross process boundaries as JSON in later tasks.
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Randomised two- and three-node schedules over a fake clock; the failing seed is printed.
+proptest = "1"
+# `ManualClock::new` takes a wall-clock start.
+time = { version = "0.3.55", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

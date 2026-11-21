@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WP-UI-13.T3: the client half of tier A UI extensions (ADR-069 amendment A1,
+       ADR-27). Renderer-neutral and pure .NET, so the desktop head and the browser head
+       render the same resolved document and a second renderer can reuse the model: a
+       reader for `contracts/ui-ext`'s resolved JSON that never throws, the per-slot view
+       with expression-driven visibility and enabled state, actions with exactly one
+       declared effect, panels whose data blocks come from server queries, and composite
+       components built from the closed control catalogue. No floating point (ADR-12), no
+       reflection, no clock (time is an argument), no Avalonia reference. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- The renderer lives in a nested project under this owned path; the default compile
+       glob must not pull its sources (and its Avalonia reference) into the pure model. -->
+  <ItemGroup>
+    <Compile Remove="Renderer/**" />
+    <None Remove="Renderer/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Spotledger.Client.Metadata/Spotledger.Client.Metadata.csproj" />
+    <ProjectReference Include="../Spotledger.Client.Expressions/Spotledger.Client.Expressions.csproj" />
+  </ItemGroup>
+</Project>

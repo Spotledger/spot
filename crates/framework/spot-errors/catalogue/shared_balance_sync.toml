@@ -1,0 +1,60 @@
+# shared_balance_sync codes: the `shared_balance_sync.*` vocabulary of the shared-balance
+# sync wiring (WP-EDG-09.T2). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# These are library-internal vocabulary: `class = "none"` describes what each code means. A
+# refused batch is an answer to a sender, and `batch_rejected` is the audit event such a refusal
+# is written as; neither rides an `AppError`.
+
+[[entry]]
+code = "shared_balance_sync.sender_mismatch"
+class = "none"
+summary = "The batch claims node {claimed} but the connection authenticated as {authenticated}."
+explanation_key = "error.shared_balance_sync.sender_mismatch"
+params = ["authenticated", "claimed"]
+remedy = "Refuse the whole batch and investigate the sender: a node may only file its own entries."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance_sync.node_not_registered"
+class = "none"
+summary = "Node {node} is not registered at head office."
+explanation_key = "error.shared_balance_sync.node_not_registered"
+params = ["node"]
+remedy = "Enrol the node through node enrolment before it may deliver a batch."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance_sync.node_not_active"
+class = "none"
+summary = "Node {node} is {state} and may not deliver a batch."
+explanation_key = "error.shared_balance_sync.node_not_active"
+params = ["node", "state"]
+remedy = "Reinstate the node, or stop its sync client; a decommissioned node stays so."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance_sync.audit_failed"
+class = "none"
+summary = "The refusal of a batch could not be audited."
+explanation_key = "error.shared_balance_sync.audit_failed"
+params = []
+remedy = "Repair the audit sink; the batch stays refused and unacknowledged until the refusal is recorded."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance_sync.quarantine_failed"
+class = "none"
+summary = "A refused entry could not be placed in the quarantine queue."
+explanation_key = "error.shared_balance_sync.quarantine_failed"
+params = []
+remedy = "Repair the quarantine store; the batch is not acknowledged and the sender delivers it again."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance_sync.batch_rejected"
+class = "none"
+summary = "A batch was refused for {reason}."
+explanation_key = "error.shared_balance_sync.batch_rejected"
+params = ["reason"]
+remedy = "Compare the authenticated and claimed node ids; a mismatch is an impersonation attempt."
+since = "0.1.0"

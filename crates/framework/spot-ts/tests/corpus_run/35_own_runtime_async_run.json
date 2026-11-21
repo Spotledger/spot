@@ -1,0 +1,6 @@
+{
+  "case": "own_runtime",
+  "entry": "async_run",
+  "args": 5,
+  "expect": 21
+}

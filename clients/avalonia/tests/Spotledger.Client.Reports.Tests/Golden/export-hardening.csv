@@ -1,0 +1,11 @@
+Memo,Party,Balance,Count
+'=SUM(A1:A9),C1,10.50,3
+'+cmd|' /C calc'!A0,C2,-5.25,-1
+'-2+3,C3,'=1+1,7
+'@SUM(1),"C,4",0.00,0
+'	leading tab,C5,1,1
+"'leading cr",C6,2,2
+"say ""hi"", ok","multi
+line",2.5,2
+,,,
+مرحبا,ج,1000000.000001,1

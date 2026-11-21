@@ -1,0 +1,37 @@
+# world_access codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "world_access.settings_invalid"
+class = "none"
+summary = "The [services.world_access] table has an unknown key or a value of the wrong type, so the world-access composer cannot start."
+explanation_key = "error.world_access.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled and rehearsal exist, both true or false."
+since = "0.1.0"
+
+[[entry]]
+code = "world_access.rehearsal_off"
+class = "none"
+summary = "A rehearsal world was asked for while rehearsal is switched off in the site settings, so the remedy host and the fix pipeline cannot rehearse."
+explanation_key = "error.world_access.rehearsal_off"
+params = []
+remedy = "Set rehearsal = true in [services.world_access] and restart, or accept that no fix above T1 is applied."
+since = "0.1.0"
+
+[[entry]]
+code = "world_access.not_assembled"
+class = "none"
+summary = "A world was asked for before the site finished assembling, so its parts were not resolved yet."
+explanation_key = "error.world_access.not_assembled"
+params = []
+remedy = "Retry once the site is ready; this does not happen on a started site."
+since = "0.1.0"
+
+[[entry]]
+code = "world_access.rehearsal_unavailable"
+class = "none"
+summary = "A part of the world cannot take a snapshot, so a rehearsal over it is refused (the text names the part)."
+explanation_key = "error.world_access.rehearsal_unavailable"
+params = []
+remedy = "Read the part name in the message and check the subsystem it stands for; live remedies over the other parts are unaffected."
+since = "0.1.0"

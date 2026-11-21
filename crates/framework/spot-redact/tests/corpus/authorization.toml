@@ -1,0 +1,52 @@
+# Authorization-family header values; the header name stays, the value goes.
+# Value runs to end of line, comma/brace or quote (headers may carry spaces).
+
+[[case]]
+input = 'Authorization: SkjAjN3jM2kVwP9qLb'
+expected = 'Authorization: [redacted:header]'
+class = 'authorization'
+
+[[case]]
+input = 'authorization=Basic dGVzdDEyMzQ='
+expected = 'authorization=[redacted:header]'
+class = 'authorization'
+
+[[case]]
+input = '"proxy-authorization": "OAuth vK45qa"'
+expected = '"proxy-authorization": "[redacted:header]"'
+class = 'authorization'
+
+[[case]]
+input = 'www-authenticate: Basic realm="shop"'
+expected = 'www-authenticate: [redacted:header]"shop"'
+class = 'authorization'
+
+[[case]]
+input = 'x-api-key: 7fKk3QmZp2WbNqLxVjHc9sTy'
+expected = 'x-api-key: [redacted:header]'
+class = 'authorization'
+
+[[case]]
+input = 'Cookie: sid=8f14e45fceea167a; theme=light'
+expected = 'Cookie: [redacted:header]'
+class = 'authorization'
+
+[[case]]
+input = 'authorizations list: none'
+expected = 'authorizations list: none'
+class = 'authorization'
+
+[[case]]
+input = 'authorization failed'
+expected = 'authorization failed'
+class = 'authorization'
+
+[[case]]
+input = 'Authorization: (nothing to hide)'
+expected = 'Authorization: [redacted:header]'
+class = 'authorization'
+
+[[case]]
+input = 'proxy-authorization: Basic QWxhZGRpbjpvcGVuIHNlc2Ft'
+expected = 'proxy-authorization: [redacted:header]'
+class = 'authorization'

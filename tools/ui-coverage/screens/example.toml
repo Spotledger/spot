@@ -1,0 +1,24 @@
+# Example only: files named example*.toml are ignored unless --include-examples is given.
+# Copy this shape into <module>.toml when a design is approved.
+
+[[screen]]
+id = "example.invoice.form"
+title = "Sales invoice form"
+module = "example"
+kind = "form"
+doctype = "Sales Invoice"
+route = "/app/sales-invoice/:name"
+design_ref = "docs/ui/designs/example.md#sales-invoice-form"
+required_states = ["default", "empty", "error", "readonly"]
+priority = "p0"
+
+[[screen]]
+id = "example.invoice.list"
+title = "Sales invoice list"
+module = "example"
+kind = "list"
+doctype = "Sales Invoice"
+route = "/app/sales-invoice"
+design_ref = "docs/ui/designs/example.md#sales-invoice-list"
+required_states = ["default", "empty"]
+priority = "p1"

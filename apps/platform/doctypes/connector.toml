@@ -1,0 +1,84 @@
+name = "connector"
+label = "Connector"
+app = "platform"
+module = "integrations"
+title_field = "connector_name"
+
+# A configured connector (WP-INT-05.T3, ADR-49): a signed WebAssembly component, the hosts it may
+# call, the credential REFERENCES it uses, and when it runs. A credential VALUE is never a field of
+# this DocType: it is written once through the write-only secret action into the sealed vault, and
+# nothing reads it back. The connector service (`services.connectors`) is the writer of `state`.
+
+[[fields]]
+name = "connector_name"
+label = "Name"
+type = "text"
+required = true
+unique = true
+max_chars = 63
+in_list_view = true
+description = "The connector's name, unique on the site. Its calls run as the service principal connector:<name>."
+
+[[fields]]
+name = "digest"
+label = "Component digest"
+type = "text"
+required = true
+max_chars = 64
+description = "The canonical digest (64 hex digits) of the signed bundle that holds the component."
+
+[[fields]]
+name = "endpoints"
+label = "Allowed hosts"
+type = "long_text"
+description = "One host or host:port per line. Empty means the connector has no network at all."
+
+[[fields]]
+name = "credential_kind"
+label = "Credential kind"
+type = "select"
+options = "\nbearer\nbasic\noauth2"
+description = "How the host injects the credential into outbound requests; empty for none."
+
+[[fields]]
+name = "credential_ref"
+label = "Credential reference"
+type = "text"
+max_chars = 140
+description = "The NAME of the credential in the vault. Never the value."
+
+[[fields]]
+name = "extra_secret_refs"
+label = "Other readable references"
+type = "long_text"
+description = "One vault reference per line that the connector may read with secrets-get."
+
+[[fields]]
+name = "schedule_seconds"
+label = "Run every (seconds)"
+type = "int"
+description = "Empty for a connector that runs only when invoked. At least 10."
+
+[[fields]]
+name = "schedule_operation"
+label = "Scheduled operation"
+type = "text"
+max_chars = 140
+description = "The operation a scheduled run invokes."
+
+[[fields]]
+name = "mapping"
+label = "Mapping"
+type = "long_text"
+description = "The field mapping rules the operations apply."
+
+[[fields]]
+name = "state"
+label = "State"
+type = "select"
+options = "enabled\ndisabled\nfailed\ndead_letter"
+required = true
+default = "enabled"
+in_list_view = true
+in_standard_filter = true
+description = "enabled: runs. disabled: an operator stopped it. failed: it could not load. dead_letter: it failed on every attempt of a run and waits for an operator."

@@ -1,0 +1,29 @@
+# The server-side statement timeout for AI sessions (WP-AI-05.T1): an agent's query may never
+# run longer than this, whatever the client does.
+
+key = "ai.pool.statement_timeout_ms"
+title = "AI Statement Timeout"
+summary = "Server-side statement timeout for AI sessions, in milliseconds."
+description = "Set as the `ai` role's statement_timeout. A single AI statement is ended by the server after this long, so one runaway query cannot hold a connection indefinitely."
+scopes = [
+    "fleet",
+    "server",
+]
+risk = "medium"
+secret = false
+read_only = false
+since = "0.1.0"
+tags = [
+    "ai",
+    "timeout",
+]
+
+[value.Int]
+min = 1
+max = 3600000
+
+[default]
+Int = 30000
+
+[restart]
+type = "none"

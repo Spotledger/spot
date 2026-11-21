@@ -1,0 +1,828 @@
+openapi: 3.1.1
+info:
+  title: Spotledger control-plane API
+  version: 0.1.0
+  summary: "The service API for tenants, placements, licences, health, usage, quotas, support grants, moves and rollouts (ADR-098)."
+  description: |
+    ## ADR note
+
+    The control plane (`docs/adr/ADR-098-control-plane-api-contract-v0.1.md`) is the service that the console, the `spot` CLI, tenant hosts and host agents call about tenants, placements, licences, health, usage, quotas, support grants, moves and rollouts. WS18 exists as libraries and PostgreSQL stores (`spot-tenancy`, `spot-license`, `spot-metering`, `spot-fleet-health`, `spot-support-grants`, `spot-tenant-move`, `spot-fleet-rollout`, `spot-links`); this contract is what serves them. Draft, awaiting architecture-owner approval.
+
+    ## Two audiences, two prefixes
+
+    **Operator** (`/cp/v1/...`): Mutual TLS with an operator client certificate, and the signed command envelope of the management API (`contracts/management-api`) in the `X-Spot-Command` header for every mutation. **Tenant host and agent** (`/cp/v1/host/...`): Mutual TLS with the host's enrolled certificate (`host_mtls`), no operator rights; the agent's own long poll and result report are in the agent-channel contract. A host calling an operator operation, or the reverse, is `403 cp.forbidden`; a missing certificate is `401 cp.unauthenticated` before any body is read.
+
+    ## Rules
+
+    - **The control plane never reads tenant business data**: only counts, sizes, health findings, usage and licence facts cross this API.
+    - **Scope.** Every mutation names a tenant by id and is checked against the operator's scope (a regional operator cannot touch another region's tenants). A tenant that is missing and one that is out of scope are the same `404 cp.not_found`, so scope is not an oracle.
+    - **Idempotency.** Every create carries an `Idempotency-Key`; a repeat returns the first answer.
+    - **Workflows.** A provisioning workflow is resumable and the API exposes its step state (`cp_workflow_get`).
+    - **Deprovisioning is two-step**: a request, then a confirmation after a delay with a signed approval; data is never deleted before the retention period of the licence.
+    - **Limits.** A quota or licence limit answers `403 cp.limit_exceeded` with the limit name, never another tenant's numbers. Telemetry batches are at most 256 KiB and within the series cardinality budget of `spot-fleet-health::SeriesBudget` (`422 cp.cardinality_rejected`).
+    - **Audit.** Every request that reaches authentication is audited with the principal, the operation, the tenant and the outcome, refusals included.
+
+    ## What the console needs (ADM-09, UI stage)
+
+    The console starts from: `cp_tenant_list|get|create|suspend|resume|deprovision`, `cp_workflow_get`, `cp_health_list`, `cp_usage_list`, `cp_quota_list|put`, `cp_licence_list|issue|renew|revoke`, `cp_support_grant_*`, `cp_rollout_*`, `cp_move_*`.
+
+    ## Versioning
+
+    Paths are prefixed `/cp/v1`. Additive changes bump the minor version; clients ignore unknown response fields.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://{host}:{port}
+    description: The control plane (mutual TLS).
+    variables:
+      host: {default: control.example.test}
+      port: {default: '8443'}
+security:
+  - operator_mtls: []
+tags:
+  - name: control
+
+paths:
+  /cp/v1/live:
+    get:
+      tags: [control]
+      operationId: cp_live
+      summary: "Liveness"
+      description: |
+        Liveness. Unauthenticated liveness only. Audience: anyone, no bearer token (the tenant comes
+        from the site). Permission: none (liveness only). Rate class `interactive`.
+      security: []
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpLiveResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants:
+    get:
+      tags: [control]
+      operationId: cp_tenant_list
+      summary: "The tenants in the caller's scope"
+      description: |
+        The tenants in the caller's scope. Audience: an operator principal behind the verified client
+        certificate (ADR-083: never the consumer audience). Permission: an operator principal (only
+        tenants in its scope are listed). Rate class `interactive`.
+      parameters:
+        - {"name": "status", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 30}}
+        - {"name": "region", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 60}}
+        - {"name": "q", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 100}}
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [control]
+      operationId: cp_tenant_create
+      summary: "Create a tenant (starts the provisioning workflow)"
+      description: |
+        Create a tenant (starts the provisioning workflow). Answers `202`; the provisioning workflow is
+        resumable and `cp_workflow_get` shows its step state. The first administrator is invited by mail
+        at the end of the workflow; no credential is in any answer. Audience: an operator principal
+        behind the verified client certificate (ADR-083: never the consumer audience). Permission: the
+        operator permission `tenants.create` in the target region. Rate class `bulk`. Needs the signed
+        command envelope in the `X-Spot-Command` header (the rules of the management API: Ed25519,
+        audience, 10 minutes, nonce); it binds the body by its SHA-256 digest. Requires an
+        `Idempotency-Key`. Audited: who, what and the outcome; a refusal is audited too.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantCreateRequest"}}}}
+      responses:
+        "202": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantCreateResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_tenant_get
+      summary: "One tenant"
+      description: |
+        One tenant. Audience: an operator principal behind the verified client certificate (ADR-083:
+        never the consumer audience). Permission: an operator principal in the tenant's scope. Rate
+        class `interactive`. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/suspend:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_tenant_suspend
+      summary: "Suspend a tenant"
+      description: |
+        Suspend a tenant. Suspends the tenant (it refuses sign-in and writes; data is kept). Audience:
+        an operator principal behind the verified client certificate (ADR-083: never the consumer
+        audience). Permission: the operator permission `tenants.suspend` in the tenant's scope. Rate
+        class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the rules
+        of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its SHA-256
+        digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who, what and
+        the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like
+        a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantSuspendResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/resume:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_tenant_resume
+      summary: "Resume a tenant"
+      description: |
+        Resume a tenant. Resumes a suspended tenant. Audience: an operator principal behind the verified
+        client certificate (ADR-083: never the consumer audience). Permission: the operator permission
+        `tenants.resume` in the tenant's scope. Rate class `interactive`. Needs the signed command
+        envelope in the `X-Spot-Command` header (the rules of the management API: Ed25519, audience, 10
+        minutes, nonce); it binds the body by its SHA-256 digest. Takes no `Idempotency-Key`: a repeat
+        is a repeat of the action. Audited: who, what and the outcome; a refusal is audited too. A
+        cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantResumeResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/deprovision:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_tenant_deprovision_request
+      summary: "Request deprovisioning (step one of two)"
+      description: |
+        Request deprovisioning (step one of two). Deprovisioning is a two-step: this request records it
+        and returns when it can be confirmed; nothing is deleted. Confirmation needs a delay and a
+        signed approval, and data is never deleted before the retention period of the licence ends.
+        Audience: an operator principal behind the verified client certificate (ADR-083: never the
+        consumer audience). Permission: the operator permission `tenants.deprovision` in the tenant's
+        scope. Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command`
+        header (the rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the
+        body by its SHA-256 digest. Requires an `Idempotency-Key`. Audited: who, what and the outcome; a
+        refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantDeprovisionRequestRequest"}}}}
+      responses:
+        "202": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantDeprovisionRequestResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/deprovision/confirm:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_tenant_deprovision_confirm
+      summary: "Confirm deprovisioning (step two of two)"
+      description: |
+        Confirm deprovisioning (step two of two). Audience: an operator principal behind the verified
+        client certificate (ADR-083: never the consumer audience). Permission: the operator permission
+        `tenants.deprovision` and a second approver's signed approval. Rate class `interactive`. Needs
+        the signed command envelope in the `X-Spot-Command` header (the rules of the management API:
+        Ed25519, audience, 10 minutes, nonce); it binds the body by its SHA-256 digest. Requires an
+        `Idempotency-Key`. Audited: who, what and the outcome; a refusal is audited too. A cross-tenant
+        id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantDeprovisionConfirmRequest"}}}}
+      responses:
+        "202": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpTenantDeprovisionConfirmResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/workflows/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_workflow_get
+      summary: "A workflow and its step state"
+      description: |
+        A workflow and its step state. Audience: an operator principal behind the verified client
+        certificate (ADR-083: never the consumer audience). Permission: an operator principal in the
+        workflow's tenant scope. Rate class `interactive`. A cross-tenant id answers `404 cp.not_found`
+        exactly like a missing one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpWorkflowGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/placements:
+    get:
+      tags: [control]
+      operationId: cp_placement_list
+      summary: "Where tenants run"
+      description: |
+        Where tenants run. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal (scoped). Rate class
+        `interactive`.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpPlacementListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/clusters:
+    get:
+      tags: [control]
+      operationId: cp_cluster_list
+      summary: "The clusters"
+      description: |
+        The clusters. Audience: an operator principal behind the verified client certificate (ADR-083:
+        never the consumer audience). Permission: an operator principal (scoped). Rate class
+        `interactive`.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpClusterListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/moves:
+    post:
+      tags: [control]
+      operationId: cp_move_start
+      summary: "Request a tenant move"
+      description: |
+        Request a tenant move. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `tenants.move` in
+        the tenant's scope. Rate class `bulk`. Needs the signed command envelope in the `X-Spot-Command`
+        header (the rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the
+        body by its SHA-256 digest. Requires an `Idempotency-Key`. Audited: who, what and the outcome; a
+        refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpMoveStartRequest"}}}}
+      responses:
+        "202": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpMoveStartResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/moves/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_move_get
+      summary: "The status of a move"
+      description: |
+        The status of a move. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal in the tenant's scope.
+        Rate class `interactive`. A cross-tenant id answers `404 cp.not_found` exactly like a missing
+        one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpMoveGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/moves/{id}/cancel:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_move_cancel
+      summary: "Cancel a move"
+      description: |
+        Cancel a move. Only before cutover; after it the answer is `409 cp.conflict`. Audience: an
+        operator principal behind the verified client certificate (ADR-083: never the consumer
+        audience). Permission: the operator permission `tenants.move` in the tenant's scope. Rate class
+        `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the rules of
+        the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its SHA-256
+        digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who, what and
+        the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like
+        a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpMoveCancelResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/licences:
+    get:
+      tags: [control]
+      operationId: cp_licence_list
+      summary: "The licences"
+      description: |
+        The licences. Audience: an operator principal behind the verified client certificate (ADR-083:
+        never the consumer audience). Permission: an operator principal (scoped). Rate class
+        `interactive`.
+      parameters:
+        - {"name": "tenant", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 64}}
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [control]
+      operationId: cp_licence_issue
+      summary: "Issue a licence"
+      description: |
+        Issue a licence. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `licences.issue` in
+        the tenant's scope. Rate class `interactive`. Needs the signed command envelope in the
+        `X-Spot-Command` header (the rules of the management API: Ed25519, audience, 10 minutes, nonce);
+        it binds the body by its SHA-256 digest. Requires an `Idempotency-Key`. Audited: who, what and
+        the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like
+        a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceIssueRequest"}}}}
+      responses:
+        "201": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceIssueResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/licences/{id}/renew:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_licence_renew
+      summary: "Renew a licence"
+      description: |
+        Renew a licence. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `licences.issue`.
+        Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the
+        rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its
+        SHA-256 digest. Requires an `Idempotency-Key`. Audited: who, what and the outcome; a refusal is
+        audited too. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceRenewRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceRenewResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/licences/{id}/revoke:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_licence_revoke
+      summary: "Revoke a licence"
+      description: |
+        Revoke a licence. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `licences.revoke`.
+        Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the
+        rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its
+        SHA-256 digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who,
+        what and the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found`
+        exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceRevokeRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpLicenceRevokeResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/entitlements:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_entitlement_list
+      summary: "The entitlements of a tenant"
+      description: |
+        The entitlements of a tenant. Audience: an operator principal behind the verified client
+        certificate (ADR-083: never the consumer audience). Permission: an operator principal in the
+        tenant's scope. Rate class `interactive`. A cross-tenant id answers `404 cp.not_found` exactly
+        like a missing one.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpEntitlementListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/health:
+    get:
+      tags: [control]
+      operationId: cp_health_list
+      summary: "Health per tenant and node"
+      description: |
+        Health per tenant and node. Audience: an operator principal behind the verified client
+        certificate (ADR-083: never the consumer audience). Permission: an operator principal (scoped).
+        Rate class `interactive`.
+      parameters:
+        - {"name": "tenant", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 64}}
+        - {"name": "node", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 100}}
+        - {"name": "state", "in": "query", "required": false, "schema": {"type": "string", "enum": ["green", "amber", "red"]}}
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpHealthListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/usage:
+    get:
+      tags: [control]
+      operationId: cp_usage_list
+      summary: "Usage per period and meter"
+      description: |
+        Usage per period and meter. Quantities are decimal strings, never floats. Audience: an operator
+        principal behind the verified client certificate (ADR-083: never the consumer audience).
+        Permission: an operator principal (scoped). Rate class `interactive`.
+      parameters:
+        - {"name": "tenant", "in": "query", "required": true, "schema": {"type": "string", "maxLength": 64}}
+        - {"name": "period", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 20}}
+        - {"name": "meter", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 100}}
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpUsageListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/quotas:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_quota_list
+      summary: "The quotas of a tenant"
+      description: |
+        The quotas of a tenant. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal in the tenant's scope.
+        Rate class `interactive`. A cross-tenant id answers `404 cp.not_found` exactly like a missing
+        one.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpQuotaListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/tenants/{id}/quotas/{name}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+      - {"name": "name", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    put:
+      tags: [control]
+      operationId: cp_quota_put
+      summary: "Set one quota"
+      description: |
+        Set one quota. Audience: an operator principal behind the verified client certificate (ADR-083:
+        never the consumer audience). Permission: the operator permission `quotas.manage`. Rate class
+        `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the rules of
+        the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its SHA-256
+        digest. Takes no `Idempotency-Key`: a repeat is a no-op. Audited: who, what and the outcome; a
+        refusal is audited too. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpQuotaPutRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpQuotaPutResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/support-grants:
+    get:
+      tags: [control]
+      operationId: cp_support_grant_list
+      summary: "The support grants"
+      description: |
+        The support grants. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal (scoped). Rate class
+        `interactive`.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpSupportGrantListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [control]
+      operationId: cp_support_grant_create
+      summary: "Create a support grant"
+      description: |
+        Create a support grant. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `support.grant`;
+        needs the customer-approved grant record. Rate class `interactive`. Needs the signed command
+        envelope in the `X-Spot-Command` header (the rules of the management API: Ed25519, audience, 10
+        minutes, nonce); it binds the body by its SHA-256 digest. Requires an `Idempotency-Key`.
+        Audited: who, what and the outcome; a refusal is audited too. A cross-tenant id answers `404
+        cp.not_found` exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpSupportGrantCreateRequest"}}}}
+      responses:
+        "201": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpSupportGrantCreateResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/support-grants/{id}/revoke:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_support_grant_revoke
+      summary: "Revoke a support grant"
+      description: |
+        Revoke a support grant. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `support.grant`.
+        Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the
+        rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its
+        SHA-256 digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who,
+        what and the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found`
+        exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpSupportGrantRevokeResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/rollouts:
+    get:
+      tags: [control]
+      operationId: cp_rollout_list
+      summary: "The rollouts"
+      description: |
+        The rollouts. Audience: an operator principal behind the verified client certificate (ADR-083:
+        never the consumer audience). Permission: an operator principal (scoped). Rate class
+        `interactive`.
+      parameters:
+        - {"name": "cursor", "in": "query", "required": false, "description": "The `next_cursor` of the previous page.", "schema": {"type": "string", "maxLength": 2048, "minLength": 1}}
+        - {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutListResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [control]
+      operationId: cp_rollout_create
+      summary: "Create a rollout with a wave plan"
+      description: |
+        Create a rollout with a wave plan. Audience: an operator principal behind the verified client
+        certificate (ADR-083: never the consumer audience). Permission: the operator permission
+        `rollouts.manage`. Rate class `interactive`. Needs the signed command envelope in the
+        `X-Spot-Command` header (the rules of the management API: Ed25519, audience, 10 minutes, nonce);
+        it binds the body by its SHA-256 digest. Requires an `Idempotency-Key`. Audited: who, what and
+        the outcome; a refusal is audited too.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutCreateRequest"}}}}
+      responses:
+        "201": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutCreateResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/rollouts/{id}:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    get:
+      tags: [control]
+      operationId: cp_rollout_get
+      summary: "A rollout's status"
+      description: |
+        A rollout's status. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: an operator principal in scope. Rate class
+        `interactive`. A cross-tenant id answers `404 cp.not_found` exactly like a missing one.
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/rollouts/{id}/pause:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_rollout_pause
+      summary: "Pause a rollout"
+      description: |
+        Pause a rollout. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `rollouts.manage`.
+        Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the
+        rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its
+        SHA-256 digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who,
+        what and the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found`
+        exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutPauseResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/rollouts/{id}/resume:
+    parameters:
+      - {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 200, "minLength": 1}}
+    post:
+      tags: [control]
+      operationId: cp_rollout_resume
+      summary: "Resume a rollout"
+      description: |
+        Resume a rollout. Audience: an operator principal behind the verified client certificate
+        (ADR-083: never the consumer audience). Permission: the operator permission `rollouts.manage`.
+        Rate class `interactive`. Needs the signed command envelope in the `X-Spot-Command` header (the
+        rules of the management API: Ed25519, audience, 10 minutes, nonce); it binds the body by its
+        SHA-256 digest. Takes no `Idempotency-Key`: a repeat is a repeat of the action. Audited: who,
+        what and the outcome; a refusal is audited too. A cross-tenant id answers `404 cp.not_found`
+        exactly like a missing one.
+      parameters:
+        - {"$ref": "#/components/parameters/SignedCommand"}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpRolloutResumeResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/host/heartbeat:
+    post:
+      tags: [control]
+      operationId: cp_host_heartbeat
+      summary: "A tenant host's telemetry batch"
+      description: |
+        A tenant host's telemetry batch. At most 256 KiB; the series cardinality budget is that of
+        `spot-fleet-health::SeriesBudget` (`422 cp.cardinality_rejected` over it). Counts, sizes and
+        health only: the control plane never reads tenant business data. Audience: the enrolled tenant
+        host behind the verified client certificate (ADR-083: never the consumer audience). Permission:
+        the host's own certificate (it may report only for itself). Rate class `bulk`. Takes no
+        `Idempotency-Key`: a repeat is a repeat of the action. Audited: who, what and the outcome; a
+        refusal is audited too.
+      security:
+        - host_mtls: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpHostHeartbeatRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpHostHeartbeatResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/host/usage:
+    post:
+      tags: [control]
+      operationId: cp_host_usage
+      summary: "Metering events from a tenant host"
+      description: |
+        Metering events from a tenant host. Idempotent: every event is keyed by its event id, so a
+        repeat is counted once (`duplicates`). Audience: the enrolled tenant host behind the verified
+        client certificate (ADR-083: never the consumer audience). Permission: the host's own
+        certificate. Rate class `bulk`. Requires an `Idempotency-Key`. Audited: who, what and the
+        outcome; a refusal is audited too.
+      security:
+        - host_mtls: []
+      parameters:
+        - {"$ref": "#/components/parameters/IdempotencyKeyRequired"}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/CpHostUsageRequest"}}}}
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpHostUsageResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+  /cp/v1/host/licence:
+    get:
+      tags: [control]
+      operationId: cp_host_licence_get
+      summary: "The host's current signed licence"
+      description: |
+        The host's current signed licence. A signed licence document that the host verifies offline; the
+        answer is the one licence of the host's tenant. Audience: the enrolled tenant host behind the
+        verified client certificate (ADR-083: never the consumer audience). Permission: the host's own
+        certificate. Rate class `bulk`.
+      security:
+        - host_mtls: []
+      responses:
+        "200": {description: OK., content: {application/json: {schema: {$ref: "#/components/schemas/CpHostLicenceGetResponse"}}}}
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    operator_mtls:
+      type: mutualTLS
+      description: An operator client certificate (TLS 1.3); mutations also carry the signed command envelope.
+    host_mtls:
+      type: mutualTLS
+      description: The enrolled host's client certificate (TLS 1.3); no operator rights.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 1 to 128 visible ASCII characters; a replay returns the first answer.
+      schema: {type: string, pattern: '^[\x21-\x7e]{1,128}$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The version the change is based on, as returned in `ETag`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    SignedCommand:
+      name: X-Spot-Command
+      in: header
+      required: true
+      description: The signed command envelope (base64url of the `spot-signed-command` JSON); it binds the body by its SHA-256 digest.
+      schema: {type: string, maxLength: 16384}
+  responses:
+    Error:
+      description: Any error. The status and `error.code` follow the registry.
+      headers:
+        Retry-After:
+          description: Seconds to wait, on 429 and 503.
+          schema: {type: integer, minimum: 0}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    Identifier:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{0,62}$'
+    RecordId:
+      type: string
+      description: A UUIDv7, canonical lower-case hyphenated form.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    ErrorCode:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, request_id]
+          properties:
+            code: {$ref: "#/components/schemas/ErrorCode"}
+            message: {type: string, maxLength: 1000}
+            retryable: {type: boolean, description: True when the same request may succeed later unchanged.}
+            request_id: {type: string, maxLength: 200}
+            details: {type: object, maxProperties: 20, description: "Code-specific data, documented per code; never a secret, a path outside the site root or a stack."}
+    CpTenant: {"type": "object", "additionalProperties": false, "required": ["id", "name", "region", "status", "created_at"], "properties": {"id": {"type": "string", "maxLength": 64}, "name": {"type": "string", "maxLength": 200}, "region": {"type": "string", "maxLength": 60}, "cluster": {"type": "string", "maxLength": 100}, "status": {"type": "string", "enum": ["provisioning", "active", "suspended", "deprovisioning", "deprovisioned", "failed"]}, "plan": {"type": "string", "maxLength": 60}, "created_at": {"type": "string", "format": "date-time", "maxLength": 40}, "workflow_id": {"type": ["string", "null"], "maxLength": 64}}}
+    CpWorkflow: {"type": "object", "additionalProperties": false, "description": "The state of a resumable workflow and its journal of steps; no tenant business data.", "required": ["id", "kind", "state", "steps"], "properties": {"id": {"type": "string", "maxLength": 64}, "kind": {"type": "string", "enum": ["provision", "deprovision", "move", "rollout"]}, "state": {"type": "string", "enum": ["pending", "running", "waiting", "succeeded", "failed", "cancelled"]}, "steps": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["name", "state"], "properties": {"name": {"type": "string", "maxLength": 100}, "state": {"type": "string", "enum": ["pending", "running", "done", "failed", "skipped"]}, "at": {"type": ["string", "null"], "format": "date-time", "maxLength": 40}, "code": {"type": ["string", "null"], "maxLength": 100}}}}, "resumable": {"type": "boolean"}}}
+    CpMove: {"type": "object", "additionalProperties": false, "required": ["id", "tenant_id", "to_cluster", "state"], "properties": {"id": {"type": "string", "maxLength": 64}, "tenant_id": {"type": "string", "maxLength": 64}, "to_cluster": {"type": "string", "maxLength": 100}, "state": {"type": "string", "enum": ["requested", "preparing", "copying", "cutover", "done", "failed", "cancelled"]}, "workflow_id": {"type": "string", "maxLength": 64}, "created_at": {"type": "string", "format": "date-time", "maxLength": 40}}}
+    CpLicence: {"type": "object", "additionalProperties": false, "required": ["id", "tenant_id", "plan", "status", "starts_at", "ends_at"], "properties": {"id": {"type": "string", "maxLength": 64}, "tenant_id": {"type": "string", "maxLength": 64}, "plan": {"type": "string", "maxLength": 60}, "status": {"type": "string", "enum": ["active", "expired", "revoked"]}, "starts_at": {"type": "string", "format": "date-time", "maxLength": 40}, "ends_at": {"type": "string", "format": "date-time", "maxLength": 40}, "retention_days": {"type": "integer", "minimum": 0, "maximum": 36500}, "entitlements": {"type": "array", "maxItems": 200, "items": {"type": "string", "maxLength": 100}}}}
+    CpHealth: {"type": "object", "additionalProperties": false, "description": "The three-colour state of `spot-fleet-health` and its findings: counts, sizes and codes only, never tenant business data.", "required": ["state", "at"], "properties": {"tenant_id": {"type": ["string", "null"], "maxLength": 64}, "node": {"type": ["string", "null"], "maxLength": 100}, "state": {"type": "string", "enum": ["green", "amber", "red"]}, "findings": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["code", "severity", "since"], "properties": {"code": {"type": "string", "maxLength": 100}, "severity": {"type": "string", "enum": ["info", "warning", "critical"]}, "since": {"type": "string", "format": "date-time", "maxLength": 40}}}}, "at": {"type": "string", "format": "date-time", "maxLength": 40}}}
+    CpSupportGrant: {"type": "object", "additionalProperties": false, "required": ["id", "tenant_id", "scope", "starts_at", "ends_at", "status"], "properties": {"id": {"type": "string", "maxLength": 64}, "tenant_id": {"type": "string", "maxLength": 64}, "scope": {"type": "string", "maxLength": 500}, "starts_at": {"type": "string", "format": "date-time", "maxLength": 40}, "ends_at": {"type": "string", "format": "date-time", "maxLength": 40}, "status": {"type": "string", "enum": ["active", "expired", "revoked"]}, "customer_record": {"type": "string", "maxLength": 64}}}
+    CpRollout: {"type": "object", "additionalProperties": false, "required": ["id", "target_version", "state", "waves"], "properties": {"id": {"type": "string", "maxLength": 64}, "target_version": {"type": "string", "maxLength": 40}, "state": {"type": "string", "enum": ["planned", "running", "paused", "done", "failed"]}, "waves": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["index", "tenants", "state"], "properties": {"index": {"type": "integer", "minimum": 0}, "tenants": {"type": "array", "maxItems": 500, "items": {"type": "string", "maxLength": 64}}, "state": {"type": "string", "enum": ["pending", "running", "done", "failed"]}}}}, "workflow_id": {"type": "string", "maxLength": 64}}}
+    CpLiveResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["status"], "properties": {"status": {"type": "string", "const": "live"}}}}}
+    CpTenantListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/CpTenant"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpTenantCreateRequest: {"type": "object", "additionalProperties": false, "required": ["name", "region", "plan", "admin_email"], "properties": {"name": {"type": "string", "maxLength": 200, "minLength": 1}, "region": {"type": "string", "maxLength": 60}, "plan": {"type": "string", "maxLength": 60}, "admin_email": {"type": "string", "maxLength": 320}}}
+    CpTenantCreateResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["tenant", "workflow_id"], "properties": {"tenant": {"$ref": "#/components/schemas/CpTenant"}, "workflow_id": {"type": "string", "maxLength": 64}}}}}
+    CpTenantGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpTenant"}}}
+    CpTenantSuspendResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpTenant"}}}
+    CpTenantResumeResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpTenant"}}}
+    CpTenantDeprovisionRequestRequest: {"type": "object", "additionalProperties": false, "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 500, "minLength": 1}}}
+    CpTenantDeprovisionRequestResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["request_id", "confirmable_after", "retention_ends"], "properties": {"request_id": {"type": "string", "maxLength": 64}, "confirmable_after": {"type": "string", "format": "date-time", "maxLength": 40}, "retention_ends": {"type": "string", "format": "date-time", "maxLength": 40}}}}}
+    CpTenantDeprovisionConfirmRequest: {"type": "object", "additionalProperties": false, "required": ["request_id", "approval"], "properties": {"request_id": {"type": "string", "maxLength": 64}, "approval": {"type": "string", "maxLength": 16384}}}
+    CpTenantDeprovisionConfirmResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpWorkflow"}}}
+    CpWorkflowGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpWorkflow"}}}
+    CpPlacementListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["tenant_id", "cluster", "node", "region"], "properties": {"tenant_id": {"type": "string", "maxLength": 64}, "cluster": {"type": "string", "maxLength": 100}, "node": {"type": "string", "maxLength": 100}, "region": {"type": "string", "maxLength": 60}}}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpClusterListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["name", "region", "nodes", "tenants", "state"], "properties": {"name": {"type": "string", "maxLength": 100}, "region": {"type": "string", "maxLength": 60}, "nodes": {"type": "integer", "minimum": 0}, "tenants": {"type": "integer", "minimum": 0}, "state": {"type": "string", "enum": ["green", "amber", "red"]}}}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpMoveStartRequest: {"type": "object", "additionalProperties": false, "required": ["tenant_id", "to_cluster"], "properties": {"tenant_id": {"type": "string", "maxLength": 64}, "to_cluster": {"type": "string", "maxLength": 100}}}
+    CpMoveStartResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpMove"}}}
+    CpMoveGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpMove"}}}
+    CpMoveCancelResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpMove"}}}
+    CpLicenceListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/CpLicence"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpLicenceIssueRequest: {"type": "object", "additionalProperties": false, "required": ["tenant_id", "plan", "starts_at", "ends_at"], "properties": {"tenant_id": {"type": "string", "maxLength": 64}, "plan": {"type": "string", "maxLength": 60}, "starts_at": {"type": "string", "format": "date-time", "maxLength": 40}, "ends_at": {"type": "string", "format": "date-time", "maxLength": 40}, "retention_days": {"type": "integer", "minimum": 0, "maximum": 36500}}}
+    CpLicenceIssueResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpLicence"}}}
+    CpLicenceRenewRequest: {"type": "object", "additionalProperties": false, "required": ["ends_at"], "properties": {"ends_at": {"type": "string", "format": "date-time", "maxLength": 40}}}
+    CpLicenceRenewResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpLicence"}}}
+    CpLicenceRevokeRequest: {"type": "object", "additionalProperties": false, "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 500, "minLength": 1}}}
+    CpLicenceRevokeResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpLicence"}}}
+    CpEntitlementListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["name", "source", "until"], "properties": {"name": {"type": "string", "maxLength": 100}, "source": {"type": "string", "maxLength": 60}, "until": {"type": ["string", "null"], "format": "date-time", "maxLength": 40}}}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpHealthListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/CpHealth"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpUsageListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["tenant_id", "period", "meter", "quantity"], "properties": {"tenant_id": {"type": "string", "maxLength": 64}, "period": {"type": "string", "maxLength": 20}, "meter": {"type": "string", "maxLength": 100}, "quantity": {"type": "string", "maxLength": 40}}}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpQuotaListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["name", "limit", "used"], "properties": {"name": {"type": "string", "maxLength": 100}, "limit": {"type": "string", "maxLength": 40}, "used": {"type": "string", "maxLength": 40}}}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpQuotaPutRequest: {"type": "object", "additionalProperties": false, "required": ["limit"], "properties": {"limit": {"type": "string", "maxLength": 40}}}
+    CpQuotaPutResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["name", "limit", "used"], "properties": {"name": {"type": "string", "maxLength": 100}, "limit": {"type": "string", "maxLength": 40}, "used": {"type": "string", "maxLength": 40}}}}}
+    CpSupportGrantListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/CpSupportGrant"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpSupportGrantCreateRequest: {"type": "object", "additionalProperties": false, "required": ["tenant_id", "scope", "ends_at", "customer_approval"], "properties": {"tenant_id": {"type": "string", "maxLength": 64}, "scope": {"type": "string", "maxLength": 500}, "ends_at": {"type": "string", "format": "date-time", "maxLength": 40}, "customer_approval": {"type": "string", "maxLength": 16384}}}
+    CpSupportGrantCreateResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpSupportGrant"}}}
+    CpSupportGrantRevokeResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpSupportGrant"}}}
+    CpRolloutListResponse: {"type": "object", "additionalProperties": false, "required": ["data", "next_cursor"], "properties": {"data": {"type": "array", "maxItems": 100, "items": {"$ref": "#/components/schemas/CpRollout"}}, "next_cursor": {"type": ["string", "null"], "maxLength": 2048}}}
+    CpRolloutCreateRequest: {"type": "object", "additionalProperties": false, "required": ["target_version", "waves"], "properties": {"target_version": {"type": "string", "maxLength": 40}, "waves": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["tenants"], "properties": {"tenants": {"type": "array", "maxItems": 500, "items": {"type": "string", "maxLength": 64}}}}}}}
+    CpRolloutCreateResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpRollout"}}}
+    CpRolloutGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpRollout"}}}
+    CpRolloutPauseResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpRollout"}}}
+    CpRolloutResumeResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"$ref": "#/components/schemas/CpRollout"}}}
+    CpHostHeartbeatRequest: {"type": "object", "additionalProperties": false, "required": ["host", "at"], "properties": {"host": {"type": "string", "maxLength": 100}, "at": {"type": "string", "format": "date-time", "maxLength": 40}, "series": {"type": "array", "maxItems": 500, "items": {"type": "object", "additionalProperties": false, "required": ["name", "points"], "properties": {"name": {"type": "string", "maxLength": 100}, "labels": {"type": "object", "maxProperties": 10, "additionalProperties": {"type": "string", "maxLength": 100}}, "points": {"type": "array", "maxItems": 600, "items": {"type": "object", "additionalProperties": false, "required": ["t", "v"], "properties": {"t": {"type": "string", "format": "date-time", "maxLength": 40}, "v": {"type": "string", "maxLength": 40}}}}}}}, "findings": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["code", "severity"], "properties": {"code": {"type": "string", "maxLength": 100}, "severity": {"type": "string", "enum": ["info", "warning", "critical"]}}}}}}
+    CpHostHeartbeatResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["accepted"], "properties": {"accepted": {"type": "integer", "minimum": 0}}}}}
+    CpHostUsageRequest: {"type": "object", "additionalProperties": false, "required": ["events"], "properties": {"events": {"type": "array", "maxItems": 500, "items": {"type": "object", "additionalProperties": false, "required": ["event_id", "meter", "quantity", "at"], "properties": {"event_id": {"$ref": "#/components/schemas/RecordId"}, "meter": {"type": "string", "maxLength": 100}, "quantity": {"type": "string", "maxLength": 40}, "at": {"type": "string", "format": "date-time", "maxLength": 40}}}}}}
+    CpHostUsageResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["accepted", "duplicates"], "properties": {"accepted": {"type": "integer", "minimum": 0}, "duplicates": {"type": "integer", "minimum": 0}}}}}
+    CpHostLicenceGetResponse: {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "object", "additionalProperties": false, "required": ["licence", "proof", "valid_until"], "properties": {"licence": {"type": "string", "maxLength": 65536}, "proof": {"type": "string", "maxLength": 1024}, "valid_until": {"type": "string", "format": "date-time", "maxLength": 40}}}}}
+
+x-spot-error-codes:
+  # code: [HTTP status, retryable, meaning]
+  cp.unauthenticated: [401, false, "No verified client certificate (checked before any body is read), or the certificate is untrusted, expired, revoked, or a host that is not enrolled."]
+  cp.forbidden: [403, false, "The principal may not call this operation (a host calling an operator operation, or the reverse)."]
+  cp.not_found: [404, false, "No such tenant, workflow, move, licence, grant or rollout in the caller's scope: the same answer for one that is missing and one that is out of scope, so scope is not an oracle."]
+  cp.invalid: [422, false, "The request is not valid; details.fields names field paths only, never values."]
+  cp.signature_invalid: [401, false, "The signed command envelope is missing, wrong, for another audience, expired, or does not bind this body."]
+  cp.replayed: [409, false, "The nonce, command id or idempotency key was already used with a different body or window."]
+  cp.conflict: [409, true, "Another workflow or command holds this tenant; retry after Retry-After."]
+  cp.approval_required: [403, false, "The operation needs the signed approval records the request does not carry."]
+  cp.limit_exceeded: [403, false, "A quota or licence limit would be exceeded; details.limit names the limit, never another tenant's numbers."]
+  cp.not_confirmable: [409, false, "The deprovisioning cannot be confirmed yet: the delay has not passed, or the licence's retention period has not ended."]
+  cp.licence_invalid: [422, false, "The licence request is not valid (unknown plan, a period outside the contract, or a conflicting licence)."]
+  cp.cardinality_rejected: [422, false, "The telemetry batch is over the series cardinality budget; details.budget names it."]
+  cp.rate_limited: [429, true, "Too many requests; wait for Retry-After."]
+  cp.body_too_large: [413, false, "The body is larger than the operation allows (256 KiB for a telemetry batch)."]
+  cp.internal: [500, false, "An unexpected server error; the request id identifies it in the logs."]

@@ -1,0 +1,46 @@
+# occupancy codes: tentative holds on intervals of a unit (WP-STO-14.T2, contract 0.23.0). One [[entry]] per code.
+
+[[entry]]
+code = "occupancy.conflict"
+class = "none"
+summary = "The unit is already occupied or held in that interval."
+explanation_key = "error.occupancy.conflict"
+params = []
+remedy = "Choose another interval or unit."
+since = "0.1.0"
+
+[[entry]]
+code = "occupancy.hold_expired"
+class = "none"
+summary = "The hold expired and another row took its place, so it can no longer be confirmed."
+explanation_key = "error.occupancy.hold_expired"
+params = []
+remedy = "Claim the interval again if it is still free."
+since = "0.1.0"
+
+[[entry]]
+code = "occupancy.invalid_range"
+class = "none"
+summary = "The end is not after the start, or the interval or window is longer than the maximum."
+explanation_key = "error.occupancy.invalid_range"
+params = []
+remedy = "Send an end after the start and keep the interval within the maximum span."
+since = "0.1.0"
+
+[[entry]]
+code = "occupancy.ttl_too_long"
+class = "none"
+summary = "ttl_seconds is longer than the server's maximum."
+explanation_key = "error.occupancy.ttl_too_long"
+params = []
+remedy = "Ask for a shorter hold lifetime."
+since = "0.1.0"
+
+[[entry]]
+code = "occupancy.not_holder"
+class = "none"
+summary = "You are not the holder of this hold and lack the cancel right."
+explanation_key = "error.occupancy.not_holder"
+params = []
+remedy = "Ask the holder, or a user with the cancel right, to release it."
+since = "0.1.0"

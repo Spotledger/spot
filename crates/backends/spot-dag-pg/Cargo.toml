@@ -1,0 +1,36 @@
+[package]
+name = "spot-dag-pg"
+description = "PostgreSQL ExecStore for DAG run state (WP-DAG-02.T2, ADR-13): durable spot_dag_run and spot_dag_node_state tables, a version-checked and idempotent apply, and a SKIP LOCKED ready-list"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The ExecStore trait, the run/node types and the contract suite this store must pass.
+spot-dag-exec = { path = "../../framework/spot-dag-exec" }
+# `NodeId` and `Published` come from the DAG model the run pins.
+spot-dag = { path = "../../framework/spot-dag" }
+# The storage errors a database or pool failure is reported as.
+spot-storage-contract = { path = "../../../contracts/storage" }
+# `AppError`/`ErrorClass` for the schema-migration error and the `OffsetDateTime` instants.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the store owns its two tables.
+deadpool-postgres = "0.14"
+# `PgBackend` opens the storage transaction the `Unit` port commits through, and
+# `PgTransaction` is the transaction `apply_in` writes on.
+spot-postgres = { path = "../spot-postgres" }
+tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1"] }
+# The `taken` edges and the node output payload are stored as jsonb.
+serde_json = "1"
+
+[dev-dependencies]
+# The migrator the tables must pass (its live-schema reader and planner).
+spot-pg-migrate = { path = "../spot-pg-migrate" }
+# Per-test scratch databases and a raw client for the SKIP LOCKED test.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true

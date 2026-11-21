@@ -1,0 +1,50 @@
+[package]
+name = "spot-link-external"
+description = "The external carrier of the tenant link (WP-CTL-11.T1, ADR-058 rule 12, ADR-080): a peer that is not a platform tenant exchanges message topics under a grant, outbound through a connector or a signed webhook and inbound through a signature-verified webhook, with credentials by reference only and the same delivery states, audit and conditions as a tenant link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[features]
+# Nothing by default: every inbound body is read through the capped reader. `testing` adds the
+# buffered `InboundRequest::new`, so a test can build a request the reader would have refused
+#.
+testing = []
+
+[dependencies]
+# `EgressError`: the refusals of the egress policy, mapped to a retryable failure.
+spot-egress = { path = "../spot-egress" }
+# The outbox, the inbox, the message and receipt types and the delivery states: this crate adds
+# a carrier, not a second exchange.
+spot-link-exchange = { path = "../spot-link-exchange" }
+# `Link` (and `Link::allows`), `Party`, `ExternalPeerId`, `Topic`, the audit sink and the
+# signing identity trait.
+spot-tenant-link = { path = "../spot-tenant-link" }
+# `ConnectorPort` (the outbound connector), `MappingSpec` (the optional peer format),
+# `CredentialRef` and `CredentialVault` (credentials by reference).
+spot-connectors = { path = "../spot-connectors" }
+# The HMAC signing key and the egress-guarded POST of the webhook subsystem, reused as is.
+spot-webhooks = { path = "../spot-webhooks" }
+# `AuditRecord` and `PayloadValue`: the refusal window's summary row carries its `count` in the
+# audit payload, which `LinkEvent`'s fixed `detail` word cannot hold.
+spot-audit-chain = { path = "../spot-audit-chain" }
+# The secret value type the vault returns (zeroed on drop, never printed).
+spot-secrets = { path = "../spot-secrets" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typed errors with stable `link_external.*` codes.
+thiserror = "2"
+async-trait = "0.1"
+# The deterministic message id of an inbound peer id.
+sha2 = "0.10"
+http = "1"
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "time"] }
+spot-tenancy = { path = "../spot-tenancy" }
+
+[lints]
+workspace = true

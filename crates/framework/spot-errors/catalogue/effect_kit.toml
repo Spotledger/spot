@@ -1,0 +1,100 @@
+# effect_kit codes: the findings of the effect conformance kit (spot-effect-kit, WP-EXT-11.T3). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "effect_kit.not_netted_to_zero"
+class = "none"
+summary = "After post then cancel (or correct) a declared store's aggregate is not what it was before."
+explanation_key = "error.effect_kit.not_netted_to_zero"
+params = []
+remedy = "Add the reversing step to the after-cancel pipeline: it must write the same store with the opposite sign."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.over_reversal"
+class = "none"
+summary = "Cancel reversed more than post wrote in a declared store."
+explanation_key = "error.effect_kit.over_reversal"
+params = []
+remedy = "Make the cancel step reverse exactly what the post step wrote."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.row_deleted"
+class = "none"
+summary = "A store has fewer rows after an operation; stores are append-only."
+explanation_key = "error.effect_kit.row_deleted"
+params = []
+remedy = "Never delete or rewrite a store row; reverse it by appending a new row."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.unreported_write"
+class = "none"
+summary = "A store gained rows that the operation's receipt does not report."
+explanation_key = "error.effect_kit.unreported_write"
+params = []
+remedy = "Report every row a step writes with report_effect and declare the store in the step's effect declaration."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.over_reported"
+class = "none"
+summary = "The operation's receipt reports more rows than the store gained."
+explanation_key = "error.effect_kit.over_reported"
+params = []
+remedy = "Report only rows the step actually wrote and fix the count in the receipt."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.undeclared_report"
+class = "none"
+summary = "A step reported an effect that no declaration of its pipeline covers."
+explanation_key = "error.effect_kit.undeclared_report"
+params = []
+remedy = "Declare the effect's class and kind on the step, or stop reporting it."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.reversal_unlinked"
+class = "none"
+summary = "The reversing rows do not reference the rows post wrote."
+explanation_key = "error.effect_kit.reversal_unlinked"
+params = []
+remedy = "Give each reversing row a reference to the posted row it reverses."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.cancel_not_refused"
+class = "none"
+summary = "A second cancel of an already cancelled document was accepted."
+explanation_key = "error.effect_kit.cancel_not_refused"
+params = []
+remedy = "Refuse cancel unless the document is posted, before any step writes."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.cancel_duplicated"
+class = "none"
+summary = "A refused second cancel still changed a store."
+explanation_key = "error.effect_kit.cancel_duplicated"
+params = []
+remedy = "Make sure no step writes when the lifecycle refuses the operation."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.correct_not_cancel_plus_new"
+class = "none"
+summary = "Correct did not cancel the original and return a new draft linked through amended_from."
+explanation_key = "error.effect_kit.correct_not_cancel_plus_new"
+params = []
+remedy = "Implement correct as cancel plus a new linked draft, with the stores netted to zero."
+since = "0.1.0"
+
+[[entry]]
+code = "effect_kit.operation_failed"
+class = "none"
+summary = "An operation the scenario needs was refused, so nothing after it could be checked."
+explanation_key = "error.effect_kit.operation_failed"
+params = []
+remedy = "Give the scenario a draft that passes validation and steps that succeed in the in-memory engine."
+since = "0.1.0"

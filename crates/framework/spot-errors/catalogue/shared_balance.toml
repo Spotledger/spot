@@ -1,0 +1,222 @@
+# shared_balance codes: the `shared_balance.*` vocabulary of the shared-balance policies
+# (WP-EDG-09.T1). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+#
+# These are library-internal vocabulary: `class = "none"` describes what each code means. A
+# decline is a node's answer to a spend, and a rejection is why head office quarantined an
+# entry; neither rides an `AppError`.
+
+[[entry]]
+code = "shared_balance.invalid_amount"
+class = "none"
+summary = "The amount is not a valid number of minor units."
+explanation_key = "error.shared_balance.invalid_amount"
+params = []
+remedy = "Give an amount above zero."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.overflow"
+class = "none"
+summary = "The balance overflowed an integer minor unit."
+explanation_key = "error.shared_balance.overflow"
+params = []
+remedy = "Split the amount; a balance this large needs a design review."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.entry_conflict"
+class = "none"
+summary = "Entry {id} was reused for different content."
+explanation_key = "error.shared_balance.entry_conflict"
+params = ["id"]
+remedy = "A node must never reuse an entry id; check the node's sequence counter was persisted."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.unknown_balance"
+class = "none"
+summary = "Balance {balance} does not exist."
+explanation_key = "error.shared_balance.unknown_balance"
+params = ["balance"]
+remedy = "Open the balance at head office first."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.balance_exists"
+class = "none"
+summary = "Balance {balance} already exists."
+explanation_key = "error.shared_balance.balance_exists"
+params = ["balance"]
+remedy = "Use the existing balance, or open one with a different id."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.insufficient_available"
+class = "none"
+summary = "Balance {balance} does not have that much available to grant."
+explanation_key = "error.shared_balance.insufficient_available"
+params = ["balance"]
+remedy = "Grant less, or wait for outstanding quotas to settle."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.grant_exists"
+class = "none"
+summary = "Node {node} already holds an open grant on {balance}."
+explanation_key = "error.shared_balance.grant_exists"
+params = ["balance", "node"]
+remedy = "Settle the node's last delivery with the complete flag before granting again."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.config_invalid"
+class = "none"
+summary = "The policy configuration is not valid: {why}."
+explanation_key = "error.shared_balance.config_invalid"
+params = ["why"]
+remedy = "Fix the setting the message names."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_offline"
+class = "none"
+summary = "Declined: head office cannot be reached and this balance needs it."
+explanation_key = "error.shared_balance.declined_offline"
+params = []
+remedy = "Retry when the connection is back, or use another payment method."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_insufficient"
+class = "none"
+summary = "Declined: the balance does not cover the amount."
+explanation_key = "error.shared_balance.declined_insufficient"
+params = []
+remedy = "Ask for a smaller amount or another payment method."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_no_quota"
+class = "none"
+summary = "Declined: this node holds no quota for the balance."
+explanation_key = "error.shared_balance.declined_no_quota"
+params = []
+remedy = "Sync with head office to be granted a quota."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_quota_expired"
+class = "none"
+summary = "Declined: this node's quota has expired."
+explanation_key = "error.shared_balance.declined_quota_expired"
+params = []
+remedy = "Sync with head office to be granted a new quota."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_quota_exhausted"
+class = "none"
+summary = "Declined: the amount is more than the quota this node has left."
+explanation_key = "error.shared_balance.declined_quota_exhausted"
+params = []
+remedy = "Ask for a smaller amount, or sync for a new quota."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_over_risk_cap"
+class = "none"
+summary = "Declined: accepting would put this node over its risk cap."
+explanation_key = "error.shared_balance.declined_over_risk_cap"
+params = []
+remedy = "Sync with head office to report earlier sales, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_no_funds"
+class = "none"
+summary = "Declined: this node's last view of the balance shows nothing left to spend."
+explanation_key = "error.shared_balance.declined_no_funds"
+params = []
+remedy = "Sync with head office to refresh the balance."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_invalid_amount"
+class = "none"
+summary = "Declined: the amount is not a valid spend."
+explanation_key = "error.shared_balance.declined_invalid_amount"
+params = []
+remedy = "Give an amount above zero."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.declined_unknown_balance"
+class = "none"
+summary = "Declined: this node does not know the balance."
+explanation_key = "error.shared_balance.declined_unknown_balance"
+params = []
+remedy = "Sync with head office to learn the balance."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_insufficient"
+class = "none"
+summary = "Head office quarantined an entry because the balance did not cover it."
+explanation_key = "error.shared_balance.rejected_insufficient"
+params = []
+remedy = "A person reviews the quarantined entry and decides how to settle it."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_no_grant"
+class = "none"
+summary = "Head office quarantined an entry that has no open quota grant behind it."
+explanation_key = "error.shared_balance.rejected_no_grant"
+params = []
+remedy = "A person reviews the quarantined entry; the grant may have been closed already."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_over_quota"
+class = "none"
+summary = "Head office quarantined an entry that goes past the node's granted quota."
+explanation_key = "error.shared_balance.rejected_over_quota"
+params = []
+remedy = "A person reviews the quarantined entry; the node may be misbehaving."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_after_expiry"
+class = "none"
+summary = "Head office quarantined an entry made at or after its quota's expiry."
+explanation_key = "error.shared_balance.rejected_after_expiry"
+params = []
+remedy = "A person reviews the quarantined entry; the node's clock may be wrong."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_unknown_balance"
+class = "none"
+summary = "Head office quarantined an entry for a balance it does not hold."
+explanation_key = "error.shared_balance.rejected_unknown_balance"
+params = []
+remedy = "A person reviews the quarantined entry."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.rejected_not_permitted"
+class = "none"
+summary = "Head office quarantined an entry of a kind a node may not send."
+explanation_key = "error.shared_balance.rejected_not_permitted"
+params = []
+remedy = "A person reviews the quarantined entry; nodes may only send debits."
+since = "0.1.0"
+
+[[entry]]
+code = "shared_balance.sink_failed"
+class = "none"
+summary = "The quarantine sink could not take a refused entry, so the entry was deferred."
+explanation_key = "error.shared_balance.sink_failed"
+params = []
+remedy = "Check the quarantine queue's availability; the sender redelivers the entry and head office offers it to the sink again, so nothing is lost."
+since = "0.1.0"

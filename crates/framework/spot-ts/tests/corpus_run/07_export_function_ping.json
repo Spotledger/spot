@@ -1,0 +1,6 @@
+{
+  "case": "export_function",
+  "entry": "ping",
+  "args": "a1",
+  "expect": "pong a1"
+}

@@ -1,0 +1,45 @@
+# Budgets of the `tier_s` profile (WP-TST-15.T3), set from the README, not from what the
+# platform achieves today. They apply to a run on the capped reference (L9_REQUIRE_CAP set;
+# see tests/tier_s.rs); an uncapped machine prints the verdicts and does not fail on them.
+#
+#   create_submit  posting p95 500 ms
+#   open_form      form open p95 300 ms
+#   all            error rate 0 (any failed request fails the run)
+#
+# Also enforced by the test, not expressible in this schema: host RSS plus PostgreSQL RSS
+# (proportional set size where the kernel offers it) under 1 GB at its steady-state peak,
+# measured every second; and no swap use by those processes.
+#
+# `tier_s_hdd` is the second pass on a throttled block device (cgroup `io.max`). Its lines are
+# informational: the test prints the degradation and never fails the build on them. The
+# numbers are the tier S ones so the report shows how far the throttled disk is from them.
+
+[[budget]]
+profile = "tier_s"
+operation = "all"
+max_error_rate = 0
+
+[[budget]]
+profile = "tier_s"
+operation = "create_submit"
+p95_ms = 500
+
+[[budget]]
+profile = "tier_s"
+operation = "open_form"
+p95_ms = 300
+
+[[budget]]
+profile = "tier_s_hdd"
+operation = "all"
+max_error_rate = 0
+
+[[budget]]
+profile = "tier_s_hdd"
+operation = "create_submit"
+p95_ms = 500
+
+[[budget]]
+profile = "tier_s_hdd"
+operation = "open_form"
+p95_ms = 300

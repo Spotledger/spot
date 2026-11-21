@@ -1,0 +1,35 @@
+[package]
+name = "spot-bpm-insight"
+description = "Process insight from Case events (WS8, WP-BPM-11.T1): cycle time per step with exact integer percentiles, waiting versus work time, retry and failure rates, bottleneck ranking, the stuck-run queue, and the report definitions the report engine serves - pure aggregations with no clock, no float and no storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The run id and the node kind every node-run event carries; the engine is the event source.
+spot-bpm-engine = { path = "../spot-bpm-engine" }
+# The DAG node id the engine's node-run records use.
+spot-dag = { path = "../spot-dag" }
+# The run-label keys and defaults (ADR-080) every user-visible name comes from.
+spot-bpm-model = { path = "../spot-bpm-model" }
+# The report-definition format insight shows up in as ordinary reports (WP-PLT-14).
+spot-reports = { path = "../spot-reports" }
+# `OffsetDateTime`, the crate's only time type: every instant is an argument.
+spot-app-api = { path = "../../../contracts/app-api" }
+# Every public data type carries stable, derive-based serde.
+serde = { version = "1", features = ["derive"] }
+# The one error type, with stable `bpm_insight.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Assert every raised code has a catalogue entry.
+spot-errors = { path = "../spot-errors" }
+# Property tests: folding a feed in chunks equals folding it whole.
+proptest = "1"
+# The event round-trip test reads and writes the wire form.
+serde_json = "1"
+
+[lints]
+workspace = true

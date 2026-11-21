@@ -1,0 +1,14 @@
+---
+source: crates/backends/spot-pg-query/tests/snapshots.rs
+expression: render(& ok(& q))
+---
+SELECT "p"."name" AS "name", "p"."credit_limit" AS "credit_limit" FROM "party" AS "p" WHERE (("p"."name" COLLATE "C" = $1 COLLATE "C") AND ("p"."credit_limit" > $2) AND ("p"."visits" >= $3) AND ("p"."active" = $4)) ORDER BY "p"."id" ASC LIMIT $5 OFFSET $6
+$1 = Text("O'Brien; DROP TABLE party; --")
+$2 = Numeric(10.00)
+$3 = Int8(7)
+$4 = Bool(true)
+$5 = Int8(25)
+$6 = Int8(50)
+columns = ["name", "credit_limit"]
+decode = [Text, Decimal { scale: Some(2) }]
+path = Transactional

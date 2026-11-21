@@ -1,0 +1,136 @@
+# moves codes: catalogued from the code the bundle tasks raise (generated from their doc comments; review the wording).
+
+[[entry]]
+code = "moves.after_cutover"
+class = "none"
+summary = "The operation was refused: after cutover."
+explanation_key = "error.moves.after_cutover"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.cluster_id"
+class = "none"
+summary = "The operation was refused: cluster id."
+explanation_key = "error.moves.cluster_id"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.cluster_region"
+class = "none"
+summary = "The operation was refused: cluster region."
+explanation_key = "error.moves.cluster_region"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.config_unreadable"
+class = "none"
+summary = "The operation was refused: config unreadable."
+explanation_key = "error.moves.config_unreadable"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.control_schema"
+class = "none"
+summary = "The operation was refused: control schema."
+explanation_key = "error.moves.control_schema"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.migration_running"
+class = "none"
+summary = "Audit reason when a migration is being applied on the tenant's host."
+explanation_key = "error.moves.migration_running"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.no_control_database"
+class = "none"
+summary = "The operation was refused: no control database."
+explanation_key = "error.moves.no_control_database"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.no_host_ports"
+class = "none"
+summary = "The operation was refused: no host ports."
+explanation_key = "error.moves.no_host_ports"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.not_configured"
+class = "none"
+summary = "The operation was refused: not configured."
+explanation_key = "error.moves.not_configured"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.registry"
+class = "none"
+summary = "The operation was refused: registry."
+explanation_key = "error.moves.registry"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.restore_running"
+class = "none"
+summary = "Audit reason when a restore is running on the tenant's host."
+explanation_key = "error.moves.restore_running"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.target_full"
+class = "none"
+summary = "The operation was refused: target full."
+explanation_key = "error.moves.target_full"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.target_not_accepting"
+class = "none"
+summary = "The operation was refused: target not accepting."
+explanation_key = "error.moves.target_not_accepting"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.tenant_state"
+class = "none"
+summary = "The operation was refused: tenant state."
+explanation_key = "error.moves.tenant_state"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"
+
+[[entry]]
+code = "moves.worker"
+class = "none"
+summary = "The operation was refused: worker."
+explanation_key = "error.moves.worker"
+params = []
+remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
+since = "0.1.0"

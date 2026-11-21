@@ -1,0 +1,32 @@
+{
+  "contract_version": "0.1.0",
+  "requires_shell": "0.1.0",
+  "app": "sample",
+  "actions": [
+    {
+      "id": "sample.start_work",
+      "origin": "app:sample",
+      "label": "Start work",
+      "icon": "play",
+      "slot": "doc.toolbar",
+      "doctype": "task",
+      "order": 10,
+      "visible_if": "doc.status == 'Open'",
+      "enabled_if": "not is_empty(doc.assignee)",
+      "permission": "task:write",
+      "confirm": "Start work on this task?",
+      "call": {
+        "doctype": "task",
+        "method": "start_work",
+        "args": {
+          "task": "doc.name"
+        },
+        "then": "refresh"
+      },
+      "open": {
+        "destination": "sample.tasks"
+      }
+    }
+  ],
+  "$comment": "expect: uiext.effect_invalid. An action has exactly one effect."
+}

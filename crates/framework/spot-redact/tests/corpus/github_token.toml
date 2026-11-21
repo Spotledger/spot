@@ -1,0 +1,47 @@
+# GitHub tokens: the five `gh?_` shapes (36 token characters) and the fine-grained
+# `github_pat_` shape, anchored on word boundaries.
+# Corpus format: [[case]] with input/expected/class (class must equal the file stem).
+
+[[case]]
+input = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = '[redacted:github_token]'
+class = 'github_token'
+
+[[case]]
+input = '''gho_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+ghu_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+ghs_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+ghr_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'''
+expected = '''[redacted:github_token]
+[redacted:github_token]
+[redacted:github_token]
+[redacted:github_token]'''
+class = 'github_token'
+
+[[case]]
+input = 'github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV'
+expected = '[redacted:github_token]'
+class = 'github_token'
+
+[[case]]
+input = 'clone failed: ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789 (403)'
+expected = 'clone failed: [redacted:github_token] (403)'
+class = 'github_token'
+
+# Shorter than a token: a prefix alone is not a secret.
+[[case]]
+input = 'prefix ghp_abc is a hint'
+expected = 'prefix ghp_abc is a hint'
+class = 'github_token'
+
+# The prefix is lower-case; an upper-case lookalike is a word, not a token.
+[[case]]
+input = 'GHP_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = 'GHP_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+class = 'github_token'
+
+# No word boundary on the left.
+[[case]]
+input = 'xghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+expected = 'xghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'
+class = 'github_token'

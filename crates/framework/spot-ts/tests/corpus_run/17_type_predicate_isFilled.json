@@ -1,0 +1,6 @@
+{
+  "case": "type_predicate",
+  "entry": "isFilled",
+  "args": "a",
+  "expect": true
+}

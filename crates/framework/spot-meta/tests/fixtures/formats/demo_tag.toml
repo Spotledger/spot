@@ -1,0 +1,9 @@
+name = "demo_tag"
+label = "Demo Tag"
+is_child = true
+
+[[fields]]
+name = "tag"
+type = "link"
+options = "tag"
+required = true

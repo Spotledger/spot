@@ -1,0 +1,73 @@
+# sync_acks codes: the `AckError` vocabulary of spot-sync-acks (ADR-065). One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "sync_acks.prefix_regressed"
+class = "none"
+summary = "Node {node} of tenant {tenant} reported applied prefix {after}, below the recorded {before}."
+explanation_key = "error.sync_acks.prefix_regressed"
+params = ["after", "before", "node", "tenant"]
+remedy = "Ignore the stale report; an applied prefix only moves forward. If the node was restored from a backup, re-register it."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.unknown_node"
+class = "none"
+summary = "Node {node} is not registered for tenant {tenant}."
+explanation_key = "error.sync_acks.unknown_node"
+params = ["node", "tenant"]
+remedy = "Register the node for that tenant before accepting its reports, and pass the node id and the tenant the transport authenticated."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.unknown_event"
+class = "none"
+summary = "No mandatory event is registered for tenant {tenant} at position {position}."
+explanation_key = "error.sync_acks.unknown_event"
+params = ["position", "tenant"]
+remedy = "Register the mandatory event first, or ask about a position that is one."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.hold_unknown"
+class = "none"
+summary = "Node {node} of tenant {tenant} holds position {position}, which is not a registered mandatory event."
+explanation_key = "error.sync_acks.hold_unknown"
+params = ["node", "position", "tenant"]
+remedy = "Register the event before reporting a hold on it, or drop the stale hold."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.condition_missing"
+class = "none"
+summary = "The condition definitions lack {id}."
+explanation_key = "error.sync_acks.condition_missing"
+params = ["id"]
+remedy = "Build the ledger with AckLedger::with_catalogue, or pass a catalogue that defines OBLIGATION_DUE_SOON, OBLIGATION_OVERDUE and OBLIGATION_RED."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.prefix_beyond_head"
+class = "none"
+summary = "Node {node} of tenant {tenant} claimed applied prefix {claimed}, above the hub's stream head {head}."
+explanation_key = "error.sync_acks.prefix_beyond_head"
+params = ["claimed", "head", "node", "tenant"]
+remedy = "Ignore the report; a node cannot have applied what the hub has not written. Check the node for corruption or tampering, and make sure the caller passes the hub's own stream head, never a value from the node."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.hold_beyond_head"
+class = "none"
+summary = "Node {node} of tenant {tenant} reported a hold at {claimed}, above the hub's stream head {head}."
+explanation_key = "error.sync_acks.hold_beyond_head"
+params = ["claimed", "head", "node", "tenant"]
+remedy = "Ignore the report; a node cannot hold a record the hub has not written. Check the node for corruption or tampering, and make sure the caller passes the hub's own stream head."
+since = "0.1.0"
+
+[[entry]]
+code = "sync_acks.id_invalid"
+class = "none"
+summary = "The id {id} contains '@', which is reserved."
+explanation_key = "error.sync_acks.id_invalid"
+params = ["id"]
+remedy = "Use a node or tenant id without '@'; the character separates node and tenant in a condition subject."
+since = "0.1.0"

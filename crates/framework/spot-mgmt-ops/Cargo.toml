@@ -1,0 +1,27 @@
+[package]
+name = "spot-mgmt-ops"
+description = "The typed management operation catalogue (WP-ADM-01.T1, blueprint WS22, ADR-44): operations, typed parameters, risk and target kinds as data, the catalogue with validation, and the 'show equivalent command' renderer with a parser that round-trips, shared by the Admin Center console and the spot CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Stable, derive-based serde on every public data type, so operations ride the
+# management API as JSON (the signed command envelope carries params as `Value`).
+serde = { version = "1", features = ["derive"] }
+# Whole-value pattern checks on `Text` parameters. Linear-time matching only:
+# `regex` never backtracks catastrophically.
+regex = "1.13"
+# Typed errors with stable `ops.*` codes.
+thiserror = "2"
+
+[dev-dependencies]
+# Property tests: random valid invocations round-trip through render and parse.
+proptest = "1"
+# JSON round-trip checks of the serde derives on the public data types.
+serde_json = "1"
+
+[lints]
+workspace = true

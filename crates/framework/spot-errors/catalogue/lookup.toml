@@ -1,0 +1,19 @@
+# lookup codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "lookup.seam_failed"
+class = "Unavailable"
+summary = "The lookup seam provider failed to produce a page: {seam}."
+explanation_key = "error.lookup.seam_failed"
+params = ["seam"]
+remedy = "Check the seam provider; retry the lookup."
+since = "0.1.0"
+
+[[entry]]
+code = "lookup.page_encoding"
+class = "Internal"
+summary = "The lookup page could not be encoded onto the wire: {error}."
+explanation_key = "error.lookup.page_encoding"
+params = ["error"]
+remedy = "Check the seam provider's page shape; this is a provider bug."
+since = "0.1.0"

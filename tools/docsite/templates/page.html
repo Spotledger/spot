@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · Spotledger contracts</title>
+<link rel="stylesheet" href="{{ prefix }}style.css">
+</head>
+<body>
+<nav class="sidebar">
+  <p class="brand"><a href="{{ prefix }}index.html">Spotledger<br>contracts</a></p>
+  {% for group in nav %}
+  <p class="section">{{ group.label }}</p>
+  <ul>
+  {% for entry in group.pages %}
+    <li><a href="{{ entry.href }}"{% if entry.active %} class="active" aria-current="page"{% endif %}>{{ entry.name }}</a></li>
+  {% endfor %}
+  </ul>
+  {% endfor %}
+</nav>
+<main>
+{{ content | safe }}
+</main>
+<footer>Generated deterministically from the contracts in this repository (see{% if commit %} commit <code>{{ commit }}</code>,{% endif %} <code>tools/docsite/README.md</code>).</footer>
+</body>
+</html>

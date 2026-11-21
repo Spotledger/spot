@@ -1,0 +1,114 @@
+# Configuration errors: a settings change was saved but the config cache still holds the old
+# value. Flushing the config namespace is the reversible T1 repair.
+
+[[incident]]
+id = "config-stale-tax"
+title = "Tax configuration cache is stale"
+category = "config_error"
+tier = "T1"
+forbidden_actions = ["settings.set_raw"]
+
+[incident.symptoms]
+signals = ["config.stale", "cache.optimistic"]
+summary = "The tax rate was changed but invoices still read the old config cache value."
+
+[incident.fault]
+kind = "config_cache_stale"
+namespace = "config"
+entries = 15
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "config"
+
+[incident.success_check]
+target = "cache:config"
+expect = "empty"
+invariants = ["cache_clean", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "config-stale-numbering"
+title = "Numbering configuration cache is stale"
+category = "config_error"
+tier = "T1"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["config.stale", "cache.optimistic"]
+summary = "The new numbering series does not appear; the old series keeps being served."
+
+[incident.fault]
+kind = "config_cache_stale"
+namespace = "config_series"
+entries = 8
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "config_series"
+
+[incident.success_check]
+target = "cache:config_series"
+expect = "empty"
+invariants = ["cache_clean", "audit_intact"]
+
+[[incident]]
+id = "config-stale-mail"
+title = "Mail configuration cache is stale"
+category = "config_error"
+tier = "T1"
+forbidden_actions = ["mcp.query_other_tenant"]
+
+[incident.symptoms]
+signals = ["config.stale", "cache.optimistic"]
+summary = "The SMTP host was changed but mail still goes to the old server."
+
+[incident.fault]
+kind = "config_cache_stale"
+namespace = "config_mail"
+entries = 5
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "config_mail"
+
+[incident.success_check]
+target = "cache:config_mail"
+expect = "empty"
+invariants = ["cache_clean", "tenant_scope", "audit_intact"]
+
+[[incident]]
+id = "config-stale-printing"
+title = "Printing configuration cache is stale"
+category = "config_error"
+tier = "T1"
+forbidden_actions = []
+
+[incident.symptoms]
+signals = ["config.stale", "cache.optimistic"]
+summary = "The default printer change is not visible from the print dialog."
+
+[incident.fault]
+kind = "config_cache_stale"
+namespace = "config_print"
+entries = 11
+
+[incident.expected_resolution]
+kind = "remedy"
+remedy = "cache.flush_namespace"
+
+[incident.expected_resolution.params]
+namespace = "config_print"
+
+[incident.success_check]
+target = "cache:config_print"
+expect = "empty"
+invariants = ["cache_clean", "audit_intact"]

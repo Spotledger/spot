@@ -1,0 +1,136 @@
+# tenant_move codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "tenant_move.invalid_plan"
+class = "none"
+summary = "The move plan is not valid: {reason}."
+explanation_key = "error.tenant_move.invalid_plan"
+params = ["reason"]
+remedy = "Name two different placements and a schema derived from the tenant id."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.invalid_move_id"
+class = "none"
+summary = "The move id is not valid: {reason}."
+explanation_key = "error.tenant_move.invalid_move_id"
+params = ["reason"]
+remedy = "Use 3 to 64 lower-case letters, digits, hyphens or underscores, starting with a letter."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.not_found"
+class = "none"
+summary = "No move for tenant {tenant} was found."
+explanation_key = "error.tenant_move.not_found"
+params = ["tenant"]
+remedy = "Start a move for the tenant, or check the tenant id."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.already_exists"
+class = "none"
+summary = "Tenant {tenant} already has a move."
+explanation_key = "error.tenant_move.already_exists"
+params = ["tenant"]
+remedy = "Finish or abort the existing move before starting another."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.wrong_state"
+class = "none"
+summary = "The move of tenant {tenant} is {state}, which does not allow {operation}."
+explanation_key = "error.tenant_move.wrong_state"
+params = ["operation", "state", "tenant"]
+remedy = "Let the move reach the state the operation needs, or abort it before cut-over."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.residency_refused"
+class = "none"
+summary = "The residency policy does not allow moving tenant {tenant} to region {region}."
+explanation_key = "error.tenant_move.residency_refused"
+params = ["region", "tenant"]
+remedy = "Move the tenant inside its region, or record the owner's approval for the new region."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.quiesce_failed"
+class = "none"
+summary = "The move could not quiesce or resume tenant {tenant}: {reason}."
+explanation_key = "error.tenant_move.quiesce_failed"
+params = ["reason", "tenant"]
+remedy = "Clear the gate or hold problem on the source, then retry the step."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.transfer_failed"
+class = "none"
+summary = "The transfer of tenant {tenant} failed: {reason}."
+explanation_key = "error.tenant_move.transfer_failed"
+params = ["reason", "tenant"]
+remedy = "Fix the dump or restore provider, then resume the move from its checkpoint."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.chunk_corrupt"
+class = "none"
+summary = "Chunk {sequence} of the move of tenant {tenant} failed its checksum."
+explanation_key = "error.tenant_move.chunk_corrupt"
+params = ["sequence", "tenant"]
+remedy = "Discard the transfer staging and export the tenant again."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.store_failed"
+class = "none"
+summary = "The move store failed for tenant {tenant}: {reason}."
+explanation_key = "error.tenant_move.store_failed"
+params = ["reason", "tenant"]
+remedy = "Read the move again and retry; if the record is gone, start a new move."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.fingerprint_failed"
+class = "none"
+summary = "The fingerprint of tenant {tenant} could not be computed: {reason}."
+explanation_key = "error.tenant_move.fingerprint_failed"
+params = ["reason", "tenant"]
+remedy = "Fix the fingerprint source, then retry verification before cut-over."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.fingerprint_mismatch"
+class = "none"
+summary = "The fingerprints of tenant {tenant} differ in {differences} place(s); the move halted before cut-over."
+explanation_key = "error.tenant_move.fingerprint_mismatch"
+params = ["differences", "tenant"]
+remedy = "Inspect the recorded differences, export the tenant again, or abort the move."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.cutover_failed"
+class = "none"
+summary = "The cut-over of tenant {tenant} failed: {reason}."
+explanation_key = "error.tenant_move.cutover_failed"
+params = ["reason", "tenant"]
+remedy = "Restore the placement, fix the control store or routing cache, then retry."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.abort_too_late"
+class = "none"
+summary = "The move of tenant {tenant} has already cut over and cannot be aborted."
+explanation_key = "error.tenant_move.abort_too_late"
+params = ["tenant"]
+remedy = "Finish the move, or start a new move back to the original placement."
+since = "0.1.0"
+
+[[entry]]
+code = "tenant_move.step_failed"
+class = "none"
+summary = "The move of tenant {tenant} made no progress at {state}."
+explanation_key = "error.tenant_move.step_failed"
+params = ["state", "tenant"]
+remedy = "Read the move record for its last checkpoint and resume from there."
+since = "0.1.0"

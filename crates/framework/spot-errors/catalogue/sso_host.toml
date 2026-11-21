@@ -1,0 +1,33 @@
+# sso_host codes: the hosting of single sign-on in `spot serve` (WP-IAM-05.T11).
+# The sign-in operations answer through the contract's `sso.*` codes (spot-sso and the native API);
+# these are the codes of the host itself: a setting that is out of range, a store choice the
+# profile refuses, and the stores that cannot be prepared at start-up. The two audit codes name
+# the outcome of an attempt that succeeded.
+
+[[entry]]
+code = "sso_host.settings_invalid"
+class = "none"
+summary = "[services.sso] holds a value out of range, or a store other than `postgres` or `memory`."
+explanation_key = "error.sso_host.settings_invalid"
+params = []
+remedy = "Correct the named key: the fetch timeout 1 to 30 seconds, the body cap 1 KiB to 1 MiB, the key cache age 60 to 86400 seconds, the refetch interval 1 to 3600 seconds and 1 to 256 keys."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_host.memory_store_refused"
+class = "none"
+summary = "The in-memory single sign-on stores are allowed only in the single-node profile, so the site does not start."
+explanation_key = "error.sso_host.memory_store_refused"
+params = []
+remedy = "Set `store = \"postgres\"` in [services.sso]. An in-memory pending store loses the sign-ins in flight at a restart and an in-memory replay store forgets an assertion, so a cluster must not use them."
+since = "0.1.0"
+
+[[entry]]
+code = "sso_host.stores_unavailable"
+class = "none"
+summary = "The single sign-on stores could not be built or prepared, so the site does not start with single sign-on enabled."
+explanation_key = "error.sso_host.stores_unavailable"
+params = []
+remedy = "Check that [services.secrets] is configured (the pending record is sealed with a key derived from it) and that the site's database user may create the sso tables."
+since = "0.1.0"
+

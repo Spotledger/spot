@@ -1,0 +1,37 @@
+[package]
+name = "spot-access-review-pg"
+description = "PostgreSQL stores for the access review and segregation-of-duties data (WP-SEC-02.T3, ADR-070 section 8): campaigns with compare-and-set decisions, an append-only history and a deadline tick as one stored-state operation, plus the versioned SoD rule set and expiring, never-edited overrides, all tenant-scoped and failing closed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The `CampaignStore` port, the state machine, the shared planning and the bounds.
+spot-access-review = { path = "../../framework/spot-access-review" }
+# The `SodStore` port, the rule loader and the override record.
+spot-sod = { path = "../../framework/spot-sod" }
+# `TenantId`: the tenant every call is scoped by.
+spot-tenancy = { path = "../../framework/spot-tenancy" }
+# `AppError`/`ErrorClass` for the schema-migration error.
+spot-app-api = { path = "../../../contracts/app-api" }
+# The connection pool the caller builds; the stores own their tables.
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+# Campaign specs, items, states and history entries are stored as JSON text next to their key
+# columns.
+serde = "1"
+serde_json = "1"
+
+[dev-dependencies]
+# Per-test scratch databases.
+spot-postgres = { path = "../spot-postgres", features = ["testing"] }
+# The backend-independent contract suites.
+spot-access-review = { path = "../../framework/spot-access-review", features = ["testing"] }
+spot-sod = { path = "../../framework/spot-sod", features = ["testing"] }
+# `#[tokio::test]` and the multi-thread runtime for the racing and restart cases.
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[lints]
+workspace = true
