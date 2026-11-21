@@ -79,6 +79,38 @@ an agent's tier is its stored registration, never a header or an argument), `ins
 isolation: calls are admitted or shed with `429` and `Retry-After`; with `required`, an absent admission
 makes `/mcp` answer `503`) and `install_key_scopes` (a store of API key scopes).
 
+## Extension tools
+
+A hosting service adds a tool of its own to the tool list (and so to tool calls) with
+`McpHandle::install_tool(Arc<dyn ExtensionTool>)` and takes it away with `uninstall_tool(name)`
+(contract `mcp.md`, section 5, "Extension tools"; the trait is `spot_mcp::ExtensionTool`). The service
+installs when it turns ready and uninstalls when it stops or degrades, and uninstalls before it installs
+so a reload does not collide with itself.
+
+- **Name.** Lower snake case, at most 64 characters, never `query` or `job_status`, never beginning
+  `search_`, `get_`, `create_`, `update_` or `call_`. A name that breaks the rule, or one already
+  installed, makes `install_tool` answer an `InstallError` and leaves the handle unchanged.
+- **Listing.** `ExtensionTool::spec(principal)` answers `None` for a principal that may not call the tool:
+  it is not listed and a call is the unknown-tool refusal. It is asked on every request, so nothing about
+  the principal is cached.
+- **The call.** It receives the calling `McpPrincipal` and the arguments (already checked against the
+  schema of the spec) and nothing else: no raw message, no credential. It answers JSON, or an
+  `ExtensionError` (the service's own catalogue code and a fixed sentence; never data).
+- **Same rules as any tool.** The per-principal rate limit, the request size limit, the deadline and the
+  audit record (the tool name, the principal, the outcome, never an argument) apply. A tool whose spec says
+  `writes` is recorded before it runs and is refused when the audit append fails. The tier rule of a
+  generated write tool does not apply: an extension gates itself (list it only for a tier that may use it and
+  check the tier again when it runs).
+- **Failure.** A tool that panics is a tool error (`mcp.internal`); one that never returns hits the
+  deadline (`mcp.timeout`); a call in flight when a service stops ends with that service's tool error and
+  the next tool list no longer shows the tool.
+
+No tool is installed by this module itself. Three services install the six agent tools of the contract
+when they are ready: retrieval (`retrieve`), agent memory (`recall_memory`) and the remedy host
+(`remedy_list`, `remedy_dry_run`, `remedy_apply`, `remedy_undo`); see `retrieval.md`, `agent-memory.md` and
+`remedies.md`. Each uninstalls its tool at shutdown, so the tool leaves the tool list with the service. A
+service the site has not turned on, or that is degraded, offers no tool.
+
 ## Known limits
 
 - The function registry served here is empty until the `function` module exposes its registry, so there

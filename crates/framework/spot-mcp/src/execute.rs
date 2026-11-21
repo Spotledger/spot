@@ -61,6 +61,19 @@ impl Server {
                 };
                 self.call_function(principal, &call, arguments, now).await
             }
+            ToolKind::Extension { name, .. } => {
+                // Read from the registry now: a tool uninstalled since the list was built is an
+                // unknown tool, never a call into a service that has stopped.
+                let extension = self
+                    .extensions
+                    .get(name)
+                    .ok_or_else(|| McpError::unknown_tool(name))?;
+                let answer =
+                    crate::extension::guarded_call(extension.as_ref(), principal, arguments)
+                        .await?;
+                // What a service answers is data it read from the tenant: marked untrusted.
+                Ok(structured(answer, true))
+            }
         }
     }
 

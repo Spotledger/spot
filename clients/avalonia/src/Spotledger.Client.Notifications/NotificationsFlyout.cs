@@ -17,6 +17,9 @@ namespace Spotledger.Client.Notifications;
 /// </summary>
 public sealed class NotificationsFlyout : UserControl, IDisposable
 {
+    /// <summary>The widest a row may measure: the flyout's maximum width less its 12 pixel margins.</summary>
+    internal const double RowMaxWidth = 396;
+
     private readonly NotificationFeed _feed;
     private readonly TimeProvider _time;
     private readonly Action<string, string> _openDocument;
@@ -112,6 +115,10 @@ public sealed class NotificationsFlyout : UserControl, IDisposable
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Content = new DockPanel { Children = { marker, text } },
+            // The measured size of a row is bounded whatever the text: a width of the flyout's
+            // own limit (less its margin) and clipping, so no sender can widen the surface.
+            MaxWidth = RowMaxWidth,
+            ClipToBounds = true,
         };
         DockPanel.SetDock(marker, Dock.Left);
         AutomationProperties.SetName(row, $"{NoticeLook.Name(notice.Severity)}: {notice.Title}{(read ? string.Empty : ", unread")}");

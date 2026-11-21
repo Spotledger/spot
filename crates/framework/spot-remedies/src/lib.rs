@@ -34,6 +34,10 @@
 //!   authoriser allows its action for the agent under the hard floor.
 //! - **Dry-run is mandatory**: apply takes the [`Plan`](model::Plan) that dry-run produced, and a
 //!   plan hash binds the two.
+//! - **Undo survives a restart**: a host reads the open records with
+//!   [`Registry::open_undo_records`](registry::Registry::open_undo_records), keeps them, and puts
+//!   the unexpired ones back with [`Registry::restore_undo`](registry::Registry::restore_undo).
+//!   The crate itself stores nothing and reads no clock.
 //! - **Undo is audited** and refuses an unknown or expired token, a later conflict, or an
 //!   irreversible remedy — which must be T3.
 //! - **The hard floor binds every remedy**: a submitted financial record changes only through
@@ -60,7 +64,7 @@ pub mod testing;
 pub use audit::{AuditEvent, AuditKind, AuditSink, MemoryAudit};
 pub use corpus::{Corpus, CorpusCase, Outcome, Suggestion};
 pub use ctx::{Gate, RemedyCtx, RemedySettings};
-pub use error::RemedyError;
+pub use error::{RemedyError, RestoreRefusal};
 pub use fixture::FakeWorld;
 pub use model::{
     Applied, Change, Check, DocTypeRef, ParamSchema, ParamType, Plan, PlanHash, PlanStep, RemedyId,

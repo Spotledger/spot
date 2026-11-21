@@ -338,6 +338,8 @@ fn anthropic(tenant: &str) -> TenantConfig {
         default_max_output_tokens: 100,
         tasks: vec!["chat".to_owned()],
         budget: None,
+        embedding_model: None,
+        embedding_dimensions: None,
     }
 }
 

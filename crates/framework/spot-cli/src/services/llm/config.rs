@@ -129,7 +129,21 @@ pub struct TenantConfig {
     /// The spending cap; `None` is no cap (usage is still counted).
     #[serde(default)]
     pub budget: Option<BudgetConfig>,
+    /// The embedding model, when this tenant embeds text (WP-AI-03.T7): the model id as the
+    /// endpoint spells it. `None` means the tenant does not embed, and an embedding call is
+    /// answered with `llm_host.embeddings_not_configured`. Anthropic has no embeddings endpoint,
+    /// so a tenant of that kind cannot set it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
+    /// The vector width asked of the embedding model (and checked in every reply); `None` leaves
+    /// the model's own width. The consumer of the vectors fixes it: agent memory needs
+    /// [`spot_agent_memory::EMBEDDING_DIM`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_dimensions: Option<u32>,
 }
+
+/// The largest embedding width a tenant may configure.
+pub const MAX_EMBEDDING_DIMENSIONS: u32 = 8_192;
 
 /// Why a configuration or a name is refused. The text is fixed and never quotes a value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -301,6 +315,28 @@ impl TenantConfig {
                 ));
             }
         }
+        if let Some(model) = &self.embedding_model {
+            if model.trim().is_empty() || model.len() > 200 {
+                return Err(ConfigProblem(
+                    "the embedding model must be 1 to 200 characters",
+                ));
+            }
+            if self.kind == Kind::Anthropic {
+                return Err(ConfigProblem(
+                    "this provider kind has no embeddings endpoint: configure an OpenAI-compatible tenant for embeddings",
+                ));
+            }
+        }
+        if let Some(dimensions) = self.embedding_dimensions {
+            if self.embedding_model.is_none() {
+                return Err(ConfigProblem(
+                    "the embedding dimensions need an embedding model",
+                ));
+            }
+            if !(1..=MAX_EMBEDDING_DIMENSIONS).contains(&dimensions) {
+                return Err(ConfigProblem("the embedding dimensions must be 1 to 8192"));
+            }
+        }
         Ok(())
     }
 
@@ -347,6 +383,8 @@ mod tests {
             default_max_output_tokens: 512,
             tasks: vec!["chat".into()],
             budget: None,
+            embedding_model: None,
+            embedding_dimensions: None,
         }
     }
 
@@ -413,6 +451,43 @@ mod tests {
             warn_at_percent: 0,
         });
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn embedding_fields_are_checked() {
+        let mut cfg = good();
+        cfg.kind = Kind::Openai;
+        cfg.embedding_model = Some("text-embedding-3-small".into());
+        cfg.embedding_dimensions = Some(64);
+        assert!(cfg.validate().is_ok());
+
+        // Anthropic has no embeddings endpoint.
+        let mut anthropic = cfg.clone();
+        anthropic.kind = Kind::Anthropic;
+        assert!(anthropic.validate().is_err());
+
+        // Dimensions need a model and a sane width.
+        let mut no_model = cfg.clone();
+        no_model.embedding_model = None;
+        assert!(no_model.validate().is_err());
+        for bad in [0, 8_193] {
+            let mut wide = cfg.clone();
+            wide.embedding_dimensions = Some(bad);
+            assert!(wide.validate().is_err(), "{bad}");
+        }
+        let mut empty = cfg.clone();
+        empty.embedding_model = Some("  ".into());
+        assert!(empty.validate().is_err());
+    }
+
+    #[test]
+    fn an_older_stored_configuration_still_reads() {
+        let text = r#"{"tenant":"a","kind":"ollama","endpoint":"http://h","model":"m","allowed_hosts":["h"]}"#;
+        let parsed: TenantConfig = serde_json::from_str(text).unwrap();
+        assert!(parsed.embedding_model.is_none() && parsed.embedding_dimensions.is_none());
+        // And a configuration without embeddings stores no embedding keys.
+        let stored = serde_json::to_string(&parsed).unwrap();
+        assert!(!stored.contains("embedding"));
     }
 
     #[test]

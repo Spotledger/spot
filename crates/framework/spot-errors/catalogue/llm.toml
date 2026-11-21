@@ -89,3 +89,12 @@ explanation_key = "error.llm.protocol"
 params = []
 remedy = "Report the provider and model; the detail names what was wrong."
 since = "0.1.0"
+
+[[entry]]
+code = "llm.embeddings_unsupported"
+class = "none"
+summary = "The provider has no embeddings endpoint."
+explanation_key = "error.llm.embeddings_unsupported"
+params = []
+remedy = "Use a provider with an embeddings endpoint (OpenAI-compatible); Anthropic has none."
+since = "0.1.0"

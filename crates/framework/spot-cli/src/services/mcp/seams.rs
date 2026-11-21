@@ -4,6 +4,12 @@
 //! [`McpHandle`] port the `mcp` module provides: `WP-AI-06.T4` installs the agent directory,
 //! `WP-AI-05.T4` installs the admission, and a key-scope store installs [`KeyScopes`]. Each is read
 //! on every request, so nothing is captured at start-up and a service that stops can uninstall.
+//!
+//! A hosting service adds a tool to `tools/list` and `tools/call` with [`McpHandle::install_tool`]
+//! (retrieval, agent memory and the remedy host: contract `mcp.md`, section 5, "Extension tools")
+//! and removes it with [`McpHandle::uninstall_tool`] when it stops or degrades. The tools live in
+//! an [`ExtensionRegistry`] the server reads on every request, so a tool installed or removed
+//! while the site runs is listed or gone on the next request, with no restart.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -18,7 +24,8 @@ use spot_core::Clock;
 use spot_iam_access::KeyScope;
 use spot_jobs::{InMemoryJobStore, JobStore};
 use spot_mcp::server::{MetaState, MetadataSource};
-use spot_mcp::{AuditSink, ChainSink};
+use spot_mcp::{AuditSink, ChainSink, ExtensionRegistry};
+pub use spot_mcp::{ExtensionError, ExtensionSpec, ExtensionTool, InstallError};
 use spot_meta::{EffectiveMeta, Registry};
 use spot_permissions::PermissionEngine;
 use spot_postgres::PgBackend;
@@ -161,6 +168,8 @@ struct Slots {
     admission: Option<Arc<dyn AgentAdmission>>,
     admission_required: bool,
     closed: Option<String>,
+    /// The tools services added; shared with every server built for this site.
+    extensions: Arc<ExtensionRegistry>,
 }
 
 /// The port the `mcp` module provides: later services install their hooks here.
@@ -228,6 +237,31 @@ impl McpHandle {
     /// Lifts a [`McpHandle::close`].
     pub fn reopen(&self) {
         self.write().closed = None;
+    }
+
+    /// Installs an extension tool: it is listed for the principals whose
+    /// [`ExtensionTool::spec`] is `Some` and callable from the next request.
+    ///
+    /// # Errors
+    ///
+    /// [`InstallError::BadName`] for a name that could collide with a generated tool (or is not
+    /// lower snake case) and [`InstallError::Duplicate`] for a name already installed. The handle
+    /// is unchanged on an error. A service that is built again on a reload uninstalls its tool
+    /// first, so a duplicate means two services claim one name.
+    pub fn install_tool(&self, tool: Arc<dyn ExtensionTool>) -> Result<(), InstallError> {
+        self.extensions().install(tool)
+    }
+
+    /// Removes the extension tool `name`; whether one was installed. A call already running
+    /// finishes with the tool it started with (the tool answers a tool error if its service has
+    /// stopped); the next `tools/list` no longer shows it and a call is an unknown tool.
+    pub fn uninstall_tool(&self, name: &str) -> bool {
+        self.extensions().uninstall(name)
+    }
+
+    /// The registry the servers of this site read on every request.
+    pub(super) fn extensions(&self) -> Arc<ExtensionRegistry> {
+        Arc::clone(&self.read().extensions)
     }
 
     pub(super) fn directory(&self) -> Option<Arc<dyn AgentDirectory>> {

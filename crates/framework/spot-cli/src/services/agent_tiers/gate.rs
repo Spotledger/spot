@@ -36,10 +36,23 @@ pub fn classify(name: &str) -> ToolNeed {
     if let Some(rest) = name.strip_prefix("get_") {
         return reads(rest);
     }
-    if name == "query" || name == "job_status" {
+    // The tenant-wide tools: `query`, `job_status` and the extension tools the host installs
+    // (WP-AI-04.T7). The remedy host re-checks the remedy's own tier on apply and undo; the
+    // gate only needs T1 to reach the two that change the world.
+    if matches!(
+        name,
+        "query" | "job_status" | "retrieve" | "recall_memory" | "remedy_list" | "remedy_dry_run"
+    ) {
         return ToolNeed {
             action: "read",
             tier: Tier::T0,
+            doctype: None,
+        };
+    }
+    if matches!(name, "remedy_apply" | "remedy_undo") {
+        return ToolNeed {
+            action: "call",
+            tier: Tier::T1,
             doctype: None,
         };
     }
@@ -228,6 +241,45 @@ mod tests {
         assert_eq!(classify("job_status").tier, Tier::T0);
         assert_eq!(classify("call_sample_reports_echo").tier, Tier::T3);
         assert_eq!(classify("something_new").tier, Tier::T3);
+    }
+
+    #[test]
+    fn the_mcp_extension_tools_have_their_own_needs() {
+        for name in ["retrieve", "recall_memory", "remedy_list", "remedy_dry_run"] {
+            let need = classify(name);
+            assert_eq!(need.tier, Tier::T0, "{name}");
+            assert_eq!(need.action, "read", "{name}");
+            assert_eq!(need.doctype, None, "{name}");
+        }
+        for name in ["remedy_apply", "remedy_undo"] {
+            let need = classify(name);
+            assert_eq!(need.tier, Tier::T1, "{name}");
+            assert_eq!(need.action, "call", "{name}");
+            assert_eq!(need.doctype, None, "{name}");
+        }
+        // A look-alike name is still the strongest.
+        assert_eq!(classify("remedy_apply_all").tier, Tier::T3);
+    }
+
+    #[test]
+    fn the_extension_tools_read_at_t0_and_the_two_that_change_need_t1_and_an_open_policy() {
+        let agent = reg(Domain::Operations, Tier::T1, Status::Active);
+        for name in ["retrieve", "recall_memory", "remedy_list", "remedy_dry_run"] {
+            assert_eq!(decide(&agent, &[], "t", name, 0, false), Ok(()), "{name}");
+        }
+        assert_eq!(
+            decide(&agent, &[], "t", "remedy_apply", 0, false),
+            Err(Refused("agent.above_tier".to_owned()))
+        );
+        // With the site policy open, a T1 agent may reach apply and undo; a T0 agent never.
+        for name in ["remedy_apply", "remedy_undo"] {
+            assert_eq!(decide(&agent, &[], "t", name, 0, true), Ok(()), "{name}");
+        }
+        let weak = reg(Domain::Operations, Tier::T0, Status::Active);
+        assert_eq!(
+            decide(&weak, &[], "t", "remedy_apply", 0, true),
+            Err(Refused("agent.above_tier".to_owned()))
+        );
     }
 
     #[test]

@@ -208,18 +208,13 @@ jobs:
           }
           failed_chunks=""
           rc=0
-          set -- $NAMES
-          while [ $# -gt 0 ]; do
-            chunk=(); n=0; extra=()
-            while [ $# -gt 0 ] && [ $n -lt 4 ]; do
-              if [ "$1" = l9-scale ]; then
-                [ $n -gt 0 ] && break
-                chunk+=(-p l9-scale); extra=(-- "${L9_SKIP[@]}"); shift; break
-              fi
-              chunk+=(-p "$1"); shift; n=$((n+1))
-            done
-            cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" || rc=1
-            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast "${chunk[@]}" "${extra[@]}" || { rc=1; failed_chunks="$failed_chunks [${chunk[*]}]"; }
+          run_chunk() { # run_chunk <build|grouped|doc>: the chunk is in $chunk, trailing test arguments in $extra
+            if [ "$1" = doc ]; then
+              : > "$RUNNER_TEMP/test-exes.json"  # doc-tests build nothing ahead of the run
+            else
+              cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" </dev/null || rc=1
+            fi
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast "${chunk[@]}" "${extra[@]}" </dev/null || { rc=1; failed_chunks="$failed_chunks [${chunk[*]}]"; }
             "$PY" -c '
           import json, os, sys
           for line in open(sys.argv[1]):
@@ -234,6 +229,57 @@ jobs:
                   except OSError:
                       pass
           ' "$RUNNER_TEMP/test-exes.json"
+          }
+          # A crate with many test targets (spot-cli has 248, each a large statically linked executable)
+          # is run in groups of about 40 targets: one `cargo test -p spot-cli` keeps every executable on
+          # disk at once (v0.1.15: 114 GB, "No space left on device" while linking). big-crates.txt has one
+          # line per group: the crate, then its cargo target arguments: `--lib --bins --examples` first,
+          # one `--doc` line (doc-tests run once per crate, not once per group), then `--test a --test b ...`.
+          BIG_FILE="$RUNNER_TEMP/big-crates.txt"
+          "$PY" -c '
+          import json, subprocess, sys
+          LIMIT, GROUP = 60, 40
+          m = json.loads(subprocess.run(["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                                        check=True, capture_output=True, text=True).stdout)
+          members = set(m["workspace_members"])
+          want = set(sys.argv[1:])
+          for p in sorted((p for p in m["packages"] if p["id"] in members and p["name"] in want), key=lambda p: p["name"]):
+              tests = sorted(t["name"] for t in p["targets"] if "test" in t["kind"])
+              if len(tests) < LIMIT:
+                  continue
+              k = -(-len(tests) // GROUP)
+              size = -(-len(tests) // k)
+              print(p["name"], "--lib --bins --examples")
+              if any(set(t["kind"]) & {"lib", "rlib", "proc-macro"} for t in p["targets"]):
+                  print(p["name"], "--doc")
+              for i in range(0, len(tests), size):
+                  print(p["name"], " ".join("--test " + t for t in tests[i:i + size]))
+          ' $NAMES > "$BIG_FILE"
+          cut -d" " -f1 "$BIG_FILE" | sort | uniq -c | while read -r c n; do echo "grouped: $n in $c groups"; done
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0; extra=(); big=""
+            while [ $# -gt 0 ] && [ $n -lt 4 ]; do
+              if [ "$1" = l9-scale ]; then
+                [ $n -gt 0 ] && break
+                chunk+=(-p l9-scale); extra=(-- "${L9_SKIP[@]}"); shift; break
+              fi
+              if grep -q "^$1 " "$BIG_FILE"; then
+                [ $n -gt 0 ] && break
+                big=$1; shift; break
+              fi
+              chunk+=(-p "$1"); shift; n=$((n+1))
+            done
+            if [ -n "$big" ]; then
+              while IFS= read -r line <&3; do
+                read -r -a g <<< "$line"
+                chunk=(-p "${g[0]}" "${g[@]:1}"); extra=()
+                mode=grouped; [ "${g[1]}" = --doc ] && mode=doc
+                run_chunk "$mode"
+              done 3< <(grep "^$big " "$BIG_FILE")
+              continue
+            fi
+            run_chunk build
           done
           [ -z "$failed_chunks" ] || echo "::error::failing chunks:$failed_chunks"
           exit $rc

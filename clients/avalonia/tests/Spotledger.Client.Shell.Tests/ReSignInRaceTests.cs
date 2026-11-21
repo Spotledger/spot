@@ -211,6 +211,36 @@ public sealed class ReSignInRaceTests
     }
 
     /// <summary>
+    /// WP-TST-14.T13: the flaky interleaving, forced. A hand-rolled call that is the ONLY one
+    /// in flight when its 401 is processed (the other call has not counted itself in yet, which
+    /// on a loaded host is a thread-timing outcome) used to raise <see cref="ApiConnection.SessionExpired"/>
+    /// itself and then again through the prompt. One expiry is one event, whatever the timing.
+    /// </summary>
+    [Fact]
+    public async Task ALoneHandRolled401RaisesExactlyOneExpiryEvent()
+    {
+        using var h = await SignedInAsync();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var providerCalls = 0;
+        var expiryEvents = 0;
+        h.Connection.ReSignInProvider = () =>
+        {
+            Interlocked.Increment(ref providerCalls);
+            h.Connection.Tokens.SetToken(TestHarness.RefreshedSessionToken);
+            return Task.FromResult(true);
+        };
+        h.Connection.SessionExpired += (_, _) => Interlocked.Increment(ref expiryEvents);
+        h.Handler.PasswordResponder = PasswordAnsweringOnlyWith(FreshBearer);
+
+        await h.Connection.ChangePasswordAsync("old-passphrase-01", "new-passphrase-02", cancellationToken);
+
+        Assert.Equal(1, providerCalls);
+        Assert.Equal(1, expiryEvents);
+        Assert.Equal(2, h.Handler.RequestsFor("/api/v1/auth/password").Count());
+    }
+
+    /// <summary>
     /// The gate-release bug: the old cleanup called <c>_reSignInGate.WaitAsync</c> without
     /// awaiting it and then released the semaphore, so a contended cleanup released a permit
     /// it never held and two callers could sit inside the gate at once. The observable

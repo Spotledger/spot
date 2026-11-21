@@ -8,6 +8,7 @@
 //! appears on the next `tools/list` with no restart.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde_json::{Value as Json, json};
 use spot_app_api::lifecycle::Operation;
@@ -16,6 +17,7 @@ use spot_functions::{FunctionInfo, FunctionRegistry};
 use spot_meta::Registry;
 use spot_permissions::{Action, DocFacts, PermissionEngine};
 
+use crate::extension::{ExtensionTool, spec_of};
 use crate::limits::MAX_ROWS;
 use crate::principal::McpPrincipal;
 use crate::schema::{field_schema, tool_input_schema};
@@ -58,16 +60,27 @@ pub enum ToolKind {
         /// Whether the call enqueues a job and returns its id.
         async_job: bool,
     },
+    /// A tool a hosting service installed (`ExtensionTool`): `retrieve`, `recall_memory`, the
+    /// `remedy_*` tools. The call is dispatched to the installed tool of that name.
+    Extension {
+        /// The tool's name.
+        name: String,
+        /// Whether the tool can change data (its spec said so for this principal).
+        writes: bool,
+    },
 }
 
 impl ToolKind {
     /// Whether the tool changes anything.
     #[must_use]
     pub fn writes(&self) -> bool {
-        matches!(
-            self,
-            ToolKind::CreateDraft { .. } | ToolKind::Update { .. } | ToolKind::Function { .. }
-        )
+        match self {
+            ToolKind::CreateDraft { .. } | ToolKind::Update { .. } | ToolKind::Function { .. } => {
+                true
+            }
+            ToolKind::Extension { writes, .. } => *writes,
+            _ => false,
+        }
     }
 
     /// Whether the tool returns a job id instead of running to completion.
@@ -147,6 +160,22 @@ impl ToolCatalog {
         principal: &McpPrincipal,
         functions: &FunctionRegistry,
     ) -> ToolCatalog {
+        Self::build_with(registry, engine, principal, functions, &[])
+    }
+
+    /// Builds the catalog as [`ToolCatalog::build`] does, then lists the `extensions` whose
+    /// [`spec`](ExtensionTool::spec) is `Some` for `principal`, after the generated tools and in
+    /// name order. An extension whose name equals a generated tool's, or an earlier extension's,
+    /// is not listed: the generated tool wins and the name is never suffixed (the registry
+    /// refuses such a name at install time, so this is a second line of defence).
+    #[must_use]
+    pub fn build_with(
+        registry: &Registry,
+        engine: &PermissionEngine,
+        principal: &McpPrincipal,
+        functions: &FunctionRegistry,
+        extensions: &[Arc<dyn ExtensionTool>],
+    ) -> ToolCatalog {
         let mut tools = Vec::new();
         let effective = registry.effective();
         for view in effective.doctypes() {
@@ -161,6 +190,28 @@ impl ToolCatalog {
             tools.push(function_tool(&function));
         }
         tools.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut extra: Vec<ToolSpec> = Vec::new();
+        for extension in extensions {
+            let name = extension.name();
+            if tools.iter().chain(&extra).any(|t| t.name == name) {
+                continue;
+            }
+            let Some(spec) = spec_of(extension.as_ref(), principal) else {
+                continue;
+            };
+            extra.push(ToolSpec {
+                name: name.to_owned(),
+                title: spec.title.unwrap_or_else(|| name.to_owned()),
+                description: spec.description,
+                input_schema: spec.input_schema,
+                kind: ToolKind::Extension {
+                    name: name.to_owned(),
+                    writes: spec.writes,
+                },
+            });
+        }
+        extra.sort_by(|a, b| a.name.cmp(&b.name));
+        tools.extend(extra);
         let index = tools
             .iter()
             .enumerate()

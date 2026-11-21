@@ -9,6 +9,11 @@
 #   cargo fmt --all -- --check
 #   clippy (-D warnings): manual run with the `clippy` input only
 #   tests: manual run with `test_crates` ("spot-a spot-b" or "-p spot-a -p spot-b") only
+#   dotnet repeat runs: manual run with `dotnet_tests` (a test project name under
+#   clients/avalonia/tests, e.g. Spotledger.Client.Shell.Tests) only: one build, then the
+#   project (narrowed by `dotnet_filter`) is run `dotnet_repeat` times and the job fails if any
+#   iteration fails. It proves a flaky test fixed or not on a real hosted runner. The default lane
+#   stays Rust-only.
 #
 # Every cargo job writes its whole output (`--message-format short`) to a text file and uploads it
 # as the artifact `compile-<job>`; the job log ends with the first 40 errors. To read them:
@@ -32,6 +37,18 @@ on:
         description: "Run the tests of these crates (names separated by spaces, or -p a -p b); empty: no tests"
         type: string
         default: ""
+      dotnet_tests:
+        description: "Run a .NET test project repeatedly (project name under clients/avalonia/tests, e.g. Spotledger.Client.Shell.Tests); empty: no .NET job"
+        type: string
+        default: ""
+      dotnet_filter:
+        description: "dotnet test --filter expression for the repeat runs (e.g. FullyQualifiedName~ReSignInRaceTests); empty: the whole project"
+        type: string
+        default: ""
+      dotnet_repeat:
+        description: "How many times the repeat run executes the project (1 to 200)"
+        type: string
+        default: "30"
 permissions:
   contents: read
 concurrency:
@@ -284,12 +301,13 @@ jobs:
             return "$s"
           }
           rc=0
-          set -- $NAMES
-          while [ $# -gt 0 ]; do
-            chunk=(); n=0
-            while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
-            cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" 2> >(tee -a "$OUT" >&2) || rc=1
-            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" | tee -a "$OUT"
+          run_chunk() { # run_chunk <build|grouped|doc>: the chunk is in $chunk
+            if [ "$1" = doc ]; then
+              : > "$RUNNER_TEMP/test-exes.json"  # doc-tests build nothing ahead of the run
+            else
+              cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" 2> >(tee -a "$OUT" >&2) </dev/null || rc=1
+            fi
+            run_timed "cargo test ${chunk[*]}" cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" </dev/null | tee -a "$OUT"
             [ "${PIPESTATUS[0]}" = 0 ] || rc=1
             "$PY" -c '
           import json, os, sys
@@ -305,6 +323,53 @@ jobs:
                   except OSError:
                       pass
           ' "$RUNNER_TEMP/test-exes.json"
+          }
+          # A crate with many test targets (spot-cli has 248, each a large statically linked executable)
+          # is run in groups of about 40 targets: one `cargo test -p spot-cli` keeps every executable on
+          # disk at once (v0.1.15: 114 GB, "No space left on device" while linking). big-crates.txt has one
+          # line per group: the crate, then its cargo target arguments: `--lib --bins --examples` first,
+          # one `--doc` line (doc-tests run once per crate, not once per group), then `--test a --test b ...`.
+          BIG_FILE="$RUNNER_TEMP/big-crates.txt"
+          "$PY" -c '
+          import json, subprocess, sys
+          LIMIT, GROUP = 60, 40
+          m = json.loads(subprocess.run(["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                                        check=True, capture_output=True, text=True).stdout)
+          members = set(m["workspace_members"])
+          want = set(sys.argv[1:])
+          for p in sorted((p for p in m["packages"] if p["id"] in members and p["name"] in want), key=lambda p: p["name"]):
+              tests = sorted(t["name"] for t in p["targets"] if "test" in t["kind"])
+              if len(tests) < LIMIT:
+                  continue
+              k = -(-len(tests) // GROUP)
+              size = -(-len(tests) // k)
+              print(p["name"], "--lib --bins --examples")
+              if any(set(t["kind"]) & {"lib", "rlib", "proc-macro"} for t in p["targets"]):
+                  print(p["name"], "--doc")
+              for i in range(0, len(tests), size):
+                  print(p["name"], " ".join("--test " + t for t in tests[i:i + size]))
+          ' $NAMES > "$BIG_FILE"
+          cut -d" " -f1 "$BIG_FILE" | sort | uniq -c | while read -r c n; do echo "grouped: $n in $c groups"; done
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0; big=""
+            while [ $# -gt 0 ] && [ $n -lt 10 ]; do
+              if grep -q "^$1 " "$BIG_FILE"; then
+                [ $n -gt 0 ] && break
+                big=$1; shift; break
+              fi
+              chunk+=(-p "$1"); shift; n=$((n+1))
+            done
+            if [ -n "$big" ]; then
+              while IFS= read -r line <&3; do
+                read -r -a g <<< "$line"
+                chunk=(-p "${g[0]}" "${g[@]:1}")
+                mode=grouped; [ "${g[1]}" = --doc ] && mode=doc
+                run_chunk "$mode"
+              done 3< <(grep "^$big " "$BIG_FILE")
+              continue
+            fi
+            run_chunk build
           done
           errs=$(grep -E '(^|: )error(\[E[0-9]+\])?:|^test .* FAILED|^failures:|panicked at' "$OUT" | head -40 || true)
           { echo "### cargo test: exit $rc"; echo '```'; printf '%s\n' "$errs"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -340,3 +405,53 @@ jobs:
         name: stop the throwaway PostgreSQL
         shell: bash
         run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true
+
+  dotnet:
+    # lint-allow: no-postgres the .NET build and its tests use no database.
+    name: dotnet repeat runs (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.dotnet_tests != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DOTNET_TESTS: ${{ inputs.dotnet_tests }}
+      DOTNET_FILTER: ${{ inputs.dotnet_filter }}
+      DOTNET_REPEAT: ${{ inputs.dotnet_repeat }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with: { global-json-file: clients/avalonia/global.json }
+      - name: build the solution once (the same build as ci.yml)
+        shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" tools/ci/dotnet_build.py "$(ls clients/avalonia/*.sln | head -1)"
+      - name: run the project repeatedly; fail if any iteration fails
+        shell: bash
+        run: |
+          # The inputs are data, not shell: validate the project name and the count; the filter
+          # is passed as one quoted argument and never interpreted by the shell.
+          if ! [[ "$DOTNET_TESTS" =~ ^[A-Za-z0-9_.]+$ ]]; then echo "::error::not a project name: $DOTNET_TESTS"; exit 2; fi
+          if ! [[ "$DOTNET_REPEAT" =~ ^[0-9]+$ ]] || [ "$DOTNET_REPEAT" -lt 1 ] || [ "$DOTNET_REPEAT" -gt 200 ]; then echo "::error::dotnet_repeat must be 1 to 200"; exit 2; fi
+          proj="clients/avalonia/tests/$DOTNET_TESTS"
+          [ -d "$proj" ] || { echo "::error::no such test project: $proj"; exit 2; }
+          args=(-c Release --no-build)
+          if [ -n "$DOTNET_FILTER" ]; then args+=(--filter "$DOTNET_FILTER"); fi
+          failed=0
+          for i in $(seq 1 "$DOTNET_REPEAT"); do
+            if dotnet test "$proj" "${args[@]}" > "$RUNNER_TEMP/iter-$i.txt" 2>&1; then
+              echo "iteration $i/$DOTNET_REPEAT: pass ($(grep -E '^(Passed|Failed)!' "$RUNNER_TEMP/iter-$i.txt" | tail -1))"
+            else
+              failed=$((failed + 1))
+              echo "::group::iteration $i/$DOTNET_REPEAT: FAILED"
+              grep -vE '^\s*$' "$RUNNER_TEMP/iter-$i.txt" | tail -80
+              echo "::endgroup::"
+              echo "iteration $i/$DOTNET_REPEAT: FAILED"
+            fi
+          done
+          { echo "### dotnet repeat run: $DOTNET_TESTS ${DOTNET_FILTER:+filter $DOTNET_FILTER}"; echo; echo "$((DOTNET_REPEAT - failed)) of $DOTNET_REPEAT iterations passed"; } | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$failed" = 0 ]

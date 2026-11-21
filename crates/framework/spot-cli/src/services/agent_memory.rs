@@ -60,6 +60,8 @@ pub mod facade;
 pub mod filter;
 #[path = "agent_memory/host.rs"]
 pub mod host;
+#[path = "agent_memory/tools.rs"]
+pub mod tools;
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -73,6 +75,7 @@ use tokio::sync::watch;
 use self::facade::{AgentMemory, Limits, MemoryFault, Parts};
 use self::filter::{Fut, RecordValues, WriteFilter};
 use crate::services::ai_audit::AiAuditPort;
+use crate::services::mcp::McpHandle;
 use crate::services::ports::{ConsumerLease, OutboxLease, SystemReader};
 use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
@@ -209,6 +212,8 @@ struct ServiceParts {
     audit: Option<Arc<dyn AiAuditPort>>,
     clock: Arc<dyn spot_core::Clock>,
     handle: Arc<MemoryHandle>,
+    /// The MCP service's handle, when it runs: the `recall_memory` tool is taken off it at shutdown.
+    mcp: Option<Arc<McpHandle>>,
 }
 
 /// The service: the start-up check (provision, open, prepare) and the scheduled retention.
@@ -338,6 +343,15 @@ impl Service for MemoryService {
         })
     }
 
+    fn shutdown(&self) -> RunFuture<'_> {
+        Box::pin(async move {
+            if let Some(mcp) = &self.parts.mcp {
+                mcp.uninstall_tool(tools::NAME);
+            }
+            Ok(())
+        })
+    }
+
     fn run(&self, stop: watch::Receiver<bool>) -> RunFuture<'_> {
         Box::pin(async move {
             let mut stop = stop;
@@ -367,6 +381,14 @@ impl Service for MemoryService {
 fn degraded(ctx: &mut SiteCtx<'_>, reason: &'static str) {
     ctx.add(Idle::new("agent_memory", Level::Optional, move || {
         Box::pin(async move { Err(reason.to_owned()) })
+    }));
+}
+
+/// A degraded entry with a sentence built at run time.
+fn degraded_with(ctx: &mut SiteCtx<'_>, reason: String) {
+    ctx.add(Idle::new("agent_memory", Level::Optional, move || {
+        let reason = reason.clone();
+        Box::pin(async move { Err(reason) })
     }));
 }
 
@@ -406,6 +428,16 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         return Ok(());
     };
     let handle = Arc::new(MemoryHandle::default());
+    // The MCP service is absent when it is off: nothing to install, not an error. The tool is
+    // listed only once the start-up check provisioned the memory (`MemoryHandle::get`), and taken
+    // off again at shutdown. A name another service holds degrades this one, naming the tool.
+    let mcp = ctx.port::<McpHandle>();
+    if let Some(mcp) = &mcp
+        && let Err(reason) = tools::RecallMemoryTool::install(mcp, &handle, settings.max_recall_k)
+    {
+        degraded_with(ctx, format!("agent_memory: {reason}"));
+        return Ok(());
+    }
     let job_handle = Arc::clone(&handle);
     let (reader, audit, clock) = (
         ctx.port::<dyn SystemReader>(),
@@ -425,6 +457,7 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             audit,
             clock,
             handle: Arc::clone(&handle),
+            mcp,
         },
     }));
     ctx.job_handlers().register(RETENTION_JOB, move |_job| {

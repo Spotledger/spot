@@ -7,7 +7,7 @@ per case; a **blocked** case names the work package that owns the missing surfac
 distance between the brief and the product is visible in every run instead of being deleted.
 The pass or fail state is not listed here: the run report carries it.
 
-287 cases, of which 186 are blocked by surfaces the host does not serve yet.
+290 cases, of which 188 are blocked by surfaces the host does not serve yet.
 
 ## Authentication and sessions
 
@@ -534,8 +534,16 @@ The pass or fail state is not listed here: the run report carries it.
 
 | Case | Pins | Kind |
 | --- | --- | --- |
-| `retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document` | an agent signed in as a restricted user calls the `retrieve` MCP tool and gets no hit for a document that user may not read, and the unreadable document's text is in no snippet | blocked: WP-AI-10.T3: the MCP service has no extra-tool hook (`spot-mcp` ToolKind is closed and `McpHandle` has no tool slot), so `retrieve` is not on tools/list over HTTP; the tool exists as a port and is tested in-process |
-| `retrieval: a_revoked_share_applies_to_the_next_retrieve_call` | after the share that made a document readable is revoked over REST, the very next `retrieve` call returns no hit for it, with no re-index in between | blocked: WP-AI-03.T5: no service provides the embedding port yet, so a running site cannot index; the in-process proof is `retrieval_service.rs` |
+| `retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document` | an agent signed in as a restricted user calls the `retrieve` MCP tool and gets no hit for a document that user may not read, and the unreadable document's text is in no snippet | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (the LLM service provides the embedding port only then, WP-AI-03.T7), so retrieval is degraded on it, nothing is indexed and `retrieve` is not on tools/list; the tool and its extension-tool adapter are proved in-process by `retrieval_service.rs` |
+| `retrieval: a_revoked_share_applies_to_the_next_retrieve_call` | after the share that made a document readable is revoked over REST, the very next `retrieve` call returns no hit for it, with no re-index in between | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (WP-AI-03.T7), so it has no embedding port and cannot index; the in-process proof is `retrieval_service.rs` |
+
+## Agent tools
+
+| Case | Pins | Kind |
+| --- | --- | --- |
+| `agent_tools: a_t1_remedy_dry_runs_applies_and_undoes_through_the_tools` | a registered agent calls `remedy_list`, `remedy_dry_run`, `remedy_apply` and `remedy_undo` over `POST /mcp`: the answer carries the sealed plan, the `undo_token`, `route` and `undo_expires_at`, a tampered plan is refused, and the audit chain holds the intent record before the change | blocked: WP-AI-07.T5: the `dyn WorldAccess` the composer provides (WP-AI-07.T5) has no part the harness site's remedies can run on (the seeded remedies need jobs and cache parts that read ports the harness does not configure), so a dry-run is refused by its precondition; and the harness has no path that signs in as a registered agent (the agent directory of WP-AI-06.T4 resolves one only from a stored registration) |
+| `agent_tools: recall_memory_is_gated_by_the_agents_tier` | a registered agent calls `recall_memory` and gets no entry learned above its tier, a user principal does not see the tool, and an entry carries no document field value | blocked: WP-AI-03.T7: the harness site configures no LLM tenant with an `embedding_model` (WP-AI-03.T7), so agent memory has no embedder, is degraded and `recall_memory` is not on tools/list; the in-process proof is `agent_memory_service.rs` |
+| `agent_tools: the_agent_tools_are_absent_for_a_user_and_while_their_services_are_off` | a signed-in user's `tools/list` holds none of `retrieve`, `recall_memory` and the four `remedy_*` tools (retrieval and agent memory are off, the remedy tools are for agents), and `tools/call` of each is the same unknown-tool refusal as for any name nobody offers | case |
 
 ## Processes
 

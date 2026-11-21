@@ -238,7 +238,7 @@ fn build_bridge(backend: &spot_postgres::PgBackend, pool_size: usize) -> Result<
     let config = BridgeConfig {
         name: "sync_catchup_serve".to_owned(),
         max_in_flight: largest.min(2),
-        workers: 1,
+        workers: 2,
         queue_capacity: 8,
         default_deadline: Duration::from_secs(10),
         max_deadline: Duration::from_secs(30),

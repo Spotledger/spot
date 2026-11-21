@@ -15,6 +15,9 @@
 //! - [`error::LlmError`]: typed, explained errors with stable `llm.*` codes and a retryable
 //!   flag (ADR-26: typed, explained errors).
 //! - [`ApiKey`]: a key that prints `***` and zeroises on drop.
+//! - [`embed::Embedder`]: embeddings beside completions, a trait of its own so a provider that
+//!   does not embed does not implement it (WP-AI-03.T6); [`mock::MockEmbedder`] is its
+//!   deterministic test double.
 //! - [`mock::MockProvider`]: the scripted provider tests build on, and
 //!   [`conformance`]: the checks every provider must pass, green on the mock and later run
 //!   against recorded HTTP exchanges.
@@ -26,6 +29,7 @@
 
 pub mod api_key;
 pub mod conformance;
+pub mod embed;
 pub mod error;
 pub mod message;
 pub mod mock;
@@ -36,9 +40,10 @@ pub mod stream;
 pub mod transport;
 
 pub use api_key::ApiKey;
+pub use embed::{EmbedRequest, EmbedResponse, Embedder, MAX_EMBED_INPUT_BYTES, MAX_EMBED_INPUTS};
 pub use error::LlmError;
 pub use message::{Message, Part, Role};
-pub use mock::{MockAction, MockProvider, MockStep};
+pub use mock::{MockAction, MockEmbedder, MockProvider, MockStep};
 pub use provider::{BoxFuture, Capabilities, Provider};
 pub use request::{Request, ToolSpec};
 pub use response::{Response, StopReason, Usage};

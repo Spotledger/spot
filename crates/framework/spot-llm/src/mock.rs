@@ -5,11 +5,12 @@ use std::sync::{Mutex, PoisonError};
 use serde::{Deserialize, Serialize};
 
 use crate::conformance::{ErrorOracle, Fixture};
+use crate::embed::{EmbedRequest, EmbedResponse, Embedder};
 use crate::error::LlmError;
 use crate::message::{Message, Part};
-use crate::provider::{Capabilities, Provider};
+use crate::provider::{BoxFuture, Capabilities, Provider};
 use crate::request::Request;
-use crate::response::Response;
+use crate::response::{Response, Usage};
 use crate::stream::{BoxStream, IterStream, StreamEvent, assemble};
 
 /// One scripted step: what it fires on, and what it then does.
@@ -338,4 +339,164 @@ fn synthesise(response: &Response) -> Vec<StreamEvent> {
         reason: response.stop_reason,
     });
     events
+}
+
+/// A deterministic embedder for tests (WP-AI-03.T6): the vector of a text is derived from a
+/// hash of the text, so the same text always embeds to the same vector, different texts to
+/// different ones, and a test can fail a call on demand.
+///
+/// The vector width is the configured one unless the request asks for `dimensions`. Values
+/// are built from bits (a mantissa from the hash, a fixed exponent, a sign bit), so no float
+/// arithmetic is involved and every value is finite and non-zero, with magnitude between 1
+/// and 2; the vectors are not normalised. Usage counts one token per four bytes of input,
+/// rounded up. Like the real providers, the mock checks the request's bounds first.
+pub struct MockEmbedder {
+    id: String,
+    width: usize,
+    always_fail: Option<LlmError>,
+    fail_next: Mutex<Vec<LlmError>>,
+    recorded: Mutex<Vec<EmbedRequest>>,
+}
+
+impl MockEmbedder {
+    /// An embedder with id `mock-embedder` producing vectors of `width` values (at least 1).
+    pub fn new(width: usize) -> Self {
+        Self {
+            id: "mock-embedder".to_owned(),
+            width: width.max(1),
+            always_fail: None,
+            fail_next: Mutex::new(Vec::new()),
+            recorded: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// A caller-chosen id, to test provider id plumbing.
+    pub fn titled(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
+    /// Fails every call with `error`.
+    pub fn failing_with(mut self, error: LlmError) -> Self {
+        self.always_fail = Some(error);
+        self
+    }
+
+    /// Fails the next call only with `error`; calls queue, oldest first.
+    pub fn fail_next(&self, error: LlmError) {
+        self.fail_queue().push(error);
+    }
+
+    /// Every request received, in order, including the ones that failed.
+    pub fn requests(&self) -> Vec<EmbedRequest> {
+        self.recorded_requests().clone()
+    }
+
+    /// How many requests were received.
+    pub fn recorded_count(&self) -> usize {
+        self.recorded_requests().len()
+    }
+
+    /// The vector this embedder gives `text` at `width` values.
+    pub fn vector_for(text: &str, width: usize) -> Vec<f32> {
+        let mut state = fnv1a(text.as_bytes());
+        let mut vector = Vec::with_capacity(width);
+        for _ in 0..width {
+            state = splitmix64(state);
+            let mantissa = (state as u32) & 0x007F_FFFF;
+            let sign = ((state >> 40) as u32 & 1) << 31;
+            // Exponent 127 puts the value in [1, 2); the sign bit mirrors it.
+            vector.push(f32::from_bits(sign | 0x3F80_0000 | mantissa));
+        }
+        vector
+    }
+
+    fn fail_queue(&self) -> std::sync::MutexGuard<'_, Vec<LlmError>> {
+        self.fail_next
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn recorded_requests(&self) -> std::sync::MutexGuard<'_, Vec<EmbedRequest>> {
+        self.recorded.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn answer(&self, request: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
+        self.recorded_requests().push(request.clone());
+        let queued = {
+            let mut queue = self.fail_queue();
+            if queue.is_empty() {
+                None
+            } else {
+                Some(queue.remove(0))
+            }
+        };
+        if let Some(error) = queued {
+            return Err(error);
+        }
+        if let Some(error) = &self.always_fail {
+            return Err(error.clone());
+        }
+        request.validate()?;
+        let width = request
+            .dimensions
+            .map_or(self.width, |wanted| wanted as usize);
+        let vectors: Vec<Vec<f32>> = request
+            .inputs
+            .iter()
+            .map(|text| Self::vector_for(text, width))
+            .collect();
+        let bytes: u64 = request.inputs.iter().map(|text| text.len() as u64).sum();
+        let response = EmbedResponse {
+            vectors,
+            usage: Usage {
+                input_tokens: bytes.div_ceil(4),
+                ..Usage::ZERO
+            },
+            model: request.model.clone(),
+        };
+        response.validate_against(request)?;
+        Ok(response)
+    }
+}
+
+impl std::fmt::Debug for MockEmbedder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockEmbedder")
+            .field("id", &self.id)
+            .field("width", &self.width)
+            .field("recorded", &self.recorded_requests().len())
+            .finish()
+    }
+}
+
+impl Embedder for MockEmbedder {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn embed<'a>(
+        &'a self,
+        request: EmbedRequest,
+    ) -> BoxFuture<'a, Result<EmbedResponse, LlmError>> {
+        Box::pin(async move { self.answer(&request) })
+    }
+}
+
+/// FNV-1a over `bytes`: the seed of a text's vector.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// One splitmix64 step: the stream of values behind a text's vector.
+fn splitmix64(state: u64) -> u64 {
+    let mut z = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }

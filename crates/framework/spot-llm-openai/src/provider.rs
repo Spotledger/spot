@@ -199,9 +199,40 @@ impl OpenAiProvider {
         Ok(outbound)
     }
 
+    /// The transport the provider sends through (the embeddings call shares it).
+    pub(crate) fn transport(&self) -> &Arc<dyn HttpTransport> {
+        &self.transport
+    }
+
+    /// Builds the outbound embeddings HTTP request around the already-serialized `body`:
+    /// the profile's embeddings path under the base URL, the same auth and extra headers as
+    /// a chat call. A `Bearer` profile with no key is `llm.auth`, as for a completion.
+    pub(crate) fn embeddings_outbound(&self, body: String) -> Result<HttpRequest, LlmError> {
+        let trimmed = self.base_url.trim_end_matches('/');
+        let url = format!("{trimmed}{}", self.profile.embeddings_path);
+        let mut outbound = HttpRequest::post_json(url, body);
+        match (&self.profile.auth, &self.api_key) {
+            (AuthStyle::Bearer, Some(key)) => {
+                let value = format!("Bearer {}", key.expose());
+                outbound = outbound.with_header("authorization", &value);
+            }
+            (AuthStyle::Bearer, None) => return Err(LlmError::Auth),
+            (AuthStyle::None, _) => {}
+        }
+        for (name, value) in &self.profile.extra_headers {
+            outbound = outbound.with_header(name, value);
+        }
+        Ok(outbound)
+    }
+
     /// Maps a failed HTTP exchange onto [`LlmError`]: transport errors keep their meaning;
     /// status responses parse their envelope; `retry-after` is honoured where defined.
-    fn error_from(&self, status: u16, headers: &[(String, String)], body: &str) -> LlmError {
+    pub(crate) fn error_from(
+        &self,
+        status: u16,
+        headers: &[(String, String)],
+        body: &str,
+    ) -> LlmError {
         let retry_after = headers
             .iter()
             .find(|(name, _)| name.eq_ignore_ascii_case(RETRY_AFTER_HEADER))
@@ -406,7 +437,7 @@ impl Provider for OpenAiProvider {
 
 /// Maps a transport failure onto [`LlmError`] through its documented meaning, never its
 /// text (the transport's own detail quotes URLs, which are not for error surfaces here).
-fn transport_map(error: TransportError) -> LlmError {
+pub(crate) fn transport_map(error: TransportError) -> LlmError {
     match error {
         TransportError::Timeout => LlmError::Timeout,
         TransportError::Connection(_) => LlmError::Unavailable,

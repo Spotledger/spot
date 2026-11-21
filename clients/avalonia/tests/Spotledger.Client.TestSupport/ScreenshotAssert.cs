@@ -268,61 +268,106 @@ public static partial class ScreenshotAssert
         Dispatcher.UIThread.RunJobs();
     }
 
-    public static Bitmap Capture(Window window)
+    /// <summary>How long the first rendered frame may take (and a frame may take to settle) before the capture gives up.</summary>
+    public static readonly TimeSpan FrameDeadline = TimeSpan.FromSeconds(10);
+
+    /// <summary>The pump count the old count-based loops allowed; kept as a floor so the deadline never makes a capture stricter.</summary>
+    private const int MinimumPumps = 20;
+
+    public static Bitmap Capture(Window window) => Capture(window, FrameDeadline);
+
+    /// <summary>Captures the first rendered frame, waiting by time (at least <see cref="MinimumPumps"/> pumps and at least <paramref name="deadline"/>).</summary>
+    public static Bitmap Capture(Window window, TimeSpan deadline)
     {
         ArgumentNullException.ThrowIfNull(window);
-        for (var attempt = 0; attempt < 20; attempt++)
+        return WaitForFrame(() =>
         {
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();
-            var frame = window.CaptureRenderedFrame();
+            return window.CaptureRenderedFrame();
+        }, deadline);
+    }
+
+    /// <summary>
+    /// Pumps <paramref name="pumpAndTryCapture"/> until it returns a frame. A slow or loaded host
+    /// needs more than a fixed number of pumps to draw its first frame, so the wait is a deadline
+    /// (yielding briefly between pumps; the sleep waits for a render, not for a product event) with
+    /// the old 20 pumps kept as a floor. The failure states the elapsed time and the pump count.
+    /// </summary>
+    public static T WaitForFrame<T>(Func<T?> pumpAndTryCapture, TimeSpan deadline) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(pumpAndTryCapture);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var pumps = 0;
+        while (true)
+        {
+            pumps++;
+            var frame = pumpAndTryCapture();
             if (frame is not null) return frame;
+            if (pumps >= MinimumPumps && clock.Elapsed >= deadline) break;
+            Thread.Sleep(5);
         }
-        throw new ScreenshotMismatchException("No rendered frame after 20 pumps; initialize Skia and disable headless drawing.");
+        throw new ScreenshotMismatchException(
+            $"No rendered frame after {clock.Elapsed.TotalMilliseconds:F0} ms and {pumps} pumps (deadline {deadline.TotalMilliseconds:F0} ms); initialize Skia and disable headless drawing.");
     }
 
     /// <summary>
     /// Captures until two consecutive frames are byte-identical. The first frame after a window is
     /// shown can still be a partially arranged one (text measured before the glyph cache is warm),
     /// which would make a baseline depend on test order; settling removes that whole class of flake
-    /// and fails loudly (bounded, never unbounded) if a frame never settles. Variant cases use it
+    /// and fails loudly (bounded by a deadline, never unbounded) if a frame never settles. Variant cases use it
     /// because their committed baselines were recorded from a settled frame.
     /// </summary>
-    private static Bitmap CaptureSettled(Window window)
+    private static Bitmap CaptureSettled(Window window) => Settle(
+        () =>
+        {
+            for (var round = 0; round < 3; round++)
+            {
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+            }
+            return Capture(window);
+        },
+        Pixels,
+        FrameDeadline);
+
+    /// <summary>The stability rule (two consecutive byte-identical frames) over any frame source, bounded by a deadline with the old 20 attempts as a floor.</summary>
+    public static T Settle<T>(Func<T> capture, Func<T, byte[]> pixelsOf, TimeSpan deadline) where T : class
     {
-        Bitmap? previous = null;
+        ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(pixelsOf);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        T? previous = null;
         byte[]? previousPixels = null;
+        var attempts = 0;
         try
         {
-            for (var attempt = 0; attempt < 20; attempt++)
+            while (attempts < MinimumPumps || clock.Elapsed < deadline)
             {
-                for (var round = 0; round < 3; round++)
-                {
-                    window.UpdateLayout();
-                    Dispatcher.UIThread.RunJobs();
-                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                    Dispatcher.UIThread.RunJobs();
-                }
-                var frame = Capture(window);
-                var pixels = Pixels(frame);
+                attempts++;
+                var frame = capture();
+                var pixels = pixelsOf(frame);
                 if (previous is not null && previousPixels!.AsSpan().SequenceEqual(pixels))
                 {
-                    frame.Dispose();
+                    (frame as IDisposable)?.Dispose();
                     return previous;
                 }
-                previous?.Dispose();
+                (previous as IDisposable)?.Dispose();
                 previous = frame;
                 previousPixels = pixels;
             }
         }
         catch
         {
-            previous?.Dispose();
+            (previous as IDisposable)?.Dispose();
             throw;
         }
-        previous?.Dispose();
-        throw new ScreenshotMismatchException("The rendered frame never settled after 20 pumps; refusing to compare an unstable image.");
+        (previous as IDisposable)?.Dispose();
+        throw new ScreenshotMismatchException(
+            $"The rendered frame never settled after {clock.Elapsed.TotalMilliseconds:F0} ms and {attempts} pumps; refusing to compare an unstable image.");
     }
 
     private static byte[] Pixels(Bitmap bitmap)

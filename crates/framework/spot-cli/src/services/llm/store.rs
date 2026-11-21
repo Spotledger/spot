@@ -354,6 +354,37 @@ impl Store {
         }
     }
 
+    /// Deletes the sealed key of a tenant (the configuration is kept). Returns whether a key was
+    /// there.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError`] when the write fails.
+    pub async fn delete_key(&self, tenant: &str, now_ms: u64) -> Result<bool, StoreError> {
+        match &self.backing {
+            Backing::Memory(state) => {
+                let mut state = Self::mem(state);
+                Ok(state
+                    .tenants
+                    .get_mut(tenant)
+                    .and_then(|entry| entry.1.take())
+                    .is_some())
+            }
+            Backing::Pg { pool, site } => {
+                let client = pool.get().await.map_err(pool_err)?;
+                let changed = client
+                    .execute(
+                        "UPDATE spot_llm_tenant SET key_sealed = NULL, updated_at = $3 \
+                         WHERE site = $1 AND tenant = $2 AND key_sealed IS NOT NULL",
+                        &[site, &tenant, &to_i64(now_ms)],
+                    )
+                    .await
+                    .map_err(|_| StoreError("the key could not be removed"))?;
+                Ok(changed > 0)
+            }
+        }
+    }
+
     /// The sealed key of a tenant (`None` when no key was ever written).
     ///
     /// # Errors
@@ -667,7 +698,22 @@ mod tests {
             default_max_output_tokens: 100,
             tasks: vec!["chat".into()],
             budget: None,
+            embedding_model: None,
+            embedding_dimensions: None,
         }
+    }
+
+    #[tokio::test]
+    async fn a_deleted_key_is_gone_and_the_configuration_stays() {
+        let store = Store::memory();
+        store.put_config(&cfg("a"), 1).await.unwrap();
+        assert!(!store.delete_key("a", 2).await.unwrap());
+        store.put_key("a", b"sealed", 3).await.unwrap();
+        assert!(store.delete_key("a", 4).await.unwrap());
+        assert!(store.key("a").await.unwrap().is_none());
+        assert!(store.config("a").await.unwrap().is_some());
+        assert!(!store.delete_key("a", 5).await.unwrap());
+        assert!(!store.delete_key("missing", 5).await.unwrap());
     }
 
     #[tokio::test]

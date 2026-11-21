@@ -263,7 +263,10 @@ Each hosted service has its own page. A new service adds one line here and one p
 - [Reports](running-spot/report.md)
 - [Export](running-spot/export.md)
 - [The LLM service](running-spot/llm.md)
+- [The document reader for model prompts](running-spot/llm-reader.md): the engine-backed read behind LLM prompts
+- [`spot llm`](running-spot/llm-admin.md): configure a tenant's model provider, enter its key, usage, sends, connection test
 - [Remedies](running-spot/remedies.md)
+- [World access (what a remedy runs on)](running-spot/world-access.md)
 - [The fix pipeline](running-spot/fix-pipeline.md)
 - [Retrieval](running-spot/retrieval.md)
 - [Agent memory](running-spot/agent-memory.md)

@@ -43,3 +43,35 @@ fn the_moved_blocked_entries_keep_their_owner_and_reason() {
     let entry = entries.iter().find(|entry| entry.name == name).unwrap();
     assert_eq!(entry.kind, index::Kind::Blocked { owner, reason });
 }
+
+#[test]
+fn the_agent_tool_cases_name_exactly_what_is_missing() {
+    let entries = index::entries();
+    let blocked = |name: &str| {
+        let entry = entries.iter().find(|entry| entry.name == name).unwrap();
+        match entry.kind {
+            index::Kind::Blocked { owner, reason } => (owner, reason),
+            index::Kind::Case => panic!("{name} runs"),
+        }
+    };
+    // The extension-tool seam is served; what is missing is named, with the task that provides it.
+    let (owner, reason) =
+        blocked("retrieval: a_restricted_users_agent_never_surfaces_an_unreadable_document");
+    assert_eq!(owner, "WP-AI-03.T7");
+    assert!(reason.contains("embedding port"), "{reason}");
+    assert!(!reason.contains("no extra-tool hook"), "{reason}");
+    let (owner, reason) =
+        blocked("agent_tools: a_t1_remedy_dry_runs_applies_and_undoes_through_the_tools");
+    assert_eq!(owner, "WP-AI-07.T5");
+    assert!(reason.contains("WorldAccess"), "{reason}");
+    let (owner, _) = blocked("agent_tools: recall_memory_is_gated_by_the_agents_tier");
+    assert_eq!(owner, "WP-AI-03.T7");
+    let absent = entries
+        .iter()
+        .find(|entry| {
+            entry.name
+                == "agent_tools: the_agent_tools_are_absent_for_a_user_and_while_their_services_are_off"
+        })
+        .unwrap();
+    assert_eq!(absent.kind, index::Kind::Case);
+}

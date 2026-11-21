@@ -9,6 +9,30 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.16] - 2026-11-21
+
+Runtime work compiled and tested on GitHub-hosted runners, and continuous integration fixes.
+
+### Added
+
+- Remedies: durable undo records (`spot_remedy_undo`, restored at start), a world-access composer
+  that gives the remedy host its jobs, cache and retrieval-index parts. The edge, cases, documents
+  and quarantine parts stay unavailable until their services expose the ports.
+- LLM service: embeddings (OpenAI-compatible providers), `spot llm` operator command (config,
+  write-only keys, usage, sends, connection test), an engine-backed document reader.
+- MCP: extension tools (`retrieve`, `recall_memory`, `remedy_list`, `remedy_dry_run`,
+  `remedy_apply`, `remedy_undo`) with the agent tier rules; native API contract 0.27.0.
+- Test infrastructure (Python): differential engine, probe recorder, catalogue checker.
+
+### Fixed
+
+- The fix pipeline's database bridge asked for one worker; the bridge needs at least two.
+- Client: a lone hand-rolled 401 raised the session-expired event twice (a race); headless
+  screenshot waits by time instead of 20 pumps; grid performance budgets are strict only on a
+  declared reference runner.
+- Continuous integration: the `spot-cli` tests run in groups of at most 40 test targets so their
+  executables do not fill the runner disk.
+
 ## [0.1.15] - 2026-11-21
 
 Continuous integration fix after 0.1.14, no new features.

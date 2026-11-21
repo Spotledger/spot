@@ -62,7 +62,10 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::Deserialize;
+use serde_json::Value as Json;
 use spot_core::SiteId;
+use spot_mcp::principal::McpPrincipal;
+use spot_mcp::{BoxFuture, ExtensionError, ExtensionSpec, ExtensionTool};
 use spot_postgres::PgConfig;
 use spot_retrieval::VectorStore;
 use spot_retrieval_pg::{IndexKind, PgVectorStore, PrepareError};
@@ -72,6 +75,7 @@ use self::access::{LiveGuards, LivePolicy, LiveProtection, LoaderAccess};
 use self::ports::{EmbedPort, FilePositions};
 use self::pump::{Pump, PumpDeps, Shared};
 use self::tool::{Limits, RetrieveTool, ToolDeps};
+use crate::services::mcp::McpHandle;
 use crate::services::ports::{LiveLoader, OutboxLease, SystemReader};
 use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
@@ -299,6 +303,51 @@ struct RetrievalService {
     store: Arc<PgVectorStore>,
     pump: Pump<spot_postgres::PgBackend>,
     shared: Arc<Shared>,
+    /// The MCP service's handle, when it runs: the `retrieve` tool is taken off it at shutdown.
+    mcp: Option<Arc<McpHandle>>,
+}
+
+/// `retrieve` as the MCP service lists it: only while the service is ready and its last indexing
+/// pass did not fail (contract `mcp.md`: an extension tool is absent while its service is off or
+/// degraded), and a call that arrives after that is a tool error.
+struct Offered {
+    tool: Arc<RetrieveTool>,
+    shared: Arc<Shared>,
+}
+
+impl Offered {
+    fn available(&self) -> bool {
+        self.shared.degraded().is_none()
+    }
+}
+
+impl ExtensionTool for Offered {
+    fn name(&self) -> &str {
+        tool::NAME
+    }
+
+    fn spec(&self, principal: &McpPrincipal) -> Option<ExtensionSpec> {
+        if !self.available() {
+            return None;
+        }
+        ExtensionTool::spec(self.tool.as_ref(), principal)
+    }
+
+    fn call<'a>(
+        &'a self,
+        principal: &'a McpPrincipal,
+        arguments: &'a Json,
+    ) -> BoxFuture<'a, std::result::Result<Json, ExtensionError>> {
+        if !self.available() {
+            return Box::pin(async {
+                Err(ExtensionError::failed(
+                    "server.unavailable",
+                    "retrieval is not available on this site",
+                ))
+            });
+        }
+        ExtensionTool::call(self.tool.as_ref(), principal, arguments)
+    }
 }
 
 impl Service for RetrievalService {
@@ -335,6 +384,9 @@ impl Service for RetrievalService {
     fn shutdown(&self) -> RunFuture<'_> {
         Box::pin(async move {
             self.shared.ready.store(false, Ordering::SeqCst);
+            if let Some(mcp) = &self.mcp {
+                mcp.uninstall_tool(tool::NAME);
+            }
             Ok(())
         })
     }
@@ -348,6 +400,14 @@ impl Service for RetrievalService {
 fn degraded(ctx: &mut SiteCtx<'_>, reason: &'static str) {
     ctx.add(Idle::new("retrieval", Level::Optional, move || {
         Box::pin(async move { Err(reason.to_owned()) })
+    }));
+}
+
+/// A degraded entry with a sentence built at run time.
+fn degraded_with(ctx: &mut SiteCtx<'_>, reason: String) {
+    ctx.add(Idle::new("retrieval", Level::Optional, move || {
+        let reason = reason.clone();
+        Box::pin(async move { Err(reason) })
     }));
 }
 
@@ -418,11 +478,6 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         settings: settings.clone(),
         shared: Arc::clone(&shared),
     });
-    ctx.add(Arc::new(RetrievalService {
-        store: Arc::clone(&store),
-        pump,
-        shared: Arc::clone(&shared),
-    }));
     let job_shared = Arc::clone(&shared);
     ctx.job_handlers().register(BACKFILL_JOB, move |_job| {
         let shared = Arc::clone(&job_shared);
@@ -439,9 +494,9 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
             })
         })
     });
-    let tool = RetrieveTool::new(ToolDeps {
+    let tool = Arc::new(RetrieveTool::new(ToolDeps {
         site: site.clone(),
-        store: store as Arc<dyn VectorStore>,
+        store: Arc::clone(&store) as Arc<dyn VectorStore>,
         embed,
         access: Arc::new(LoaderAccess::new(
             Arc::new(LiveLoader(Arc::clone(&live))),
@@ -451,8 +506,35 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         guards: Arc::new(LiveGuards::new(live, Arc::clone(ctx.clock()))),
         ready: Arc::clone(&shared.ready),
         limits: settings.limits(),
-    });
-    ctx.provide(Arc::new(tool))
+    }));
+    // The MCP service is absent when it is off: nothing to install, not an error. A reload builds
+    // this module again, so the tool is taken off first; a name another service holds is a
+    // refusal that degrades this service and names the tool.
+    let mcp = ctx.port::<McpHandle>();
+    if let Some(mcp) = &mcp {
+        mcp.uninstall_tool(tool::NAME);
+        let offered = Offered {
+            tool: Arc::clone(&tool),
+            shared: Arc::clone(&shared),
+        };
+        if let Err(error) = mcp.install_tool(Arc::new(offered)) {
+            degraded_with(
+                ctx,
+                format!(
+                    "retrieval.tool_refused: the tool `{}` could not be added to the MCP service ({error})",
+                    tool::NAME
+                ),
+            );
+            return Ok(());
+        }
+    }
+    ctx.add(Arc::new(RetrievalService {
+        store,
+        pump,
+        shared,
+        mcp,
+    }));
+    ctx.provide(tool)
         .map_err(|e| Error(format!("services.retrieval: {e}")))?;
     Ok(())
 }

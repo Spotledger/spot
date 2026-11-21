@@ -711,7 +711,12 @@ public sealed class ApiConnection : IDisposable
                     if (Tokens.Generation == generation)
                     {
                         Tokens.ClearTokenIfGeneration(generation);
-                        if (Volatile.Read(ref _awareCallDepth) == 1)
+                        // The prompt raises the event for its batch itself (once, under the
+                        // gate). Raising it here as well made a lone call raise two events, and
+                        // whether a concurrent call had already counted itself in (depth 1 or 2)
+                        // depended on thread timing. Only a connection with no prompt wired
+                        // still needs the hard event from this path.
+                        if (ReSignInProvider is null && Volatile.Read(ref _awareCallDepth) == 1)
                         {
                             RaiseSessionExpiredOnce();
                         }

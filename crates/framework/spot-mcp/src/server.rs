@@ -22,9 +22,10 @@ use crate::audit::{
     AuditAlert, AuditAlerts, AuditFailurePolicy, AuditFailures, AuditPhase, AuditSink,
     TelemetryAlerts, call_record, intent_record, required_tier,
 };
-use crate::catalog::{ToolCatalog, ToolSpec};
+use crate::catalog::{ToolCatalog, ToolKind, ToolSpec};
 use crate::error::{McpError, from_app_error};
 use crate::execute::{doctype_schema, document_json};
+use crate::extension::ExtensionRegistry;
 use crate::jsonrpc::{
     Id, Incoming, Notification, Request, error_response, error_response_no_id, notification,
     parse_message, result_response,
@@ -133,6 +134,7 @@ pub struct Server {
     pub(crate) service: Arc<dyn DocumentService>,
     pub(crate) query: Arc<dyn QueryPort>,
     pub(crate) functions: Arc<FunctionRegistry>,
+    pub(crate) extensions: Arc<ExtensionRegistry>,
     pub(crate) jobs: Arc<dyn JobStore>,
     pub(crate) coordinator: Arc<dyn Coordinator>,
     pub(crate) audit: Arc<dyn AuditSink>,
@@ -155,6 +157,7 @@ impl Server {
             service: parts.service,
             query: parts.query,
             functions: parts.functions,
+            extensions: Arc::new(ExtensionRegistry::new()),
             jobs: parts.jobs,
             coordinator: parts.coordinator,
             audit: parts.audit,
@@ -166,6 +169,21 @@ impl Server {
             instructions: parts.instructions,
             cancels: Mutex::new(BTreeSet::new()),
         }
+    }
+
+    /// Reads the extension tools (contract `mcp.md`, section 5) from `extensions` on every
+    /// request, so a service installs and uninstalls its tool while the server runs. Without
+    /// this the server has its own empty registry and lists no extension tool.
+    #[must_use]
+    pub fn with_extensions(mut self, extensions: Arc<ExtensionRegistry>) -> Self {
+        self.extensions = extensions;
+        self
+    }
+
+    /// The extension tools this server serves.
+    #[must_use]
+    pub fn extensions(&self) -> &Arc<ExtensionRegistry> {
+        &self.extensions
     }
 
     /// Sets what happens when the audit sink refuses a record (default
@@ -374,7 +392,13 @@ impl Server {
 
     fn catalog(&self, principal: &McpPrincipal) -> ToolCatalog {
         let state = self.meta.state();
-        ToolCatalog::build(&state.registry, &state.engine, principal, &self.functions)
+        ToolCatalog::build_with(
+            &state.registry,
+            &state.engine,
+            principal,
+            &self.functions,
+            &self.extensions.snapshot(),
+        )
     }
 
     fn tools_list(
@@ -484,7 +508,11 @@ impl Server {
         if let Err(e) = spot_functions::validate_arguments(&tool.input_schema, arguments) {
             return Err(McpError::invalid_arguments(e.to_string()));
         }
-        if let Some(tier) = principal.tier() {
+        // An extension tool gates itself (it is listed only for a tier that may use it and its
+        // service checks the tier again), so the generated-tool tier rule does not apply to it.
+        if let Some(tier) = principal.tier()
+            && !matches!(tool.kind, ToolKind::Extension { .. })
+        {
             let required = required_tier(tool.kind.writes(), tool.kind.async_job());
             if tier < required {
                 return Err(McpError::permission_denied(format!(

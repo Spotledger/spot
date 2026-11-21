@@ -46,6 +46,41 @@ mod codes {
     pub const HARD_FLOOR_FINANCIAL: &str = "remedies.hard_floor_financial";
 }
 
+/// Why [`Registry::restore_undo`](crate::registry::Registry::restore_undo) refused a record.
+///
+/// Each reason has one fixed sentence that names no value (no token, remedy id, target or
+/// fingerprint), so it is safe to log, return to a caller and write to the audit chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RestoreRefusal {
+    /// The record's remedy is not in this registry's catalogue.
+    UnknownRemedy,
+    /// The undo window had already closed at the instant of the restore.
+    Expired,
+    /// The token is already held for a different plan.
+    TokenInUse,
+    /// A reversible remedy's record carries no changes, so undo would have nothing to check.
+    NoChanges,
+    /// The record's undo kind disagrees with what the remedy declares, so restoring it would
+    /// widen what undo can do.
+    UndoKindMismatch,
+}
+
+impl RestoreRefusal {
+    /// The fixed sentence for the refusal.
+    #[must_use]
+    pub fn sentence(self) -> &'static str {
+        match self {
+            RestoreRefusal::UnknownRemedy => "the remedy is not in this registry's catalogue",
+            RestoreRefusal::Expired => "the undo window has already closed",
+            RestoreRefusal::TokenInUse => "the token is already held for a different plan",
+            RestoreRefusal::NoChanges => "a reversible record must carry at least one change",
+            RestoreRefusal::UndoKindMismatch => {
+                "the record's undo kind does not match the remedy's declaration"
+            }
+        }
+    }
+}
+
 /// Something failed in the remedy framework.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RemedyError {
@@ -126,6 +161,14 @@ pub enum RemedyError {
         expected: String,
         /// The state now.
         actual: String,
+    },
+
+    /// A stored undo record could not be put back into the registry. The sentence is fixed and
+    /// names no value.
+    #[error("the undo record cannot be restored: {}", .reason.sentence())]
+    UndoRestoreRefused {
+        /// Why the record was refused.
+        reason: RestoreRefusal,
     },
 
     /// The remedy declares its undo irreversible and refuses it.
@@ -211,6 +254,9 @@ impl RemedyError {
             RemedyError::UndoUnknown { .. } => codes::UNDO_UNKNOWN,
             RemedyError::UndoExpired { .. } => codes::UNDO_EXPIRED,
             RemedyError::UndoConflict { .. } => codes::UNDO_CONFLICT,
+            // No catalogue line of its own yet: the refusal reports as an unknown undo record,
+            // which is what the caller can act on (the token cannot be undone here).
+            RemedyError::UndoRestoreRefused { .. } => codes::UNDO_UNKNOWN,
             RemedyError::Irreversible { .. } => codes::IRREVERSIBLE,
             RemedyError::Duplicate { .. } => codes::DUPLICATE,
             RemedyError::InvalidId { .. } => codes::INVALID_ID,

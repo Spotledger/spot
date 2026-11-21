@@ -341,7 +341,7 @@ fn build_ranges(
             BridgeConfig {
                 name: "edge_offline".to_owned(),
                 max_in_flight: largest.min(2),
-                workers: 1,
+                workers: 2,
                 queue_capacity: 16,
                 default_deadline: Duration::from_secs(10),
                 max_deadline: Duration::from_secs(30),

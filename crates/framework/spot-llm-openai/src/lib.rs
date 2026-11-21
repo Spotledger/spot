@@ -21,12 +21,17 @@
 //! - [`errors`]: HTTP status + the error body mapped onto the stable `llm.*` codes,
 //!   including endpoints that return HTTP 200 with an error object; `retry-after`
 //!   honoured; keys and request bodies never quoted.
+//! - [`embed`]: [`spot_llm::Embedder`] for `{base}/v1/embeddings` (WP-AI-03.T6) on the same
+//!   transport, auth and error mapping; replies sorted by `index` and checked before they are
+//!   passed on; a profile with `supports_embeddings = false` is refused with
+//!   `llm.embeddings_unsupported`.
 //! - [`finish_reason`]: `stop` / `length` / `tool_calls` / `content_filter` mapping.
 //!
 //! The conformance suite (`spot_llm::conformance::run`) runs against this provider on
 //! recorded exchanges under `tests/fixtures/` — no network, no real key.
 
 pub mod close;
+pub mod embed;
 pub mod errors;
 pub mod finish_reason;
 pub mod profile;
@@ -37,5 +42,5 @@ pub mod test_hooks;
 pub mod wire;
 
 pub use errors::WireError;
-pub use profile::{AuthStyle, MaxTokensField, Profile};
+pub use profile::{AuthStyle, DEFAULT_EMBEDDINGS_PATH, MaxTokensField, Profile};
 pub use provider::{ModelInfo, OpenAiProvider};

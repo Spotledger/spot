@@ -749,3 +749,14 @@ reason = "Integration test: tampers with stored rows of a throwaway test databas
 path = "crates/framework/spot-cli/tests/edge_integrity_more.rs"
 pattern = "SQL (INSERT|UPDATE|SELECT)|database driver crate path"
 reason = "Integration test: seeds and tampers with stored rows of a throwaway test database through the raw driver to prove the integrity scan finds it. Tests only."
+
+# WP-AI-07.T4: the remedy host's durable undo store. One table of the site's own database, one row per undo token; the record column is the serde form of the framework's UndoRecord (fingerprints of typed ports, no cell values).
+[[allow]]
+path = "crates/framework/spot-cli/src/services/remedies/undo_store.rs"
+pattern = "SQL (CREATE|INSERT|SELECT|UPDATE|DELETE)|database driver crate path"
+reason = "Host-side PostgreSQL store module of the remedy host: its statements are in this one file, like llm/store.rs, and it holds only the framework's undo records. DEBT: move behind a storage port in a backend crate."
+
+[[allow]]
+path = "crates/framework/spot-cli/tests/remedies_undo_store.rs"
+pattern = "database driver crate path"
+reason = "Integration test: opens a pool on a throwaway test database to round-trip the undo store through PostgreSQL (skipped without SPOT_TEST_PG_URL). Tests only."

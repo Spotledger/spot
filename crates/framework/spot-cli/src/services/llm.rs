@@ -28,13 +28,34 @@
 //! - **Redaction**: [`prompt::PromptBuilder`] strips protected and sealed fields (and personal ones
 //!   unless the policy includes them) and redacts what remains with `spot-redact`; a document
 //!   enters a prompt only through the permission-checked read as the invoking user
-//!   ([`prompt::DocumentReader`], denied by default until the engine-backed reader is provided as
-//!   a port).
+//!   ([`prompt::DocumentReader`]: the engine-backed one the `llm_reader` module provides, and a
+//!   reader that denies everything when a site has none).
+//!
+//! # Embeddings (WP-AI-03.T7)
+//!
+//! [`gateway::LlmGateway::embed`] embeds texts with a tenant's `embedding_model` through the same
+//! controls as a completion: the allow-list, the egress policy, the key, the budget (a worst case
+//! reserved before the call, the exact tokens settled after), a send record written first (digest,
+//! size, counts and purpose, never a text) and usage counted under the task `embed`. A text the
+//! redactor flags as a secret or a financial identifier is refused, not sent. The module provides
+//! the two ports that need it, both always, so a site without an embedding setup reports a precise
+//! reason instead of "no embedding provider":
+//!
+//! - `dyn retrieval::ports::EmbedPort` ([`embed_port::GatewayEmbedPort`]): the tenant named by
+//!   `[services.retrieval] provider`; the indexer runs as the named caller `system-indexer`, a
+//!   query as the user or agent that asked.
+//! - `dyn spot_agent_memory::Embedder` ([`embed_sync::GatewayEmbedder`]): synchronous, for agent
+//!   memory's blocking threads; the tenant named by `embedding_tenant`. A configured width that
+//!   differs from the memory store's is a degraded sentence at start naming both numbers, and
+//!   the port is then not provided.
+//!
+//! With no tenant set for embeddings every call answers `llm_host.embeddings_not_configured`.
 //!
 //! # Settings (`[services.llm]`)
 //!
 //! `enabled` (true), `max_retries` (2), `retention_days` (90), `maintenance_seconds` (30),
-//! `request_timeout_seconds` (120) and `[[services.llm.tenants]]` entries that seed tenant
+//! `request_timeout_seconds` (120), `max_texts_per_call` (512), `max_text_bytes` (32768),
+//! `embedding_tenant` (none) and `[[services.llm.tenants]]` entries that seed tenant
 //! configurations at start (never a key). Unknown keys and invalid entries stop the site from
 //! starting with a message naming the key.
 //!
@@ -46,8 +67,9 @@
 //!
 //! # Ports
 //!
-//! Provides [`gateway::LlmGateway`]; takes `SecretsHost`, `SharedGuard` and (optionally)
-//! `dyn DocumentReader`.
+//! Provides [`gateway::LlmGateway`], `dyn EmbedPort` and `dyn Embedder`; takes `SecretsHost`,
+//! `SharedGuard` and (optionally) `dyn DocumentReader`. Its [`ORDER`] stays below the retrieval
+//! service's (1270) and agent memory's (1280), which read the embedding ports.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,12 +79,17 @@ use spot_redact::{RedactionPolicy, Redactor};
 use tokio::sync::watch;
 
 use crate::services::egress::SharedGuard;
+use crate::services::retrieval::ports::EmbedPort;
 use crate::services::secrets::SecretsHost;
 use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
 #[path = "llm/config.rs"]
 pub mod config;
+#[path = "llm/embed_port.rs"]
+pub mod embed_port;
+#[path = "llm/embed_sync.rs"]
+pub mod embed_sync;
 #[path = "llm/gateway.rs"]
 pub mod gateway;
 #[path = "llm/prompt.rs"]
@@ -73,8 +100,9 @@ pub mod store;
 pub mod usage;
 
 use config::TenantConfig;
-use gateway::{BuiltinProviders, Deps, EgressTransports, LlmGateway};
+use gateway::{BuiltinProviders, Deps, EgressTransports, EmbedLimits, LlmGateway};
 use prompt::{DenyAllReader, DocumentReader};
+use spot_agent_memory::{EMBEDDING_DIM, Embedder};
 use store::Store;
 
 /// Start order: after the secrets host (1000) and the egress service (950) whose ports it takes.
@@ -105,6 +133,14 @@ fn default_timeout() -> u64 {
     120
 }
 
+fn default_max_texts() -> usize {
+    512
+}
+
+fn default_max_text_bytes() -> usize {
+    32_768
+}
+
 /// `[services.llm]`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -124,6 +160,17 @@ pub struct Settings {
     /// The total time one model request may take.
     #[serde(default = "default_timeout")]
     pub request_timeout_seconds: u64,
+    /// The most texts one embedding call may carry (above the provider batch size, the call is
+    /// split into batches).
+    #[serde(default = "default_max_texts")]
+    pub max_texts_per_call: usize,
+    /// The longest single text of an embedding call, in bytes.
+    #[serde(default = "default_max_text_bytes")]
+    pub max_text_bytes: usize,
+    /// The tenant whose embedding setup answers agent memory's synchronous embedder. Unset: that
+    /// port answers `llm_host.embeddings_not_configured`.
+    #[serde(default)]
+    pub embedding_tenant: Option<String>,
     /// Tenant configurations to store at start (keys are never configured here).
     #[serde(default)]
     pub tenants: Vec<TenantConfig>,
@@ -137,6 +184,9 @@ impl Default for Settings {
             retention_days: default_retention(),
             maintenance_seconds: default_maintenance(),
             request_timeout_seconds: default_timeout(),
+            max_texts_per_call: default_max_texts(),
+            max_text_bytes: default_max_text_bytes(),
+            embedding_tenant: None,
             tenants: Vec::new(),
         }
     }
@@ -161,6 +211,17 @@ impl Settings {
         }
         if !(1..=3_600).contains(&self.request_timeout_seconds) {
             return Err(refuse("request_timeout_seconds must be 1 to 3600"));
+        }
+        if !(1..=10_000).contains(&self.max_texts_per_call) {
+            return Err(refuse("max_texts_per_call must be 1 to 10000"));
+        }
+        if !(1..=32_768).contains(&self.max_text_bytes) {
+            return Err(refuse("max_text_bytes must be 1 to 32768"));
+        }
+        if let Some(tenant) = &self.embedding_tenant
+            && config::check_tenant(tenant).is_err()
+        {
+            return Err(refuse("embedding_tenant is not a valid tenant id"));
         }
         let mut seen: Vec<&str> = Vec::new();
         for tenant in &self.tenants {
@@ -227,8 +288,13 @@ impl Service for LlmService {
 
 /// A degraded entry: the module is present but cannot serve, for `reason`.
 fn degraded(ctx: &mut SiteCtx<'_>, reason: impl Into<String>) {
+    degraded_as(ctx, "llm", reason);
+}
+
+/// A degraded entry under `name`, for a part of the module that cannot serve.
+fn degraded_as(ctx: &mut SiteCtx<'_>, name: &'static str, reason: impl Into<String>) {
     let reason: String = reason.into();
-    ctx.add(Idle::new("llm", Level::Optional, move || {
+    ctx.add(Idle::new(name, Level::Optional, move || {
         let reason = reason.clone();
         Box::pin(async move { Err(reason) })
     }));
@@ -277,21 +343,27 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let reader: Arc<dyn DocumentReader> = ctx
         .port::<dyn DocumentReader>()
         .unwrap_or_else(|| Arc::new(DenyAllReader));
-    let gateway = Arc::new(LlmGateway::new(Deps {
-        site: site.clone(),
-        store: store.clone(),
-        vault: secrets.vault(),
-        guard,
-        clock: Arc::clone(ctx.clock()),
-        providers: Arc::new(BuiltinProviders),
-        transports: Arc::new(EgressTransports {
-            total_timeout: Duration::from_secs(settings.request_timeout_seconds),
+    let gateway = Arc::new(
+        LlmGateway::new(Deps {
+            site: site.clone(),
+            store: store.clone(),
+            vault: secrets.vault(),
+            guard,
+            clock: Arc::clone(ctx.clock()),
+            providers: Arc::new(BuiltinProviders),
+            transports: Arc::new(EgressTransports {
+                total_timeout: Duration::from_secs(settings.request_timeout_seconds),
+            }),
+            redactor: Arc::new(redactor),
+            reader,
+            max_retries: settings.max_retries,
+            retention_days: settings.retention_days,
+        })
+        .with_embed_limits(EmbedLimits {
+            max_texts: settings.max_texts_per_call,
+            max_text_bytes: settings.max_text_bytes,
         }),
-        redactor: Arc::new(redactor),
-        reader,
-        max_retries: settings.max_retries,
-        retention_days: settings.retention_days,
-    }));
+    );
     for tenant in &settings.tenants {
         gateway
             .put_config(tenant)
@@ -302,7 +374,43 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         gateway: Arc::clone(&gateway),
         interval: Duration::from_secs(settings.maintenance_seconds),
     }));
+    provide_embedding_ports(ctx, &gateway, &settings).await?;
     ctx.provide(gateway)
+        .map_err(|e| Error(format!("services.llm: {e}")))?;
+    Ok(())
+}
+
+/// Provides the embedding ports (WP-AI-03.T7). Both are always provided, so a consumer without
+/// an embedding setup gets `llm_host.embeddings_not_configured` per call instead of a missing
+/// port; the one exception is a configured width that differs from what agent memory's store was
+/// prepared with, which is reported here, at start, and withholds the synchronous port.
+async fn provide_embedding_ports(
+    ctx: &mut SiteCtx<'_>,
+    gateway: &Arc<LlmGateway>,
+    settings: &Settings,
+) -> Result<()> {
+    let port: Arc<dyn EmbedPort> = Arc::new(embed_port::GatewayEmbedPort::new(Arc::clone(gateway)));
+    ctx.provide::<dyn EmbedPort>(port)
+        .map_err(|e| Error(format!("services.llm: {e}")))?;
+
+    if let Some(tenant) = settings.embedding_tenant.as_deref() {
+        // The tenant's stored configuration (seeded above, or entered with `spot llm`).
+        let configured = match gateway.config(tenant).await {
+            Ok(config) => config.and_then(|c| c.embedding_dimensions),
+            Err(_) => None,
+        };
+        if let Err(sentence) = embed_sync::check_width(tenant, configured, EMBEDDING_DIM) {
+            degraded_as(ctx, "llm_embed", sentence);
+            return Ok(());
+        }
+    }
+    let embedder: Arc<dyn Embedder> = Arc::new(embed_sync::GatewayEmbedder::new(
+        Arc::clone(gateway),
+        settings.embedding_tenant.clone(),
+        EMBEDDING_DIM,
+        tokio::runtime::Handle::current(),
+    ));
+    ctx.provide::<dyn Embedder>(embedder)
         .map_err(|e| Error(format!("services.llm: {e}")))?;
     Ok(())
 }
@@ -320,6 +428,47 @@ mod tests {
         let parsed: Settings = toml::from_str("").unwrap();
         assert_eq!(parsed.retention_days, 90);
         assert!(toml::from_str::<Settings>("nope = 1").is_err());
+    }
+
+    #[test]
+    fn the_embedding_settings_are_checked() {
+        let defaults = Settings::default();
+        assert_eq!(
+            (defaults.max_texts_per_call, defaults.max_text_bytes),
+            (512, 32_768)
+        );
+        assert!(defaults.embedding_tenant.is_none());
+        for bad in [
+            Settings {
+                max_texts_per_call: 0,
+                ..Settings::default()
+            },
+            Settings {
+                max_texts_per_call: 10_001,
+                ..Settings::default()
+            },
+            Settings {
+                max_text_bytes: 0,
+                ..Settings::default()
+            },
+            Settings {
+                max_text_bytes: 32_769,
+                ..Settings::default()
+            },
+            Settings {
+                embedding_tenant: Some("Not A Tenant".to_owned()),
+                ..Settings::default()
+            },
+        ] {
+            let error = bad.check().unwrap_err();
+            assert!(error.0.contains("llm_host.settings_invalid"), "{}", error.0);
+        }
+        let parsed: Settings = toml::from_str(
+            "max_texts_per_call = 64\nmax_text_bytes = 1000\nembedding_tenant = \"acme\"\n",
+        )
+        .unwrap();
+        assert!(parsed.check().is_ok());
+        assert_eq!(parsed.embedding_tenant.as_deref(), Some("acme"));
     }
 
     #[test]

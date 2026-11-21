@@ -73,9 +73,24 @@ A refused index policy indexes nothing until it is fixed (`retrieval.policy_*`).
 - Embedding calls leave the system: they go through the LLM service, so its endpoint allow-list, its
   budget and its record of what was sent apply. This module calls no model or URL itself.
 
+## The `retrieve` MCP tool
+
+The service installs `retrieve` on the MCP service's `McpHandle` (`install_tool`; contract
+`mcp.md`, section 5, "Extension tools") when the site is built, and takes it off at shutdown. It is
+listed for a user or an agent acting as a user while the service is ready and the last indexing pass
+did not fail; for anyone else, and while the service is off or degraded, it is not listed and a call
+is the unknown-tool refusal. Arguments: `query` (1 to `max_query_chars` characters), `k` (1 to
+`max_hits`, default 5) and `doctypes` (at most 16 names). The answer is `{"hits": [...],
+"provenance": "untrusted"}`; each hit has `doctype`, `id`, `version`, `score` and a `snippet`. Every hit
+is checked against the caller's permissions at the moment of the call; there is no total and no count
+of hidden documents, so an empty list says nothing about what exists. A failure is a tool error with
+`retrieval.query_too_long`, `retrieval.embed_failed` or `retrieval.store_failed` and a fixed sentence.
+
 ## Limits to know
 
-- The `retrieve` tool is not yet in the MCP tool list: the MCP service needs a hook to install an
-  extra tool. Until it exists the tool is a port of this module (`RetrieveTool`).
+- The `retrieve` tool is on the MCP tool list while this service is ready and its last indexing pass
+  did not fail (see "The `retrieve` MCP tool"). With no embedding provider the service is degraded
+  and the tool is absent; the harness case `retrieval: a_revoked_share_applies_to_the_next_retrieve_call`
+  stays blocked until the LLM service provides the embedding port (WP-AI-03.T7).
 - One embedding model per table: changing `dimensions` is a re-index into a new table, and the
   service refuses to start against a table of another width.

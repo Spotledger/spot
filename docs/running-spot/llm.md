@@ -22,6 +22,9 @@ max_retries = 2                # retries of a retryable provider failure on the 
 retention_days = 90            # how long a send record is kept; 1 to 3650
 maintenance_seconds = 30       # usage flush and retention sweep interval; 1 to 3600
 request_timeout_seconds = 120  # the total time one model request may take; 1 to 3600
+max_texts_per_call = 512       # most texts one embedding call may carry; 1 to 10000
+max_text_bytes = 32768         # longest single text of an embedding call; 1 to 32768
+embedding_tenant = "acme"      # the tenant agent memory embeds with; default none
 
 # Optional: store a tenant's configuration at start. A key is never configured here.
 [[services.llm.tenants]]
@@ -36,6 +39,8 @@ max_output = 8192
 default_max_output_tokens = 1024
 price = { input_micro_per_million = 3000000, output_micro_per_million = 15000000 }
 budget = { limit_micro = 50000000, period = "month", warn_at_percent = 80 }   # period: day | month
+embedding_model = "text-embedding-3-small"   # optional; not for kind = "anthropic" (no embeddings endpoint)
+embedding_dimensions = 64      # optional width asked of the model and checked in every reply; 1 to 8192
 ```
 
 Unknown keys, out-of-range numbers and an invalid tenant entry stop the site from starting; the
@@ -91,9 +96,53 @@ than `retention_days` are deleted by the maintenance loop.
 A prompt is built with `LlmGateway::prompt`. Free text is redacted (keys, tokens, card numbers,
 connection strings). A document enters only through the permission-checked read **as the invoking
 user** (`DocumentReader`): protected-group fields and sealed (secret) fields are always dropped,
-personal-data fields unless the policy includes them, and what remains is redacted. Until the
-engine-backed reader is provided as a port the host uses a reader that denies every read, so no
-document can enter a prompt.
+personal-data fields unless the policy includes them, and what remains is redacted. The reader is
+the engine-backed one the `llm_reader` module provides (see [the document reader](llm-reader.md));
+it reads only for a `user:<id>` caller. When the site has no reader (the module is switched off, or
+the site cannot open its document engine) the host falls back to a reader that denies every read,
+so no document can enter a prompt.
+
+## Embeddings
+
+`LlmGateway::embed(tenant, caller, texts)` turns texts into vectors with the tenant's
+`embedding_model` through the same controls as a completion:
+
+- the tenant must set `embedding_model` (else `llm_host.embeddings_not_configured`); an Anthropic
+  tenant cannot, since Anthropic has no embeddings endpoint (a stored configuration that somehow
+  does is refused by the provider with `llm.embeddings_unsupported`, no network call);
+- at most `max_texts_per_call` texts of at most `max_text_bytes` bytes each
+  (`llm_host.embed_too_large`); a larger call is split into provider batches of at most 256 texts;
+- **protected data never leaves**: every text goes through the redactor, and a text it flags as a
+  secret or a financial identifier (a key, a token, a card number, an IBAN...) refuses the whole
+  call with `llm_host.embed_refused`, naming only the class, and nothing is sent. The caller
+  (retrieval, memory) already keeps protected fields out; this is the second line;
+- the allow-list, the key, the egress policy and the budget period, exactly as above. The budget
+  reserves the worst case of the call (one token per byte of text, at the tenant's input price)
+  before anything is sent and settles the tokens the provider reported (one per four bytes when
+  it reports none);
+- the send record is written first: digest of the model, the width and the texts, the total size
+  in bytes, the number of texts (`classes.texts`), the purpose and the user; never a text. The task
+  of the record is `embed`;
+- usage is counted under the task `embed` (its own row per tenant, day, provider and model), so
+  embedding tokens are separate from chat tokens and count against the same tenant budget.
+
+The service provides the two ports that need this, **always**, so a site without an embedding
+setup reports a precise reason instead of "no embedding provider":
+
+- `dyn EmbedPort` for the retrieval service: `[services.retrieval] provider` names the tenant. The
+  indexer embeds as the named caller `system-indexer`; a query as the `user:<id>` or `agent:<id>`
+  that asked, which is the actor of the send record. The failure carries the stable `llm_host.*`
+  code and no text.
+- `dyn Embedder` for agent memory (synchronous, on memory's own blocking threads): the tenant
+  named by `[services.llm] embedding_tenant`; memory embeds as the named caller
+  `system-agent-memory`. Its vector width must equal what memory's store was prepared with (64
+  today): if the tenant's `embedding_dimensions` is set to anything else, readiness says
+  `degraded: llm_embed (llm_host.embed_dimensions_mismatch: ...)` naming both numbers, and the port
+  is not provided (memory then reports its own degraded reason). Set
+  `embedding_dimensions = 64` on that tenant.
+
+With no tenant set, both ports answer `llm_host.embeddings_not_configured` on every call. The LLM
+service starts before the retrieval service (1270) and agent memory (1280), which read the ports.
 
 ## Codes
 
@@ -101,7 +150,9 @@ document can enter a prompt.
 `llm_host.task_unknown`, `llm_host.key_missing`, `llm_host.key_unusable`,
 `llm_host.endpoint_not_allowed`, `llm_host.endpoint_denied` (carries the egress code),
 `llm_host.budget_exceeded`, `llm_host.provider_failed` (carries the provider's `llm.*` code),
-`llm_host.store_unavailable`, `llm_host.secrets_unavailable`, `llm_host.egress_unavailable`.
+`llm_host.store_unavailable`, `llm_host.secrets_unavailable`, `llm_host.egress_unavailable`,
+`llm_host.embeddings_not_configured`, `llm_host.embed_too_large`, `llm_host.embed_refused` (carries
+the class, never a value), `llm_host.embed_dimensions_mismatch` (at start, in readiness).
 
 ## Tables
 

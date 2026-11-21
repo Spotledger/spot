@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use spot_llm::embed::{EmbedRequest, EmbedResponse, Embedder};
 use spot_llm::error::LlmError;
 use spot_llm::message::{Message, Part, Role};
 use spot_llm::provider::{BoxFuture, Capabilities, Provider};
@@ -398,4 +399,20 @@ fn next_index(events: &[StreamEvent]) -> u32 {
         })
         .max()
         .unwrap_or(0)
+}
+
+/// Anthropic has no embeddings endpoint (WP-AI-03.T6): the call is refused with the fixed
+/// `llm.embeddings_unsupported` error before anything is built or sent, so no input text and
+/// no key goes anywhere. The request is not even bound-checked: the answer is the same.
+impl Embedder for AnthropicProvider {
+    fn id(&self) -> &str {
+        "anthropic"
+    }
+
+    fn embed<'a>(
+        &'a self,
+        _request: EmbedRequest,
+    ) -> BoxFuture<'a, Result<EmbedResponse, LlmError>> {
+        Box::pin(async { Err(LlmError::EmbeddingsUnsupported) })
+    }
 }

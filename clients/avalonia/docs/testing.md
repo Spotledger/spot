@@ -341,6 +341,20 @@ States the head cannot reach are reported as unavailable rather than captured fr
    Review and explicitly generate baseline matrices rather than accepting current
    capture side effects as baseline approval.
 
+## Reference runner and budgets
+
+A hard performance budget is a property of the reference runner (Fedora, six slow cores, named in
+`tests/Spotledger.Client.Grid.Tests/perf-budgets.toml`). The only switch for the strict budget is
+`SPOT_PERF_REFERENCE=1`; it is never inferred from `CI`. The runner's owner sets it, in CI from a
+repository variable of the same name. With it set, `FirstPaintOfFiftyRowsUnderBudget` asserts the
+unscaled budget on thread CPU time and on wall time, and the scroll test asserts the maximum frame
+time. Everywhere else both tests still run and print their numbers (one `PERF ...` line each, so a
+trend can be read from CI logs) and fail only on the catastrophe bound, `CatastropheFactor` (10, a constant
+of `PerfBudgetTests`; `perf-budgets.toml` cannot carry it while TestSupport's loader accepts exactly six keys)
+times the budget: a hang or an accidental O(n^2), which no shared host reaches. Allocations per frame
+do not depend on the host and stay strict everywhere. To add a reference runner, record its
+hardware beside the budgets, set the variable on it and nowhere else.
+
 ## Tests that depend on load
 
 Two kinds of UI test used to pass on an idle machine and fail on a loaded one.

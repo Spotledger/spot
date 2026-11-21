@@ -274,6 +274,7 @@ pub const TABLES: &[TableRule] = &[
     empty("spot_agent_tier_event", "history of the source's agent registrations"),
     empty("spot_agent_tier_registration", "which agents the source registered, and as whom"),
     empty("spot_agent_tier_support_session", "support sessions opened on the source"),
+    empty("spot_remedy_undo", "undo records of changes applied on the source; a clone must not undo the source's changes"),
     empty("spot_bpm_eff_audit", "the audit of effects run for real cases"),
     empty("spot_bpm_eff_done", "which effects of the source's cases already ran: a clone must never skip or replay them"),
     empty("spot_bpm_eff_log", "the log of effects run for real cases"),

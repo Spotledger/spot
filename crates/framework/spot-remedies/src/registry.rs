@@ -15,7 +15,7 @@ use spot_agent_tiers::{ActionCatalogue, AgentIdentity, Authoriser, Decision, Pol
 
 use crate::audit::AuditKind;
 use crate::ctx::{Gate, RemedyCtx, RemedySettings};
-use crate::error::RemedyError;
+use crate::error::{RemedyError, RestoreRefusal};
 use crate::model::{Applied, Plan, RemedyId, RemedyMeta, UndoRecord, UndoToken, Undone};
 use crate::remedy::Remedy;
 use crate::seeds;
@@ -143,6 +143,73 @@ impl Registry {
     #[must_use]
     pub fn undo_record(&self, token: &UndoToken) -> Option<UndoRecord> {
         self.lock().records.get(token.as_str()).cloned()
+    }
+
+    /// Every undo record whose window has not closed at `now`, ordered by token, cloned.
+    ///
+    /// Records of irreversible remedies are included: undo refuses them with its own error, and
+    /// a host persists whatever the registry holds. Time is an argument; the registry reads no
+    /// clock.
+    #[must_use]
+    pub fn open_undo_records(&self, now: i64) -> Vec<UndoRecord> {
+        self.lock()
+            .records
+            .values()
+            .filter(|record| !record.is_expired(now))
+            .cloned()
+            .collect()
+    }
+
+    /// Puts a stored undo record back, so an undo token survives a restart.
+    ///
+    /// The registry trusts the record only as far as it can check it: the remedy must be in
+    /// this catalogue, the window must still be open at `now` (and is never wider than this
+    /// registry's own window), the record's undo kind must match the remedy's declaration, and
+    /// a reversible record must carry at least one change. Restoring a record whose token is
+    /// already held for the same plan is a no-op.
+    ///
+    /// # Errors
+    ///
+    /// [`RemedyError::UndoRestoreRefused`] with the reason, naming no value.
+    pub fn restore_undo(&self, mut record: UndoRecord, now: i64) -> Result<(), RemedyError> {
+        let refuse = |reason: RestoreRefusal| RemedyError::UndoRestoreRefused { reason };
+        let Some(remedy) = self.get(&record.remedy) else {
+            return Err(refuse(RestoreRefusal::UnknownRemedy));
+        };
+        if record.is_expired(now) {
+            return Err(refuse(RestoreRefusal::Expired));
+        }
+        let declared = remedy.meta().undo;
+        if declared.is_reversible() != record.undo.is_reversible() {
+            return Err(refuse(RestoreRefusal::UndoKindMismatch));
+        }
+        if record.undo.is_reversible() && record.changes.is_empty() {
+            return Err(refuse(RestoreRefusal::NoChanges));
+        }
+        // A restore never widens the window beyond what an apply here would have granted.
+        let ceiling = record
+            .applied_at
+            .saturating_add(self.settings.undo_window_secs);
+        if record.expires_at > ceiling {
+            record.expires_at = ceiling;
+            if record.is_expired(now) {
+                return Err(refuse(RestoreRefusal::Expired));
+            }
+        }
+        let mut log = self.lock();
+        if let Some(existing) = log.records.get(record.token.as_str()) {
+            if existing.plan_hash == record.plan_hash {
+                return Ok(());
+            }
+            return Err(refuse(RestoreRefusal::TokenInUse));
+        }
+        log.records.insert(record.token.as_str().to_owned(), record);
+        Ok(())
+    }
+
+    /// Drops an undo record (for example after the host swept it). Returns whether one was held.
+    pub fn forget_undo(&self, token: &UndoToken) -> bool {
+        self.lock().records.remove(token.as_str()).is_some()
     }
 
     /// Authorises a remedy for an agent under a gate, recording the decision.
@@ -276,21 +343,30 @@ impl Registry {
         self.lock().issued.remove(plan.hash.as_str());
         let mut applied = remedy.apply(ctx, plan)?;
         let now = ctx.now();
-        let seq = self.seq.fetch_add(1, Ordering::Relaxed);
-        let token = UndoToken::derive(&plan.hash, now, seq);
-        applied.undo_token = token.clone();
-        let record = UndoRecord {
-            token: token.clone(),
-            remedy: id.clone(),
-            plan_hash: plan.hash.clone(),
-            applied_at: now,
-            expires_at: now.saturating_add(self.settings.undo_window_secs),
-            changes: applied.changes.clone(),
-            undo: meta.undo.clone(),
-        };
-        self.lock()
-            .records
-            .insert(token.as_str().to_owned(), record);
+        {
+            let mut log = self.lock();
+            // A restored record may already hold the token this plan, instant and sequence
+            // derive (the token does not carry the sequence), so advance the counter until the
+            // token is free: a new apply never reuses a restored token.
+            let token = loop {
+                let seq = self.seq.fetch_add(1, Ordering::Relaxed);
+                let candidate = UndoToken::derive(&plan.hash, now, seq);
+                if !log.records.contains_key(candidate.as_str()) {
+                    break candidate;
+                }
+            };
+            applied.undo_token = token.clone();
+            let record = UndoRecord {
+                token: token.clone(),
+                remedy: id.clone(),
+                plan_hash: plan.hash.clone(),
+                applied_at: now,
+                expires_at: now.saturating_add(self.settings.undo_window_secs),
+                changes: applied.changes.clone(),
+                undo: meta.undo.clone(),
+            };
+            log.records.insert(token.as_str().to_owned(), record);
+        }
         ctx.record(AuditKind::Applied, id, &format!("applied {}", plan.hash));
         Ok(applied)
     }

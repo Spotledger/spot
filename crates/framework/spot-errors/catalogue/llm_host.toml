@@ -116,3 +116,39 @@ explanation_key = "error.llm_host.egress_unavailable"
 params = []
 remedy = "Enable the egress service with a policy file for the site and restart."
 since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embeddings_not_configured"
+class = "none"
+summary = "An embedding was asked for, but the tenant has no embedding model configured (or no tenant is set for the consumer), so nothing is sent."
+explanation_key = "error.llm_host.embeddings_not_configured"
+params = []
+remedy = "Set embedding_model (and embedding_dimensions) on the tenant's OpenAI-compatible provider configuration, or name that tenant in [services.llm] embedding_tenant and [services.retrieval] provider."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_too_large"
+class = "none"
+summary = "An embedding call carries more texts than max_texts_per_call or a text longer than max_text_bytes, so nothing is sent."
+explanation_key = "error.llm_host.embed_too_large"
+params = []
+remedy = "Split the call into smaller ones, or raise max_texts_per_call (up to 10000) or max_text_bytes (up to 32768) in [services.llm]."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_refused"
+class = "none"
+summary = "A text to embed holds a secret or a financial identifier (the message names only its class), so the whole call is refused and nothing is sent."
+explanation_key = "error.llm_host.embed_refused"
+params = []
+remedy = "Keep secrets and financial identifiers out of the text that is embedded; the caller must strip them before the call."
+since = "0.1.0"
+
+[[entry]]
+code = "llm_host.embed_dimensions_mismatch"
+class = "none"
+summary = "The tenant's embedding_dimensions differ from the width agent memory's store was prepared with, so memory cannot use the tenant's embeddings."
+explanation_key = "error.llm_host.embed_dimensions_mismatch"
+params = []
+remedy = "Set embedding_dimensions on the tenant to the width the message names, or point embedding_tenant at a tenant with that width."
+since = "0.1.0"

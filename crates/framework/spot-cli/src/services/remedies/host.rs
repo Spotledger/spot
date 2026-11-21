@@ -20,12 +20,19 @@
 //!   events (authorised, refused, planned, applied, undone, undo refused) after. Records carry the
 //!   remedy id, the agent, the instant and a plain sentence, never a parameter value.
 //! - **Undo is time-boxed** by `undo_window_secs` and refuses a later conflict, as the framework
-//!   does. The undo log lives in memory: it is lost on restart (see the module's open question).
+//!   does.
+//! - **Undo survives a restart** ([`UndoStore`]): the record of every live apply is written to the
+//!   store before the answer returns, removed after an undo, restored into the registry at start
+//!   ([`RemedyHost::restore_undo_records`]) and swept when its window has closed
+//!   ([`RemedyHost::sweep_undo`]). If the record cannot be written the host undoes the change at
+//!   once, audits the refusal and answers `remedies_host.undo_store_unavailable`: a remedy applied
+//!   with no way back is never left standing. The rehearsal registry never touches the store.
 //!
 //! The framework's operations are synchronous, so each runs on a blocking thread.
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
 use serde_json::Value as Json;
@@ -39,7 +46,13 @@ use spot_remedies::{
     Risk, UndoToken, Undone,
 };
 
+use super::undo_store::{MemoryUndoStore, StoredUndo, UndoStore};
 use super::world::{Catalogue, Collect, CtxRequest, WorldAccess, WorldKind};
+
+/// The code of an apply that was rolled back because its undo record could not be kept.
+pub const UNDO_STORE_UNAVAILABLE: &str = "remedies_host.undo_store_unavailable";
+/// The code of the readiness text for stored undo records that could not be restored.
+pub const UNDO_RESTORE_FAILED: &str = "remedies_host.undo_restore_failed";
 
 /// A boxed `Send` future.
 pub type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -90,6 +103,9 @@ pub enum HostError {
     /// The audit chain did not take the record, so nothing ran (or, after a run, the result is
     /// reported through [`RunReport`]).
     AuditUnavailable,
+    /// The undo store could not be read or written. After an apply the change was undone at once
+    /// (see [`RemedyHost::apply`]).
+    UndoStoreUnavailable,
     /// The blocking task failed.
     Internal,
 }
@@ -106,6 +122,7 @@ impl HostError {
             HostError::WorldUnavailable => "remedies_host.world_unavailable",
             HostError::ApplyClosed => "remedies_host.apply_closed",
             HostError::AuditUnavailable => "remedies_host.audit_unavailable",
+            HostError::UndoStoreUnavailable => UNDO_STORE_UNAVAILABLE,
             HostError::Internal => "remedies_host.internal",
         }
     }
@@ -126,6 +143,9 @@ impl std::fmt::Display for HostError {
                         "this remedy must go through the fix pipeline, which is not installed"
                     }
                     HostError::AuditUnavailable => "the audit chain did not take the record",
+                    HostError::UndoStoreUnavailable => {
+                        "the undo record could not be kept, so the change was not left standing"
+                    }
                     _ => "the operation failed",
                 })
             }
@@ -201,14 +221,7 @@ impl DirectApply<'_> {
         let agent = self.agent.clone();
         let id = self.plan.remedy.clone();
         match kind {
-            WorldKind::Live => {
-                let plan = self.plan.clone();
-                self.host
-                    .run(kind, &self.host.live, self.agent, move |reg, ctx| {
-                        reg.apply(&agent, &id, &plan, &gate, ctx)
-                    })
-                    .await
-            }
+            WorldKind::Live => self.host.apply_live(self.agent, self.plan, gate).await,
             WorldKind::Rehearsal => {
                 let params = self.plan.params.clone();
                 let planned = {
@@ -237,16 +250,22 @@ impl DirectApply<'_> {
         let gate = self.gate();
         let agent = self.agent.clone();
         let id = self.plan.remedy.clone();
-        let token = token.clone();
         let registry = match kind {
             WorldKind::Live => &self.host.live,
             WorldKind::Rehearsal => &self.host.rehearsal,
         };
-        self.host
+        let kept = token.clone();
+        let token = token.clone();
+        let undone = self
+            .host
             .run(kind, registry, self.agent, move |reg, ctx| {
                 reg.undo(&agent, &id, &token, &gate, ctx)
             })
-            .await
+            .await?;
+        if kind == WorldKind::Live {
+            self.host.forget_stored(&kept).await;
+        }
+        Ok(undone)
     }
 
     fn gate(&self) -> Gate {
@@ -290,6 +309,18 @@ pub struct RemedyHost {
     clock: Arc<dyn Clock>,
     live: Arc<Registry>,
     rehearsal: Arc<Registry>,
+    undo_store: Arc<dyn UndoStore>,
+    restore_failed: AtomicUsize,
+}
+
+/// What [`RemedyHost::restore_undo_records`] did with the stored rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RestoreReport {
+    /// Rows put back into the live registry (rows already there count as restored).
+    pub restored: usize,
+    /// Rows kept in the store but not restored: another site's row, a row that does not parse,
+    /// or a record the registry refused. The operator sees the count in readiness.
+    pub failed: usize,
 }
 
 fn truncate(text: &str, max: usize) -> String {
@@ -324,7 +355,173 @@ impl RemedyHost {
             clock: deps.clock,
             live: Arc::new(live),
             rehearsal: Arc::new(rehearsal),
+            undo_store: Arc::new(MemoryUndoStore::new()),
+            restore_failed: AtomicUsize::new(0),
         })
+    }
+
+    /// Keeps undo records in `store` instead of the in-memory default (the site's database in
+    /// production). Call it right after [`RemedyHost::new`], before the host serves a call.
+    #[must_use]
+    pub fn with_undo_store(mut self, store: Arc<dyn UndoStore>) -> Self {
+        self.undo_store = store;
+        self
+    }
+
+    /// Creates what the undo store needs (idempotent).
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::UndoStoreUnavailable`].
+    pub async fn prepare_undo_store(&self) -> Result<(), HostError> {
+        self.undo_store
+            .ensure_schema()
+            .await
+            .map_err(|_| HostError::UndoStoreUnavailable)
+    }
+
+    /// Puts every unexpired stored undo record back into the live registry, so a token handed out
+    /// before a restart can still be undone. Idempotent: a record already restored is a no-op.
+    ///
+    /// A row that belongs to another site, does not parse, or is refused by the registry is
+    /// **kept** in the store and counted in [`RestoreReport::failed`] (also available from
+    /// [`RemedyHost::undo_restore_failures`]); it is never dropped silently. Nothing about the row
+    /// is logged beyond the count.
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::UndoStoreUnavailable`] when the rows cannot be read.
+    pub async fn restore_undo_records(&self) -> Result<RestoreReport, HostError> {
+        let now = self.now();
+        let entries = self
+            .undo_store
+            .list_open(now)
+            .await
+            .map_err(|_| HostError::UndoStoreUnavailable)?;
+        let mut report = RestoreReport::default();
+        for entry in entries {
+            let restorable = match entry.record {
+                Some(record) if entry.site == self.site => {
+                    self.live.restore_undo(record, now).is_ok()
+                }
+                _ => false,
+            };
+            if restorable {
+                report.restored += 1;
+            } else {
+                report.failed += 1;
+            }
+        }
+        self.restore_failed.store(report.failed, Ordering::Relaxed);
+        if report.failed > 0 {
+            tracing::warn!(
+                site = %self.site,
+                code = UNDO_RESTORE_FAILED,
+                failed = report.failed,
+                "remedies: stored undo records could not be restored and were kept"
+            );
+        }
+        Ok(report)
+    }
+
+    /// How many stored undo records the last restore could not put back.
+    #[must_use]
+    pub fn undo_restore_failures(&self) -> usize {
+        self.restore_failed.load(Ordering::Relaxed)
+    }
+
+    /// Deletes the stored undo records whose window has closed and returns how many went.
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::UndoStoreUnavailable`].
+    pub async fn sweep_undo(&self) -> Result<u64, HostError> {
+        self.undo_store
+            .sweep(self.now())
+            .await
+            .map_err(|_| HostError::UndoStoreUnavailable)
+    }
+
+    /// Applies a plan on the live world and keeps its undo record. If the record cannot be
+    /// written, a reversible change is undone at once and the refusal is audited.
+    async fn apply_live(
+        &self,
+        agent: &AgentIdentity,
+        plan: &Plan,
+        gate: Gate,
+    ) -> Result<Applied, HostError> {
+        let (who, id, sealed, applying) = (
+            agent.clone(),
+            plan.remedy.clone(),
+            plan.clone(),
+            gate.clone(),
+        );
+        let applied = self
+            .run(WorldKind::Live, &self.live, agent, move |reg, ctx| {
+                reg.apply(&who, &id, &sealed, &applying, ctx)
+            })
+            .await?;
+        self.keep_undo(agent, &applied, gate).await?;
+        Ok(applied)
+    }
+
+    /// Writes the undo record of a live apply to the store (fail closed, see [`Self::apply_live`]).
+    async fn keep_undo(
+        &self,
+        agent: &AgentIdentity,
+        applied: &Applied,
+        gate: Gate,
+    ) -> Result<(), HostError> {
+        let Some(record) = self.live.undo_record(&applied.undo_token) else {
+            return Ok(());
+        };
+        let row = StoredUndo {
+            site: self.site.clone(),
+            agent: agent.id.clone(),
+            record,
+        };
+        if self.undo_store.put(&row).await.is_ok() {
+            return Ok(());
+        }
+        let remedy = row.record.remedy.clone();
+        if !row.record.undo.is_reversible() {
+            // There was never a way back for this remedy, so there is nothing to roll back; the
+            // gap is on the audit chain.
+            self.append(&[self.host_record(
+                "undo_store_unavailable",
+                &remedy,
+                &agent.id,
+                "the undo record of an irreversible remedy could not be kept",
+            )])
+            .await;
+            return Ok(());
+        }
+        let (who, id, token) = (agent.clone(), remedy.clone(), applied.undo_token.clone());
+        let rolled = self
+            .run(WorldKind::Live, &self.live, agent, move |reg, ctx| {
+                reg.undo(&who, &id, &token, &gate, ctx)
+            })
+            .await;
+        let detail = if rolled.is_ok() {
+            "the undo record could not be kept, so the change was undone at once"
+        } else {
+            "the undo record could not be kept and the change could not be undone; it needs an operator"
+        };
+        self.append(&[self.host_record("undo_store_unavailable", &remedy, &agent.id, detail)])
+            .await;
+        Err(HostError::UndoStoreUnavailable)
+    }
+
+    /// Removes a token's stored record after a successful undo. A failure is logged (the code
+    /// only): the row then waits for the sweep, and a restore of it can only conflict.
+    async fn forget_stored(&self, token: &UndoToken) {
+        if self.undo_store.remove(token).await.is_err() {
+            tracing::error!(
+                site = %self.site,
+                code = UNDO_STORE_UNAVAILABLE,
+                "remedies: an undone record could not be removed from the undo store"
+            );
+        }
     }
 
     /// How many remedies are in the catalogue.
@@ -531,14 +728,7 @@ impl RemedyHost {
                 };
                 path.apply(run).await
             }
-            _ => {
-                let gate = gate_of(approval);
-                let (who, id, plan) = (agent.clone(), plan.remedy.clone(), plan.clone());
-                self.run(WorldKind::Live, &self.live, &agent, move |reg, ctx| {
-                    reg.apply(&who, &id, &plan, &gate, ctx)
-                })
-                .await
-            }
+            _ => self.apply_live(&agent, plan, gate_of(approval)).await,
         }
     }
 
@@ -559,11 +749,15 @@ impl RemedyHost {
         let agent = self.refusable(tenant, agent_id, remedy).await?;
         self.intent("undo_started", remedy, agent_id).await?;
         let gate = gate_of(approval);
+        let kept = token.clone();
         let (who, id, token) = (agent.clone(), remedy.clone(), token.clone());
-        self.run(WorldKind::Live, &self.live, &agent, move |reg, ctx| {
-            reg.undo(&who, &id, &token, &gate, ctx)
-        })
-        .await
+        let undone = self
+            .run(WorldKind::Live, &self.live, &agent, move |reg, ctx| {
+                reg.undo(&who, &id, &token, &gate, ctx)
+            })
+            .await?;
+        self.forget_stored(&kept).await;
+        Ok(undone)
     }
 
     /// The agent, or a refusal that is audited.

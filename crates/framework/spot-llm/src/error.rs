@@ -15,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// The codes are the contract:
 /// `llm.auth`, `llm.rate_limited`, `llm.overloaded`, `llm.context_too_long`, `llm.bad_request`,
 /// `llm.timeout`, `llm.unavailable`, `llm.content_filtered`, `llm.budget_exceeded`,
-/// `llm.protocol`. Error text never contains a secret or the request body (ADR-26); variants
+/// `llm.protocol`, `llm.embeddings_unsupported`. Error text never contains a secret or the request body (ADR-26); variants
 /// with a `detail` carry a producer-written explanation obeying the same rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LlmError {
@@ -48,6 +48,9 @@ pub enum LlmError {
         /// Why the answer is nonsense. Must never quote the request body.
         detail: String,
     },
+    /// The provider has no embeddings endpoint (`llm.embeddings_unsupported`, WP-AI-03.T6);
+    /// a fixed refusal raised before any network call.
+    EmbeddingsUnsupported,
 }
 
 impl LlmError {
@@ -63,6 +66,7 @@ impl LlmError {
         "llm.content_filtered",
         "llm.budget_exceeded",
         "llm.protocol",
+        "llm.embeddings_unsupported",
     ];
 
     /// The dotted machine-readable code (`llm.*`), stable across providers.
@@ -78,6 +82,7 @@ impl LlmError {
             LlmError::ContentFiltered => "llm.content_filtered",
             LlmError::BudgetExceeded => "llm.budget_exceeded",
             LlmError::Protocol { .. } => "llm.protocol",
+            LlmError::EmbeddingsUnsupported => "llm.embeddings_unsupported",
         }
     }
 
@@ -118,6 +123,7 @@ impl LlmError {
             "llm.protocol" => Some(LlmError::Protocol {
                 detail: String::new(),
             }),
+            "llm.embeddings_unsupported" => Some(LlmError::EmbeddingsUnsupported),
             _ => None,
         }
     }
@@ -145,6 +151,9 @@ impl fmt::Display for LlmError {
             LlmError::Unavailable => write!(f, ": the endpoint is unreachable"),
             LlmError::ContentFiltered => write!(f, ": the provider filtered the content"),
             LlmError::BudgetExceeded => write!(f, ": the model budget is exhausted"),
+            LlmError::EmbeddingsUnsupported => {
+                write!(f, ": this provider has no embeddings endpoint")
+            }
         }
     }
 }
@@ -219,6 +228,7 @@ impl<'de> Deserialize<'de> for LlmError {
                     "llm.protocol" => Ok(LlmError::Protocol {
                         detail: detail.ok_or_else(|| DeError::missing_field("detail"))?,
                     }),
+                    "llm.embeddings_unsupported" => Ok(LlmError::EmbeddingsUnsupported),
                     other => Err(DeError::unknown_variant(other, LlmError::CODES)),
                 }
             }

@@ -16,12 +16,16 @@ namespace Spotledger.Client.Grid.Tests;
 /// </summary>
 public sealed class PerfBudgetTests
 {
-    private static (double MaxFrameMs, double MaxAllocPerFrame, double FirstPaintMs, int Rows, int Columns, int Steps) ReadBudgets()
+    private static (double MaxFrameMs, double MaxAllocPerFrame, double FirstPaintMs, int Rows, int Columns, int Steps, double CatastropheFactor) ReadBudgets()
     {
         var path = FindBudgetFile();
         var lines = File.ReadAllLines(path);
         double maxFrame = 0, maxAlloc = 0, firstPaint = 0;
         var rows = 0; var columns = 0; var steps = 0;
+        // catastrophe_factor is not a key of perf-budgets.toml: TestSupport's PerfBudget loader (outside this
+        // task's paths) rejects any file whose keys are not exactly the six it knows, and the TestSupport
+        // MeasuredUiTests read the same file. The default lives here until that loader accepts it.
+        var catastrophe = 10d;
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
@@ -46,11 +50,20 @@ public sealed class PerfBudgetTests
                 case "rows": rows = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "columns": columns = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "scroll_steps": steps = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "catastrophe_factor": catastrophe = double.Parse(value, CultureInfo.InvariantCulture); break;
             }
         }
 
-        return (maxFrame, maxAlloc, firstPaint, rows, columns, steps);
+        return (maxFrame, maxAlloc, firstPaint, rows, columns, steps, catastrophe);
     }
+
+    /// <summary>
+    /// The strict budget is a property of the reference runner, declared by SPOT_PERF_REFERENCE=1
+    /// (set from a repository variable of the same name, never inferred from CI). Everywhere else the
+    /// test still runs and prints its numbers and fails only on the catastrophe bound
+    /// (catastrophe_factor times the budget: a hang or an accidental O(n^2)).
+    /// </summary>
+    private static bool IsReferenceRunner => Environment.GetEnvironmentVariable("SPOT_PERF_REFERENCE") == "1";
 
     private static string FindBudgetFile()
     {
@@ -94,7 +107,7 @@ public sealed class PerfBudgetTests
     [AvaloniaFact]
     public void FirstPaintOfFiftyRowsUnderBudget()
     {
-        var (_, _, firstPaintBudget, _, _, _) = ReadBudgets();
+        var (_, _, firstPaintBudget, _, _, _, catastropheFactor) = ReadBudgets();
         // Best of five: the first grid pays JIT and style loading, and a shared CI runner adds noise.
         // The verdict is on the thread CPU time of the two pumps: the headless platform renders
         // on the calling (UI) thread, so that thread's CPU time is the paint cost, and a busy
@@ -116,11 +129,15 @@ public sealed class PerfBudgetTests
             Assert.True(grid.AppliedRows is { Count: > 0 }, "the first window must have completed");
             window.Close();
         }
-        var budget = firstPaintBudget * (Environment.GetEnvironmentVariable("CI") is null ? 1 : 3); // shared runners are not the reference runner
+        var reference = IsReferenceRunner;
+        var budget = reference ? firstPaintBudget : firstPaintBudget * catastropheFactor;
         var culture = CultureInfo.InvariantCulture;
-        var numbers = $"{ThreadCpuTime.Source} {bestCpu.ToString("F1", culture)} ms, wall time {bestWall.ToString("F1", culture)} ms (best of 5), budget {budget.ToString("F1", culture)} ms";
+        var mode = reference ? "strict (reference runner)" : $"catastrophe bound only ({catastropheFactor.ToString("F0", culture)} x the {firstPaintBudget.ToString("F1", culture)} ms budget)";
+        var numbers = $"{ThreadCpuTime.Source} {bestCpu.ToString("F1", culture)} ms, wall time {bestWall.ToString("F1", culture)} ms (best of 5), budget {budget.ToString("F1", culture)} ms, mode {mode}";
+        // One line a trend can be read from in CI logs.
+        Console.WriteLine($"PERF first-paint source={ThreadCpuTime.Source} cpu_ms={bestCpu.ToString("F1", culture)} wall_ms={bestWall.ToString("F1", culture)} budget_ms={budget.ToString("F1", culture)} mode={(reference ? "strict" : "catastrophe")}");
         Assert.True(bestCpu < budget, $"first paint took {numbers}");
-        if (Environment.GetEnvironmentVariable("SPOT_PERF_REFERENCE") == "1")
+        if (reference)
         {
             Assert.True(bestWall < budget, $"first paint wall time exceeded the budget on the reference runner: {numbers}");
         }
@@ -150,7 +167,7 @@ public sealed class PerfBudgetTests
     [AvaloniaFact]
     public void ScrollOf100kRowsIn300StepsStaysWithinBudgets()
     {
-        var (maxFrameBudget, allocBudget, _, rows, columns, steps) = ReadBudgets();
+        var (maxFrameBudget, allocBudget, _, rows, columns, steps, catastropheFactor) = ReadBudgets();
 
         var grid = MakePerfGrid(out _, rows, columns, out var window);
         TestHost.Pump();
@@ -196,8 +213,13 @@ public sealed class PerfBudgetTests
         _allocFrames = 0;
 
         Assert.True(grid.MaxScrollRows > 4000, "the fixture must be large enough to matter");
-        Assert.True(maxFrame < maxFrameBudget,
-            $"max single-frame draw {maxFrame.ToString("F3", culture)} ms exceeded budget {maxFrameBudget} ms (worst steps: {string.Join(", ", watched.OrderByDescending(x => x).Take(3).Select(x => x.ToString("F3", culture)))})");
+        // Max frame time is wall time and follows the reference marker; allocations per frame are
+        // host-independent and stay strict everywhere.
+        var frameBound = IsReferenceRunner ? maxFrameBudget : maxFrameBudget * catastropheFactor;
+        var worst = string.Join(", ", watched.OrderByDescending(x => x).Take(3).Select(x => x.ToString("F3", culture)));
+        Console.WriteLine($"PERF scroll max_frame_ms={maxFrame.ToString("F3", culture)} bound_ms={frameBound.ToString("F3", culture)} mode={(IsReferenceRunner ? "strict" : "catastrophe")} mean_alloc_bytes={meanAlloc.ToString("F0", culture)}");
+        Assert.True(maxFrame < frameBound,
+            $"max single-frame draw {maxFrame.ToString("F3", culture)} ms exceeded bound {frameBound.ToString("F3", culture)} ms ({(IsReferenceRunner ? "strict budget" : "catastrophe bound")}; worst steps: {worst})");
         Assert.True(meanAlloc < allocBudget,
             $"mean per-frame allocations {meanAlloc.ToString("F0", culture)} bytes exceeded budget {allocBudget} bytes");
     }

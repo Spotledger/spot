@@ -47,6 +47,7 @@
 //! [`host::RemedyHost::install_apply_path`].
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Deserialize;
 use spot_agent_tiers::{AgentIdentity, AgentRegistry, Domain};
@@ -55,16 +56,23 @@ use spot_remedies::RemedySettings;
 use tokio::sync::watch;
 
 use crate::services::agent_tiers::TierService;
+use crate::services::mcp::McpHandle;
 use crate::services::mcp::seams::{AgentDirectory, audit_sink};
 use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
 #[path = "remedies/host.rs"]
 pub mod host;
+#[path = "remedies/tools.rs"]
+pub mod tools;
+#[path = "remedies/undo_store.rs"]
+pub mod undo_store;
 #[path = "remedies/world.rs"]
 pub mod world;
 
-use host::{AgentSource, Deps, Fut, RemedyHost};
+use host::{AgentSource, Deps, Fut, RemedyHost, UNDO_RESTORE_FAILED, UNDO_STORE_UNAVAILABLE};
+use tools::RemedyTool;
+use undo_store::PgUndoStore;
 use world::{Catalogue, ShippedCatalogue, WorldAccess};
 
 /// Start order: after the agent tier service (1070) and the AI audit modules, before the fix
@@ -75,6 +83,12 @@ pub const ORDER: u32 = 1270;
 const SETTINGS_INVALID: &str = "remedies_host.settings_invalid";
 const SELF_TEST_FAILED: &str = "remedies_host.self_test_failed";
 const TIERS_UNAVAILABLE: &str = "remedies_host.tiers_unavailable";
+/// The code of the readiness text when the MCP service refused one of the four tools (no code of
+/// its own: it is an internal failure of the wiring).
+const TOOLS_REFUSED: &str = "remedies_host.internal";
+
+/// How often the service sweeps the undo records whose window has closed.
+const SWEEP_EVERY: Duration = Duration::from_secs(300);
 
 fn default_true() -> bool {
     true
@@ -172,10 +186,19 @@ impl AgentSource for TierSource {
     }
 }
 
+/// What the service needs to put its four tools on the MCP service and take them off again.
+struct ToolWiring {
+    mcp: Arc<McpHandle>,
+    site: String,
+    clock: Arc<dyn Clock>,
+}
+
 /// The service: the readiness entry and the start-up self-test.
 struct RemediesService {
     host: Arc<RemedyHost>,
     self_test: bool,
+    /// The MCP service, when it runs: the tools are on it while this service is healthy.
+    tools: Option<ToolWiring>,
 }
 
 impl Service for RemediesService {
@@ -189,31 +212,76 @@ impl Service for RemediesService {
 
     fn check(&self) -> CheckFuture<'_> {
         Box::pin(async move {
-            if !self.self_test {
-                return Ok(());
+            // Restore first: a token handed out before a restart must be undoable even when the
+            // self-test is switched off.
+            let mut problems = Vec::new();
+            match self.host.restore_undo_records().await {
+                Ok(report) if report.failed > 0 => problems.push(format!(
+                    "{UNDO_RESTORE_FAILED}: {} undo records could not be restored",
+                    report.failed
+                )),
+                Ok(_) => {}
+                Err(error) => problems.push(error.to_string()),
             }
-            let results = self.host.self_test_all().map_err(|e| e.sentence())?;
-            let failed: Vec<String> = results
-                .iter()
-                .filter(|r| r.outcome.is_err())
-                .map(|r| r.remedy.as_str().to_owned())
-                .collect();
-            if failed.is_empty() {
+            if self.self_test {
+                let results = self.host.self_test_all().map_err(|e| e.sentence())?;
+                let failed: Vec<String> = results
+                    .iter()
+                    .filter(|r| r.outcome.is_err())
+                    .map(|r| r.remedy.as_str().to_owned())
+                    .collect();
+                if !failed.is_empty() {
+                    problems.push(format!(
+                        "{SELF_TEST_FAILED}: {} remedies fail their own scenario ({})",
+                        failed.len(),
+                        failed.join(", ")
+                    ));
+                }
+            }
+            // The tools are offered while the service is healthy and taken off while it is not
+            // (an extension tool is absent while its service is degraded).
+            if let Some(wiring) = &self.tools {
+                if problems.is_empty() {
+                    RemedyTool::install(&wiring.mcp, &self.host, &wiring.site, &wiring.clock)
+                        .map_err(|reason| format!("{TOOLS_REFUSED}: {reason}"))?;
+                } else {
+                    RemedyTool::uninstall(&wiring.mcp);
+                }
+            }
+            if problems.is_empty() {
                 Ok(())
             } else {
-                Err(format!(
-                    "{SELF_TEST_FAILED}: {} remedies fail their own scenario ({})",
-                    failed.len(),
-                    failed.join(", ")
-                ))
+                Err(problems.join("; "))
             }
+        })
+    }
+
+    fn shutdown(&self) -> RunFuture<'_> {
+        Box::pin(async move {
+            if let Some(wiring) = &self.tools {
+                RemedyTool::uninstall(&wiring.mcp);
+            }
+            Ok(())
         })
     }
 
     fn run(&self, stop: watch::Receiver<bool>) -> RunFuture<'_> {
         Box::pin(async move {
             let mut stop = stop;
-            let _ = stop.changed().await;
+            let mut tick = tokio::time::interval(SWEEP_EVERY);
+            loop {
+                tokio::select! {
+                    _ = stop.changed() => break,
+                    _ = tick.tick() => {
+                        if self.host.sweep_undo().await.is_err() {
+                            tracing::warn!(
+                                code = UNDO_STORE_UNAVAILABLE,
+                                "remedies: the undo sweep failed; it runs again"
+                            );
+                        }
+                    }
+                }
+            }
             Ok(())
         })
     }
@@ -253,11 +321,40 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         sink: audit_sink(env.backend, &site),
         clock,
     })
-    .map_err(|e| Error(format!("services.remedies: {}", e.sentence())))?;
+    .map_err(|e| Error(format!("services.remedies: {}", e.sentence())))?
+    .with_undo_store(Arc::new(PgUndoStore::new(env.backend.pool())));
+    if host.prepare_undo_store().await.is_err() {
+        // A remedy applied with no way back is never left standing, so a host that cannot keep
+        // undo records stays closed.
+        ctx.add(Idle::new("remedies", Level::Optional, || {
+            Box::pin(async {
+                Err(format!("{UNDO_STORE_UNAVAILABLE}: the undo table could not be created, so the remedy host stays closed"))
+            })
+        }));
+        return Ok(());
+    }
     let host = Arc::new(host);
+    // The MCP service is absent when it is off: no tools to offer, not an error. The tools are
+    // installed here and again by the check each time the service is healthy.
+    let tools = ctx.port::<McpHandle>().map(|mcp| ToolWiring {
+        mcp,
+        site: site.clone(),
+        clock: Arc::clone(ctx.clock()),
+    });
+    if let Some(wiring) = &tools
+        && let Err(reason) = RemedyTool::install(&wiring.mcp, &host, &wiring.site, &wiring.clock)
+    {
+        let sentence = format!("{TOOLS_REFUSED}: {reason}");
+        ctx.add(Idle::new("remedies", Level::Optional, move || {
+            let sentence = sentence.clone();
+            Box::pin(async move { Err(sentence) })
+        }));
+        return Ok(());
+    }
     ctx.add(Arc::new(RemediesService {
         host: Arc::clone(&host),
         self_test: settings.self_test_at_start,
+        tools,
     }));
     ctx.provide(host)
         .map_err(|e| Error(format!("services.remedies: {e}")))?;

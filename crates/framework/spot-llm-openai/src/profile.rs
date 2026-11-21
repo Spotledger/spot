@@ -46,7 +46,18 @@ pub struct Profile {
     /// unclosed object) that the provider closes and parses. When `false`, a malformed
     /// argument string is `llm.protocol`.
     pub tool_args_may_be_partial_json: bool,
+    /// The endpoint has an OpenAI-compatible embeddings route (WP-AI-03.T6). When `false`,
+    /// an embeddings call is refused with `llm.embeddings_unsupported` before any request
+    /// is built.
+    pub supports_embeddings: bool,
+    /// The embeddings route, appended to the base URL like the chat path (so it carries the
+    /// protocol's own `/v1` prefix). OpenAI, OpenRouter and Ollama's OpenAI-compatible
+    /// surface all serve `/v1/embeddings` with the same request and reply shape.
+    pub embeddings_path: &'static str,
 }
+
+/// The embeddings route OpenAI, OpenRouter and Ollama share.
+pub const DEFAULT_EMBEDDINGS_PATH: &str = "/v1/embeddings";
 
 impl Profile {
     /// The OpenRouter profile: bearer key, streaming usage on, strict tool arguments. The
@@ -60,6 +71,8 @@ impl Profile {
             supports_streaming_usage: true,
             max_tokens_field: MaxTokensField::MaxTokens,
             tool_args_may_be_partial_json: false,
+            supports_embeddings: true,
+            embeddings_path: DEFAULT_EMBEDDINGS_PATH,
         }
     }
 
@@ -73,6 +86,8 @@ impl Profile {
             supports_streaming_usage: true,
             max_tokens_field: MaxTokensField::MaxTokens,
             tool_args_may_be_partial_json: true,
+            supports_embeddings: true,
+            embeddings_path: DEFAULT_EMBEDDINGS_PATH,
         }
     }
 
@@ -87,6 +102,8 @@ impl Profile {
             supports_streaming_usage: false,
             max_tokens_field: MaxTokensField::MaxTokens,
             tool_args_may_be_partial_json: false,
+            supports_embeddings: true,
+            embeddings_path: DEFAULT_EMBEDDINGS_PATH,
         }
     }
 }

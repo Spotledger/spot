@@ -25,8 +25,14 @@
 //!
 //! Every refusal writes a send record with its reason (`refused_*`), so an operator can see what
 //! was blocked as well as what was sent.
+//!
+//! [`LlmGateway::embed`] (module `embed`, WP-AI-03.T7) passes the same controls for an embedding
+//! call: the tenant's embedding model, the allow-list, the egress policy, the key, the budget
+//! (a worst case reserved for the whole call, the exact tokens settled), a send record written
+//! first, and usage counted under the task `embed`.
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex as StdMutex, PoisonError};
 use std::time::Duration;
 
@@ -36,7 +42,7 @@ use spot_document::secrets::SecretVault;
 use spot_egress::{Guard, Purpose, Request as EgressRequest};
 use spot_llm::transport::HttpTransport;
 use spot_llm::transport::egress::EgressTransport;
-use spot_llm::{ApiKey, LlmError, Provider, Request, Response};
+use spot_llm::{ApiKey, Embedder as ProviderEmbedder, LlmError, Provider, Request, Response};
 use spot_llm_anthropic::{AnthropicProvider, ModelInfo as AnthropicModel};
 use spot_llm_openai::{ModelInfo as OpenAiModel, OpenAiProvider, Profile};
 use spot_llm_router::{
@@ -71,6 +77,18 @@ pub trait ProviderFactory: Send + Sync {
         key: Option<ApiKey>,
         transport: Arc<dyn HttpTransport>,
     ) -> Arc<dyn Provider>;
+
+    /// The embedder for `config` (WP-AI-03.T7), built only for a tenant that sets an embedding
+    /// model. The default answers `None`: a factory that builds no embedder leaves the tenant's
+    /// embedding calls refused with the provider's fixed `llm.embeddings_unsupported`.
+    fn build_embedder(
+        &self,
+        _config: &TenantConfig,
+        _key: Option<ApiKey>,
+        _transport: Arc<dyn HttpTransport>,
+    ) -> Option<Arc<dyn ProviderEmbedder>> {
+        None
+    }
 }
 
 /// The providers that ship: Anthropic and the OpenAI-compatible family.
@@ -115,6 +133,44 @@ impl ProviderFactory for BuiltinProviders {
                     }],
                 ))
             }
+        }
+    }
+
+    fn build_embedder(
+        &self,
+        config: &TenantConfig,
+        key: Option<ApiKey>,
+        transport: Arc<dyn HttpTransport>,
+    ) -> Option<Arc<dyn ProviderEmbedder>> {
+        match config.kind {
+            // Anthropic has no embeddings endpoint; the provider says so with its fixed refusal.
+            Kind::Anthropic => Some(Arc::new(AnthropicProvider::new(
+                config.endpoint.clone(),
+                key.unwrap_or_else(|| ApiKey::new("")),
+                transport,
+                Vec::new(),
+            ))),
+            Kind::Openrouter => Some(Arc::new(OpenAiProvider::new(
+                Profile::openrouter(),
+                config.endpoint.clone(),
+                key,
+                transport,
+                Vec::new(),
+            ))),
+            Kind::Ollama => Some(Arc::new(OpenAiProvider::new(
+                Profile::ollama(),
+                config.endpoint.clone(),
+                key,
+                transport,
+                Vec::new(),
+            ))),
+            Kind::Openai => Some(Arc::new(OpenAiProvider::new(
+                Profile::generic(),
+                config.endpoint.clone(),
+                key,
+                transport,
+                Vec::new(),
+            ))),
         }
     }
 }
@@ -182,6 +238,16 @@ pub enum CallError {
     Store(StoreError),
     /// The key could not be sealed or opened.
     Vault,
+    /// The tenant has no embedding model configured (WP-AI-03.T7).
+    EmbeddingsNotConfigured,
+    /// An embedding call is over the per-call text count or the per-text size (WP-AI-03.T7).
+    EmbedTooLarge,
+    /// A text holds a secret or a financial identifier and was not sent; the classes are the
+    /// redactor's labels (`card_number`, `iban`, `token`...), never a value.
+    EmbedRefused {
+        /// The labels of what the redactor found, sorted, without repeats.
+        classes: Vec<String>,
+    },
 }
 
 impl CallError {
@@ -199,15 +265,21 @@ impl CallError {
             CallError::Provider(_) => "llm_host.provider_failed",
             CallError::Store(_) => "llm_host.store_unavailable",
             CallError::Vault => "llm_host.key_unusable",
+            CallError::EmbeddingsNotConfigured => "llm_host.embeddings_not_configured",
+            CallError::EmbedTooLarge => "llm_host.embed_too_large",
+            CallError::EmbedRefused { .. } => "llm_host.embed_refused",
         }
     }
 
     /// The short reason the send record keeps (`refused_budget`, `failed_llm_timeout`).
     fn outcome(&self) -> String {
         match self {
-            CallError::Config(_) | CallError::NotConfigured | CallError::TaskUnknown => {
-                "refused_config".to_owned()
-            }
+            CallError::Config(_)
+            | CallError::NotConfigured
+            | CallError::TaskUnknown
+            | CallError::EmbeddingsNotConfigured => "refused_config".to_owned(),
+            CallError::EmbedTooLarge => "refused_too_large".to_owned(),
+            CallError::EmbedRefused { .. } => "refused_redaction".to_owned(),
             CallError::KeyMissing | CallError::Vault => "refused_key".to_owned(),
             CallError::EndpointNotAllowed => "refused_allow_list".to_owned(),
             CallError::EndpointDenied(_) => "refused_egress".to_owned(),
@@ -242,6 +314,17 @@ impl std::fmt::Display for CallError {
             CallError::Provider(error) => write!(f, "the provider failed ({})", error.code()),
             CallError::Store(error) => write!(f, "{error}"),
             CallError::Vault => f.write_str("the stored key could not be opened"),
+            CallError::EmbeddingsNotConfigured => {
+                f.write_str("the tenant has no embedding model configured")
+            }
+            CallError::EmbedTooLarge => f.write_str(
+                "the embedding call has more texts, or a longer text, than the service allows",
+            ),
+            CallError::EmbedRefused { classes } => write!(
+                f,
+                "a text holds a secret or a financial identifier ({}) and was not sent",
+                classes.join(", ")
+            ),
         }
     }
 }
@@ -294,6 +377,8 @@ struct TenantRuntime {
     price: Price,
     router: Router,
     ledger: Arc<CapturingLedger>,
+    /// The embedder, built only for a tenant that sets an embedding model.
+    embedder: Option<Arc<dyn ProviderEmbedder>>,
     guard: Arc<Guard>,
     built_at_ms: u64,
     /// The first day of the budget period the router's book is in; 0 until installed.
@@ -304,7 +389,31 @@ struct TenantRuntime {
 pub struct LlmGateway {
     deps: Deps,
     runtimes: StdMutex<HashMap<String, Arc<TenantRuntime>>>,
+    embed_limits: EmbedLimits,
+    /// Makes the request id of each embedding call unique within one millisecond.
+    embed_seq: AtomicU64,
 }
+
+/// The bounds of one embedding call (`[services.llm] max_texts_per_call` and `max_text_bytes`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EmbedLimits {
+    /// The most texts one call may carry.
+    pub max_texts: usize,
+    /// The longest single text, in bytes.
+    pub max_text_bytes: usize,
+}
+
+impl Default for EmbedLimits {
+    fn default() -> Self {
+        Self {
+            max_texts: 512,
+            max_text_bytes: 32_768,
+        }
+    }
+}
+
+#[path = "embed.rs"]
+mod embed;
 
 fn key_aad(site: &str, tenant: &str) -> Vec<u8> {
     format!("spot-llm/{site}/{tenant}/key").into_bytes()
@@ -317,7 +426,16 @@ impl LlmGateway {
         Self {
             deps,
             runtimes: StdMutex::new(HashMap::new()),
+            embed_limits: EmbedLimits::default(),
+            embed_seq: AtomicU64::new(0),
         }
+    }
+
+    /// Sets the bounds of an embedding call (the defaults are 512 texts of 32,768 bytes).
+    #[must_use]
+    pub fn with_embed_limits(mut self, limits: EmbedLimits) -> Self {
+        self.embed_limits = limits;
+        self
     }
 
     fn now_ms(&self) -> u64 {
@@ -393,6 +511,22 @@ impl LlmGateway {
             self.flush(&old).await;
         }
         Ok(())
+    }
+
+    /// Deletes the tenant's stored key (the configuration is kept, and so are usage and records).
+    /// Returns whether a key was there. The next call of the tenant is refused as
+    /// [`CallError::KeyMissing`] (a provider that needs none, Ollama, is unaffected).
+    ///
+    /// # Errors
+    ///
+    /// [`CallError::Config`] for a bad tenant id, [`CallError::Store`] when the write fails.
+    pub async fn remove_key(&self, tenant: &str) -> Result<bool, CallError> {
+        check_tenant(tenant)?;
+        let existed = self.deps.store.delete_key(tenant, self.now_ms()).await?;
+        if let Some(old) = self.forget(tenant) {
+            self.flush(&old).await;
+        }
+        Ok(existed)
     }
 
     /// Whether a key is stored for the tenant (never the key).
@@ -569,6 +703,17 @@ impl LlmGateway {
         if !runtime.config.tasks.iter().any(|t| t == task) {
             return Err(CallError::TaskUnknown);
         }
+        self.admit_send(runtime, tenant, caller).await
+    }
+
+    /// The checks every call that can send bytes passes, a completion or an embedding: the
+    /// allow-list, the key, the egress policy (after DNS) and the budget period.
+    async fn admit_send(
+        &self,
+        runtime: &TenantRuntime,
+        tenant: &str,
+        caller: &Caller,
+    ) -> Result<(), CallError> {
         if !runtime.config.endpoint_allowed() {
             return Err(CallError::EndpointNotAllowed);
         }
@@ -662,6 +807,13 @@ impl LlmGateway {
             None
         };
         let transport = self.deps.transports.transport(Arc::clone(&guard), tenant);
+        let embedder = if config.embedding_model.is_some() {
+            self.deps
+                .providers
+                .build_embedder(&config, key.clone(), Arc::clone(&transport))
+        } else {
+            None
+        };
         let provider = self.deps.providers.build(&config, key, transport);
         let provider_id = config.kind.provider_id();
         let price = Price::new(
@@ -701,6 +853,7 @@ impl LlmGateway {
             price,
             router,
             ledger,
+            embedder,
             guard,
             built_at_ms: now,
             period: Mutex::new(0),

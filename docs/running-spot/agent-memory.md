@@ -68,6 +68,18 @@ nothing is written or recalled, when:
 - no embedding provider port exists (turn the LLM service on and configure an embedding provider) or
   the coordinator lease port is absent.
 
+## The `recall_memory` MCP tool
+
+The service installs `recall_memory` on the MCP service's `McpHandle` (contract `mcp.md`, section 5,
+"Extension tools") when the site is built and takes it off at shutdown. It is listed only for a
+registered agent (a user principal never sees it) and only once the start-up check has provisioned the
+tenant's memory. Arguments: `query` (at most 512 bytes), `k` (1 to `max_recall_k`, default 5) and `kinds`
+(`episode`, `procedure`, `fact`). The answer is `{"entries": [...], "provenance": "untrusted"}`; each
+entry has `kind`, `id`, `text`, `score_bp`, `confidence_bp`, `source`, `tier`, `created_ms` and
+`remedies`. The agent's tier comes from the authenticated principal and gates the answer: an entry
+learned above it is neither returned, counted nor hinted at. A failure is a tool error with
+`agent_memory.query_too_long`, `agent_memory.embed_failed` or `agent_memory.store_failed`.
+
 ## Limits to know
 
 - Embeddings are 64 wide (`EMBEDDING_DIM`), the width of the memory tables.

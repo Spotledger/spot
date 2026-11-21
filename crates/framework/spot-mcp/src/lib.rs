@@ -41,6 +41,14 @@
 //! Hidden and forbidden fields are omitted from a tool's input schema for that principal, and
 //! a runtime-created DocType appears on the next `tools/list` with no restart.
 //!
+//! # Extension tools
+//!
+//! A hosting service adds a tool of its own (`retrieve`, `recall_memory`, the `remedy_*` tools)
+//! through [`ExtensionTool`] and the [`ExtensionRegistry`] the host shares with the server
+//! (contract `mcp.md`, section 5): listed per principal, run as the caller, under the same
+//! limits, deadline and audit record as every tool, and gone from the next `tools/list` when
+//! the service uninstalls it. See [`extension`].
+//!
 //! # Running strictly as the calling user
 //!
 //! Every request carries an authenticated principal (an OAuth bearer or an API key). The
@@ -64,6 +72,7 @@ pub mod audit;
 pub mod catalog;
 pub mod error;
 pub mod execute;
+pub mod extension;
 pub mod http;
 pub mod jobs;
 pub mod jsonrpc;
@@ -81,6 +90,9 @@ pub use audit::{
 };
 pub use catalog::{ToolCatalog, ToolKind, ToolSpec};
 pub use error::McpError;
+pub use extension::{
+    ExtensionError, ExtensionRegistry, ExtensionSpec, ExtensionTool, FaultClass, InstallError,
+};
 pub use jsonrpc::{Framing, Id, Incoming, Notification, Request, parse_message};
 pub use limits::Limits;
 pub use principal::{Authenticator, Credential, McpPrincipal};

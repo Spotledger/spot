@@ -232,7 +232,7 @@ fn build_journal(backend: &PgBackend, pool_size: usize) -> Result<Arc<dyn FixJou
     let config = BridgeConfig {
         name: "fix_pipeline".to_owned(),
         max_in_flight: largest.min(2),
-        workers: 1,
+        workers: 2,
         queue_capacity: 4,
         default_deadline: Duration::from_secs(10),
         max_deadline: Duration::from_secs(60),
