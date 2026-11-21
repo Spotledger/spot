@@ -9,6 +9,16 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.15] - 2026-11-21
+
+Continuous integration fix after 0.1.14, no new features.
+
+### Fixed
+
+- The Rust test shard script of 0.1.14 failed to parse (an apostrophe in a Python comment inside
+  a quoted shell string), so all four shards failed at once. The script is fixed, and the workflow
+  lint now runs `bash -n` on every `run:` block (rule `shell-syntax`) so it cannot recur.
+
 ## [0.1.14] - 2026-11-21
 
 Continuous integration fixes after 0.1.13, no new features.

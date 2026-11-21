@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable
@@ -235,6 +237,21 @@ def iter_env(doc: dict[str, Any]) -> Iterable[tuple[str, Any]]:
                 yield from step["env"].items()
 
 
+def shell_syntax_error(script: str, shell: Any) -> str:
+    """``bash -n`` on a run: block (expressions blanked), so a stray quote cannot ship."""
+    if shell not in (None, "bash") and not (isinstance(shell, str) and shell.startswith("bash ")):
+        return ""
+    bash = shutil.which("bash")
+    if not bash:
+        return ""
+    blank = re.sub(r"\$\{\{.*?\}\}", "X", script, flags=re.S)
+    done = subprocess.run([bash, "-n"], input=blank, capture_output=True, text=True, check=False)
+    if done.returncode == 0:
+        return ""
+    lines = done.stderr.strip().splitlines()
+    return lines[-1][:160] if lines else "syntax error"
+
+
 def lint_text(text: str, name: str, allow_unpinned: bool = False) -> list[str]:
     """All findings for one workflow file, as ``name: [rule] message`` strings."""
     if yaml is None:
@@ -332,6 +349,9 @@ def lint_text(text: str, name: str, allow_unpinned: bool = False) -> list[str]:
                     add("script-injection", f"{where}, {label}: github.event expression interpolated into run:; pass it through env:")
                 if START_PG in code:
                     started = True
+                bad = shell_syntax_error(script, step.get("shell"))
+                if bad:
+                    add("shell-syntax", f"{where}, {label}: bash cannot parse this run: block ({bad})")
                 if TEST_CMD_RE.search(code) and not started:
                     runs_tests = True
         if runs_tests and not re.search(r"#\s*lint-allow:\s*no-postgres[ \t]+\S", job_text):

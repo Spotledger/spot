@@ -104,7 +104,7 @@ jobs:
           # Balanced by test binaries (each one is a link of its own): spot-cli alone has 240, so
           # taking every fourth crate by name left shard 3 with 650 binaries and the others 360 to
           # 420. Greedy by weight; shard 1 starts heavier because it also runs fmt and clippy.
-          # spot-cli's 248 test binaries are four times the cost of any other (v0.1.13 run: 18 min to
+          # The 248 test binaries of spot-cli are four times the cost of any other (v0.1.13 run: 18 min to
           # build and 31 min to run, against 33 min for a whole shard of 560 ordinary binaries), so a
           # crate with 100 or more of them counts four times each and ends up on a shard of its own.
           def weight(p):

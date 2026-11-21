@@ -109,5 +109,28 @@ class WorkflowLintTests(unittest.TestCase):
         self.assertEqual(self.lint(shipped), [])
 
 
+
+class ShellSyntaxRuleTests(unittest.TestCase):
+    BASE = (
+        "name: t\non: push\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - name: s\n        run: |\n"
+    )
+
+    def findings(self, script: str) -> list[str]:
+        body = "".join("          " + line + "\n" for line in script.splitlines())
+        return [f for f in workflow_lint.lint_text(self.BASE + body, "t.yml") if "shell-syntax" in f]
+
+    def test_a_valid_script_passes(self):
+        self.assertEqual(self.findings("echo hi\nfor i in 1 2; do echo $i; done"), [])
+
+    def test_a_stray_quote_inside_a_quoted_python_block_is_caught(self):
+        # The v0.1.14 shard script: an apostrophe in a Python comment ended the quoted string.
+        bad = "N=$(python3 -c '\n# the crate's weight (see below)\nprint(1)\n')\necho $N"
+        self.assertEqual(len(self.findings(bad)), 1)
+
+    def test_expressions_are_blanked_before_parsing(self):
+        self.assertEqual(self.findings("echo ${{ github.sha }}\nX=${{ matrix.os }}"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

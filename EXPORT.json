@@ -1,5 +1,5 @@
 {
-  "content_sha256": "6b5be50bd97299d50d5c9d4ddf5fa2cc295265aeaec7a03cfb988b3e300fb047",
+  "content_sha256": "90c0e92af3d274fe4a31176841c048ac7679bb24515da3bd7f720db4b352c012",
   "file_count": 10385,
   "file_list_sha256": "570230f652397512c07d2527e399cbff64af41e3cd7b4d2c6f8d3d711e666ad2",
   "manifest_sha256": "f6bae14a7af7b7a1598d189f12cf4791a5cf69136a3d6acba488255bc3244487",
@@ -15,7 +15,7 @@
     "citations_rewritten": 29,
     "files_changed": 220
   },
-  "source_commit": "6c2dddcd50d7662eff2e2efc82c88ac62b4e85ba",
-  "source_commit_date_utc": "2026-11-21T07:48:48Z",
+  "source_commit": "c0a69a656a77c423551b3969a359c9c25de5fe66",
+  "source_commit_date_utc": "2026-11-21T08:09:52Z",
   "tool_version": "1.1.0"
 }
