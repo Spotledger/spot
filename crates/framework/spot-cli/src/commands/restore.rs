@@ -104,6 +104,8 @@ pub fn command() -> Command {
                 .arg(
                     Arg::new("confirm")
                         .long("confirm")
+                        // The token is base64 and may begin with `-`.
+                        .allow_hyphen_values(true)
                         .value_name("TOKEN")
                         .help("The token `preflight` printed (single use, 10 minutes)"),
                 )

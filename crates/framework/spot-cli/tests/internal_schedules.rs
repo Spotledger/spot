@@ -435,12 +435,26 @@ async fn missed_runs_coalesce_into_one_under_run_once() {
     let (stop, task) = rig.start(&db, "node-a", planned);
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    // Five minutes pass with nobody planning: five firings are missed, one run is enqueued.
+    // Five minutes pass with nobody planning: five firings are due. The grace is a minute
+    // (`schedule_grace`), so the 10:05 firing is on time and runs by itself; the four older ones
+    // are missed and coalesce into one run.
     rig.clock.advance(Duration::from_secs(300));
-    let jobs = rig.wait_for(1).await;
+    let jobs = rig.wait_for(2).await;
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert_eq!(jobs.len(), 1);
-    assert_eq!(rig.jobs().await.len(), 1, "missed runs coalesce into one");
+    assert_eq!(jobs.len(), 2);
+    let all = rig.jobs().await;
+    assert_eq!(
+        all.len(),
+        2,
+        "the missed runs coalesce into one, beside the one on time"
+    );
+    let mut keys: Vec<String> = all
+        .iter()
+        .map(|j| j.idempotency_key.clone().unwrap_or_default())
+        .collect();
+    keys.sort();
+    assert!(keys[0].ends_with("2026-11-12T10:04:00Z"), "{keys:?}");
+    assert!(keys[1].ends_with("2026-11-12T10:05:00Z"), "{keys:?}");
 
     let _ = stop.send(true);
     let _ = task.await;
@@ -455,11 +469,15 @@ async fn the_skip_policy_enqueues_nothing_for_a_missed_window() {
     let (stop, task) = rig.start(&db, "node-a", planned);
     tokio::time::sleep(Duration::from_millis(300)).await;
     rig.clock.advance(Duration::from_secs(300));
+    // The firing a tick reaches within the grace (10:05, thirty seconds old) runs; the four
+    // missed ones before it are dropped, not replayed.
+    let jobs = rig.wait_for(1).await;
     tokio::time::sleep(Duration::from_millis(500)).await;
-    assert!(
-        rig.jobs().await.is_empty(),
-        "skip plans nothing for a firing that is due"
-    );
+    let all = rig.jobs().await;
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(all.len(), 1, "skip plans nothing for the missed window");
+    let key = all[0].idempotency_key.clone().unwrap_or_default();
+    assert!(key.ends_with("2026-11-12T10:05:00Z"), "{key}");
 
     let _ = stop.send(true);
     let _ = task.await;

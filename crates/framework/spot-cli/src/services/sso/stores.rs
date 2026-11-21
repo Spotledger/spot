@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use spot_auth::OpaqueToken;
-use spot_secrets::{KeyProvider, LocalKeyring};
+use spot_secrets::KeyProvider;
 use spot_sso::{
     MemoryPendingStore, MemoryProviderStore, MemoryReplayStore, PendingStore, ProviderStore,
     ReplayStore,
@@ -114,7 +114,7 @@ fn info(label: &str, tenant: &str) -> Vec<u8> {
 pub async fn postgres(
     backend: &spot_postgres::PgBackend,
     tenant: &str,
-    keyring: &Arc<LocalKeyring>,
+    keyring: &Arc<dyn KeyProvider>,
 ) -> Result<Stores> {
     let pool = backend.pool();
     let fail = |what: &str| Error(format!("sso_host.stores_unavailable: {what}"));

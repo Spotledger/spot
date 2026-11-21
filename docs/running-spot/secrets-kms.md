@@ -150,3 +150,23 @@ until the version it was wrapped under is retired in the KMS.
 The provider's own refusals (`secrets_kms.unreachable`, `secrets_kms.rejected`,
 `secrets_kms.key_disabled`, `secrets_kms.version_retired`, ...) are in the `spot-secrets-kms`
 README.
+
+## How the site picks the provider
+
+`[services.secrets] provider = "local"` (the default, a key file) or `"kms"`. The `kms` provider
+needs the `[services.secrets.kms]` table; the table is refused when the provider is `local`, and an
+unknown key in either is refused by name. The same host object serves both: the engine's vault, the
+start-up canary, `spot secrets status` and the check that no stored value names a key version the
+provider cannot open all go through the configured provider, not a key file.
+
+- The KMS address is judged by the site's shared egress guard (the policy file of
+  [egress](egress.md)). A host the policy does not allow stops the start with the entry to add. A
+  host that does not pass the guard in (`secrets::open` rather than `open_with`) judges the address
+  by a policy of its own that allows exactly the configured KMS for this site and nothing else.
+- `spot secrets status` shows `provider: kms` and the seed file. `spot secrets init`,
+  `rotate-kek` and `retire-kek` are key file operations and are refused with
+  `secrets_host.provider_unsupported`: rotate the key in the KMS, then run
+  `spot secrets-kms rewrap-seed` and let the sweep move the stored values.
+- No key, token or value is in an error, a log line or the status output; messages name files and
+  stable codes only.
+

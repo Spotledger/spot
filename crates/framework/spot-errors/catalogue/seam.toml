@@ -30,10 +30,10 @@ since = "0.1.0"
 [[entry]]
 code = "seam.version_mismatch"
 class = "none"
-summary = "A replacement was built against another seam version than the one installed."
+summary = "An app requires a seam at a major version that no installed provider offers."
 explanation_key = "error.seam.version_mismatch"
 params = []
-remedy = "Rebuild the replacement for the installed seam version."
+remedy = "Rebuild the app, or the provider, for the same major version of the seam."
 since = "0.1.0"
 
 [[entry]]

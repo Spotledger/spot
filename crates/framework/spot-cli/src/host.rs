@@ -782,6 +782,10 @@ async fn build_site(
     )
     .map_err(error)?
     .with_delivery(delivery)
+    // `ctx.cache()` of the steps: the site's bounded `CacheStore`, behind a slot the `cache`
+    // module fills once the store exists (the same late fill as the attach slot above). The slot
+    // belongs to the site for the life of the process, so a reload keeps it filled.
+    .with_cache(services::cache::StepCache::for_site(&site_id))
     .with_authorizer(permission.authorizer.clone())
     .with_app_permissions(Arc::new(spot_app_permissions::SnapshotAppPermissions::new(
         permission.authorizer.clone(),
@@ -922,6 +926,7 @@ async fn build_site(
                 clock: clock.clone(),
                 heartbeat_seconds: loaded.common.services.realtime.heartbeat_seconds,
                 poll: std::time::Duration::from_millis(loaded.common.services.realtime.poll_ms),
+                max_connections: loaded.common.services.realtime.max_connections,
             })
             .map(|hub| live.realtime_with(|| hub)),
         }

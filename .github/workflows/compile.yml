@@ -1,0 +1,321 @@
+# Compile lane (wip/* branches): fast compile feedback, not the full CI.
+#
+# tools/opensource/push_wip.py publishes an exported private branch as ONE commit on
+# `wip/<name>` of this repository. This workflow runs on that push (and on a manual run) and
+# answers one question: does the tree compile? It never runs on main, a pull request or a
+# schedule, and it replaces none of ci.yml.
+#
+#   cargo check --workspace --all-targets --locked, in 8 shards (every eighth crate by sorted name)
+#   cargo fmt --all -- --check
+#   clippy (-D warnings): manual run with the `clippy` input only
+#   tests: manual run with `test_crates` ("spot-a spot-b" or "-p spot-a -p spot-b") only
+#
+# Every cargo job writes its whole output (`--message-format short`) to a text file and uploads it
+# as the artifact `compile-<job>`; the job log ends with the first 40 errors. To read them:
+#   gh run view <id> -R Spotledger/spot --log-failed
+#   gh run download <id> -R Spotledger/spot -p 'compile-*'
+#
+# Cargo.lock is never fixed here: every cargo command uses --locked, and a lock file that is out of
+# date for the branch fails the `lock` job with a message. Regenerate it in the private repository
+# and push the branch again.
+name: compile
+on:
+  push:
+    branches: ["wip/**"]
+  workflow_dispatch:
+    inputs:
+      clippy:
+        description: "Also run cargo clippy --workspace --all-targets -D warnings"
+        type: boolean
+        default: false
+      test_crates:
+        description: "Run the tests of these crates (names separated by spaces, or -p a -p b); empty: no tests"
+        type: string
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: compile-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+jobs:
+  lock:
+    # lint-allow: no-postgres this job only reads the manifests and the lock file; it runs no test.
+    name: Cargo.lock is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - name: cargo metadata --locked
+        shell: bash
+        run: |
+          if ! cargo metadata --locked --format-version 1 >/dev/null 2>"$RUNNER_TEMP/lock.txt"; then
+            cat "$RUNNER_TEMP/lock.txt"
+            msg="Cargo.lock is out of date for this branch (or a manifest is broken). The compile lane never rewrites it: regenerate Cargo.lock in the private repository and push the branch again."
+            echo "::error::$msg"
+            { echo "### Cargo.lock check failed"; echo; echo "$msg"; echo; echo '```'; head -20 "$RUNNER_TEMP/lock.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Cargo.lock is current"
+
+  fmt:
+    # lint-allow: no-postgres rustfmt reads source files; it runs no test.
+    name: cargo fmt --check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - name: cargo fmt --all -- --check
+        shell: bash
+        run: |
+          set +e
+          cargo fmt --all -- --check 2>&1 | tee fmt-output.txt
+          rc=${PIPESTATUS[0]}
+          { echo "### cargo fmt --check: exit $rc"; echo '```'; grep -E '^Diff in ' fmt-output.txt | head -40; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-fmt
+          path: fmt-output.txt
+          if-no-files-found: ignore
+
+  check:
+    # lint-allow: no-postgres cargo check compiles only; it runs no test and needs no database.
+    name: cargo check (shard ${{ matrix.shard }}/8)
+    needs: lock
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          df -h /
+          # /mnt is a directory on the same disk as /, not a second disk (see ci.yml); the target
+          # directory lives there only by habit.
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false } # restoring a cache from main is enough; this lane never saves one
+      - name: cargo check this shard (every eighth crate by sorted name, all targets, --locked)
+        id: check
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          PY=$(command -v python3 || command -v python)
+          NAMES=$(cargo metadata --locked --no-deps --format-version 1 | "$PY" -c '
+          import json, sys
+          m = json.load(sys.stdin)
+          members = set(m["workspace_members"])
+          names = sorted(p["name"] for p in m["packages"] if p["id"] in members)
+          print(" ".join(names[int(sys.argv[1]) - 1::8]))
+          ' "$SHARD")
+          echo "shard $SHARD/8: $(echo "$NAMES" | wc -w | tr -d ' ') crates"
+          args=()
+          for n in $NAMES; do args+=(-p "$n"); done
+          OUT="$GITHUB_WORKSPACE/cargo-check-shard-$SHARD.txt"
+          echo "$NAMES" | tr ' ' '\n' > "$GITHUB_WORKSPACE/crates-shard-$SHARD.txt"
+          set +e
+          cargo check --locked --all-targets --keep-going --message-format short "${args[@]}" 2>&1 | tee "$OUT"
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # The first 40 errors, at the end of the log and in the run summary.
+          errs=$(grep -E '(^|: )error(\[E[0-9]+\])?:' "$OUT" | grep -v 'could not compile' || true)
+          count=$(printf '%s' "$errs" | grep -c . || true)
+          {
+            echo "### cargo check shard $SHARD/8: exit $rc, $count error line(s)"
+            if [ "$rc" != 0 ]; then echo '```'; printf '%s\n' "$errs" | head -40; echo '```'; fi
+            if [ "$rc" != 0 ] && [ "$count" = 0 ]; then echo; echo 'No error line was matched; the tail of the output follows.'; echo '```'; tail -40 "$OUT"; echo '```'; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        name: disk report
+        shell: bash
+        run: df -h / /mnt || true
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-check-shard-${{ matrix.shard }}
+          path: |
+            cargo-check-shard-${{ matrix.shard }}.txt
+            crates-shard-${{ matrix.shard }}.txt
+          if-no-files-found: ignore
+
+  clippy:
+    # lint-allow: no-postgres clippy compiles and lints only; it runs no test.
+    name: cargo clippy (manual, -D warnings)
+    if: github.event_name == 'workflow_dispatch' && inputs.clippy
+    needs: lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false }
+      - name: cargo clippy --workspace --all-targets -D warnings
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --locked --workspace --all-targets --keep-going --message-format short -- -D warnings 2>&1 | tee cargo-clippy.txt
+          rc=${PIPESTATUS[0]}
+          errs=$(grep -E '(^|: )(error|warning)(\[[A-Za-z0-9_:]+\])?:' cargo-clippy.txt | grep -v 'could not compile' || true)
+          { echo "### cargo clippy: exit $rc"; echo '```'; printf '%s\n' "$errs" | head -40; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-clippy
+          path: cargo-clippy.txt
+          if-no-files-found: ignore
+
+  test:
+    name: cargo test (manual, chosen crates)
+    if: github.event_name == 'workflow_dispatch' && inputs.test_crates != ''
+    needs: lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TEST_CRATES: ${{ inputs.test_crates }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: free disk space on the hosted runner
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/dotnet /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/az
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+          df -h /
+      - name: install the toolchain pinned in rust-toolchain.toml
+        shell: bash
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with: { save-if: false }
+      - name: start PostgreSQL 18 with its extensions
+        shell: bash
+        run: bash tools/ci/start-postgres.sh
+      - name: install the PostgreSQL 18 client tools
+        shell: bash
+        run: bash tools/ci/install-pg-client.sh
+      # The L3 mail-intake case needs the fake IMAP server's certificate to be one the process
+      # trusts (harness/rust/l3-http/src/cases/mail_intake.rs): a throwaway self-signed one, added
+      # to a copy of the system roots so nothing else loses its trust store.
+      - name: certificate for the L3 mail-intake case
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/l3-imap"
+          mkdir -p "$d"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=127.0.0.1 \
+            -addext subjectAltName=IP:127.0.0.1 -addext basicConstraints=critical,CA:FALSE \
+            -keyout "$d/key.pem" -out "$d/cert.pem"
+          cat /etc/ssl/certs/ca-certificates.crt "$d/cert.pem" > "$d/trusted.pem"
+          {
+            echo "L3_IMAP_CERT=$d/cert.pem"
+            echo "L3_IMAP_KEY=$d/key.pem"
+            echo "SSL_CERT_FILE=$d/trusted.pem"
+          } >> "$GITHUB_ENV"
+      - name: cargo test the chosen crates (ten crates at a time)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          # The input is data, not shell: keep only crate-name tokens, drop "-p".
+          NAMES=""
+          for t in $TEST_CRATES; do
+            [ "$t" = "-p" ] && continue
+            if ! [[ "$t" =~ ^[A-Za-z0-9_-]+$ ]]; then echo "::error::not a crate name: $t"; exit 2; fi
+            NAMES="$NAMES $t"
+          done
+          echo "crates:$NAMES"
+          OUT="$GITHUB_WORKSPACE/cargo-test.txt"
+          : > "$OUT"
+          rc=0
+          set -- $NAMES
+          while [ $# -gt 0 ]; do
+            chunk=(); n=0
+            while [ $# -gt 0 ] && [ $n -lt 10 ]; do chunk+=(-p "$1"); shift; n=$((n+1)); done
+            cargo test --locked --no-run --message-format=json "${chunk[@]}" > "$RUNNER_TEMP/test-exes.json" 2> >(tee -a "$OUT" >&2) || rc=1
+            cargo test --locked --no-fail-fast --message-format short "${chunk[@]}" 2>&1 | tee -a "$OUT"
+            [ "${PIPESTATUS[0]}" = 0 ] || rc=1
+            "$PY" -c '
+          import json, os, sys
+          for line in open(sys.argv[1]):
+              try:
+                  m = json.loads(line)
+              except ValueError:
+                  continue
+              exe = m.get("executable")
+              if m.get("reason") == "compiler-artifact" and exe and m.get("profile", {}).get("test"):
+                  try:
+                      os.remove(exe)
+                  except OSError:
+                      pass
+          ' "$RUNNER_TEMP/test-exes.json"
+          done
+          errs=$(grep -E '(^|: )error(\[E[0-9]+\])?:|^test .* FAILED|^failures:|panicked at' "$OUT" | head -40 || true)
+          { echo "### cargo test: exit $rc"; echo '```'; printf '%s\n' "$errs"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      # The l3-http case index is a generated file (CASES.md); a stale one fails its test. When the
+      # chosen crates include l3-http, regenerate it and offer the result as the artifact
+      # `compile-cases` (commit it in the private repository).
+      - if: always() && contains(inputs.test_crates, 'l3-http')
+        name: regenerate harness/rust/l3-http/CASES.md
+        shell: bash
+        run: |
+          cargo run --locked --quiet -p l3-http -- --write-cases
+          mkdir -p "$RUNNER_TEMP/cases"
+          cp harness/rust/l3-http/CASES.md "$RUNNER_TEMP/cases/CASES.md"
+          head -12 harness/rust/l3-http/CASES.md
+      - if: always() && contains(inputs.test_crates, 'l3-http')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-cases
+          path: ${{ runner.temp }}/cases/CASES.md
+          if-no-files-found: ignore
+      - if: failure()
+        name: explain a PostgreSQL failure
+        shell: bash
+        run: bash tools/ci/pg-diagnose.sh
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compile-test
+          path: cargo-test.txt
+          if-no-files-found: ignore
+      - if: always() && env.SPOT_PG_DIR != ''
+        name: stop the throwaway PostgreSQL
+        shell: bash
+        run: ${SPOT_PG_BIN:-/usr/lib/postgresql/18/bin}/pg_ctl -D "$SPOT_PG_DIR/data" stop -m immediate >/dev/null 2>&1 || true

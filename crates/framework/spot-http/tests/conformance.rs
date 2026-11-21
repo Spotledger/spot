@@ -1853,8 +1853,8 @@ fn component_validator(root: &Json, name: &str) -> jsonschema::Validator {
 #[test]
 fn the_0_6_0_properties_are_optional_bounded_and_additive() {
     let root = parse_root();
-    // The contract is at 0.26.1; the 0.6.0 properties must still hold unchanged.
-    assert_eq!(root["info"]["version"], "0.26.1");
+    // The contract is at 0.27.0; the 0.6.0 properties must still hold unchanged.
+    assert_eq!(root["info"]["version"], "0.27.0");
     let meta = component_validator(&root, "DocTypeMeta");
     let row = component_validator(&root, "LookupRow");
     let request = component_validator(&root, "LookupRequest");
@@ -1926,7 +1926,7 @@ fn the_0_6_0_properties_are_optional_bounded_and_additive() {
 #[test]
 fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(
         root["x-spot-error-codes"].as_object().must().len(),
         149,
@@ -2007,7 +2007,7 @@ fn the_0_7_0_print_operation_is_a_read_only_get_that_answers_a_pdf() {
 #[test]
 fn the_0_9_0_properties_are_optional_and_additive() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     let field = component_validator(&root, "FieldMeta");
     let kind = component_validator(&root, "FieldType");
 
@@ -2055,7 +2055,7 @@ fn the_0_9_0_properties_are_optional_and_additive() {
 #[test]
 fn the_0_10_0_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][0], 403);
     assert_eq!(root["x-spot-error-codes"]["partition.not_owner"][1], false);
@@ -2121,7 +2121,7 @@ fn the_0_10_0_additions_are_additive_and_pinned() {
 #[test]
 fn the_0_12_0_process_and_task_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(
         api_operations(&root).len(),
         189,
@@ -2217,7 +2217,7 @@ fn the_0_12_0_process_and_task_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_13_0_process_version_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
@@ -2330,7 +2330,7 @@ fn the_0_13_0_process_version_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_14_0_graph_and_lineage_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
@@ -2448,7 +2448,7 @@ fn the_0_14_0_graph_and_lineage_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_15_0_webhook_signing_secret_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
@@ -2861,7 +2861,7 @@ fn the_served_set_is_consistent_with_the_contract() {
 #[test]
 fn the_0_16_0_journal_and_selector_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
 
@@ -3016,7 +3016,7 @@ fn pin_group(
 #[test]
 fn the_0_17_0_sso_and_step_up_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -3191,7 +3191,7 @@ fn the_0_17_0_sso_and_step_up_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_18_0_identity_administration_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -3538,7 +3538,7 @@ fn the_0_18_0_identity_administration_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_19_0_access_governance_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -3755,7 +3755,7 @@ fn the_0_19_0_access_governance_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_20_0_security_administration_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -3978,7 +3978,7 @@ fn the_0_20_0_security_administration_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_21_0_data_import_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -4044,7 +4044,7 @@ fn the_0_21_0_data_import_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_22_0_search_additions_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -4065,7 +4065,7 @@ fn the_0_22_0_search_additions_are_additive_and_pinned() {
 #[test]
 fn the_0_23_0_booking_hold_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -4122,10 +4122,54 @@ fn the_0_23_0_booking_hold_operations_are_additive_and_pinned() {
 #[test]
 fn the_0_24_0_mcp_contract_document_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(&root, &[], &[], &[]);
+}
+
+/// Contract 0.27.0 (WP-CON-03.T68), additive: the extension-tool rule and the six agent tools in `mcp.md`, and their listing in the `x-spot-mcp` pointer. No HTTP operation and no error
+/// code changes; no server yet (WP-AI-04.T6 and T7).
+#[test]
+fn the_0_27_0_mcp_extension_tools_are_additive_and_pinned() {
+    let root = parse_root();
+    assert_eq!(root["info"]["version"], "0.27.0");
+    assert_eq!(api_operations(&root).len(), 189);
+    assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
+    let tools: Vec<&str> = root["x-spot-mcp"]["extension_tools"]
+        .as_array()
+        .must()
+        .iter()
+        .map(|tool| tool.as_str().must())
+        .collect();
+    assert_eq!(
+        tools,
+        [
+            "retrieve",
+            "recall_memory",
+            "remedy_list",
+            "remedy_dry_run",
+            "remedy_apply",
+            "remedy_undo"
+        ]
+    );
+    let doc = std::fs::read_to_string(std::path::Path::new(CONTRACT).with_file_name("mcp.md"))
+        .must()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for tool in &tools {
+        assert!(doc.contains(&format!("`{tool}`")), "mcp.md names {tool}");
+    }
+    for word in [
+        "### Extension tools",
+        "\"provenance\": \"untrusted\"",
+        "no total and no count of hidden documents",
+        "One dry-run authorises one apply",
+        "written to the audit chain **before** it runs",
+    ] {
+        assert!(doc.contains(word), "mcp.md states {word:?}");
+    }
 }
 
 /// Contract 0.25.0 (WP-CON-03.T54), additive: the installed apps list and the connector operations (list, get, invoke, run log, inbound). No server yet; this pins the shape a
@@ -4133,7 +4177,7 @@ fn the_0_24_0_mcp_contract_document_are_additive_and_pinned() {
 #[test]
 fn the_0_25_0_app_and_connector_operations_are_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(
@@ -4642,7 +4686,7 @@ mod sso_fake {
 #[test]
 fn the_0_26_0_link_inbound_operation_is_additive_and_pinned() {
     let root = parse_root();
-    assert_eq!(root["info"]["version"], "0.26.1");
+    assert_eq!(root["info"]["version"], "0.27.0");
     assert_eq!(api_operations(&root).len(), 189);
     assert_eq!(root["x-spot-error-codes"].as_object().must().len(), 149);
     pin_group(

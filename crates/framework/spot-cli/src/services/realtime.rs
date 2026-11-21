@@ -44,6 +44,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::hash::BuildHasher;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 
@@ -58,7 +59,11 @@ use spot_http::api::service::{
 use spot_http::request::RequestId;
 use spot_permissions::{DocFacts, PermissionEngine, Snapshot};
 use spot_postgres::PgBackend;
-use spot_realtime::ws::{self, CancellationToken, ExpiryWatch, Rejected, TokenVerifier, WsConfig};
+use spot_realtime::ws::limits::{CLOSE_CODES, CounterSnapshot, counters};
+use spot_realtime::ws::{
+    self, CancellationToken, ConnectionGate, ExpiryWatch, Rejected, TokenVerifier, WsConfig,
+    WsLimits,
+};
 use spot_realtime::{
     AuthFuture, BusConfig, Principal as WirePrincipal, RealtimeBus, Room, RoomAuthorizer,
 };
@@ -75,6 +80,42 @@ use crate::services::offline_identity::{
     self, EntryPoint, OfflineGate, OfflineIdentity, decide_at,
 };
 use crate::services::{CheckFuture, Idle, Level, RunFuture, Service, SiteCtx};
+
+/// Metric names (WP-PLT-08.T7).
+pub mod metric {
+    /// Gauge: sockets open, authenticated or not.
+    pub const CONNECTIONS: &str = "spot_realtime_connections";
+    /// Gauge: bus subscriptions.
+    pub const SUBSCRIPTIONS: &str = "spot_realtime_subscriptions";
+    /// Gauge: rooms held by the bus.
+    pub const ROOMS: &str = "spot_realtime_rooms";
+    /// Counter: room events the pump published.
+    pub const EVENTS_PUBLISHED_TOTAL: &str = "spot_realtime_events_published_total";
+    /// Counter, label `result` (`ok`, `denied`, `resync`): joins.
+    pub const JOINS_TOTAL: &str = "spot_realtime_joins_total";
+    /// Counter, label `code` (the contract's close codes): closes sent.
+    pub const CLOSES_TOTAL: &str = "spot_realtime_closes_total";
+    /// Counter, label `reason` (`cap`, `bad_request`): upgrades refused.
+    pub const UPGRADES_REJECTED_TOTAL: &str = "spot_realtime_upgrades_rejected_total";
+    /// Counter: `resync_required` answers.
+    pub const RESYNC_REQUIRED_TOTAL: &str = "spot_realtime_resync_required_total";
+    /// Gauge: seconds the pump has been continuously behind the change feed (0 when caught up).
+    pub const PUMP_LAG_SECONDS: &str = "spot_realtime_pump_lag_seconds";
+}
+
+/// The pump lag above which readiness shows the hub as degraded.
+const PUMP_LAG_DEGRADED_SECONDS: u64 = 30;
+
+/// How often the service's loop reads the counters into the metrics.
+const METRICS_EVERY: Duration = Duration::from_secs(5);
+
+/// What the process has already emitted of the WebSocket counters (they are process-wide).
+static EMITTED: std::sync::OnceLock<Mutex<CounterSnapshot>> = std::sync::OnceLock::new();
+
+#[allow(clippy::cast_precision_loss)]
+fn gauge(name: &'static str, value: usize) {
+    metrics::gauge!(name).set(value as f64);
+}
 
 /// How often a connected session is asked whether it is still valid.
 const SESSION_CHECK: Duration = Duration::from_secs(10);
@@ -680,19 +721,55 @@ impl PositionStore for MemoryPosition {
     }
 }
 
-/// The pump's counters, as log lines at debug level.
+/// The pump's counters: log lines at debug level, the events it published, and for how long it
+/// has been behind the change feed (for `spot_realtime_pump_lag_seconds`).
 struct PumpLog {
     site: SiteId,
+    clock: Arc<dyn Clock>,
+    /// Room events the pump has published since the hub was built.
+    published: AtomicU64,
+    /// When the pump was first seen behind the head, until it is caught up again.
+    behind_since: Mutex<Option<time::OffsetDateTime>>,
+}
+
+impl PumpLog {
+    fn new(site: SiteId, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            site,
+            clock,
+            published: AtomicU64::new(0),
+            behind_since: Mutex::new(None),
+        }
+    }
+
+    /// Whole seconds the pump has been continuously behind the head; 0 when it is caught up.
+    ///
+    /// The pump reports how many entries it is behind, not their commit times, so this is the
+    /// time since it was last caught up: a lower bound of the age of the oldest unfed change.
+    fn lag_seconds(&self) -> u64 {
+        let since = *lock(&self.behind_since);
+        since.map_or(0, |at| {
+            u64::try_from((self.clock.now_utc() - at).whole_seconds()).unwrap_or(0)
+        })
+    }
 }
 
 impl PumpTelemetry for PumpLog {
     fn record_run(&self, outcome: &MappingOutcome) {
         if outcome.room_events > 0 {
+            self.published
+                .fetch_add(outcome.room_events, Ordering::Relaxed);
             tracing::debug!(site = %self.site, events = outcome.room_events, "realtime events published");
         }
     }
 
     fn record_lag(&self, log: &'static str, entries_behind: u64) {
+        let mut since = lock(&self.behind_since);
+        if entries_behind == 0 {
+            *since = None;
+        } else if since.is_none() {
+            *since = Some(self.clock.now_utc());
+        }
         tracing::debug!(site = %self.site, log, entries_behind, "realtime pump lag");
     }
 
@@ -715,6 +792,8 @@ pub struct Settings {
     pub heartbeat_seconds: u64,
     /// How often the pump reads the feed.
     pub poll: Duration,
+    /// The most sockets the route holds open (`services.realtime.max_connections`).
+    pub max_connections: usize,
 }
 
 /// The realtime hub of one site.
@@ -733,6 +812,11 @@ pub struct Realtime {
     stop_sockets: CancellationToken,
     bus: RealtimeBus,
     offline: Arc<OfflineSlot>,
+    /// The cap on open sockets, and the count.
+    gate: ConnectionGate,
+    pump_log: Arc<PumpLog>,
+    /// Events already counted into the metrics.
+    published_emitted: AtomicU64,
 }
 
 impl Realtime {
@@ -748,6 +832,7 @@ impl Realtime {
             clock,
             heartbeat_seconds,
             poll,
+            max_connections,
         } = settings;
         // The engine rooms are decided with while no snapshot is published: it grants nothing.
         let closed = PermissionEngine::new(Arc::new(Snapshot::empty(&live.served()?.meta).ok()?));
@@ -788,24 +873,28 @@ impl Realtime {
             me: me.clone(),
             offline: Arc::clone(&offline),
         });
-        let router = ws::router(
+        let limits = WsLimits::with_max_connections(Some(max_connections));
+        let gate = limits.gate.clone();
+        let router = ws::router_with(
             bus.clone(),
             sessions.clone(),
             WsConfig {
                 heartbeat_seconds,
                 shutdown: stop_sockets.clone(),
             },
+            limits,
         );
         let feed = Arc::new(backend);
         let config = PumpConfig::default();
         let page_limit = config.page_limit;
+        let pump_log = Arc::new(PumpLog::new(site.clone(), Arc::clone(&clock)));
         let pump = FeedPump::new(
             site.clone(),
             Arc::clone(&feed),
             bus.clone(),
             Arc::new(MemoryPosition::default()),
             None,
-            Arc::new(PumpLog { site: site.clone() }),
+            Arc::clone(&pump_log),
             config,
         )
         // A protected field name never reaches a room, and a value-bearing notice is refused
@@ -826,6 +915,9 @@ impl Realtime {
             stop_sockets,
             bus,
             offline,
+            gate,
+            pump_log,
+            published_emitted: AtomicU64::new(0),
         }))
     }
 
@@ -839,6 +931,86 @@ impl Realtime {
     #[must_use]
     pub fn offline_slot(&self) -> &Arc<OfflineSlot> {
         &self.offline
+    }
+
+    /// Sockets open right now (authenticated or not) and the cap.
+    #[must_use]
+    pub fn connections(&self) -> (usize, Option<usize>) {
+        (self.gate.open(), self.gate.max())
+    }
+
+    /// `connections n/max, rooms r, pump lag s`: numbers only, for the readiness text.
+    #[must_use]
+    pub fn readiness_detail(&self) -> String {
+        let (open, max) = self.connections();
+        let cap = max.map_or_else(|| "unlimited".to_owned(), |m| m.to_string());
+        format!(
+            "connections {open}/{cap}, rooms {}, pump lag {}s",
+            self.bus.stats().rooms,
+            self.pump_log.lag_seconds()
+        )
+    }
+
+    /// Why the hub is degraded, if it is: the pump has been behind for more than 30 seconds, or
+    /// the sockets are above 90 percent of the cap. The site still serves; the reason is shown.
+    #[must_use]
+    pub fn degraded(&self) -> Option<String> {
+        let mut reasons = Vec::new();
+        let lag = self.pump_log.lag_seconds();
+        if lag > PUMP_LAG_DEGRADED_SECONDS {
+            reasons.push(format!("the pump is {lag}s behind the change feed"));
+        }
+        let (open, max) = self.connections();
+        if let Some(max) = max
+            && open.saturating_mul(10) > max.saturating_mul(9)
+        {
+            reasons.push(format!(
+                "connections {open}/{max} are above 90 percent of the cap"
+            ));
+        }
+        (!reasons.is_empty())
+            .then(|| format!("{} ({})", reasons.join("; "), self.readiness_detail()))
+    }
+
+    /// Reads the counters and gauges into `/metrics` (see [`metric`]). Called by the service's
+    /// loop. The WebSocket counters are process-wide, so the part already emitted is kept
+    /// process-wide too: a host with several sites emits each total once. No label carries a
+    /// user, room, token or site.
+    pub fn emit_metrics(&self) {
+        let (open, _) = self.connections();
+        let stats = self.bus.stats();
+        gauge(metric::CONNECTIONS, open);
+        gauge(metric::SUBSCRIPTIONS, stats.subscriptions);
+        gauge(metric::ROOMS, stats.rooms);
+        #[allow(clippy::cast_precision_loss)]
+        metrics::gauge!(metric::PUMP_LAG_SECONDS).set(self.pump_log.lag_seconds() as f64);
+        let published = self.pump_log.published.load(Ordering::Relaxed);
+        let before = self.published_emitted.swap(published, Ordering::Relaxed);
+        metrics::counter!(metric::EVENTS_PUBLISHED_TOTAL)
+            .increment(published.saturating_sub(before));
+        let now = counters().snapshot();
+        let emitted = EMITTED.get_or_init(|| Mutex::new(CounterSnapshot::default()));
+        let mut last = lock(emitted);
+        let delta = |a: u64, b: u64| a.saturating_sub(b);
+        for (outcome, now_value, last_value) in [
+            ("ok", now.joins_ok, last.joins_ok),
+            ("denied", now.joins_denied, last.joins_denied),
+            ("resync", now.joins_resync, last.joins_resync),
+        ] {
+            metrics::counter!(metric::JOINS_TOTAL, "result" => outcome)
+                .increment(delta(now_value, last_value));
+        }
+        for (index, code) in CLOSE_CODES.iter().enumerate() {
+            metrics::counter!(metric::CLOSES_TOTAL, "code" => code.to_string())
+                .increment(delta(now.closes[index], last.closes[index]));
+        }
+        metrics::counter!(metric::UPGRADES_REJECTED_TOTAL, "reason" => "cap")
+            .increment(delta(now.rejected_cap, last.rejected_cap));
+        metrics::counter!(metric::UPGRADES_REJECTED_TOTAL, "reason" => "bad_request")
+            .increment(delta(now.rejected_bad_request, last.rejected_bad_request));
+        metrics::counter!(metric::RESYNC_REQUIRED_TOTAL)
+            .increment(delta(now.resync_required, last.resync_required));
+        *last = now;
     }
 
     /// The `GET /api/v1/realtime` route.
@@ -962,7 +1134,9 @@ impl Service for RealtimeService {
                 .pump_once()
                 .await
                 .map(|_| ())
-                .map_err(|e| format!("the change feed cannot be read: {e}"))
+                .map_err(|e| format!("the change feed cannot be read: {e}"))?;
+            tracing::debug!(detail = %self.hub.readiness_detail(), "realtime ready");
+            Ok(())
         })
     }
 
@@ -976,6 +1150,9 @@ impl Service for RealtimeService {
             let mut again = tokio::time::interval(REVALIDATE_EVERY);
             again.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             again.reset();
+            let mut metrics_tick = tokio::time::interval(METRICS_EVERY);
+            metrics_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut was_degraded = false;
             let mut failing = false;
             let mut fed_up_to = FeedPosition::START;
             loop {
@@ -994,6 +1171,19 @@ impl Service for RealtimeService {
                     }
                     _ = again.tick() => {
                         self.hub.revalidate().await;
+                    }
+                    _ = metrics_tick.tick() => {
+                        self.hub.emit_metrics();
+                        // Logged on the change only: readiness shows the numbers through
+                        // `Realtime::degraded`, the log says when they crossed a limit.
+                        let degraded = self.hub.degraded();
+                        if degraded.is_some() != was_degraded {
+                            was_degraded = degraded.is_some();
+                            match degraded {
+                                Some(why) => tracing::warn!(site = %self.hub.site, %why, "realtime is degraded"),
+                                None => tracing::info!(site = %self.hub.site, "realtime is no longer degraded"),
+                            }
+                        }
                     }
                     _ = tick.tick() => {
                         match self.hub.pump_and_revalidate(&mut fed_up_to).await {

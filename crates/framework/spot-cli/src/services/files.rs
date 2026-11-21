@@ -37,8 +37,6 @@ use spot_core::{Clock, SiteId};
 use spot_document::engine::{
     Authorizer, CommittedBatch, CommittedDelivery, CommittedStep, CommittedSteps, OutboxSink,
 };
-use spot_files::local::LocalFileStore;
-use spot_files::memory::MemoryFileStore;
 use spot_files::store::{Body, FileStore};
 use spot_files_service::{
     AttachAccess, AttachTarget, Caller, CallerSource, Download, DownloadRequest, DownloadStatus,
@@ -47,7 +45,7 @@ use spot_files_service::{
 };
 use spot_http::api::files::{
     BoxByteStream, ByteStream, FileDownload, FileGetRequest, FileGetStatus, FilePortError,
-    FileRecord as PortRecord, FileUpload, FilesPort,
+    FileRecord as PortRecord, FileUpload as HttpUpload, FilesPort,
 };
 use spot_http::api::service::{ApiError, BoxFuture, Credential, RequestCtx};
 use spot_http::request::RequestId;
@@ -73,6 +71,9 @@ const FILE: &str = "file";
 /// The files routes' path: the port is not handed the request path, so the class of a refused
 /// key is computed from this, in the one place that maps a path to a class.
 const FILES_ROUTE: &str = "/api/v1/files";
+
+/// The prefix of the one-time credential an in-process upload carries (see [`FileUpload`]).
+const INTERNAL_PREFIX: &str = "spot-internal-upload:";
 
 fn internal(message: impl Into<String>) -> FileServiceError {
     FileServiceError::Internal {
@@ -131,10 +132,17 @@ pub struct Settings {
     pub backend: PgBackend,
     /// The source of `now`.
     pub clock: Arc<dyn Clock>,
-    /// `local` or `memory`.
+    /// `local`, `memory`, `s3` or `azure`.
     pub provider: String,
     /// The local provider's root, already inside the site folder.
     pub root: PathBuf,
+    /// The store of the provider, built by the host (see `files_object::open`), so a provider
+    /// that cannot work stops the site before the service exists.
+    pub store: Arc<dyn FileStore>,
+    /// Set for the object providers: what readiness may say about them.
+    pub object: Option<crate::services::files_object::ObjectInfo>,
+    /// The site's identity, for the object providers' start-up probe.
+    pub probe_site: SiteId,
     /// The hard per-upload limit.
     pub max_bytes: u64,
     /// Whether losing the files stops the site (the cluster profile).
@@ -572,6 +580,9 @@ impl FileRecordStore for DocRecords {
 /// Resolves the bearer credential with the site's sign-in service.
 pub struct Callers {
     live: Arc<SiteLive>,
+    /// In-process uploads in flight: the one-time credential of each, and the user it stands
+    /// for (see [`FileUpload`]). Never filled by anything that reads a request.
+    internal: Arc<std::sync::Mutex<std::collections::HashMap<String, RecordId>>>,
 }
 
 impl CallerSource for Callers {
@@ -583,6 +594,18 @@ impl CallerSource for Callers {
             let Some(token) = &ctx.credential else {
                 return Ok(Caller::Guest);
             };
+            // An in-process upload names its user through a credential only this process
+            // minted. A request that carries the prefix without a live entry is a guest, and
+            // is never handed to the sign-in service.
+            if token.starts_with(INTERNAL_PREFIX) {
+                let known = self
+                    .internal
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(token)
+                    .copied();
+                return Ok(known.map_or(Caller::Guest, Caller::User));
+            }
             let Some(auth) = self.live.auth() else {
                 return Ok(Caller::Guest);
             };
@@ -765,6 +788,7 @@ fn port_error(error: &FileServiceError) -> FilePortError {
 
 /// The file service as `spot-http`'s [`FilesPort`].
 pub struct Files {
+    internal: Arc<std::sync::Mutex<std::collections::HashMap<String, RecordId>>>,
     service: FilesService,
     records: Arc<DocRecords>,
     access: Arc<Access>,
@@ -776,10 +800,7 @@ pub struct Files {
 impl Files {
     /// Builds the service over the provider and the record store the settings name.
     pub fn new(settings: &Settings) -> Arc<Self> {
-        let store: Arc<dyn FileStore> = match settings.provider.as_str() {
-            "memory" => Arc::new(MemoryFileStore::new()),
-            _ => Arc::new(LocalFileStore::new(settings.root.clone())),
-        };
+        let store: Arc<dyn FileStore> = Arc::clone(&settings.store);
         let records = Arc::new(DocRecords {
             live: Arc::clone(&settings.live),
             backend: settings.backend.clone(),
@@ -795,17 +816,20 @@ impl Files {
             max_upload_bytes: settings.max_bytes,
             ..FilePolicy::default()
         };
+        let internal = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
         let service = FilesService::new(
             Arc::clone(&store),
             records.clone(),
             Arc::new(Callers {
                 live: Arc::clone(&settings.live),
+                internal: Arc::clone(&internal),
             }),
             access.clone(),
             policy,
             Arc::clone(&settings.clock),
         );
         Arc::new(Self {
+            internal,
             service,
             records,
             access,
@@ -1188,7 +1212,7 @@ impl FilesPort for Files {
     fn upload<'a>(
         &'a self,
         ctx: &'a RequestCtx,
-        upload: FileUpload,
+        upload: HttpUpload,
         body: BoxByteStream,
     ) -> BoxFuture<'a, Result<PortRecord, FilePortError>> {
         Box::pin(async move {
@@ -1280,11 +1304,15 @@ fn into_download(download: Download) -> FileDownload {
     }
 }
 
-/// The start-up check of the file provider: the folder exists and takes a write.
+/// The start-up check of the file provider: the folder exists and takes a write; for an object
+/// provider, a write-read-delete probe in the site's own prefix.
 pub struct FilesCheck {
     provider: String,
     root: PathBuf,
     required: bool,
+    store: Arc<dyn FileStore>,
+    object: Option<crate::services::files_object::ObjectInfo>,
+    site: SiteId,
 }
 
 impl FilesCheck {
@@ -1294,6 +1322,9 @@ impl FilesCheck {
             provider: settings.provider.clone(),
             root: settings.root.clone(),
             required: settings.required,
+            store: Arc::clone(&settings.store),
+            object: settings.object.clone(),
+            site: settings.probe_site.clone(),
         })
     }
 }
@@ -1313,6 +1344,18 @@ impl Service for FilesCheck {
 
     fn check(&self) -> CheckFuture<'_> {
         Box::pin(async move {
+            if let Some(object) = &self.object {
+                // Only the bucket or container and the mode: never a key or a credential.
+                crate::services::files_object::probe(
+                    self.store.as_ref(),
+                    &self.site,
+                    crate::services::files_object::PROBE_TIMEOUT,
+                )
+                .await
+                .map_err(|why| format!("{}: {why}", object.describe()))?;
+                tracing::info!(backend = %object.describe(), "file store probe passed");
+                return Ok(());
+            }
             if self.provider != "local" {
                 return Ok(());
             }
@@ -1373,13 +1416,21 @@ pub(crate) fn files_settings(
     clock: &Arc<dyn spot_core::Clock>,
 ) -> crate::Result<Settings> {
     let files = &loaded.common.services.files;
+    let local_root = root.join("sites").join(&site.site).join(&files.root);
+    // The provider's store, built here so one that cannot work (a feature not compiled in, an
+    // unreadable credential reference, an unknown provider) stops the site start with its key.
+    let opened = crate::services::files_object::open(files, local_root.clone())?;
+    let site_id = SiteId::new(&site.site).map_err(error)?;
     Ok(Settings {
-        site: SiteId::new(&site.site).map_err(error)?,
+        site: site_id.clone(),
         live: live.clone(),
         backend: backend.clone(),
         clock: clock.clone(),
         provider: files.provider.clone(),
-        root: root.join("sites").join(&site.site).join(&files.root),
+        root: local_root,
+        store: opened.store,
+        object: opened.object,
+        probe_site: site_id,
         max_bytes: files.max_bytes,
         required: loaded.common.services.profile == "cluster",
     })
@@ -1441,5 +1492,137 @@ mod unavailable_tests {
         // Today's mapping is untouched.
         let stored = port_error(&FileServiceError::store("disk"));
         assert_eq!((stored.status, stored.retry_after_secs), (500, None));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// In-process upload as a user (WP-PLT-11.T17)
+// ---------------------------------------------------------------------------------------------
+
+/// What an in-process upload names: the site, the user it is made as, and the file's identity.
+/// The bytes travel separately, so a `Debug` of this value can never print them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadAs {
+    /// The site.
+    pub site: SiteId,
+    /// The user the upload is made as: the file's uploader, and the one whose right to update
+    /// the destination document is checked.
+    pub user: RecordId,
+    /// The file name as the sender spelled it; sanitised for display by the service.
+    pub name: String,
+    /// The declared media type.
+    pub content_type: String,
+    /// The document the file is for (DocType storage name and id), or `None` for a private
+    /// file of the uploader. With a document, the user must be allowed to update it.
+    pub document: Option<(String, RecordId)>,
+}
+
+/// A stored file, as the service reports it. No path or storage key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadedFile {
+    /// The file record's id.
+    pub id: RecordId,
+    /// The display name.
+    pub name: String,
+    /// The size in bytes.
+    pub size: u64,
+    /// The stored media type.
+    pub content_type: String,
+    /// SHA-256 of the bytes, hex.
+    pub digest: String,
+    /// Whether the file is private to its uploader.
+    pub private: bool,
+}
+
+/// Why an in-process upload was refused: the catalogued code of the same refusal over HTTP
+/// (`file.too_large`, `file.virus_detected`, `fileservice.type_mismatch`, `permission.denied`,
+/// ...), and whether the same upload may succeed later. Never a path, a key or a name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadRefused {
+    /// The stable dotted code.
+    pub code: &'static str,
+    /// Whether retrying the same upload unchanged may succeed.
+    pub retryable: bool,
+}
+
+impl UploadRefused {
+    fn of(error: &FileServiceError) -> Self {
+        Self {
+            code: error.code(),
+            retryable: error.retryable(),
+        }
+    }
+}
+
+/// The in-process upload port: stores bytes as a given user through the same file service the
+/// HTTP route uses, so the type policy, the size limit, the magic-number check, the quota, the
+/// scan seam (quarantine and virus refusal) and the destination document's permission all apply
+/// exactly as they do to a request. Nothing is stored when it refuses.
+pub trait FileUpload: Send + Sync {
+    /// Uploads `bytes` as `request.user`.
+    fn upload_as<'a>(
+        &'a self,
+        request: UploadAs,
+        bytes: Vec<u8>,
+    ) -> BoxFuture<'a, Result<UploadedFile, UploadRefused>>;
+}
+
+impl FileUpload for Files {
+    fn upload_as<'a>(
+        &'a self,
+        request: UploadAs,
+        bytes: Vec<u8>,
+    ) -> BoxFuture<'a, Result<UploadedFile, UploadRefused>> {
+        Box::pin(async move {
+            // The limit is checked before anything is read or minted: the service enforces it
+            // again on the stream.
+            let fits = u64::try_from(bytes.len()).is_ok_and(|len| len <= self.max_bytes);
+            if !fits {
+                return Err(UploadRefused {
+                    code: FileServiceError::TooLarge {
+                        max_bytes: self.max_bytes,
+                    }
+                    .code(),
+                    retryable: false,
+                });
+            }
+            // A credential minted for this call alone: unguessable (a fresh UUIDv7), known only
+            // to this process, and removed whatever the outcome.
+            let credential = format!("{INTERNAL_PREFIX}{}", RecordId::new_v7());
+            self.internal
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(credential.clone(), request.user);
+            let ctx = FileCtx {
+                site: request.site.clone(),
+                credential: Some(credential.clone()),
+            };
+            let mut asked =
+                UploadRequest::new(request.name).with_content_type(request.content_type);
+            if let Some((doctype, id)) = request.document {
+                asked = asked.with_destination(AttachTarget {
+                    doctype,
+                    id,
+                    field: None,
+                });
+            }
+            let body: Body = Box::pin(std::io::Cursor::new(bytes));
+            let outcome = self.service.upload(&ctx, asked, body).await;
+            self.internal
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&credential);
+            match outcome {
+                Ok(view) => Ok(UploadedFile {
+                    id: view.id,
+                    name: view.name,
+                    size: view.size,
+                    content_type: view.content_type,
+                    digest: view.digest,
+                    private: view.private,
+                }),
+                Err(error) => Err(UploadRefused::of(&error)),
+            }
+        })
     }
 }

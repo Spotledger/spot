@@ -25,10 +25,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use clap::{Arg, ArgMatches, Command};
-use serde::{Deserialize, Serialize};
 use spot_auth::OpaqueToken;
+use spot_cli::services::sandbox_reaper::{Destroyer, PgDestroyer};
 use spot_core::SiteId;
 use spot_postgres::PgConfig;
+use spot_sandbox::registry::Entry;
 use spot_snapshot::{
     Destination, PgDumpProvider, Progress, ProgressSink, RestoreOptions, RestoreTarget,
     SnapshotOptions, SnapshotProvider, SnapshotTarget,
@@ -494,8 +495,8 @@ pub mod db {
 /// The subcommand name.
 pub const NAME: &str = "sandbox";
 
-/// The file that marks a site folder as a sandbox, beside `site.toml`.
-pub const RECORD_FILE: &str = "sandbox.toml";
+// The file that marks a site folder as a sandbox, beside `site.toml`.
+pub use spot_sandbox::registry::RECORD_FILE;
 
 /// The default time to live, in seconds (14 days).
 pub const DEFAULT_TTL: i64 = 14 * 86_400;
@@ -503,25 +504,15 @@ pub const DEFAULT_TTL: i64 = 14 * 86_400;
 /// The longest time to live (90 days).
 pub const MAX_TTL: i64 = 90 * 86_400;
 
-/// How long an unfinished creation is left before `reap` destroys it.
-pub const STALE_CREATING: i64 = 3_600;
+// How long an unfinished creation is left before `reap` destroys it.
+pub use spot_sandbox::registry::STALE_CREATING;
 
 /// The hold reason every sandbox carries.
 pub const HOLD_REASON: &str = "sandbox: no outbound effect may leave a masked clone";
 
-/// A sandbox's record.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Record {
-    pub source: String,
-    pub database: String,
-    pub created_at: i64,
-    pub expires_at: i64,
-    /// `creating` or `active`.
-    pub state: String,
-    /// The banner the interface shows on every page of a sandbox.
-    pub banner: bool,
-}
+// A sandbox's record (read and destroyed in `spot_sandbox::registry`, shared with the hosted
+// reaper).
+pub use spot_sandbox::registry::Record;
 
 struct Quiet;
 impl ProgressSink for Quiet {
@@ -596,12 +587,16 @@ pub fn database_name(name: &str) -> Option<String> {
 /// # Errors
 /// [`spot_cli::Error`] when the file exists and does not parse.
 pub fn read_record(dir: &Path) -> spot_cli::Result<Option<Record>> {
-    match std::fs::read_to_string(dir.join(RECORD_FILE)) {
-        Ok(text) => toml::from_str(&text)
-            .map(Some)
-            .map_err(|_| spot_cli::Error("a sandbox record does not parse".to_owned())),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.into()),
+    spot_sandbox::registry::read_record(dir).map_err(read_error)
+}
+
+/// A registry read failure as this crate's error: no path, no content.
+fn read_error(e: spot_sandbox::registry::ReadError) -> spot_cli::Error {
+    match e {
+        spot_sandbox::registry::ReadError::Unparsable => {
+            spot_cli::Error("a sandbox record does not parse".to_owned())
+        }
+        spot_sandbox::registry::ReadError::Io(e) => e.into(),
     }
 }
 
@@ -869,22 +864,7 @@ async fn hold(ctx: &mut CommandCtx, name: &str) -> Result<(), String> {
 }
 
 fn records(ctx: &mut CommandCtx) -> spot_cli::Result<Vec<(String, PathBuf, Record)>> {
-    let sites = ctx.root().join("sites");
-    let mut found = Vec::new();
-    let Ok(entries) = std::fs::read_dir(&sites) else {
-        return Ok(found);
-    };
-    for entry in entries.flatten() {
-        let dir = entry.path();
-        if let (Some(name), Some(record)) = (
-            entry.file_name().to_str().map(str::to_owned),
-            read_record(&dir)?,
-        ) {
-            found.push((name, dir, record));
-        }
-    }
-    found.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(found)
+    spot_sandbox::registry::list_records(ctx.root()).map_err(read_error)
 }
 
 fn list(ctx: &mut CommandCtx) -> spot_cli::Result<Exit> {
@@ -914,15 +894,16 @@ async fn destroy(ctx: &mut CommandCtx, name: &str) -> spot_cli::Result<Exit> {
         return Ok(Exit::Refused);
     };
     let cfg = spot_cli::config::load(ctx.root(), false)?.admin;
-    if drop_database(&cfg, &record.database).await.is_err() {
+    // The same destroyer the hosted reaper uses: the database, then the folder, idempotently.
+    let entry = Entry::from_record(name, &record);
+    let destroyer = PgDestroyer::new(ctx.root().to_path_buf(), cfg);
+    if let Err(code) = destroyer.destroy(&entry).await {
         writeln!(
             ctx.err(),
-            "the database {} could not be dropped",
-            record.database
+            "the sandbox `{name}` could not be destroyed ({code}); nothing more was changed"
         )?;
         return Ok(Exit::Failed);
     }
-    std::fs::remove_dir_all(&dir)?;
     writeln!(ctx.out(), "sandbox `{name}` destroyed")?;
     Ok(Exit::Ok)
 }

@@ -262,6 +262,11 @@ Each hosted service has its own page. A new service adds one line here and one p
 - [Print](running-spot/print.md)
 - [Reports](running-spot/report.md)
 - [Export](running-spot/export.md)
+- [The LLM service](running-spot/llm.md)
+- [Remedies](running-spot/remedies.md)
+- [The fix pipeline](running-spot/fix-pipeline.md)
+- [Retrieval](running-spot/retrieval.md)
+- [Agent memory](running-spot/agent-memory.md)
 - [Developer commands](running-spot/developer_commands.md): `spot app`, `doctype`, `controller`, `script`
 
 ## Logs and traces

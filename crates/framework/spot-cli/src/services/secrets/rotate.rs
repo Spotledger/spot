@@ -68,10 +68,14 @@ impl Drop for RotationLock {
 ///
 /// A provider failure, by code.
 pub async fn add_version(host: &SecretsHost) -> Result<u32> {
-    host.keyring.rotate().await.map_err(|e| {
+    host.local()?.rotate().await.map_err(|e| {
         refuse(
             codes::KEK_FILE_UNUSABLE,
-            format!("the key file {} was not changed ({})", host.path.display(), cause(&e)),
+            format!(
+                "the key file {} was not changed ({})",
+                host.path.display(),
+                cause(&e)
+            ),
         )
     })
 }
@@ -88,7 +92,7 @@ pub async fn retire_version(host: &SecretsHost, version: u32, rows_on_it: u64) -
             format!("{rows_on_it} stored value(s) are still under key version {version}"),
         ));
     }
-    host.keyring.retire(version, false).await.map_err(|e| {
+    host.local()?.retire(version, false).await.map_err(|e| {
         refuse(
             codes::RETIRE_REFUSED,
             format!("key version {version} was not retired ({})", cause(&e)),

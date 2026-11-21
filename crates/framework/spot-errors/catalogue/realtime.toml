@@ -17,3 +17,12 @@ explanation_key = "error.realtime.too_many_rooms"
 params = ["limit"]
 remedy = "Leave a room before joining another."
 since = "0.1.0"
+
+[[entry]]
+code = "realtime.too_many_connections"
+class = "none"
+summary = "The site already holds the most realtime connections it allows ({limit}); the upgrade was refused with 429."
+explanation_key = "error.realtime.too_many_connections"
+params = ["limit"]
+remedy = "Reconnect with backoff from 1 s to 30 s; an operator can raise services.realtime.max_connections."
+since = "0.1.0"

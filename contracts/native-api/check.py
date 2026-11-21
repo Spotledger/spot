@@ -1690,6 +1690,31 @@ GROUP_PINS[30] = {'version': '0.24.0',
                           'not CORS-open']}}
 
 
+# Rule 34 (contract 0.27.0, WP-CON-03.T68): the MCP extension-tool rule and the six agent tools (mcp.md section 5), and their listing in the x-spot-mcp pointer.
+GROUP_PINS[34] = {'version': '0.27.0',
+ 'task': 'WP-CON-03.T68',
+ 'ops': {},
+ 'once': [],
+ 'codes': {},
+ 'schemas': [],
+ 'doc_words': {'mcp.md': ['### Extension tools',
+                          '`retrieve`',
+                          '`recall_memory`',
+                          '`remedy_list`',
+                          '`remedy_dry_run`',
+                          '`remedy_apply`',
+                          '`remedy_undo`',
+                          '"provenance": "untrusted"',
+                          'no total and no count of hidden documents',
+                          'never as a system principal',
+                          'One dry-run',
+                          'authorises one apply',
+                          'before** it runs',
+                          'no argument value',
+                          'WP-AI-04.T7']}}
+EXT_TOOLS = ["retrieve", "recall_memory", "remedy_list", "remedy_dry_run", "remedy_apply", "remedy_undo"]
+
+
 # Rule 31 (contract 0.25.0, WP-CON-03.T54): the installed apps list and the connector operations (list, get, invoke, run log, inbound).
 GROUP_PINS[31] = {'version': '0.25.0',
  'task': 'WP-CON-03.T54',
@@ -1757,12 +1782,23 @@ def run_rules(spec: dict[str, Any], realtime_text: str | None = None) -> tuple[l
     check_signing_secret(spec, errors)
     check_assignment_create_answers(spec, errors)
     check_journal_and_selectors(spec, errors)
+    check_mcp_extension_tools(spec, errors)
     for rule_no, pin in GROUP_PINS.items():
         check_group(rule_no, pin, spec, errors)
         check_group_extra(rule_no, pin, spec, errors)
     if realtime_text is not None:
         check_notification(realtime_text, errors)
     return errors, len(codes), n
+
+
+def check_mcp_extension_tools(spec: dict, errors: list[str]) -> None:
+    """Rule 34 (0.27.0): x-spot-mcp lists exactly the six extension tools, none of which collides with a generated tool name."""
+    mcp = spec.get("x-spot-mcp", {})
+    if mcp.get("extension_tools") != EXT_TOOLS:
+        errors.append(f"rule 34: x-spot-mcp.extension_tools must be exactly {EXT_TOOLS}")
+    for name in mcp.get("extension_tools", []):
+        if name in ("query", "job_status") or name.startswith(("search_", "get_", "create_", "update_", "call_")):
+            errors.append(f"rule 34: extension tool {name!r} collides with the generated tool names")
 
 
 def check_assignment_create_answers(spec: dict, errors: list[str]) -> None:
@@ -1811,6 +1847,7 @@ def self_test() -> int:
             {"X-Pdf-Path": {"schema": {"type": "string"}}})),
         "rule 16": broken(lambda s: schemas(s)["EventEnvelope"]["properties"]["meta"]["properties"]["actor"][
             "properties"]["kind"].update(enum=["user", "system"])),
+        "rule 34": broken(lambda s: s["x-spot-mcp"].update(extension_tools=["retrieve", "get_customer"])),
     }
     failures = 0
     for rule, spec in cases.items():

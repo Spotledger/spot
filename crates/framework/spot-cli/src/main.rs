@@ -41,6 +41,14 @@ enum Command {
     Serve {
         #[arg(long)]
         dev: bool,
+        /// Allow the test hooks below. Refused unless SPOT_TEST_HOOKS=1 is set; for the load
+        /// and fault suites, never for a production host.
+        #[arg(long)]
+        test_hooks: bool,
+        /// Shift the host's clock by this many seconds (negative: behind), for the clock-skew
+        /// faults. Needs --test-hooks.
+        #[arg(long, value_name = "SECONDS", allow_negative_numbers = true)]
+        clock_offset: Option<i64>,
     },
     /// Validate an app and install it on a site (dry run unless --apply).
     InstallApp {
@@ -308,11 +316,30 @@ async fn run(args: Args) -> spot_cli::Result<()> {
             }
         }
         Command::Check => print!("{}", spot_cli::ops::check(&args.root).await?),
-        Command::Serve { dev } => {
+        Command::Serve {
+            dev,
+            test_hooks,
+            clock_offset,
+        } => {
+            // Refused before anything is read or started: a test hook on a host that did not
+            // opt in must not get as far as a log line.
+            let env_allows = std::env::var(spot_cli::config::TEST_HOOKS_ENV).as_deref() == Ok("1");
+            let clock =
+                spot_cli::config::clock_from_test_hooks(test_hooks, env_allows, clock_offset)?;
             let loaded = spot_cli::config::load(&args.root, dev)?;
             let _telemetry = spot_telemetry::init(loaded.common.telemetry.config())
                 .map_err(|e| spot_cli::Error(e.to_string()))?;
-            let handle = spot_cli::start(&args.root, dev, shutdown()).await?;
+            if let Some(seconds) = clock_offset.filter(|_| clock.is_some()) {
+                tracing::warn!(
+                    offset_seconds = seconds,
+                    "test hook: the host clock is shifted"
+                );
+            }
+            let options = spot_cli::Options {
+                clock,
+                ..spot_cli::Options::default()
+            };
+            let handle = spot_cli::start_with(&args.root, dev, options, shutdown()).await?;
             handle
                 .join()
                 .await

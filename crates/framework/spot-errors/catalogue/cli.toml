@@ -200,3 +200,12 @@ explanation_key = "error.cli.doc_audit_state_unavailable"
 params = []
 remedy = "Correct the input, setting or state this code names and repeat; if it persists, quote the code to your administrator."
 since = "0.1.0"
+
+[[entry]]
+code = "cli.test_hook_refused"
+class = "none"
+summary = "A test hook was asked for without the explicit opt-in, so the host refuses to start with it."
+explanation_key = "error.cli.test_hook_refused"
+params = []
+remedy = "Remove --test-hooks; on a test host also set the opt-in environment variable to 1."
+since = "0.1.0"

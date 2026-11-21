@@ -141,6 +141,7 @@ const CLOSE_LINGER: Duration = Duration::from_secs(1);
 /// read the frame), so a well-behaved peer does not hold the socket for the whole linger; a
 /// peer that never answers still gets all of it.
 async fn close_socket(socket: &mut WebSocket, code: u16, reason: &'static str, window: Duration) {
+    super::limits::counters().close(code);
     let frame = Message::Close(Some(CloseFrame {
         code,
         reason: Utf8Bytes::from_static(reason),
@@ -245,6 +246,8 @@ pub(crate) struct Shared {
     pub(crate) heartbeat_seconds: u64,
     /// Cancelled when the server is shutting down: connections close with 1001.
     pub(crate) shutdown: tokio_util::sync::CancellationToken,
+    /// The cap on open sockets (WP-PLT-08.T7).
+    pub(crate) gate: super::limits::ConnectionGate,
 }
 
 impl std::fmt::Debug for Shared {
@@ -401,10 +404,13 @@ pub(crate) async fn run(
     site: SiteId,
     mut socket: WebSocket,
     lease: Option<spot_http::server::ConnectionLease>,
+    guard: super::limits::ConnectionGuard,
 ) {
     // Held until the session ends on every exit path: the server counts this connection
-    // (`ServerHandle::open_connections`) for as long as the lease lives.
+    // (`ServerHandle::open_connections`) for as long as the lease lives, and the route's own
+    // cap counts it for as long as the guard lives.
     let _lease = lease;
+    let _guard = guard;
     let Some(handshake) = authenticate(
         &shared,
         &site,
@@ -746,11 +752,18 @@ async fn join(
             // across rooms).
             rooms.insert(room.clone());
             let (outcome, replay) = match outcome {
-                crate::JoinOutcome::Joined => (JoinOutcomeReport::Joined, None),
+                crate::JoinOutcome::Joined => {
+                    super::limits::counters().join_ok();
+                    (JoinOutcomeReport::Joined, None)
+                }
                 crate::JoinOutcome::Replayed { count } => {
+                    super::limits::counters().join_ok();
                     (JoinOutcomeReport::Replayed, Some(count as u64))
                 }
-                crate::JoinOutcome::ResyncRequired => (JoinOutcomeReport::ResyncRequired, None),
+                crate::JoinOutcome::ResyncRequired => {
+                    super::limits::counters().join_resync();
+                    (JoinOutcomeReport::ResyncRequired, None)
+                }
             };
             send_message(
                 socket,
@@ -765,6 +778,7 @@ async fn join(
             .await
         }
         Err(JoinError::Denied(denied)) => {
+            super::limits::counters().join_denied();
             send_message(
                 socket,
                 &ServerMessage::JoinError {

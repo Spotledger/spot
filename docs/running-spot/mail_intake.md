@@ -36,7 +36,7 @@ max_message_bytes = 10485760      # at most 25 MiB; larger mail arrives as a hea
 max_messages_per_day = 10000      # 1 to 100000
 target_doctype = "support_ticket"
 run_as = "mail-robot"             # a user of the site; required
-store_attachments = false         # not available yet, see Attachments
+store_attachments = false         # true stores attachments, see Attachments
 max_attachments = 10
 # blocked_extensions = ["exe", "js"]   # default: executable and script types
 
@@ -105,10 +105,22 @@ If the secrets service is not configured, no account can be polled (`auth_failed
 
 ## Attachments
 
-`store_attachments = true` is **not available yet**: the files service has no in-process upload
-as a user, so an account that asks for it is reported `invalid` and not polled (the other
-accounts run). The message text is stored; the raw message is not. `max_attachments` and
-`blocked_extensions` are validated now so the settings do not change when it arrives.
+`store_attachments = true` stores each allowed attachment as a **file of the `run_as` user, attached
+to the document the message created**. The upload goes through the same file service the
+`/api/v1/files` route uses, so every check of an HTTP upload applies: the site's type policy, the
+size limit, the magic-number check, the quota, the malware scan (a quarantined or infected file is
+refused) and the user's right to update the document. The site must serve files; an account that
+asks for attachments on a site without the files service is reported `invalid` and not polled (the
+other accounts run).
+
+- Inline images of the HTML body are part of the body, not files.
+- `blocked_extensions` (every dot-separated tail) and `max_attachments` skip an attachment before
+  the upload; skips are counted in `spot_mail_intake_attachments_skipped_total`.
+- A file the service refuses (too large, type refused or mismatched, malware, quota, no right) is
+  counted as skipped and never undoes the document; a refusal names its catalogued code
+  (`file.too_large`, `file.virus_detected`, `fileservice.type_mismatch`, `permission.denied`, ...)
+  in the log, never a file name, a sender or the bytes.
+- The raw message is not stored.
 
 ## Network
 

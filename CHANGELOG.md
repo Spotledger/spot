@@ -9,6 +9,36 @@ storage formats and APIs; each entry says what changed and what is not ready yet
 
 Nothing yet.
 
+## [0.1.13] - 2026-11-21
+
+Continuous integration fixes and two batches of runtime work, both compiled and tested on
+GitHub-hosted runners before this release (cargo check of the whole workspace, clippy with
+warnings denied, and the tests of the touched crates on PostgreSQL 18).
+
+### Added
+
+- Scheduler: manifest schedules fire in `spot serve` under their app name, with durable
+  high-water marks and a minimum grace of 60 seconds; the weekly `edge_verify` job.
+- Realtime caps and metrics, the site cache, S3 and Azure file providers (features `files-s3` and
+  `files-azure`), mail-intake attachments, three nodes on one PostgreSQL without Redis.
+- Secrets KMS wiring (`[services.secrets.kms]`), extension seams and overrides listing,
+  sandbox registry and destroy in the library crate.
+- AI hosting, all off or inert by default: the LLM service with write-only sealed keys
+  (`[services.llm]`), the remedy catalogue and fix pipeline, retrieval over pgvector
+  (`spot-retrieval-pg`) and agent memory. Known gaps: the remedy host has no world adapter yet,
+  and retrieval and agent memory need an embedding provider.
+- Test infrastructure (Python): scenario format v1, runner, Spotledger and ERPNext adapters,
+  scenario map, divergence registry and the differential engine.
+
+### Fixed
+
+- Manifest cron accepts day-of-week 0; the embedded platform app carries the `file` DocType;
+  `spot restore apply --confirm` accepts a token that starts with a dash.
+- Public continuous integration: balanced Rust test shards, the hardware-bound `l9-scale` runs
+  moved out of hosted runs, a throwaway IMAP certificate, unique L3 site names, the L3 case index
+  regenerated, and the step-up and reveal tests report a clean BLOCKED line while the host serves
+  no such route.
+
 ## [0.1.12] - 2026-11-20
 
 Continuous integration fixes after 0.1.11, no new features.

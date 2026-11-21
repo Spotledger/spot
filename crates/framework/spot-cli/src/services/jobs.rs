@@ -54,11 +54,11 @@ use spot_jobs::worker::{
 use spot_jobs::{InMemoryJobStore, JobStore, NewJob, QueuePolicy, Worker};
 use spot_postgres::PgBackend;
 use spot_scheduler::{
-    InMemoryHighWater, InMemoryLeaseStore, MissedRunPolicy, RunSlot, Schedule, Scheduler,
-    SchedulerConfig, SlotSink,
+    HighWater, HighWaterStore, InMemoryHighWater, InMemoryLeaseStore, MissedRunPolicy, RunSlot,
+    Schedule, Scheduler, SchedulerConfig,
 };
 use spot_storage_contract::ChangeFeed;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 
 use crate::live::SiteLive;
 use crate::services::realtime::{OfflineSlot, finalise_door, refusal_error};
@@ -250,7 +250,44 @@ impl InternalScheduleRegistry {
     ) -> crate::Result<Vec<(String, Arc<Schedule>, MissedRunPolicy)>> {
         self.sealed.store(true, Ordering::Release);
         let planned = self.lock().clone();
-        install_internal(planned, manifest, handlers)
+        // Without an app the planned job name is `:<schedule>`; kept for callers that hold only
+        // the schedules.
+        let declared: Vec<(String, String)> = manifest
+            .iter()
+            .map(|(s, _)| {
+                (
+                    spot_scheduler::scheduler::schedule_key("", &s.name),
+                    s.step.as_str().to_owned(),
+                )
+            })
+            .collect();
+        install_internal(planned, &declared, handlers)
+    }
+
+    /// As [`InternalScheduleRegistry::install`], against the hosted manifest schedules: the job
+    /// name a manifest schedule enqueues is `<app>:<schedule>`, and that is what an internal
+    /// schedule must not reuse.
+    ///
+    /// # Errors
+    ///
+    /// As [`InternalScheduleRegistry::install`].
+    pub fn install_hosted(
+        &self,
+        manifest: &[HostedSchedule],
+        handlers: &mut JobHandlerRegistry,
+    ) -> crate::Result<Vec<(String, Arc<Schedule>, MissedRunPolicy)>> {
+        self.sealed.store(true, Ordering::Release);
+        let planned = self.lock().clone();
+        let declared: Vec<(String, String)> = manifest
+            .iter()
+            .map(|h| {
+                (
+                    spot_scheduler::scheduler::schedule_key(&h.app, &h.schedule.name),
+                    h.schedule.step.as_str().to_owned(),
+                )
+            })
+            .collect();
+        install_internal(planned, &declared, handlers)
     }
 }
 
@@ -326,15 +363,14 @@ impl InternalSchedules for InternalScheduleRegistry {
 /// already uses: the site does not start.
 fn install_internal(
     planned: Vec<PlannedInternal>,
-    manifest: &[(Arc<Schedule>, MissedRunPolicy)],
+    manifest: &[(String, String)],
     registry: &mut JobHandlerRegistry,
 ) -> crate::Result<Vec<(String, Arc<Schedule>, MissedRunPolicy)>> {
     let mut out = Vec::new();
     for item in planned {
-        let clash = manifest.iter().any(|(s, _)| {
-            s.step.as_str() == item.job
-                || spot_scheduler::scheduler::schedule_key("", &s.name) == item.job
-        });
+        let clash = manifest
+            .iter()
+            .any(|(job, step)| step == &item.job || job == &item.job);
         if clash || registry.get(&item.job).is_some() {
             return Err(crate::Error(format!(
                 "the internal schedule `{}` of `{}` clashes with a schedule or a job handler that is already declared",
@@ -389,8 +425,8 @@ pub struct Settings {
     pub coordinator: Arc<dyn Coordinator>,
     /// The consumer lease's time to live.
     pub consumer_ttl: Duration,
-    /// Every manifest schedule of the site, with its missed-run policy.
-    pub schedules: Vec<(Arc<Schedule>, MissedRunPolicy)>,
+    /// Every manifest schedule of the site, with the app it belongs to and its missed-run policy.
+    pub schedules: Vec<HostedSchedule>,
     /// The scheduler's tick interval.
     pub tick_interval: Duration,
     /// The schedule leader lease's time to live.
@@ -1156,34 +1192,11 @@ impl ScheduleSources {
     }
 }
 
-/// One planned dynamic schedule as the leader runs it.
-struct DynamicNode {
-    signature: String,
-    node: Scheduler<InMemoryLeaseStore, InMemoryHighWater>,
-    sink: Arc<dyn SlotSink>,
-}
-
 /// What a dynamic schedule's slots enqueue, found by `(service, schedule name)`.
 #[derive(Clone)]
 struct DynamicTarget {
     job: String,
     args: serde_json::Value,
-}
-
-/// How late a tick may reach a schedule's firing and still run it under every missed-run policy
-/// (`spot_scheduler::DEFAULT_SKIP_GRACE` is a minute, as long as a cron firing of every minute: no
-/// firing of it would ever count as missed, so `skip` would replay a long outage's last firing).
-/// The host knows its tick: five of them, at least a second.
-fn skip_grace(tick: Duration) -> Duration {
-    tick.saturating_mul(5).max(Duration::from_secs(1))
-}
-
-/// The leader's view of the dynamic schedules: its nodes, and every target seen this lease (a
-/// slot planned just before a schedule was removed still finds its job).
-#[derive(Default)]
-struct DynamicNodes {
-    nodes: Vec<DynamicNode>,
-    targets: HashMap<(String, String), DynamicTarget>,
 }
 
 fn dynamic_signature(planned: &DynamicSchedule) -> String {
@@ -1200,174 +1213,428 @@ fn dynamic_signature(planned: &DynamicSchedule) -> String {
     )
 }
 
-impl DynamicNodes {
-    /// Follows `wanted`: a schedule whose signature is unchanged keeps its node (and so its
-    /// high-water mark), a new or changed one gets a fresh node, a removed one is dropped.
-    fn sync(
-        &mut self,
-        wanted: Vec<DynamicSchedule>,
-        build: impl Fn(&DynamicSchedule) -> DynamicNode,
-    ) {
-        let signatures: Vec<String> = wanted.iter().map(dynamic_signature).collect();
-        let current: Vec<&str> = self.nodes.iter().map(|n| n.signature.as_str()).collect();
-        if signatures
-            .iter()
-            .map(String::as_str)
-            .eq(current.iter().copied())
-        {
-            return;
-        }
-        let mut old: HashMap<String, DynamicNode> = std::mem::take(&mut self.nodes)
-            .into_iter()
-            .map(|n| (n.signature.clone(), n))
-            .collect();
-        for (planned, signature) in wanted.iter().zip(signatures) {
-            self.targets.insert(
-                (planned.service.clone(), planned.schedule.name.clone()),
-                DynamicTarget {
-                    job: planned.job.clone(),
-                    args: planned.args.clone(),
-                },
-            );
-            let node = old.remove(&signature).unwrap_or_else(|| build(planned));
-            self.nodes.push(node);
-        }
+/// The job a slot of a dynamic schedule enqueues.
+fn dynamic_job(target: &DynamicTarget, slot: &RunSlot, site: &SiteId) -> spot_jobs::Result<NewJob> {
+    let queue = slot.slot_ref.queue.as_str();
+    if !matches!(queue, "default" | "short" | "long") {
+        return Err(spot_jobs::Error::UnknownQueue);
     }
+    let mut args = match &target.args {
+        serde_json::Value::Object(map) => map.clone(),
+        _ => serde_json::Map::new(),
+    };
+    args.insert(
+        "budget_ms".to_owned(),
+        serde_json::Value::from(slot.slot_ref.budget_ms),
+    );
+    let scheduled_at = time::OffsetDateTime::from_unix_timestamp(slot.scheduled_for.as_second())
+        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    Ok(NewJob::new(
+        target.job.clone(),
+        serde_json::Value::Object(args),
+        queue.to_owned(),
+        site.clone(),
+        scheduled_at,
+    )
+    .with_idempotency_key(slot.deduplication_key.clone()))
+}
 
-    /// The job a slot of a dynamic schedule enqueues, or `None` for any other slot.
-    fn job_for(&self, slot: &RunSlot, site: &SiteId) -> Option<spot_jobs::Result<NewJob>> {
-        let target = self
-            .targets
-            .get(&(slot.slot_ref.app.clone(), slot.schedule.clone()))?;
-        let queue = slot.slot_ref.queue.as_str();
-        if !matches!(queue, "default" | "short" | "long") {
-            return Some(Err(spot_jobs::Error::UnknownQueue));
-        }
-        let mut args = match &target.args {
-            serde_json::Value::Object(map) => map.clone(),
-            _ => serde_json::Map::new(),
-        };
-        args.insert(
-            "budget_ms".to_owned(),
-            serde_json::Value::from(slot.slot_ref.budget_ms),
-        );
-        let scheduled_at =
-            time::OffsetDateTime::from_unix_timestamp(slot.scheduled_for.as_second())
-                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
-        Some(Ok(NewJob::new(
-            target.job.clone(),
-            serde_json::Value::Object(args),
-            queue.to_owned(),
-            site.clone(),
-            scheduled_at,
-        )
-        .with_idempotency_key(slot.deduplication_key.clone())))
+/// One schedule the scheduler plans, with the app whose name is the first half of its job name.
+///
+/// A manifest schedule carries its app's name (`platform` for the embedded platform app); an
+/// internal schedule carries the name of the service that registered it. The job a firing
+/// creates is `<app>:<schedule>` and its deduplication key `<app>:<schedule>:<instant>`, so two
+/// apps with a schedule of the same name never share either.
+#[derive(Clone)]
+pub struct HostedSchedule {
+    /// The owning app (or service).
+    pub app: String,
+    /// The schedule.
+    pub schedule: Arc<Schedule>,
+    /// What a run missed while no node led does.
+    pub policy: MissedRunPolicy,
+}
+
+/// The shortest grace a schedule gets: a `skip` schedule still runs a firing a tick reaches at
+/// most this late.
+const MIN_GRACE: Duration = Duration::from_secs(60);
+
+/// The grace of a schedule ticked every `tick_interval`: three ticks, and never under a minute,
+/// so a tick that runs a little late does not drop a firing under `skip`.
+#[must_use]
+pub fn schedule_grace(tick_interval: Duration) -> Duration {
+    tick_interval.saturating_mul(3).max(MIN_GRACE)
+}
+
+/// What became of one planned slot on its way into the job store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotOutcome {
+    /// The job was inserted.
+    Enqueued,
+    /// A job with this slot's key exists already (a re-plan or a failover): done.
+    Duplicate,
+    /// The slot cannot become a job (an unknown queue) and never will: the reason. Not retried.
+    Refused(String),
+    /// The store failed; the slot must be planned again under the same key: the reason.
+    Failed(String),
+}
+
+/// Turns `slot` into a job and inserts it, idempotently by the slot's key.
+pub async fn enqueue_slot(store: &dyn JobStore, site: &SiteId, slot: &RunSlot) -> SlotOutcome {
+    enqueue_slot_for(store, site, slot, None).await
+}
+
+/// As [`enqueue_slot`]; a slot of a dynamic schedule (`target` set) enqueues the job its source
+/// named instead of `<app>:<schedule>`.
+async fn enqueue_slot_for(
+    store: &dyn JobStore,
+    site: &SiteId,
+    slot: &RunSlot,
+    target: Option<&DynamicTarget>,
+) -> SlotOutcome {
+    let made = match target {
+        Some(target) => dynamic_job(target, slot, site),
+        None => spot_jobs::enqueue_scheduled(slot, site),
+    };
+    let job = match made {
+        Ok(job) => job,
+        Err(e) => return SlotOutcome::Refused(e.to_string()),
+    };
+    match store.insert_if_new(job).await {
+        Ok(InsertResult::Inserted(_)) => SlotOutcome::Enqueued,
+        Ok(InsertResult::Duplicate(_)) => SlotOutcome::Duplicate,
+        Err(e) => SlotOutcome::Failed(e.to_string()),
     }
 }
 
-/// The scheduler: the one node that plans manifest schedules and enqueues their runs.
-pub struct Scheduling {
+/// What a [`ScheduleLoop`] is built from.
+pub struct ScheduleLoopSettings {
+    /// The site.
+    pub site: SiteId,
+    /// Where the jobs go.
+    pub store: Arc<dyn JobStore>,
+    /// Holds the leader lease and the schedule marks.
+    pub coordinator: Arc<dyn Coordinator>,
+    /// The time source; a test injects a manual clock.
+    pub clock: Arc<dyn Clock>,
+    /// Everything this node plans while it leads.
+    pub schedules: Vec<HostedSchedule>,
+    /// The tick interval.
+    pub tick_interval: Duration,
+    /// The schedule-leader lease's time to live.
+    pub lease_ttl: Duration,
+    /// This node's identity in the lease.
+    pub node: String,
+}
+
+/// One schedule under a leading node: its planner, its in-memory mark and what the coordinator
+/// holds.
+struct Planned {
+    hosted: HostedSchedule,
+    key: String,
+    scheduler: Scheduler<InMemoryLeaseStore, Arc<InMemoryHighWater>>,
+    marks: Arc<InMemoryHighWater>,
+    /// The mark the coordinator holds (what a failover resumes from).
+    stored: Option<jiff::Timestamp>,
+    /// A dynamic schedule: its signature, and the job its slots enqueue. Its mark lives in memory
+    /// only (a changed schedule starts a fresh mark), so nothing is stored in the coordinator.
+    dynamic: Option<(String, DynamicTarget)>,
+}
+
+/// The schedule leader's loop: takes the leader lease, plans every schedule, turns each planned
+/// slot into a job and keeps the marks. It needs no database handle, so a test builds one over
+/// the in-memory job store and the in-process coordinator.
+///
+/// The marks follow the jobs, not the ticks: the planner's in-memory mark moves as the tick
+/// hands slots over, but the mark the coordinator holds moves only after the slot's job exists
+/// (inserted, or found already there). A slot whose insert failed resets the in-memory mark, so
+/// the next tick plans it again under the same key.
+pub struct ScheduleLoop {
     site: SiteId,
-    store: Arc<dyn JobStore>,
     node: String,
-    schedules: Vec<(Arc<Schedule>, MissedRunPolicy)>,
-    /// The internal schedules of services, with the service that registered each (the app part of
-    /// the job name).
-    internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
-    /// The sources of schedules that change while the site runs.
-    dynamic: Arc<ScheduleSources>,
+    store: Arc<dyn JobStore>,
+    schedules: Vec<HostedSchedule>,
     tick_interval: Duration,
     lease_ttl: Duration,
     clock: Arc<dyn Clock>,
     keeper: Keeper,
+    marks: crate::services::schedule_marks::CoordinatorMarks,
+    /// The sources of schedules that change while the site runs.
+    dynamic: Arc<ScheduleSources>,
 }
 
-impl Scheduling {
-    /// A scheduler service for one site's manifest schedules.
-    pub fn new(settings: &Settings) -> Arc<Self> {
-        Self::with_internal(settings, Vec::new())
+impl ScheduleLoop {
+    /// A loop for `settings`.
+    #[must_use]
+    pub fn new(settings: ScheduleLoopSettings) -> Arc<Self> {
+        Self::with_sources(settings, Arc::new(ScheduleSources::new()))
     }
 
-    /// As [`Scheduling::new`], also planning the internal schedules of services (`(service,
-    /// schedule, policy)`): each runs under the same leader lease and high-water mark per
-    /// schedule as a manifest schedule, and enqueues the job `<service>:<name>`.
-    pub fn with_internal(
-        settings: &Settings,
-        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
-    ) -> Arc<Self> {
-        Self::with_sources(settings, internal, Arc::new(ScheduleSources::new()))
-    }
-
-    /// As [`Scheduling::with_internal`], also following the `dynamic` sources: their schedules
-    /// are re-read at every tick, so one added, changed or removed while the site runs is
-    /// planned from the next tick (a changed schedule starts a fresh high-water mark).
+    /// As [`ScheduleLoop::new`], also following the `dynamic` sources: their schedules are re-read
+    /// at every tick, so one added, changed or removed while the site runs is planned from the
+    /// next tick (a changed schedule starts a fresh high-water mark).
+    #[must_use]
     pub fn with_sources(
-        settings: &Settings,
-        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+        settings: ScheduleLoopSettings,
         dynamic: Arc<ScheduleSources>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            site: settings.site.clone(),
-            store: Arc::clone(&settings.store),
-            node: settings.node.clone(),
-            schedules: settings.schedules.clone(),
-            internal,
             dynamic,
-            tick_interval: settings.tick_interval,
-            lease_ttl: settings.lease_ttl,
-            clock: Arc::clone(&settings.clock),
-            keeper: Keeper::new(
+            marks: crate::services::schedule_marks::CoordinatorMarks::new(
                 Arc::clone(&settings.coordinator),
+                settings.site.as_str(),
+            ),
+            keeper: Keeper::new(
+                settings.coordinator,
                 scheduler_lease(settings.site.as_str()),
                 settings.node.clone(),
                 settings.lease_ttl,
             ),
+            node: settings.node,
+            site: settings.site,
+            store: settings.store,
+            schedules: settings.schedules,
+            tick_interval: settings.tick_interval,
+            lease_ttl: settings.lease_ttl,
+            clock: settings.clock,
         })
     }
 
-    /// Plans and enqueues due slots while this node leads. `true` on a stop, `false` when the
-    /// lease was lost.
-    async fn lead(&self, stop: &mut watch::Receiver<bool>) -> bool {
-        // One node per schedule keeps each schedule's high-water mark apart; the coordinator
-        // lease decides which node leads, this local store only serves the planner. Each node
-        // has its own store: sharing one lets a node that renewed first after a pause take the
-        // lease under a new token and lock every other node out for good.
-        let (sender, mut receiver) = mpsc::unbounded_channel::<RunSlot>();
-        let mut nodes = Vec::new();
-        let mut sinks: Vec<Arc<dyn SlotSink>> = Vec::new();
-        let planned: Vec<(String, Arc<Schedule>, MissedRunPolicy)> = self
-            .schedules
+    /// The `app:schedule` job names this loop plans, in planning order.
+    #[must_use]
+    pub fn job_names(&self) -> Vec<String> {
+        self.schedules
             .iter()
-            .map(|(schedule, policy)| {
-                // The job is named `<app>:<schedule>`; a manifest step is `<app>:<step>`.
-                let app = schedule
-                    .step
-                    .as_str()
-                    .split_once(':')
-                    .map_or_else(String::new, |(app, _)| app.to_owned());
-                (app, Arc::clone(schedule), *policy)
-            })
-            .chain(self.internal.iter().cloned())
-            .collect();
-        for (app, schedule, policy) in &planned {
-            nodes.push(Scheduler::new(
+            .map(|s| format!("{}:{}", s.app, s.schedule.name))
+            .collect()
+    }
+
+    /// Runs until `stop` fires: leads while this node holds the lease, stands by otherwise.
+    pub async fn run(&self, stop: watch::Receiver<bool>) -> Result<(), String> {
+        let mut stop = stop;
+        let standby = (self.lease_ttl / 3).max(Duration::from_millis(100));
+        loop {
+            if *stop.borrow() {
+                return Ok(());
+            }
+            if self.keeper.acquire().await && self.lead(&mut stop).await {
+                return Ok(());
+            }
+            tokio::select! {
+                changed = stop.changed() => {
+                    if changed.is_err() || *stop.borrow() {
+                        return Ok(());
+                    }
+                }
+                () = tokio::time::sleep(standby) => {}
+            }
+        }
+    }
+
+    /// Gives the lease up, so another node leads without waiting for the time to live.
+    pub async fn release(&self) {
+        self.keeper.release().await;
+    }
+
+    /// Builds the planners, each starting from the mark the coordinator holds. A coordinator
+    /// that cannot answer is an error: a node that cannot see the marks must not lead, because
+    /// starting at `now` would lose the runs between the old leader's last tick and this one.
+    async fn planners(&self) -> crate::Result<Vec<Planned>> {
+        let grace = schedule_grace(self.tick_interval);
+        let mut planners = Vec::new();
+        for hosted in &self.schedules {
+            let key = spot_scheduler::scheduler::schedule_key(&hosted.app, &hosted.schedule.name);
+            let stored = self.marks.load(&hosted.app, &hosted.schedule.name).await?;
+            let marks = Arc::new(InMemoryHighWater::new());
+            if let Some(mark) = stored {
+                marks.set(&key, HighWater { last: Some(mark) });
+            }
+            let scheduler = Scheduler::new(
                 SchedulerConfig {
                     site: self.site.to_string(),
                     node: self.node.clone(),
                     ttl: self.lease_ttl,
-                    schedules: vec![(Arc::clone(schedule), *policy)],
-                    app: app.clone(),
+                    schedules: vec![(Arc::clone(&hosted.schedule), hosted.policy)],
+                    app: hosted.app.clone(),
                 },
+                // The coordinator's lease decides who leads; this store only serves the planner
+                // and is private to this schedule.
                 Arc::new(InMemoryLeaseStore::new()),
-                InMemoryHighWater::new(),
+                Arc::clone(&marks),
             )
-            .with_skip_grace(skip_grace(self.tick_interval)));
-            sinks.push(spot_scheduler::scheduler::sink({
-                let sender = sender.clone();
-                move |slot: &RunSlot| sender.send(slot.clone()).is_ok()
-            }));
+            .with_skip_grace(grace);
+            planners.push(Planned {
+                hosted: hosted.clone(),
+                key,
+                scheduler,
+                marks,
+                stored,
+                dynamic: None,
+            });
         }
-        let mut dynamic = DynamicNodes::default();
+        Ok(planners)
+    }
+
+    /// A planner for one dynamic schedule: a fresh in-memory mark, not kept in the coordinator.
+    fn dynamic_planner(&self, planned: &DynamicSchedule) -> Planned {
+        let hosted = HostedSchedule {
+            app: planned.service.clone(),
+            schedule: Arc::clone(&planned.schedule),
+            policy: planned.policy,
+        };
+        let key = spot_scheduler::scheduler::schedule_key(&hosted.app, &hosted.schedule.name);
+        let marks = Arc::new(InMemoryHighWater::new());
+        let scheduler = Scheduler::new(
+            SchedulerConfig {
+                site: self.site.to_string(),
+                node: self.node.clone(),
+                ttl: self.lease_ttl,
+                schedules: vec![(Arc::clone(&hosted.schedule), hosted.policy)],
+                app: hosted.app.clone(),
+            },
+            Arc::new(InMemoryLeaseStore::new()),
+            Arc::clone(&marks),
+        )
+        .with_skip_grace(schedule_grace(self.tick_interval));
+        Planned {
+            hosted,
+            key,
+            scheduler,
+            marks,
+            stored: None,
+            dynamic: Some((
+                dynamic_signature(planned),
+                DynamicTarget {
+                    job: planned.job.clone(),
+                    args: planned.args.clone(),
+                },
+            )),
+        }
+    }
+
+    /// Follows the dynamic sources: a schedule whose signature is unchanged keeps its planner (and
+    /// so its mark), a new or changed one gets a fresh planner, a removed one is dropped. The
+    /// manifest and internal planners stay where they are, in front.
+    fn sync_dynamic(&self, planners: &mut Vec<Planned>) {
+        let wanted = self.dynamic.current();
+        let have: Vec<&str> = planners
+            .iter()
+            .filter_map(|p| p.dynamic.as_ref().map(|(sig, _)| sig.as_str()))
+            .collect();
+        let signatures: Vec<String> = wanted.iter().map(dynamic_signature).collect();
+        if have
+            .iter()
+            .copied()
+            .eq(signatures.iter().map(String::as_str))
+        {
+            return;
+        }
+        let mut old: HashMap<String, Planned> = HashMap::new();
+        let mut fixed = Vec::new();
+        for planned in std::mem::take(planners) {
+            match planned.dynamic.as_ref().map(|(sig, _)| sig.clone()) {
+                Some(sig) => {
+                    old.insert(sig, planned);
+                }
+                None => fixed.push(planned),
+            }
+        }
+        planners.extend(fixed);
+        for (planned, signature) in wanted.iter().zip(signatures) {
+            let node = old
+                .remove(&signature)
+                .unwrap_or_else(|| self.dynamic_planner(planned));
+            planners.push(node);
+        }
+    }
+
+    /// One tick of one schedule: plan, enqueue, then move the marks.
+    async fn tick_one(&self, planned: &mut Planned) {
+        let now = spot_scheduler::scheduler::timestamp_of(self.clock.as_ref());
+        let before = planned.marks.get(&planned.key).and_then(|m| m.last);
+        let accept_all = spot_scheduler::scheduler::sink(|_: &RunSlot| true);
+        let slots = match planned
+            .scheduler
+            .tick(self.clock.as_ref(), accept_all.as_ref())
+        {
+            Ok(slots) => slots,
+            Err(e) => {
+                tracing::debug!(site = %self.site, %e, "scheduler tick did not lead");
+                return;
+            }
+        };
+        let app = planned.hosted.app.as_str();
+        let name = planned.hosted.schedule.name.as_str();
+        let mut done: Option<jiff::Timestamp> = None;
+        let mut failed = false;
+        for slot in &slots {
+            let target = planned.dynamic.as_ref().map(|(_, target)| target);
+            match enqueue_slot_for(self.store.as_ref(), &self.site, slot, target).await {
+                SlotOutcome::Enqueued => {
+                    tracing::info!(site = %self.site, schedule = slot.key(), "schedule fired");
+                    count_fired(app, name, slot.scheduled_for);
+                    done = Some(slot.scheduled_for);
+                }
+                SlotOutcome::Duplicate => done = Some(slot.scheduled_for),
+                SlotOutcome::Refused(code) => {
+                    // Permanent (an unknown queue): planning it again would refuse it again, so
+                    // it counts as handled and the other schedules go on.
+                    tracing::warn!(
+                        site = %self.site, app, schedule = name, code = %code,
+                        "scheduled slot was refused"
+                    );
+                    done = Some(slot.scheduled_for);
+                }
+                SlotOutcome::Failed(code) => {
+                    tracing::warn!(
+                        site = %self.site, app, schedule = name, code = %code,
+                        "scheduled job was not enqueued; it is planned again next tick"
+                    );
+                    failed = true;
+                    break;
+                }
+            }
+        }
+        if failed {
+            // The planner already moved its mark past this slot. Put it back to where it was
+            // before this tick (the mark the coordinator holds when there was none), so the same
+            // slots come out again under the same keys; a duplicate is harmless.
+            // The very first tick of a schedule with no history resets to just before this
+            // tick's instant, the way the planner starts a schedule with no mark.
+            let back = before
+                .or(planned.stored)
+                .or(Some(now - jiff::Span::new().nanoseconds(1)));
+            planned.marks.set(&planned.key, HighWater { last: back });
+            return;
+        }
+        if planned.dynamic.is_some() {
+            return;
+        }
+        if let Some(mark) = done {
+            match self.marks.store(app, name, mark).await {
+                Ok(()) => planned.stored = Some(planned.stored.map_or(mark, |s| s.max(mark))),
+                // The jobs exist; only a failover could replay from the older mark, and the
+                // keys make that harmless. The next firing stores a newer one.
+                Err(e) => tracing::warn!(
+                    site = %self.site, app, schedule = name, %e,
+                    "schedule mark was not stored"
+                ),
+            }
+        }
+    }
+
+    /// Plans and enqueues due slots while this node leads. `true` on a stop, `false` when the
+    /// lease was lost (or the marks could not be read).
+    async fn lead(&self, stop: &mut watch::Receiver<bool>) -> bool {
+        let mut planners = match self.planners().await {
+            Ok(planners) => planners,
+            Err(e) => {
+                // Fail closed: lead only with the marks in hand. The standby loop tries again.
+                tracing::warn!(site = %self.site, %e, "schedule marks unavailable; not leading");
+                self.keeper.release().await;
+                return false;
+            }
+        };
         let mut ticker = tokio::time::interval(self.tick_interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut renew = tokio::time::interval((self.lease_ttl / 3).max(Duration::from_millis(100)));
@@ -1388,93 +1655,106 @@ impl Scheduling {
                     if !self.keeper.still_held().await {
                         break false;
                     }
-                    for (node, sink) in nodes.iter_mut().zip(sinks.iter()) {
-                        match node.tick(self.clock.as_ref(), sink.as_ref()) {
-                            Ok(slots) => {
-                                for slot in slots {
-                                    tracing::info!(
-                                        site = %self.site,
-                                        schedule = slot.key(),
-                                        "schedule fired"
-                                    );
-                                }
-                            }
-                            Err(e) => tracing::debug!(
-                                site = %self.site,
-                                %e,
-                                "scheduler tick did not lead"
-                            ),
-                        }
-                    }
-                    dynamic.sync(self.dynamic.current(), |planned| {
-                        let node = Scheduler::new(
-                            SchedulerConfig {
-                                site: self.site.to_string(),
-                                node: self.node.clone(),
-                                ttl: self.lease_ttl,
-                                schedules: vec![(Arc::clone(&planned.schedule), planned.policy)],
-                                app: planned.service.clone(),
-                            },
-                            Arc::new(InMemoryLeaseStore::new()),
-                            InMemoryHighWater::new(),
-                        )
-                        .with_skip_grace(skip_grace(self.tick_interval));
-                        let sink = spot_scheduler::scheduler::sink({
-                            let sender = sender.clone();
-                            move |slot: &RunSlot| sender.send(slot.clone()).is_ok()
-                        });
-                        DynamicNode {
-                            signature: dynamic_signature(planned),
-                            node,
-                            sink,
-                        }
-                    });
-                    for planned in &mut dynamic.nodes {
-                        match planned.node.tick(self.clock.as_ref(), planned.sink.as_ref()) {
-                            Ok(slots) => {
-                                for slot in slots {
-                                    tracing::info!(
-                                        site = %self.site,
-                                        schedule = slot.key(),
-                                        "schedule fired"
-                                    );
-                                }
-                            }
-                            Err(e) => tracing::debug!(
-                                site = %self.site,
-                                %e,
-                                "dynamic scheduler tick did not lead"
-                            ),
-                        }
-                    }
-                    while let Ok(slot) = receiver.try_recv() {
-                        let enqueued = dynamic
-                            .job_for(&slot, &self.site)
-                            .unwrap_or_else(|| spot_jobs::enqueue_scheduled(&slot, &self.site));
-                        match enqueued {
-                            Ok(job) => {
-                                // The slot's deduplication key makes a second insert
-                                // harmless: a duplicate is reported, not fatal.
-                                if let Err(e) = self.store.insert_if_new(job).await {
-                                    tracing::warn!(
-                                        site = %self.site,
-                                        %e,
-                                        "scheduled job was not enqueued"
-                                    );
-                                }
-                            }
-                            Err(e) => tracing::warn!(
-                                site = %self.site,
-                                %e,
-                                "scheduled slot was refused"
-                            ),
-                        }
+                    self.sync_dynamic(&mut planners);
+                    for planned in &mut planners {
+                        self.tick_one(planned).await;
                     }
                 }
             }
         };
         self.keeper.release().await;
         stopped
+    }
+}
+
+/// Counts one fired schedule: `spot_schedule_fired_total{app,schedule}` and the gauge
+/// `spot_schedule_last_fire_seconds{app,schedule}` (the scheduled instant, seconds since the
+/// epoch). The labels are the app and schedule names, never a payload.
+fn count_fired(app: &str, schedule: &str, scheduled_for: jiff::Timestamp) {
+    metrics::counter!(
+        "spot_schedule_fired_total",
+        "app" => app.to_owned(),
+        "schedule" => schedule.to_owned()
+    )
+    .increment(1);
+    #[allow(clippy::cast_precision_loss)]
+    let seconds = scheduled_for.as_second() as f64;
+    metrics::gauge!(
+        "spot_schedule_last_fire_seconds",
+        "app" => app.to_owned(),
+        "schedule" => schedule.to_owned()
+    )
+    .set(seconds);
+}
+
+/// The scheduler: the one node that plans the site's schedules (manifest and internal) and
+/// enqueues their runs. The work is the [`ScheduleLoop`]'s; this is its [`Service`] shell.
+pub struct Scheduling {
+    looped: Arc<ScheduleLoop>,
+    internal_names: Vec<String>,
+    schedule_count: usize,
+}
+
+impl Scheduling {
+    /// A scheduler service for one site's manifest schedules.
+    pub fn new(settings: &Settings) -> Arc<Self> {
+        Self::with_internal(settings, Vec::new())
+    }
+
+    /// As [`Scheduling::new`], also planning the internal schedules of services (`(service,
+    /// schedule, policy)`): each runs under the same leader lease, grace and marks as a manifest
+    /// schedule, and enqueues the job `<service>:<name>`.
+    pub fn with_internal(
+        settings: &Settings,
+        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+    ) -> Arc<Self> {
+        Self::with_sources(settings, internal, Arc::new(ScheduleSources::new()))
+    }
+
+    /// As [`Scheduling::with_internal`], also following the `dynamic` sources: their schedules
+    /// are re-read at every tick, so one added, changed or removed while the site runs is
+    /// planned from the next tick (a changed schedule starts a fresh high-water mark).
+    pub fn with_sources(
+        settings: &Settings,
+        internal: Vec<(String, Arc<Schedule>, MissedRunPolicy)>,
+        dynamic: Arc<ScheduleSources>,
+    ) -> Arc<Self> {
+        let internal_names = internal
+            .iter()
+            .map(|(service, schedule, _)| format!("{service}:{}", schedule.name))
+            .collect();
+        let schedules: Vec<HostedSchedule> = settings
+            .schedules
+            .iter()
+            .cloned()
+            .chain(
+                internal
+                    .into_iter()
+                    .map(|(app, schedule, policy)| HostedSchedule {
+                        app,
+                        schedule,
+                        policy,
+                    }),
+            )
+            .collect();
+        let schedule_count = schedules.len();
+        Arc::new(Self {
+            looped: ScheduleLoop::with_sources(
+                ScheduleLoopSettings {
+                    site: settings.site.clone(),
+                    store: Arc::clone(&settings.store),
+                    coordinator: Arc::clone(&settings.coordinator),
+                    clock: Arc::clone(&settings.clock),
+                    schedules,
+                    tick_interval: settings.tick_interval,
+                    lease_ttl: settings.lease_ttl,
+                    node: settings.node.clone(),
+                },
+                dynamic,
+            ),
+            internal_names,
+            schedule_count,
+        })
     }
 }
 
@@ -1490,48 +1770,24 @@ impl Service for Scheduling {
 
     fn check(&self) -> CheckFuture<'_> {
         Box::pin(async {
-            if self.schedules.is_empty() && self.internal.is_empty() {
+            if self.schedule_count == 0 {
                 tracing::debug!("no schedules; the scheduler ticks and plans nothing");
             }
             // Names only: what a service schedules is its own business.
-            let names: Vec<String> = self
-                .internal
-                .iter()
-                .map(|(service, schedule, _)| format!("{service}:{}", schedule.name))
-                .collect();
-            if !names.is_empty() {
-                tracing::debug!(internal = %names.join(", "), "internal schedules planned");
+            if !self.internal_names.is_empty() {
+                tracing::debug!(internal = %self.internal_names.join(", "), "internal schedules planned");
             }
             Ok(())
         })
     }
 
     fn run(&self, stop: watch::Receiver<bool>) -> RunFuture<'_> {
-        Box::pin(async move {
-            let mut stop = stop;
-            let standby = (self.lease_ttl / 3).max(Duration::from_millis(100));
-            loop {
-                if *stop.borrow() {
-                    return Ok(());
-                }
-                if self.keeper.acquire().await && self.lead(&mut stop).await {
-                    return Ok(());
-                }
-                tokio::select! {
-                    changed = stop.changed() => {
-                        if changed.is_err() || *stop.borrow() {
-                            return Ok(());
-                        }
-                    }
-                    () = tokio::time::sleep(standby) => {}
-                }
-            }
-        })
+        Box::pin(async move { self.looped.run(stop).await })
     }
 
     fn shutdown(&self) -> RunFuture<'_> {
         Box::pin(async move {
-            self.keeper.release().await;
+            self.looped.release().await;
             Ok(())
         })
     }
@@ -1651,7 +1907,7 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> crate::Result<()> {
     });
     ctx.finally(move |ctx| {
         let mut registry = ctx.take_job_handlers();
-        let planned = internal.install(&settings.schedules, &mut registry)?;
+        let planned = internal.install_hosted(&settings.schedules, &mut registry)?;
         let handlers = Arc::new(registry);
         let jobs = Jobs::new(&settings, handlers);
         if let Some(mail) = ctx.port::<crate::services::mail::Mail>() {
@@ -1673,34 +1929,98 @@ fn process_node(site: &str) -> String {
     format!("node-{site}-{part}")
 }
 
-/// Every manifest schedule of the site's installed apps, with the policy a missed run gets.
+/// Every manifest schedule of the site's installed apps and of the embedded platform app, each
+/// tagged with the app it belongs to and the policy a missed run gets.
 fn manifest_schedules(
     root: &std::path::Path,
     loaded: &crate::config::Loaded,
     site: &crate::config::Site,
-) -> crate::Result<
-    Vec<(
-        Arc<spot_scheduler::Schedule>,
-        spot_scheduler::MissedRunPolicy,
-    )>,
-> {
+) -> crate::Result<Vec<HostedSchedule>> {
     let catalogue = crate::apps::catalogue(root, loaded)?;
-    let mut schedules = Vec::new();
+    let mut manifests = Vec::new();
     for app in &site.apps {
         let Some(source) = catalogue.iter().find(|source| &source.name == app) else {
             continue;
         };
-        let manifest = crate::appdir::manifest(&source.dir)?;
-        let zone = spot_scheduler::TimeZone::parse("UTC")
-            .map_err(|e| crate::Error(format!("{}: {e}", source.dir.display())))?;
+        manifests.push((
+            source.name.clone(),
+            crate::appdir::manifest(&source.dir)?,
+            source.dir.display().to_string(),
+        ));
+    }
+    // The platform app is embedded: a site that installs it without listing a directory for it
+    // in the catalogue still gets its schedules (one that does list it got them above).
+    let platform_installed = site
+        .apps
+        .iter()
+        .any(|app| app == spot_platform_app::PLATFORM_APP);
+    let platform_catalogued = catalogue
+        .iter()
+        .any(|source| source.name == spot_platform_app::PLATFORM_APP);
+    if platform_installed && !platform_catalogued {
+        manifests.push((
+            spot_platform_app::PLATFORM_APP.to_owned(),
+            embedded_platform_manifest()?,
+            "the embedded platform app".to_owned(),
+        ));
+    }
+    hosted_schedules(&manifests)
+}
+
+/// The platform app's embedded manifest, parsed by the parser an app directory's `app.toml` goes
+/// through (`spot_manifest::parse`).
+///
+/// # Errors
+///
+/// The embedded manifest is invalid, which a test of the platform app catches first.
+pub fn embedded_platform_manifest() -> crate::Result<spot_manifest::AppManifest> {
+    spot_manifest::parse(
+        spot_platform_app::MANIFEST,
+        "the embedded platform app/app.toml",
+    )
+    .map_err(|errors| {
+        crate::Error(
+            errors
+                .iter()
+                .map(|e| format!("the embedded platform app/app.toml: {e}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    })
+}
+
+/// The schedules of `manifests` (`(app, manifest, label for errors)`), tagged with their app.
+///
+/// An app named twice contributes once (the first), so a catalogue entry and the embedded copy of
+/// the same app never double a schedule.
+///
+/// # Errors
+///
+/// A schedule the planner rejects.
+pub fn hosted_schedules(
+    manifests: &[(String, spot_manifest::AppManifest, String)],
+) -> crate::Result<Vec<HostedSchedule>> {
+    let zone = spot_scheduler::TimeZone::parse("UTC")
+        .map_err(|e| crate::Error(format!("schedule zone: {e}")))?;
+    let mut seen: Vec<&str> = Vec::new();
+    let mut schedules = Vec::new();
+    for (app, manifest, label) in manifests {
+        if seen.contains(&app.as_str()) {
+            continue;
+        }
+        seen.push(app.as_str());
         for sub in &manifest.schedules {
             let schedule = spot_scheduler::Schedule::new(sub, zone.clone())
-                .map_err(|e| crate::Error(format!("{}: {e}", source.dir.display())))?;
-            // `skip` plans nothing for any firing in a tick's window, the on-time one included,
-            // so it would never fire. `run_once` plans the latest firing of the window: one run
-            // per tick that reaches a firing, and never a burst (the high-water mark is kept in
-            // memory, so a restarted node does not replay what it missed while down).
-            schedules.push((Arc::new(schedule), spot_scheduler::MissedRunPolicy::RunOnce));
+                .map_err(|e| crate::Error(format!("{label}: {e}")))?;
+            // `skip` runs every firing a tick reaches within the grace period (three ticks, at
+            // least a minute) and drops only a firing that was missed while no node was ticking;
+            // a catch-up burst on a restarted node is worse than one missed tick for every
+            // schedule this platform ships today. A manifest has no field for another policy.
+            schedules.push(HostedSchedule {
+                app: app.clone(),
+                schedule: Arc::new(schedule),
+                policy: spot_scheduler::MissedRunPolicy::Skip,
+            });
         }
     }
     Ok(schedules)

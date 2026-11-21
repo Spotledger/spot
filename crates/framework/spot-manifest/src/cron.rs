@@ -45,7 +45,14 @@ impl Cron {
         }
         // The same grammar the scheduler uses (WP-PLT-07): nothing this crate accepts may
         // fail to parse there later.
-        if let Err(err) = cron::Schedule::from_str(raw) {
+        // The day-of-week field is already checked above (0-7, both 0 and 7 Sunday); the
+        // `cron` crate numbers it 1-7 and rejects 0, and the scheduler translates the manifest's
+        // numbering itself, so that field is replaced by `*` for this grammar check.
+        let checked = format!(
+            "{} {} {} {} {} *",
+            parts[0], parts[1], parts[2], parts[3], parts[4]
+        );
+        if let Err(err) = cron::Schedule::from_str(&checked) {
             return Err(ManifestError::new(
                 INVALID_CRON,
                 format!("cron expression {raw:?}: {err}"),

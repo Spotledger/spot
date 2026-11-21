@@ -745,6 +745,11 @@ fn sampling_the_request_counters_never_blocks_a_writer() {
             writes
         })
     };
+    // Start sampling once the writer is running (on a busy machine its thread may not be
+    // scheduled before a thousand samples are over, and then nothing was tested).
+    while counters.total.load(Ordering::Relaxed) == 0 {
+        std::thread::yield_now();
+    }
     let sampler = ErrorRateSampler::new(Arc::clone(&counters));
     for _ in 0..1_000 {
         let value = sampler.sample().unwrap();

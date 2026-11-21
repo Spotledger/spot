@@ -481,6 +481,9 @@ pub struct Realtime {
     /// Feed-pump interval in milliseconds: how often the change feed and the outbox are
     /// read and mapped onto room events.
     pub poll_ms: u64,
+    /// The most WebSocket connections one site holds open (default 5000, at most 100000).
+    /// Past it an upgrade is refused with 429 `realtime.too_many_connections`.
+    pub max_connections: usize,
 }
 impl Default for Realtime {
     fn default() -> Self {
@@ -488,6 +491,7 @@ impl Default for Realtime {
             enabled: true,
             heartbeat_seconds: 25,
             poll_ms: 100,
+            max_connections: 5000,
         }
     }
 }
@@ -650,12 +654,17 @@ impl Default for Print {
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Files {
-    /// `local` (bytes under [`Files::root`]) or `memory` (tests).
+    /// `local` (bytes under [`Files::root`]), `memory` (tests), `s3` or `azure` (an object store,
+    /// behind the `files-s3` and `files-azure` features).
     pub provider: String,
     /// The local provider's root, relative to the site directory.
     pub root: String,
     /// Hard per-upload limit in bytes.
     pub max_bytes: u64,
+    /// The S3-compatible provider's settings (`provider = "s3"` only).
+    pub s3: Option<FilesS3>,
+    /// The Azure Blob provider's settings (`provider = "azure"` only).
+    pub azure: Option<FilesAzure>,
 }
 impl Default for Files {
     fn default() -> Self {
@@ -663,8 +672,53 @@ impl Default for Files {
             provider: "local".into(),
             root: "files".into(),
             max_bytes: 25 * 1024 * 1024,
+            s3: None,
+            azure: None,
         }
     }
+}
+/// `[services.files.s3]`: an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Wasabi).
+///
+/// Credentials are references (`env:NAME` or `file:/absolute/path`), never values. With neither
+/// reference the AWS default chain of the process environment applies.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FilesS3 {
+    /// The bucket; it must exist (the service never creates one).
+    pub bucket: String,
+    /// The service base URL; absent selects AWS.
+    pub endpoint: Option<String>,
+    /// The region, for example `us-east-1`.
+    pub region: Option<String>,
+    /// Bucket-in-path addressing.
+    pub path_style: bool,
+    /// Plain HTTP (a loopback emulator).
+    pub allow_http: bool,
+    /// Allows `allow_http` on a remote endpoint. Never for production.
+    pub allow_insecure_remote: bool,
+    /// Where the access key id lives.
+    pub access_key_id_ref: Option<String>,
+    /// Where the secret access key lives.
+    pub secret_access_key_ref: Option<String>,
+}
+/// `[services.files.azure]`: an Azure Blob container.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FilesAzure {
+    /// The storage account.
+    pub account: String,
+    /// The container; it must exist.
+    pub container: String,
+    /// The service base URL; absent selects Azure.
+    pub endpoint: Option<String>,
+    /// `access_key` or `sas`.
+    pub credential_kind: String,
+    /// Where the credential lives: `env:NAME` or `file:/absolute/path`.
+    pub credential_ref: Option<String>,
+    /// Plain HTTP (the Azurite emulator on loopback).
+    pub allow_http: bool,
+    /// Allows `allow_http` on a remote endpoint. Never for production.
+    pub allow_insecure_remote: bool,
 }
 /// Metrics options.
 #[derive(Clone, Deserialize)]
@@ -724,6 +778,12 @@ impl Services {
         }
         if self.realtime.enabled && self.realtime.poll_ms == 0 {
             errors.push("services.realtime.poll_ms must be positive".into());
+        }
+        if self.realtime.enabled
+            && !(1..=spot_realtime::ws::limits::MAX_CONNECTIONS_CEILING)
+                .contains(&self.realtime.max_connections)
+        {
+            errors.push("services.realtime.max_connections must be between 1 and 100000".into());
         }
         if self.realtime.enabled && self.realtime.heartbeat_seconds == 0 {
             errors.push("services.realtime.heartbeat_seconds must be positive".into());
@@ -802,9 +862,13 @@ impl Services {
                 errors.push("services.mail.smtp.from is not a valid address".into());
             }
         }
-        if !matches!(self.files.provider.as_str(), "local" | "memory") {
-            errors.push("services.files.provider must be local or memory".into());
+        if !matches!(
+            self.files.provider.as_str(),
+            "local" | "memory" | "s3" | "azure"
+        ) {
+            errors.push("services.files.provider must be local, memory, s3 or azure".into());
         }
+        errors.extend(crate::services::files_object::validate(&self.files));
         if self.files.provider == "local" && self.files.root.is_empty() {
             errors.push("services.files.root must not be empty".into());
         }
@@ -1256,8 +1320,10 @@ pub fn load_collect(root: &Path, dev: bool) -> Result<(Loaded, Vec<String>)> {
     {
         errors.push("postgres.pool_wait_ms must be 100 to 60000".into());
     }
-    if common.postgres.pool_max_size == 0 {
-        errors.push("postgres.pool_max_size must be positive".into());
+    if common.postgres.pool_max_size == 0 || common.postgres.pool_max_size > MAX_POOL_MAX_SIZE {
+        errors.push(format!(
+            "postgres.pool_max_size must be 1 to {MAX_POOL_MAX_SIZE}"
+        ));
     }
     if common.apps.is_empty() {
         errors.push("apps must not be empty".into());
@@ -1352,4 +1418,95 @@ pub fn load_collect(root: &Path, dev: bool) -> Result<(Loaded, Vec<String>)> {
         },
         errors,
     ))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Settings the load tests drive (WP-TST-15.T9)
+// ---------------------------------------------------------------------------------------------
+
+/// The largest `postgres.pool_max_size` the host accepts. The default (16) is unchanged; the
+/// L9 tier profiles set the value they need in `common.toml`.
+pub const MAX_POOL_MAX_SIZE: usize = 1_000;
+
+/// The catalogue code of a test hook that was asked for without the explicit opt-in.
+pub const TEST_HOOK_REFUSED: &str = "cli.test_hook_refused";
+
+/// The environment variable that must be `1` for the host to accept `--test-hooks`. The flag
+/// alone is not enough, so a copied command line cannot turn a production host's clock.
+pub const TEST_HOOKS_ENV: &str = "SPOT_TEST_HOOKS";
+
+/// The largest clock offset a test hook accepts, either way: one year.
+pub const MAX_CLOCK_OFFSET_SECONDS: i64 = 366 * 24 * 60 * 60;
+
+/// The system clock shifted by a fixed offset: the clock-skew fault of the L9 profiles.
+///
+/// Only the wall clock is shifted (`now_utc`, which stamps and compares instants). The monotonic
+/// reading, which measures intervals, is the system's own, so a skewed node still times its
+/// leases and timeouts correctly and only disagrees with other nodes about the date, as a real
+/// skewed clock does.
+#[derive(Debug)]
+pub struct OffsetClock {
+    inner: spot_core::SystemClock,
+    offset: time::Duration,
+}
+
+impl OffsetClock {
+    /// A system clock shifted by `seconds` (negative: behind).
+    #[must_use]
+    pub fn new(seconds: i64) -> Self {
+        Self {
+            inner: spot_core::SystemClock::new(),
+            offset: time::Duration::seconds(seconds),
+        }
+    }
+}
+
+impl spot_core::Clock for OffsetClock {
+    fn now_utc(&self) -> time::OffsetDateTime {
+        let now = self.inner.now_utc();
+        now.checked_add(self.offset).unwrap_or(now)
+    }
+
+    fn monotonic(&self) -> std::time::Duration {
+        self.inner.monotonic()
+    }
+}
+
+/// The clock `spot serve` runs with, from its test-hook flags.
+///
+/// - No offset asked for: `Ok(None)`, the host keeps the system clock.
+/// - An offset without `test_hooks`, or with `test_hooks` while `env_allows` is false (the
+///   `SPOT_TEST_HOOKS=1` opt-in is missing), or beyond [`MAX_CLOCK_OFFSET_SECONDS`]: refused
+///   with [`TEST_HOOK_REFUSED`] and a message that names the flag and never a value.
+/// - `test_hooks` alone changes nothing.
+///
+/// # Errors
+///
+/// The refusals above.
+pub fn clock_from_test_hooks(
+    test_hooks: bool,
+    env_allows: bool,
+    clock_offset: Option<i64>,
+) -> Result<Option<std::sync::Arc<dyn spot_core::Clock>>> {
+    let Some(seconds) = clock_offset else {
+        return Ok(None);
+    };
+    if !test_hooks {
+        return Err(Error(format!(
+            "{TEST_HOOK_REFUSED}: --clock-offset is a test hook and needs --test-hooks"
+        )));
+    }
+    if !env_allows {
+        return Err(Error(format!(
+            "{TEST_HOOK_REFUSED}: --test-hooks needs {TEST_HOOKS_ENV}=1 in the environment; a \
+             production host does not set it"
+        )));
+    }
+    if seconds.unsigned_abs() > MAX_CLOCK_OFFSET_SECONDS.unsigned_abs() {
+        return Err(Error(format!(
+            "{TEST_HOOK_REFUSED}: --clock-offset must be within {MAX_CLOCK_OFFSET_SECONDS} \
+             seconds either way"
+        )));
+    }
+    Ok(Some(std::sync::Arc::new(OffsetClock::new(seconds))))
 }

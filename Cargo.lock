@@ -6995,6 +6995,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "jiff",
+ "regex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -7234,6 +7235,8 @@ dependencies = [
  "sha2 0.10.9",
  "spot-access-review",
  "spot-activity",
+ "spot-agent-memory",
+ "spot-agent-memory-pg",
  "spot-agent-tiers",
  "spot-ai-isolation",
  "spot-airgap",
@@ -7315,6 +7318,8 @@ dependencies = [
  "spot-field-guard",
  "spot-files",
  "spot-files-service",
+ "spot-fix-pipeline",
+ "spot-fix-pipeline-pg",
  "spot-functions",
  "spot-graph-index",
  "spot-graph-model",
@@ -7362,6 +7367,10 @@ dependencies = [
  "spot-link-exchange",
  "spot-link-external",
  "spot-link-transport",
+ "spot-llm",
+ "spot-llm-anthropic",
+ "spot-llm-openai",
+ "spot-llm-router",
  "spot-login",
  "spot-mail",
  "spot-mail-intake",
@@ -7410,8 +7419,11 @@ dependencies = [
  "spot-realtime-bridge",
  "spot-redact",
  "spot-rehearsal",
+ "spot-remedies",
  "spot-replica-apply",
  "spot-reports",
+ "spot-retrieval",
+ "spot-retrieval-pg",
  "spot-rule-graph",
  "spot-sample-app",
  "spot-sandbox",
@@ -10949,6 +10961,21 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 0.8.23",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "spot-retrieval-pg"
+version = "0.1.0"
+dependencies = [
+ "deadpool-postgres",
+ "spot-core",
+ "spot-meta",
+ "spot-permissions",
+ "spot-postgres",
+ "spot-retrieval",
+ "spot-storage-contract",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]

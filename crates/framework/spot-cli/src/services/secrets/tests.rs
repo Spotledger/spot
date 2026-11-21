@@ -27,7 +27,11 @@ impl KeyProvider for Liar {
         _wrapped: &'a spot_secrets::WrappedKey,
         _aad: &'a [u8],
     ) -> spot_secrets::ProviderFuture<'a, spot_secrets::SecretBytes> {
-        Box::pin(async { Ok(spot_secrets::SecretBytes::new(b"not the canary at all, no.".to_vec())) })
+        Box::pin(async {
+            Ok(spot_secrets::SecretBytes::new(
+                b"not the canary at all, no.".to_vec(),
+            ))
+        })
     }
     fn index_key<'a>(
         &'a self,
@@ -42,7 +46,9 @@ async fn a_canary_mismatch_is_refused_naming_the_file() {
     let good = spot_secrets::MemoryKeyring::new("k").unwrap();
     canary_of(&good, Path::new("/keys/a.json")).await.unwrap();
     let liar = Liar(spot_secrets::MemoryKeyring::new("k").unwrap());
-    let error = canary_of(&liar, Path::new("/keys/a.json")).await.unwrap_err();
+    let error = canary_of(&liar, Path::new("/keys/a.json"))
+        .await
+        .unwrap_err();
     assert!(error.0.starts_with(codes::CANARY_FAILED), "{}", error.0);
     assert!(error.0.contains("/keys/a.json"));
     assert!(!error.0.contains("not the canary"));

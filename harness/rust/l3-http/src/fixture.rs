@@ -149,7 +149,9 @@ impl Fixture {
             path: root.clone(),
             armed: !keep(),
         };
-        let site = format!("l3-http-{}", &run[..12]);
+        // The random tail of the UUIDv7, not its head: the first 12 hex digits are the millisecond
+        // timestamp, so tests that start in the same millisecond would create the same database.
+        let site = format!("l3-http-{}", &run[run.len() - 12..]);
         let repo = repo();
         // A private copy of the sample app: a case may add a field to a DocType and reload the
         // site without touching the repository's copy.

@@ -93,7 +93,10 @@ pub fn command() -> clap::Command {
 
 pub async fn run(matches: &clap::ArgMatches, ctx: &mut CommandCtx) -> Result<Exit> {
     let Some((verb, sub)) = matches.subcommand() else {
-        writeln!(ctx.err(), "usage: spot secrets <init|status|rotate-kek|retire-kek> --site SITE")?;
+        writeln!(
+            ctx.err(),
+            "usage: spot secrets <init|status|rotate-kek|retire-kek> --site SITE"
+        )?;
         return Ok(Exit::Usage);
     };
     let site = sub
@@ -101,12 +104,38 @@ pub async fn run(matches: &clap::ArgMatches, ctx: &mut CommandCtx) -> Result<Exi
         .map(String::as_str)
         .unwrap_or_default()
         .to_owned();
-    let apply = sub.try_get_one::<bool>("apply").ok().flatten().copied().unwrap_or(false);
+    let apply = sub
+        .try_get_one::<bool>("apply")
+        .ok()
+        .flatten()
+        .copied()
+        .unwrap_or(false);
     let loaded = spot_cli::config::load(ctx.root(), false)?;
     let Some(site_cfg) = loaded.sites.iter().find(|s| s.site == site) else {
         writeln!(ctx.err(), "there is no site `{site}`")?;
         return Ok(Exit::Usage);
     };
+    // Under `provider = "kms"` there is no key file: `status` reads through the configured
+    // provider, the key file verbs are refused and point at the KMS commands.
+    let kms = match svc::Settings::from_common(&loaded.common) {
+        Ok(settings) => settings.is_some_and(|s| s.provider == "kms"),
+        Err(e) => {
+            writeln!(ctx.err(), "{e}")?;
+            return Ok(Exit::Refused);
+        }
+    };
+    if kms {
+        if verb == "status" {
+            return status(ctx, &loaded, site_cfg).await;
+        }
+        writeln!(
+            ctx.err(),
+            "{}: services.secrets.provider is `kms`, so `{verb}` (a key file operation) does not apply; \
+             rotate the key in the KMS, then run `spot secrets-kms rewrap-seed --site {site}`",
+            codes::PROVIDER_UNSUPPORTED
+        )?;
+        return Ok(Exit::Refused);
+    }
     let path = match svc::key_path(ctx.root(), &loaded, site_cfg) {
         Ok(Some(path)) => path,
         Ok(None) => {
@@ -129,9 +158,29 @@ pub async fn run(matches: &clap::ArgMatches, ctx: &mut CommandCtx) -> Result<Exi
             let resume = sub.get_flag("resume");
             let batch = sub.get_one::<u32>("batch").copied().unwrap_or(100);
             let settle = sub.get_one::<u64>("settle").copied().unwrap_or(3);
-            rotate(ctx, &loaded, site_cfg, Plan { apply, resume, batch, settle }).await
+            rotate(
+                ctx,
+                &loaded,
+                site_cfg,
+                Plan {
+                    apply,
+                    resume,
+                    batch,
+                    settle,
+                },
+            )
+            .await
         }
-        "retire-kek" => retire(ctx, &loaded, site_cfg, apply, sub.get_flag("confirm_reloaded")).await,
+        "retire-kek" => {
+            retire(
+                ctx,
+                &loaded,
+                site_cfg,
+                apply,
+                sub.get_flag("confirm_reloaded"),
+            )
+            .await
+        }
         _ => {
             writeln!(ctx.err(), "unknown secrets command `{verb}`")?;
             Ok(Exit::Usage)
@@ -147,9 +196,18 @@ async fn init(
     apply: bool,
 ) -> Result<Exit> {
     let _ = loaded;
-    writeln!(ctx.out(), "plan: create the key file {} for site `{}`", path.display(), site.site)?;
+    writeln!(
+        ctx.out(),
+        "plan: create the key file {} for site `{}`",
+        path.display(),
+        site.site
+    )?;
     if path.exists() {
-        writeln!(ctx.err(), "{}: the key file already exists; init never overwrites a key file", codes::KEK_FILE_UNUSABLE)?;
+        writeln!(
+            ctx.err(),
+            "{}: the key file already exists; init never overwrites a key file",
+            codes::KEK_FILE_UNUSABLE
+        )?;
         return Ok(Exit::Refused);
     }
     if !apply {
@@ -205,8 +263,13 @@ async fn status(
     };
     let out = ctx.out();
     writeln!(out, "site: {}", site.site)?;
-    writeln!(out, "provider: local")?;
-    writeln!(out, "key file: {}", host.path().display())?;
+    writeln!(out, "provider: {}", host.provider_name())?;
+    let what = if host.provider_name() == "kms" {
+        "seed file"
+    } else {
+        "key file"
+    };
+    writeln!(out, "{what}: {}", host.path().display())?;
     writeln!(out, "key id: {}", versions.id)?;
     writeln!(out, "current version: {}", versions.current)?;
     writeln!(out, "versions with key material: {}", list(&versions.held))?;
@@ -223,7 +286,11 @@ async fn status(
             "{}.{}: {}{}",
             field.doctype,
             field.field,
-            if counts.is_empty() { "no sealed values" } else { &counts },
+            if counts.is_empty() {
+                "no sealed values"
+            } else {
+                &counts
+            },
             if field.malformed > 0 {
                 format!(" ({} not in the sealed format)", field.malformed)
             } else {
@@ -272,12 +339,13 @@ async fn rotate(
     } else {
         None
     };
-    let refused = |ctx: &mut CommandCtx, audit: &Option<OperatorAudit>, text: String, reason: &str| {
-        if let Some(audit) = audit {
-            audit.always("secrets_kek_rotation_refused", 0, Some(reason));
-        }
-        writeln!(ctx.err(), "{text}")
-    };
+    let refused =
+        |ctx: &mut CommandCtx, audit: &Option<OperatorAudit>, text: String, reason: &str| {
+            if let Some(audit) = audit {
+                audit.always("secrets_kek_rotation_refused", 0, Some(reason));
+            }
+            writeln!(ctx.err(), "{text}")
+        };
     let Some(host) = svc::open(ctx.root(), loaded, site).await? else {
         return Ok(Exit::Refused);
     };
@@ -300,7 +368,10 @@ async fn rotate(
         return Ok(Exit::Refused);
     }
     if resume {
-        writeln!(ctx.out(), "plan: move {old} stored value(s) onto key version {current}")?;
+        writeln!(
+            ctx.out(),
+            "plan: move {old} stored value(s) onto key version {current}"
+        )?;
     } else {
         writeln!(
             ctx.out(),
@@ -320,7 +391,11 @@ async fn rotate(
             return Ok(Exit::Refused);
         }
     };
-    let target = if resume { current } else { current.saturating_add(1) };
+    let target = if resume {
+        current
+    } else {
+        current.saturating_add(1)
+    };
     if let Err(e) = audit.required("secrets_kek_rotation_started", u64::from(target), None) {
         writeln!(ctx.err(), "{e}")?;
         return Ok(Exit::Refused);
@@ -329,7 +404,11 @@ async fn rotate(
         let added = match svc::add_version(&host).await {
             Ok(version) => version,
             Err(e) => {
-                audit.always("secrets_kek_rotation_failed", u64::from(target), Some("add_version"));
+                audit.always(
+                    "secrets_kek_rotation_failed",
+                    u64::from(target),
+                    Some("add_version"),
+                );
                 writeln!(ctx.err(), "{e}")?;
                 return Ok(Exit::Failed);
             }
@@ -340,7 +419,10 @@ async fn rotate(
     // seals under the previous version, which is still held, so no write fails.
     let _ = spot_cli::request_reload(ctx.root(), &site.site);
     if !resume && settle > 0 {
-        writeln!(ctx.out(), "waiting {settle}s for running servers to adopt it")?;
+        writeln!(
+            ctx.out(),
+            "waiting {settle}s for running servers to adopt it"
+        )?;
         tokio::time::sleep(std::time::Duration::from_secs(settle)).await;
     }
     let engine = svc::open_engine(ctx.root(), loaded, site, &host, ctx.clock().clone()).await?;
@@ -450,7 +532,8 @@ async fn retire(
     writeln!(
         ctx.out(),
         "plan: destroy the key material of version(s) {:?}; {old} stored value(s) are under a version other than {}",
-        victims, versions.current
+        victims,
+        versions.current
     )?;
     if victims.is_empty() {
         writeln!(ctx.out(), "nothing to retire")?;
@@ -488,7 +571,11 @@ async fn retire(
     }
     for version in &victims {
         if let Err(e) = svc::retire_version(&host, *version, 0).await {
-            audit.always("secrets_kek_retire_failed", u64::from(*version), Some("provider"));
+            audit.always(
+                "secrets_kek_retire_failed",
+                u64::from(*version),
+                Some("provider"),
+            );
             writeln!(ctx.err(), "{e}")?;
             return Ok(Exit::Failed);
         }

@@ -31,6 +31,27 @@ async fn mcp(addr: SocketAddr, host: &str, token: &str, method: &str, params: Js
     .await
 }
 
+/// A call that waits for the endpoint to finish starting: `/mcp` answers 503 until the service's
+/// start-up check has passed, which runs after the listener is up. Returns the first answer that is
+/// not a 503 (or the last 503 after 20 s).
+async fn mcp_when_started(
+    addr: SocketAddr,
+    host: &str,
+    token: &str,
+    method: &str,
+    params: Json,
+) -> Reply {
+    let mut reply = mcp(addr, host, token, method, params.clone()).await;
+    for _ in 0..40 {
+        if reply.status != 503 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        reply = mcp(addr, host, token, method, params.clone()).await;
+    }
+    reply
+}
+
 fn refused(reply: &Reply) -> bool {
     reply.body["error"].is_object() || reply.body["result"]["isError"] == json!(true)
 }
@@ -50,7 +71,13 @@ async fn site_pg(env: &Env) -> PgConfig {
     loaded.admin.clone().with_dbname(&site.database)
 }
 
+/// The sites of these tests share one cluster-wide role (`spot_ai`) whose provisioning, grants and
+/// connection limit change under each other when two sites start at the same moment, so the tests
+/// run one at a time.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct World {
+    _turn: tokio::sync::MutexGuard<'static, ()>,
     env: Env,
     started: common::Started,
     admin: String,
@@ -58,6 +85,7 @@ struct World {
 }
 
 async fn world(with_password: bool) -> Option<World> {
+    let turn = ONE_AT_A_TIME.lock().await;
     let pw = with_password.then(password_file);
     let services = match &pw {
         Some(path) => format!(
@@ -100,6 +128,7 @@ async fn world(with_password: bool) -> Option<World> {
     .await;
     expect(&task, 201);
     Some(World {
+        _turn: turn,
         env,
         started,
         admin,
@@ -120,7 +149,7 @@ impl World {
 async fn reads_run_on_the_ai_pool_and_the_role_cannot_write() {
     let Some(w) = world(true).await else { return };
     let (addr, host) = (w.started.addr, w.env.site.clone());
-    let found = mcp(
+    let found = mcp_when_started(
         addr,
         &host,
         &w.admin,
@@ -169,7 +198,7 @@ async fn reads_run_on_the_ai_pool_and_the_role_cannot_write() {
 async fn a_role_that_cannot_read_makes_mcp_refuse_instead_of_using_the_main_pool() {
     let Some(w) = world(true).await else { return };
     let (addr, host) = (w.started.addr, w.env.site.clone());
-    let ok = mcp(
+    let ok = mcp_when_started(
         addr,
         &host,
         &w.admin,
@@ -240,6 +269,7 @@ async fn without_a_password_file_mcp_is_refused_not_served_unisolated() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bad_password_file_refuses_mcp_too() {
+    let _turn = ONE_AT_A_TIME.lock().await;
     let path = std::env::temp_dir().join(format!(
         "spot_ai_bad_{}",
         spot_storage_contract::RecordId::new_v7()

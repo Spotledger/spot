@@ -193,6 +193,7 @@ pub const TABLES: &[TableRule] = &[
     empty("spot_coord_node", "presence of the source's nodes"),
     empty("spot_coord_rate", "rate-limit buckets of the source"),
     empty("spot_coord_token", "fencing high-water marks of the source"),
+    empty("spot_schedule_mark", "schedule marks of the source"),
     empty("spot_dag_node_state", "state of the source's running graphs"),
     empty("spot_dag_run", "runs of the source's graphs"),
     empty("spot_edge_drift_entry", "drift findings between the source and branch nodes"),

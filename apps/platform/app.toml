@@ -16,3 +16,13 @@ cron = "0 */5 * * * *"
 step = "platform:function_evict_idle"
 queue = "short"
 budget_ms = 30000
+
+# The weekly check that the edge set equals the link fields (WP-DAG-04.T6). The host's
+# edge-integrity service registers the job; the report and its gauges are on /metrics.
+# Sunday 03:30 UTC (the manifest's day-of-week 7 is Sunday, like 0).
+[[schedules]]
+name = "edge_verify"
+cron = "0 30 3 * * 7"
+step = "platform:edge_verify"
+queue = "long"
+budget_ms = 3600000

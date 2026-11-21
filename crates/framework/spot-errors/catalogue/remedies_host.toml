@@ -1,0 +1,91 @@
+# remedies_host codes. One [[entry]] per code; see crates/framework/spot-errors/README.md.
+
+[[entry]]
+code = "remedies_host.settings_invalid"
+class = "none"
+summary = "The [services.remedies] table has an unknown key or undo_window_secs is outside 60 to 2592000, so the remedy service cannot start."
+explanation_key = "error.remedies_host.settings_invalid"
+params = []
+remedy = "Fix the table: only enabled, undo_window_secs and self_test_at_start exist."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.tiers_unavailable"
+class = "none"
+summary = "The remedy host needs the agent tier service to decide what an agent may do and it is not running, so no remedy is offered."
+explanation_key = "error.remedies_host.tiers_unavailable"
+params = []
+remedy = "Enable the agent tiers service and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.self_test_failed"
+class = "none"
+summary = "A remedy's self-test failed against the rehearsal world, so the remedy service reports itself unhealthy."
+explanation_key = "error.remedies_host.self_test_failed"
+params = []
+remedy = "Read the remedy names in the message, fix or withdraw the failing remedy and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.wrong_tenant"
+class = "none"
+summary = "The caller named a tenant other than the site's own, so the remedy request is refused and audited."
+explanation_key = "error.remedies_host.wrong_tenant"
+params = []
+remedy = "Send the request to the site of the tenant concerned."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.not_an_agent"
+class = "none"
+summary = "Only a registered agent may ask for a remedy, and the caller is not one, so the request is refused and audited."
+explanation_key = "error.remedies_host.not_an_agent"
+params = []
+remedy = "Register the agent and give it a tier before it asks for remedies."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.no_world"
+class = "none"
+summary = "No world adapter is installed on this site, so a remedy can be listed but not planned, applied or undone."
+explanation_key = "error.remedies_host.no_world"
+params = []
+remedy = "Install the module that provides the site's world (jobs, cache, index, quarantine and the rest) and restart."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.world_unavailable"
+class = "none"
+summary = "The site's world could not be opened for the remedy (live or rehearsal), so nothing was changed."
+explanation_key = "error.remedies_host.world_unavailable"
+params = []
+remedy = "Check the site's services and repeat."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.apply_closed"
+class = "none"
+summary = "This remedy cannot be applied directly: its tier needs the fix pipeline, which is not installed, so it is refused."
+explanation_key = "error.remedies_host.apply_closed"
+params = []
+remedy = "Enable the fix pipeline service, or use a remedy of a tier that applies directly."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.audit_unavailable"
+class = "none"
+summary = "The audit chain did not accept the intent record, so the remedy was neither applied nor undone and no plan is returned."
+explanation_key = "error.remedies_host.audit_unavailable"
+params = []
+remedy = "Check that the audit chain is running and writable, then repeat."
+since = "0.1.0"
+
+[[entry]]
+code = "remedies_host.internal"
+class = "none"
+summary = "The remedy host failed in a way it does not describe to the caller; nothing was changed."
+explanation_key = "error.remedies_host.internal"
+params = []
+remedy = "Repeat; if it persists, quote the code to your administrator and check the site log."
+since = "0.1.0"

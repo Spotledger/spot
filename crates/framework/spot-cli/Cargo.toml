@@ -472,6 +472,23 @@ spot-sync-process = { path = "../spot-sync-process" }
 
 # Data policy and residency hosting (WP-SEC-05); the sync health view the management executor returns.
 spot-data-policy = { path = "../spot-data-policy" }
+
+# AI hosting. The LLM service (WP-AI-03.T5): bring-your-own-key providers behind the router, every
+# request through the egress transport. The remedy catalogue and the fix pipeline hosts
+# (WP-AI-07.T2, WP-AI-08.T4) with the pipeline's PostgreSQL journal. The retrieval service
+# (WP-AI-10.T3) over the pgvector store (WP-AI-10.T2) and the agent memory service (WP-AI-09.T3)
+# over its per-tenant memory database.
+spot-llm = { path = "../spot-llm", features = ["egress"] }
+spot-llm-anthropic = { path = "../spot-llm-anthropic" }
+spot-llm-openai = { path = "../spot-llm-openai" }
+spot-llm-router = { path = "../spot-llm-router" }
+spot-remedies = { path = "../spot-remedies" }
+spot-fix-pipeline = { path = "../spot-fix-pipeline" }
+spot-fix-pipeline-pg = { path = "../../backends/spot-fix-pipeline-pg" }
+spot-retrieval = { path = "../spot-retrieval" }
+spot-retrieval-pg = { path = "../../backends/spot-retrieval-pg" }
+spot-agent-memory = { path = "../spot-agent-memory" }
+spot-agent-memory-pg = { path = "../../backends/spot-agent-memory-pg" }
 # The journal access surface (WP-JRN-09.T4): the journal_reader grants, the manifest-gated reader and
 # its PostgreSQL store; the signed manifest's verifying keys and the journal object store it reads.
 # The journal wiring (WP-RTB-01.T9): the segment and fork types the audit options take, the empty
@@ -492,6 +509,12 @@ spot-sync-catchup = { path = "../spot-sync-catchup" }
 [target.'cfg(windows)'.dependencies]
 # Stop and start of the Windows service for an update (`spot_winsvc::service::install`).
 spot-winsvc = { path = "../spot-winsvc" }
+
+[features]
+# The S3-compatible and Azure Blob file providers (WP-PLT-10.T8). Off by default: the default
+# build pulls no cloud client.
+files-s3 = ["spot-files/s3"]
+files-azure = ["spot-files/azure"]
 
 [dev-dependencies]
 # tests/fleet_loop: the control plane library the fleet rig drives, and the base64 of its tokens.
@@ -519,7 +542,7 @@ tempfile = "3"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 # Scratch app directories of the dev server's tests (WP-DX-02.T2).
 spot-node-role-pg = { path = "../../backends/spot-node-role-pg", features = ["testing"] }
-tokio = { version = "1", features = ["net", "io-util"] }
+tokio = { version = "1", features = ["net", "io-util", "test-util"] }
 spot-postgres = { path = "../../backends/spot-postgres", features = ["testing"] }
 spot-activity = { path = "../spot-activity" }
 # tests/process.rs: a direct pool per tenant, the model text parser, and `NodeId` for reading

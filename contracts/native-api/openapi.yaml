@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Spotledger native API
-  version: 0.26.1
+  version: 0.27.0
   summary: The only way clients reach the Spotledger runtime (ADR-09, ADR-15).
   description: |
     Contract v0.4 (WP-CON-03, ADR-055). Normative rules that JSON Schema cannot express are
@@ -7361,7 +7361,8 @@ x-spot-mcp:
   document: mcp.md
   endpoint: POST /mcp
   revision: "2026-07-28"
-  note: The Model Context Protocol endpoint is JSON-RPC, not REST; it has no operation in `paths` and is specified by `mcp.md`.
+  extension_tools: [retrieve, recall_memory, remedy_list, remedy_dry_run, remedy_apply, remedy_undo]
+  note: The Model Context Protocol endpoint is JSON-RPC, not REST; it has no operation in `paths` and is specified by `mcp.md`. `extension_tools` lists the tools a hosting service adds to `tools/list` (contract 0.27.0, `mcp.md` section 5); each appears only for a principal that may call it.
 
 x-spot-error-codes:
   # code: [HTTP status, retryable, meaning]

@@ -3,10 +3,13 @@
 //!
 //! # What is hosted
 //!
-//! `[services.secrets]` of `common.toml` names a **local key file** (`provider = "local"`, the
-//! only provider today; [`KeyProvider`] stays the seam for a KMS). [`open`] builds the site's
-//! [`SecretsHost`] from it: the key provider ([`LocalKeyring`]) and the [`SecretBox`] the
-//! document engine seals, opens and blind-indexes with. The host hands the vault to the engine
+//! `[services.secrets]` of `common.toml` names the key provider: a **local key file**
+//! (`provider = "local"`, the default) or a customer-managed key in a KMS (`provider = "kms"`
+//! with `[services.secrets.kms]`, see [`kms`]). [`open`] builds the site's [`SecretsHost`] from
+//! it: the key provider (a [`KeyProvider`] trait object: [`LocalKeyring`] or the KMS provider)
+//! and the [`SecretBox`] the document engine seals, opens and blind-indexes with. The KMS is
+//! reached through the site's egress guard ([`Runtime::guard`]); a KMS address the policy does
+//! not allow stops the site from starting with the entry to add. The host hands the vault to the engine
 //! at site construction (`host.rs` calls [`open`] before `Engine::new`), so a sealed value is
 //! written in the same transaction as its record.
 //!
@@ -55,14 +58,15 @@ use tokio::sync::watch;
 // the path is spelled out).
 #[path = "secrets/kms.rs"]
 pub mod kms;
+#[path = "secrets/provider.rs"]
+mod provider;
 #[path = "secrets/rotate.rs"]
 mod rotate;
 #[path = "secrets/scan.rs"]
 mod scan;
 
-pub use rotate::{
-    RotationLock, SweepTotals, add_version, open_engine, retire_version, sweep_once,
-};
+pub use provider::Runtime;
+pub use rotate::{RotationLock, SweepTotals, add_version, open_engine, retire_version, sweep_once};
 pub use scan::{FieldVersions, rows_on_old_versions, scan};
 
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
@@ -89,6 +93,9 @@ pub mod codes {
     pub const KEK_FILE_UNSAFE: &str = "secrets_host.kek_file_unsafe";
     /// The key provider could not wrap and unwrap its canary.
     pub const CANARY_FAILED: &str = "secrets_host.canary_failed";
+    /// The operation does not apply to the configured provider (a key file operation under
+    /// `provider = "kms"`).
+    pub const PROVIDER_UNSUPPORTED: &str = "secrets_host.provider_unsupported";
     /// A stored value names a key version the key file does not hold.
     pub const KEY_VERSION_MISSING: &str = "secrets_host.key_version_missing";
     /// Another rotation holds the key file's lock.
@@ -118,13 +125,16 @@ fn cause(error: &SecretError) -> &'static str {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
-    /// The key provider. Only `local` (a key file) exists.
+    /// The key provider: `local` (a key file, the default) or `kms`.
     #[serde(default = "local")]
     pub provider: String,
     /// The key file: an absolute path outside the site folders, with `{site}` for the site's
     /// name. It is created by `spot secrets init`, never by the server.
     #[serde(default)]
     pub kek_file: Option<PathBuf>,
+    /// `[services.secrets.kms]`, required by `provider = "kms"` and refused otherwise.
+    #[serde(default)]
+    pub kms: Option<kms::KmsSettings>,
 }
 
 fn local() -> String {
@@ -142,12 +152,17 @@ impl Settings {
             return Ok(None);
         };
         match table.clone().try_into::<Settings>() {
-            Ok(settings) => Ok(Some(settings)),
+            Ok(settings) => {
+                settings.check()?;
+                Ok(Some(settings))
+            }
             Err(e) => {
                 let message = e.message();
                 // `unknown field` and `missing field` quote key names only; anything else can
                 // quote the value, and the value may be a path an operator keeps private.
-                let why = if message.starts_with("unknown field") {
+                let why = if message.starts_with("unknown field")
+                    || message.starts_with("missing field")
+                {
                     message.to_owned()
                 } else {
                     "a value has the wrong type".to_owned()
@@ -157,6 +172,32 @@ impl Settings {
                     format!("services.secrets: {why}"),
                 ))
             }
+        }
+    }
+
+    /// The settings as a whole: a known provider, and `[services.secrets.kms]` exactly when the
+    /// provider is `kms`.
+    ///
+    /// # Errors
+    ///
+    /// `secrets_host.settings_invalid`, naming keys and never values; the KMS table's own bounds
+    /// are checked with `secrets_kms_host.settings_invalid`.
+    pub fn check(&self) -> Result<()> {
+        match (self.provider.as_str(), &self.kms) {
+            ("local", None) => Ok(()),
+            ("local", Some(_)) => Err(refuse(
+                codes::SETTINGS_INVALID,
+                "services.secrets.kms is set but services.secrets.provider is `local`; set provider = \"kms\" or remove the table",
+            )),
+            ("kms", Some(kms)) => kms.validate(),
+            ("kms", None) => Err(refuse(
+                codes::SETTINGS_INVALID,
+                "services.secrets.provider is `kms` but [services.secrets.kms] is not set",
+            )),
+            _ => Err(refuse(
+                codes::SETTINGS_INVALID,
+                "services.secrets.provider: use `local` or `kms`",
+            )),
         }
     }
 
@@ -170,7 +211,7 @@ impl Settings {
         if self.provider != "local" {
             return Err(refuse(
                 codes::KEK_UNSET,
-                "services.secrets.provider: only `local` is supported",
+                "services.secrets.provider is not `local`: there is no key file (a `kms` provider keeps its key in the KMS)",
             ));
         }
         let Some(template) = &self.kek_file else {
@@ -235,7 +276,11 @@ pub fn check_key_file(path: &Path) -> Result<()> {
     let meta = std::fs::metadata(path).map_err(|e| {
         refuse(
             codes::KEK_FILE_UNUSABLE,
-            format!("the key file {} cannot be read ({})", path.display(), e.kind()),
+            format!(
+                "the key file {} cannot be read ({})",
+                path.display(),
+                e.kind()
+            ),
         )
     })?;
     if !meta.is_file() {
@@ -301,9 +346,13 @@ const CANARY_AAD: &[u8] = b"spot-secrets/canary";
 /// Debug output shows the site, the file and the current version; never a key.
 pub struct SecretsHost {
     site: String,
+    /// The key file (local) or the seed file (kms): what messages name.
     path: PathBuf,
-    keyring: Arc<LocalKeyring>,
-    vault: Arc<SecretBox<Arc<LocalKeyring>>>,
+    provider: Arc<dyn KeyProvider>,
+    vault: Arc<dyn SecretVault>,
+    /// The key file's keyring, for the operations only a key file has (rotate, retire).
+    local: Option<Arc<LocalKeyring>>,
+    kms: Option<Arc<kms::KmsHost>>,
     legacy: usize,
 }
 
@@ -311,8 +360,9 @@ impl fmt::Debug for SecretsHost {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SecretsHost")
             .field("site", &self.site)
-            .field("kek_file", &self.path)
-            .field("current_version", &self.keyring.current().version)
+            .field("provider", &self.provider_name())
+            .field("file", &self.path)
+            .field("current_version", &self.provider.current().version)
             .finish_non_exhaustive()
     }
 }
@@ -323,17 +373,43 @@ impl SecretsHost {
         self.vault.clone()
     }
 
-    /// The key provider (for the commands that rotate and retire).
-    pub fn keyring(&self) -> &Arc<LocalKeyring> {
-        &self.keyring
+    /// The key provider, whichever kind it is.
+    pub fn keyring(&self) -> &Arc<dyn KeyProvider> {
+        &self.provider
+    }
+
+    /// `local` or `kms`.
+    pub fn provider_name(&self) -> &'static str {
+        if self.kms.is_some() { "kms" } else { "local" }
+    }
+
+    /// The KMS host, under `provider = "kms"` (its service and readiness check are registered
+    /// by [`register`]).
+    pub fn kms_host(&self) -> Option<&Arc<kms::KmsHost>> {
+        self.kms.as_ref()
+    }
+
+    /// The key file's keyring: only a local provider has one.
+    ///
+    /// # Errors
+    ///
+    /// `secrets_host.provider_unsupported` under `provider = "kms"`, where the key version
+    /// lives in the KMS (`spot secrets-kms` rewraps the seed after a KMS-side rotation).
+    pub fn local(&self) -> Result<&Arc<LocalKeyring>> {
+        self.local.as_ref().ok_or_else(|| {
+            refuse(
+                codes::PROVIDER_UNSUPPORTED,
+                "the provider is `kms`: key versions are rotated in the KMS; see `spot secrets-kms`",
+            )
+        })
     }
 
     /// The version new values are sealed under.
     pub fn current_version(&self) -> u32 {
-        self.keyring.current().version
+        self.provider.current().version
     }
 
-    /// The key file.
+    /// The key file (local) or the seed file (kms).
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -355,13 +431,13 @@ impl SecretsHost {
     ///
     /// `secrets_host.canary_failed`.
     pub async fn canary(&self) -> Result<()> {
-        canary_of(&*self.keyring, &self.path).await
+        canary_of(&*self.provider, &self.path).await
     }
 
     /// The key versions the file knows: the current one, the others that still hold key
     /// material, and the retired ones.
     pub async fn versions(&self) -> Versions {
-        let current = self.keyring.current();
+        let current = self.provider.current();
         let mut held = Vec::new();
         let mut retired = Vec::new();
         for version in 1..=current.version {
@@ -369,7 +445,7 @@ impl SecretsHost {
                 id: current.id.clone(),
                 version,
             };
-            match self.keyring.index_key(&key).await {
+            match self.provider.index_key(&key).await {
                 Ok(_) => held.push(version),
                 Err(SecretError::RetiredKey { .. }) => retired.push(version),
                 Err(_) => {}
@@ -394,7 +470,10 @@ pub async fn canary_of(provider: &dyn KeyProvider, path: &Path) -> Result<()> {
     let fail = |why: &str| {
         refuse(
             codes::CANARY_FAILED,
-            format!("the key file {} failed its start-up check ({why})", path.display()),
+            format!(
+                "the key file {} failed its start-up check ({why})",
+                path.display()
+            ),
         )
     };
     let current = provider.current();
@@ -436,7 +515,8 @@ pub struct Versions {
 }
 
 /// Builds the site's [`SecretsHost`] from `[services.secrets]`, or `None` when the host has no
-/// such table.
+/// such table. A KMS provider is built with [`Runtime::production`]; a host that has the site's
+/// egress guard calls [`open_with`].
 ///
 /// # Errors
 ///
@@ -446,29 +526,79 @@ pub async fn open(
     loaded: &config::Loaded,
     site: &config::Site,
 ) -> Result<Option<Arc<SecretsHost>>> {
+    open_with(root, loaded, site, &Runtime::production()).await
+}
+
+/// [`open`] with the process's clock, entropy and egress guard given.
+///
+/// # Errors
+///
+/// As [`open`].
+pub async fn open_with(
+    root: &Path,
+    loaded: &config::Loaded,
+    site: &config::Site,
+    runtime: &Runtime,
+) -> Result<Option<Arc<SecretsHost>>> {
     let Some(settings) = Settings::from_common(&loaded.common)? else {
         return Ok(None);
     };
-    let path = settings.kek_path(root, &site.site, loaded.sites.len())?;
-    host_at(&path, site).await.map(Some)
+    let legacy = site.credentials.len() + site.api_keys.len();
+    open_provider(
+        &settings,
+        root,
+        &site.site,
+        loaded.sites.len(),
+        legacy,
+        runtime,
+    )
+    .await
+    .map(Some)
+}
+
+/// The host for `settings`, whichever provider they name.
+///
+/// # Errors
+///
+/// As [`open`].
+pub async fn open_provider(
+    settings: &Settings,
+    root: &Path,
+    site: &str,
+    sites: usize,
+    legacy: usize,
+    runtime: &Runtime,
+) -> Result<Arc<SecretsHost>> {
+    settings.check()?;
+    if settings.provider == "kms" {
+        return provider::kms_host(settings, root, site, sites, legacy, runtime).await;
+    }
+    let path = settings.kek_path(root, site, sites)?;
+    host_at(&path, site, legacy).await
 }
 
 /// The host over the key file at `path` (already a vetted path).
-async fn host_at(path: &Path, site: &config::Site) -> Result<Arc<SecretsHost>> {
+async fn host_at(path: &Path, site: &str, legacy: usize) -> Result<Arc<SecretsHost>> {
     check_key_file(path)?;
     let keyring = LocalKeyring::open(path).await.map_err(|e| {
         refuse(
             codes::KEK_FILE_UNUSABLE,
-            format!("the key file {} is not usable ({})", path.display(), cause(&e)),
+            format!(
+                "the key file {} is not usable ({})",
+                path.display(),
+                cause(&e)
+            ),
         )
     })?;
     let keyring = Arc::new(keyring);
     let host = SecretsHost {
-        site: site.site.clone(),
+        site: site.to_owned(),
         path: path.to_path_buf(),
+        provider: keyring.clone(),
         vault: Arc::new(SecretBox::new(keyring.clone())),
-        keyring,
-        legacy: site.credentials.len() + site.api_keys.len(),
+        local: Some(keyring),
+        kms: None,
+        legacy,
     };
     host.canary().await?;
     Ok(Arc::new(host))
@@ -515,7 +645,7 @@ pub async fn verify_values(
                 id: id.clone(),
                 version: *version,
             };
-            if host.keyring.index_key(&key).await.is_err() {
+            if host.provider.index_key(&key).await.is_err() {
                 return Err(refuse(
                     codes::KEY_VERSION_MISSING,
                     format!(
@@ -574,16 +704,20 @@ pub fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
         }
         let env = ctx.env()?;
         let service = SecretsService {
-            host,
+            host: Arc::clone(&host),
             backend: env.backend.clone(),
             catalog: env.permission.catalog.clone(),
             meta: env.permission.meta.clone(),
         };
+        // Under a KMS the provider's own required service goes first: its start-up check says
+        // what is wrong with the key before the stored values are read.
+        if let Some(kms) = host.kms_host() {
+            ctx.add(kms.service());
+        }
         ctx.add(Arc::new(service));
     }
     Ok(())
 }
-
 
 // ---------------------------------------------------------------------------------------------
 // What the commands use besides the above
@@ -638,7 +772,11 @@ pub async fn init_key_file(path: &Path, site: &str) -> Result<()> {
         .map_err(|e| {
             refuse(
                 codes::KEK_FILE_UNUSABLE,
-                format!("the key file {} was not created ({})", path.display(), cause(&e)),
+                format!(
+                    "the key file {} was not created ({})",
+                    path.display(),
+                    cause(&e)
+                ),
             )
         })
 }
@@ -687,7 +825,12 @@ impl OperatorAudit {
     pub fn required(&self, kind: &str, count: u64, reason: Option<&str>) -> Result<()> {
         self.recorder
             .required(&self.record(kind, count, reason))
-            .map_err(|_| refuse(codes::AUDIT_UNAVAILABLE, "the audit record could not be stored"))
+            .map_err(|_| {
+                refuse(
+                    codes::AUDIT_UNAVAILABLE,
+                    "the audit record could not be stored",
+                )
+            })
     }
 
     /// Records `kind`; a failure is logged by the recorder and does not change the outcome (the

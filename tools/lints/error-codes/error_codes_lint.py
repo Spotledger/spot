@@ -103,6 +103,9 @@ NON_CODE_LITERALS = frozenset(
         "hub.key",
         # TOML table names the l3 cases strip, and a stored attempt result (not an error)
         "services.secrets",
+        # config table paths named in the file provider validation messages (WP-PLT-10.T8), not codes
+        "services.files.azure",
+        "services.files.s3",
         "services.signin_throttle",
         "login.failure_counted",
         "journal.admin",
@@ -129,6 +132,8 @@ NON_CODE_LITERALS = frozenset(
         "app.requires_host",
         # file names whose extension is not one of FILE_SUFFIXES
         "json.tmp",
+        "retrieval.cursor",
+        "cursor.tmp",
         "site.toml.new",
         "apply_fatal.csv",
         "server.log",

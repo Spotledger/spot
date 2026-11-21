@@ -104,6 +104,12 @@
 //! workflow runs with no database and no network. A real PostgreSQL-backed store plugs in
 //! behind the same trait; that run is the generic `*-pg` gating of a later task.
 //!
+//! # The registry and the destroyer
+//!
+//! [`registry`] reads the per-sandbox records (`sites/<name>/sandbox.toml`) and destroys a
+//! sandbox (database through the [`registry::DatabaseAdmin`] port, then folder, idempotently).
+//! `spot sandbox` and the hosted TTL reaper share it (WP-ALM-05.T6).
+//!
 //! Time is always an argument (`i64` Unix microseconds, or `u64` milliseconds for the tenant
 //! id), nothing here reads a wall clock, and no error carries a value.
 
@@ -114,6 +120,7 @@ pub mod error;
 pub mod mask;
 pub mod plan;
 pub mod ports;
+pub mod registry;
 pub mod scan;
 pub mod tables;
 pub mod workflow;

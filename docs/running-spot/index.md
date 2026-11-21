@@ -53,6 +53,14 @@ explains the host and its services; the pages below go deeper into one thing eac
 - [Print](print.md): rendering a document to PDF as the caller, with the site's print templates.
 - [File uploads](file-uploads.md): uploads and downloads through `/api/v1/files` and the file provider.
 
+## AI hosting
+
+- [The LLM service](llm.md): models under the tenant's policy: bring-your-own keys, the allowed-endpoint list, budgets and the send record.
+- [Remedies](remedies.md): the catalogue an agent repairs a site with, dry run and undo as audited operations.
+- [The fix pipeline](fix-pipeline.md): the one path by which an agent changes a site: rehearse, apply, verify, roll back.
+- [Retrieval](retrieval.md): the permission-aware vector index and the `retrieve` tool, per tenant and off by default.
+- [Agent memory](agent-memory.md): the separate per-tenant memory database, its write filter and its retention.
+
 ## The app store
 
 - [The app store server](store-server.md): the operator guide for `spot-store-server`, a separate deployable.

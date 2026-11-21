@@ -45,6 +45,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use spot_coordinator::{Coordinator, Lease};
 use spot_core::Clock;
+use spot_sandbox::registry::{self as shared, AdminFuture, DatabaseAdmin};
+pub use spot_sandbox::registry::{Destroyed, Entry, Listing};
 use tokio::sync::watch;
 
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
@@ -54,10 +56,10 @@ use crate::{Error, Result};
 pub const NAME: &str = "sandbox_reaper";
 /// After the modules it does not depend on; the registry's convention is 1000 and above.
 pub const ORDER: u32 = 1950;
-/// The file that marks a site folder as a sandbox (the same file `spot sandbox` writes).
-pub const RECORD_FILE: &str = "sandbox.toml";
-/// A creation that never finished is reaped after this many seconds.
-pub const STALE_CREATING: i64 = 3_600;
+// The file that marks a site folder as a sandbox (the same file `spot sandbox` writes).
+pub use spot_sandbox::registry::RECORD_FILE;
+// A creation that never finished is reaped after this many seconds.
+pub use spot_sandbox::registry::STALE_CREATING;
 /// After this many failed passes in a row a sandbox is skipped for [`STUCK_FOR`].
 pub const STUCK_AFTER: u32 = 3;
 /// How long a stuck sandbox is skipped, in seconds.
@@ -112,48 +114,11 @@ impl Settings {
 
 // ---- the registry and the destroyer (ports) ----
 
-/// One sandbox of the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Entry {
-    /// The sandbox's site name.
-    pub name: String,
-    /// The site it was cloned from.
-    pub source: String,
-    /// Its database.
-    pub database: String,
-    /// When it was created, Unix seconds.
-    pub created_at: i64,
-    /// When it expires, Unix seconds; 0 or less means "no expiry".
-    pub expires_at: i64,
-    /// `creating` or `active`.
-    pub state: String,
-    /// Marked to be kept: never reaped.
-    pub keep: bool,
-}
-
-/// What the registry holds.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Listing {
-    /// Every sandbox of the root, of every source (the safety rules look at all of them).
-    pub entries: Vec<Entry>,
-    /// The databases of the root's real (non-sandbox) sites: never destroyed.
-    pub real_databases: BTreeSet<String>,
-}
-
 /// The sandbox registry.
 #[async_trait]
 pub trait Registry: Send + Sync {
     /// Lists the registry. An error is a reason code, never a path.
     async fn list(&self) -> std::result::Result<Listing, String>;
-}
-
-/// What destroying a sandbox found.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Destroyed {
-    /// The database or the folder was there and is now gone.
-    Gone,
-    /// Neither was there: someone finished the job already.
-    AlreadyGone,
 }
 
 /// Destroys one sandbox, idempotently.
@@ -495,21 +460,8 @@ pub fn span(seconds: i64) -> String {
 }
 
 // ---- the real registry and destroyer: the files `spot sandbox` writes ----
-
-/// A sandbox record as `spot sandbox create` writes it. Lenient on purpose: a record the reaper
-/// cannot read is left alone, and a future `keep` flag is honoured.
-#[derive(Deserialize)]
-struct RecordFile {
-    source: String,
-    database: String,
-    created_at: i64,
-    #[serde(default)]
-    expires_at: i64,
-    #[serde(default)]
-    state: String,
-    #[serde(default)]
-    keep: bool,
-}
+// The reading and the destroying live in `spot_sandbox::registry` (WP-ALM-05.T6), shared with
+// the `spot sandbox` command; this module only adapts them to the ports.
 
 /// The registry over `<root>/sites/*/sandbox.toml`.
 pub struct FileRegistry {
@@ -532,40 +484,8 @@ impl FileRegistry {
 #[async_trait]
 impl Registry for FileRegistry {
     async fn list(&self) -> std::result::Result<Listing, String> {
-        let sites = self.root.join("sites");
-        let mut entries = Vec::new();
-        let Ok(dirs) = std::fs::read_dir(&sites) else {
-            return Ok(Listing {
-                entries,
-                real_databases: self.real_databases.clone(),
-            });
-        };
-        for dir in dirs.flatten() {
-            let Some(name) = dir.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-            let Ok(text) = std::fs::read_to_string(dir.path().join(RECORD_FILE)) else {
-                continue;
-            };
-            // A record that does not parse is not a registry row: it is left alone.
-            let Ok(record) = toml::from_str::<RecordFile>(&text) else {
-                continue;
-            };
-            entries.push(Entry {
-                name,
-                source: record.source,
-                database: record.database,
-                created_at: record.created_at,
-                expires_at: record.expires_at,
-                state: record.state,
-                keep: record.keep,
-            });
-        }
-        entries.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(Listing {
-            entries,
-            real_databases: self.real_databases.clone(),
-        })
+        // A record that does not parse is not a registry row: it is left alone.
+        Ok(shared::list_entries(&self.root, &self.real_databases))
     }
 }
 
@@ -583,60 +503,42 @@ impl PgDestroyer {
     }
 }
 
-/// `name` as a quoted identifier when it is a plain storage name.
-fn plain(name: &str) -> Option<String> {
-    let ok = !name.is_empty()
-        && name.len() <= 63
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
-    ok.then(|| format!("\"{name}\""))
+/// The maintenance connection as the library's [`DatabaseAdmin`] port.
+struct PgAdmin<'a>(&'a spot_postgres::PgConfig);
+
+impl DatabaseAdmin for PgAdmin<'_> {
+    fn drop_database_if_exists<'a>(&'a self, database: &'a str) -> AdminFuture<'a, bool> {
+        Box::pin(async move {
+            // The name was checked by the library: plain, `sandbox_` prefix.
+            let admin = self.0.clone().with_dbname("postgres");
+            let backend = spot_postgres::PgBackend::connect(admin)
+                .await
+                .map_err(|_| "database_unreachable")?;
+            let client = backend
+                .pool()
+                .get()
+                .await
+                .map_err(|_| "database_unreachable")?;
+            let existed = client
+                .query_opt("SELECT 1 FROM pg_database WHERE datname = $1", &[&database])
+                .await
+                .map_err(|_| "database_unreachable")?
+                .is_some();
+            client
+                .batch_execute(&format!(
+                    "DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)"
+                ))
+                .await
+                .map_err(|_| "drop_failed")?;
+            Ok(existed)
+        })
+    }
 }
 
 #[async_trait]
 impl Destroyer for PgDestroyer {
     async fn destroy(&self, entry: &Entry) -> std::result::Result<Destroyed, &'static str> {
-        // The record names the database; refuse anything that is not a plain sandbox database
-        // and any site name that is not a plain folder name.
-        let quoted = plain(&entry.database).ok_or("invalid_database")?;
-        if !entry.database.starts_with("sandbox_") {
-            return Err("not_a_sandbox_database");
-        }
-        if spot_core::SiteId::new(&entry.name).is_err() {
-            return Err("invalid_site");
-        }
-        let admin = self.admin.clone().with_dbname("postgres");
-        let backend = spot_postgres::PgBackend::connect(admin)
-            .await
-            .map_err(|_| "database_unreachable")?;
-        let client = backend
-            .pool()
-            .get()
-            .await
-            .map_err(|_| "database_unreachable")?;
-        let existed = client
-            .query_opt(
-                "SELECT 1 FROM pg_database WHERE datname = $1",
-                &[&entry.database],
-            )
-            .await
-            .map_err(|_| "database_unreachable")?
-            .is_some();
-        client
-            .batch_execute(&format!("DROP DATABASE IF EXISTS {quoted} WITH (FORCE)"))
-            .await
-            .map_err(|_| "drop_failed")?;
-        let dir = self.root.join("sites").join(&entry.name);
-        let folder = dir.exists();
-        if folder {
-            // The record is inside: removing the folder removes the registry row last.
-            std::fs::remove_dir_all(&dir).map_err(|_| "folder_not_removed")?;
-        }
-        Ok(if existed || folder {
-            Destroyed::Gone
-        } else {
-            Destroyed::AlreadyGone
-        })
+        shared::destroy_sandbox(&self.root, &PgAdmin(&self.admin), entry).await
     }
 }
 

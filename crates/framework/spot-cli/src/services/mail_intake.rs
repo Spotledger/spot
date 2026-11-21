@@ -35,12 +35,15 @@ use spot_mail_intake::{CredentialSource, CursorStore, GuardedImapFetcher, Intake
 use spot_mail_intake_pg::{PgCursorStore, PgSeenStore};
 use tokio::sync::watch;
 
+use crate::services::files::{FileUpload, Files};
 use crate::services::secrets::SecretsHost;
 use crate::services::{CheckFuture, Level, RunFuture, Service, SiteCtx};
 use crate::{Error, Result};
 
 #[path = "mail_intake/adapters.rs"]
 pub mod adapters;
+#[path = "mail_intake/attachments.rs"]
+pub mod attachments;
 #[path = "mail_intake/host.rs"]
 pub mod host;
 #[path = "mail_intake/settings.rs"]
@@ -162,14 +165,21 @@ pub async fn register(ctx: &mut SiteCtx<'_>) -> Result<()> {
     let site = SiteId::new(&site_name).map_err(|e| Error(e.to_string()))?;
     let clock = Arc::clone(ctx.clock());
 
-    let attachments: Arc<dyn sink::AttachmentWriter> = Arc::new(NoAttachments);
+    // The files service (ORDER 900) is a port when the site serves files; without it an account
+    // that asks for `store_attachments` is reported invalid and the others run.
+    let attachments: Arc<dyn sink::AttachmentWriter> = match ctx.port::<Files>() {
+        Some(files) => Arc::new(attachments::FilesAttachments::new(
+            site.clone(),
+            files as Arc<dyn FileUpload>,
+        )),
+        None => Arc::new(NoAttachments),
+    };
     let (mut ready, mut invalid) = resolve_all(&table);
     ready.retain(|entry| {
         if entry.target.store_attachments && !attachments.supported() {
             invalid.push(Invalid {
                 name: entry.account.name.clone(),
-                reason: "store_attachments is not available: the files service has no in-process \
-                         upload as a user"
+                reason: "store_attachments needs the files service, which this site does not serve"
                     .to_owned(),
             });
             return false;

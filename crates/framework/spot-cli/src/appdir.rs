@@ -53,10 +53,11 @@ fn controller_problems(text: &str) -> Vec<String> {
     problems
 }
 
-/// Removes the keys the manifest parser does not know from a copy of `app.toml`, so the
-/// remaining content is validated by `spot-manifest` while host-level keys (the controller
-/// reference) are validated here.
-fn manifest_text(text: &str) -> String {
+/// The text of `app.toml` as `spot-manifest` reads it: the keys the manifest parser does not know
+/// (the host-level `controller` reference) are removed from a copy, so the remaining content is
+/// validated by `spot-manifest` while host-level keys are validated here. Text that does not
+/// parse as TOML comes back unchanged (the manifest parser reports it).
+pub fn manifest_text(text: &str) -> String {
     let Ok(mut table) = text.parse::<toml::Table>() else {
         return text.to_owned();
     };
@@ -134,8 +135,23 @@ pub fn load(dir: &Path) -> Result<AppSource> {
 }
 
 /// The embedded platform app's definitions.
+///
+/// The platform app's own list does not carry the file record (`file`): the files service owns
+/// it, and every `attach` field links to it (`spot-meta` refuses an `attach` field without it).
+/// A site that serves the embedded platform app gets it here, as a site whose `apps/platform`
+/// directory is on disk does from `doctypes/file.toml`.
 pub fn platform_definitions() -> Result<Vec<Definition>> {
-    spot_platform_app::definitions().map_err(|e| Error(e.to_string()))
+    let mut definitions = spot_platform_app::definitions().map_err(|e| Error(e.to_string()))?;
+    if !definitions.iter().any(|d| d.name == "file") {
+        definitions.push(
+            Definition::parse(
+                "file.toml",
+                include_str!("../../../../apps/platform/doctypes/file.toml"),
+            )
+            .map_err(|e| Error(e.to_string()))?,
+        );
+    }
+    Ok(definitions)
 }
 
 /// The `[app] controller` reference of the app at `dir`, when its manifest names one.

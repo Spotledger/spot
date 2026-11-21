@@ -25,6 +25,10 @@ use spot_app_api::prelude::RecordId;
 /// The port the bundled layout of `PgLayout::default()` uses.
 const BUNDLED_PORT: u16 = 5433;
 
+/// The tests below share the bundled port (one of them listens on it, the others need it free),
+/// so they run one at a time.
+static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn text(output: &Output) -> String {
     format!(
         "{}{}",
@@ -167,6 +171,7 @@ async fn a_site_without_a_bundled_layout_is_refused_and_nothing_is_written() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_target_inside_the_bundled_server_directories_is_refused() {
+    let _serial = PORT.lock().await;
     if port_in_use() {
         println!("SKIPPED: something already listens on port {BUNDLED_PORT}");
         return;
@@ -198,6 +203,7 @@ async fn a_target_inside_the_bundled_server_directories_is_refused() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_running_bundled_instance_is_refused_and_its_files_are_never_copied() {
+    let _serial = PORT.lock().await;
     let Some(rig) = Rig::new(None).await else {
         println!("SKIPPED: no PostgreSQL (set SPOT_TEST_PG_URL)");
         return;
@@ -241,6 +247,7 @@ fn bundled_root() -> Option<PathBuf> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_stopped_backup_of_the_bundled_instance_is_written_and_verifies_in_full() {
+    let _serial = PORT.lock().await;
     let Some(bundled) = bundled_root() else {
         println!(
             "SKIPPED: no bundled layout (set SPOT_TEST_PG_BIN to a root with bin/ and a stopped data/)"

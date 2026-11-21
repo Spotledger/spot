@@ -945,9 +945,24 @@ async fn an_unusable_schema_or_condition_is_refused_at_publish_with_the_node_and
     }
 }
 
-/// `pattern` is valid for the model but not enforceable by `validate_input`, so the triggers
-/// crate refuses it when the index is built. The publish port reports that refusal as
-/// `trigger_invalid` with no node: the current behaviour (kept as a test so a change is seen).
+/// `pattern` is enforced by the triggers crate (WP-BPM-02.T13, the `regex` crate), so a plain
+/// pattern publishes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_pattern_the_triggers_crate_enforces_is_published() {
+    let db = db_or_skip!();
+    let s = site(&db, "tf-pattern-ok").await;
+    let text = process_text(
+        "patterned_ok",
+        "trigger = \"manual\"\n\
+         input_schema = '{\"type\":\"object\",\"properties\":{\"supplier\":{\"type\":\"string\",\"pattern\":\"^[A-Za-z0-9 .-]+$\"}}}'",
+    );
+    s.publish("patterned_ok", text, None).await.unwrap();
+}
+
+/// `pattern` is valid for the model but not enforceable by `validate_input` when the `regex`
+/// crate cannot compile it (a look-ahead), so the triggers crate refuses it when the index is
+/// built. The publish port reports that refusal as `trigger_invalid` with no node: the current
+/// behaviour (kept as a test so a change is seen).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_schema_the_triggers_crate_cannot_enforce_is_refused_at_publish() {
     let db = db_or_skip!();
@@ -955,7 +970,7 @@ async fn a_schema_the_triggers_crate_cannot_enforce_is_refused_at_publish() {
     let text = process_text(
         "patterned",
         "trigger = \"manual\"\n\
-         input_schema = '{\"type\":\"object\",\"properties\":{\"supplier\":{\"type\":\"string\",\"pattern\":\"^[A-Za-z0-9 .-]+$\"}}}'",
+         input_schema = '{\"type\":\"object\",\"properties\":{\"supplier\":{\"type\":\"string\",\"pattern\":\"^(?=a)a+$\"}}}'",
     );
     let error = s.publish("patterned", text, None).await.unwrap_err();
     let VersionPortError::DefinitionInvalid(problems) = &error else {

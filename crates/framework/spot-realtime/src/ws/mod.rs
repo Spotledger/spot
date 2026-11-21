@@ -56,11 +56,15 @@ use spot_http::server::ConnectionLease;
 
 use crate::bus::RealtimeBus;
 
+pub mod limits;
 pub mod protocol;
 pub mod session;
 pub mod verifier;
 
+use limits::counters;
 use session::Shared;
+
+pub use limits::{ConnectionGate, ConnectionGuard, WsLimits};
 
 pub use protocol::{ClientMessage, MAX_FRAME_BYTES, MAX_ROOMS, SUBPROTOCOL, ServerMessage};
 pub use tokio_util::sync::CancellationToken;
@@ -106,12 +110,29 @@ pub fn router(
     verifier: Arc<dyn TokenVerifier>,
     config: WsConfig,
 ) -> axum::Router {
+    router_with(bus, verifier, config, WsLimits::default())
+}
+
+/// [`router`] with a [`WsLimits`]: the cap on open sockets (`WsLimits::default()` is none). The
+/// gate is checked before the upgrade, so a socket that never authenticates counts, and a
+/// refused upgrade is a `429 realtime.too_many_connections` with `Retry-After: 5`. The host keeps
+/// a clone of the gate to read the count.
+///
+/// (A `max_connections` field on [`WsConfig`] would break every struct-literal construction of it
+/// outside this crate, so the limits ride beside the config.)
+pub fn router_with(
+    bus: RealtimeBus,
+    verifier: Arc<dyn TokenVerifier>,
+    config: WsConfig,
+    limits: WsLimits,
+) -> axum::Router {
     // The cadence is clamped to the contract schema's minimum of 1 s.
     let shared = Arc::new(Shared {
         bus,
         verifier,
         heartbeat_seconds: config.heartbeat_seconds.max(1),
         shutdown: config.shutdown,
+        gate: limits.gate,
     });
     axum::Router::new().route("/api/v1/realtime", get(upgrade).with_state(shared))
 }
@@ -138,6 +159,13 @@ async fn upgrade(
             "The realtime endpoint upgrades only with the `spot.v1` subprotocol.",
         );
     }
+    // The cap, before the upgrade: the guard moves into the session, so the count covers the
+    // socket until it ends, and a failed upgrade drops it with the closure.
+    let Some(guard) = shared.gate.try_enter() else {
+        counters().reject_cap();
+        tracing::debug!("realtime upgrade refused: connection cap reached");
+        return too_many_connections(&site.request_id);
+    };
     let site_id = site.site;
     ws.protocols([SUBPROTOCOL])
         // The contract's 64 KiB frame bound, enforced by the socket itself: tungstenite
@@ -150,7 +178,7 @@ async fn upgrade(
             // The session keeps the server's connection lease, so `open_connections()` counts
             // the WebSocket until the session task ends.
             let lease = lease.map(|Extension(lease)| lease);
-            session::run(shared, site_id, socket, lease)
+            session::run(shared, site_id, socket, lease, guard)
         })
 }
 
@@ -162,8 +190,29 @@ fn offered_subprotocol(headers: &HeaderMap) -> Option<&str> {
         .find(|token| !token.is_empty())
 }
 
+/// The 429 envelope for an upgrade past the connection cap, with `Retry-After: 5`.
+fn too_many_connections(request_id: &RequestId) -> Response {
+    let envelope = ErrorEnvelope {
+        error: ErrorDetail {
+            code: "realtime.too_many_connections",
+            message:
+                "This site holds the most realtime connections it allows; reconnect with backoff."
+                    .to_owned(),
+            retryable: true,
+            request_id: request_id.as_str().to_owned(),
+        },
+    };
+    let mut response = (StatusCode::TOO_MANY_REQUESTS, Json(envelope)).into_response();
+    response.headers_mut().insert(
+        axum::http::header::RETRY_AFTER,
+        axum::http::HeaderValue::from_static("5"),
+    );
+    response
+}
+
 /// The 400 envelope for a request the realtime route does not describe.
 fn refuse(request_id: &RequestId, message: &'static str) -> Response {
+    counters().reject_bad_request();
     let envelope = ErrorEnvelope {
         error: ErrorDetail {
             code: "api.invalid_request",

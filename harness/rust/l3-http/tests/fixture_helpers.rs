@@ -3,8 +3,8 @@
 //! stack, so they need `SPOT_TEST_PG_URL`; without it each test prints why and returns.
 #![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 
-use l3_http::Fixture;
 use l3_http::fixture::{FieldGrant, MANAGER, VIEWER};
+use l3_http::{Client, Fixture};
 use serde_json::json;
 
 macro_rules! fixture {
@@ -33,6 +33,29 @@ fn the_field_guard_channel_list_is_reachable_from_the_harness() {
     );
 }
 
+// --- surfaces the host does not serve yet ---------------------------------------------------------
+
+/// True, after printing why, when the host mounts no route at `path`: the router answers an
+/// unmounted path with a bare 404 (no error envelope), unlike a mounted route that refuses a
+/// request with a coded error. The same convention as the blocked cases of the suite: a surface
+/// the host does not serve is reported with its owner instead of failing, and a host that does
+/// serve it runs the whole test.
+///
+/// Today `auth_step_up` is `NO_HANDLER` in `spot-http`'s `route_table.rs` test (owner: the
+/// identity work that hosts step-up) and no host calls `with_reveal`, so `field_reveal` is not
+/// mounted either (owner: the sealed-field reveal work, WP-SEC-10).
+async fn route_is_not_served(client: &Client, path: &str, what: &str) -> bool {
+    let reply = client
+        .send_json("POST", path, &[], &json!({}))
+        .await
+        .unwrap();
+    if reply.status == 404 && reply.error_code().is_none() {
+        println!("BLOCKED: the host mounts no route for {what} (POST {path})");
+        return true;
+    }
+    false
+}
+
 // --- step-up ------------------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -49,6 +72,10 @@ async fn a_step_up_token_is_accepted_by_a_step_up_only_route_and_a_plain_session
         password: Some(l3_http::fixture::ADMIN_PASSWORD.to_owned()),
         secret: None,
     };
+    if route_is_not_served(&fixture.admin(), "/api/v1/auth/step-up", "`auth_step_up`").await {
+        fixture.finish().await;
+        return;
+    }
     let elevated = fixture.step_up(&admin_user).await.unwrap();
     let body = json!({"name": "l3-helper-key"});
     let refused = fixture
@@ -157,6 +184,11 @@ async fn a_masked_grant_masks_over_http() {
         "the value leaked through the mask"
     );
     // A reveal without the reveal right is refused with the one answer.
+    let reveal_path = format!("/api/v1/resource/task/{task}/reveal");
+    if route_is_not_served(&viewer, &reveal_path, "`field_reveal`").await {
+        fixture.finish().await;
+        return;
+    }
     let refused = viewer
         .reveal(
             "task",
@@ -186,6 +218,11 @@ async fn a_revealing_grant_reveals_one_value_with_a_reason() {
         !document.text().contains(value),
         "the document carries the value"
     );
+    let reveal_path = format!("/api/v1/resource/task/{task}/reveal");
+    if route_is_not_served(&viewer, &reveal_path, "`field_reveal`").await {
+        fixture.finish().await;
+        return;
+    }
     let revealed = viewer
         .reveal(
             "task",

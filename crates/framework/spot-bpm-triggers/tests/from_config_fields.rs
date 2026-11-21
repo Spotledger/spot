@@ -214,7 +214,7 @@ fn unusable_values_are_refused_without_echoing_them() {
         ),
         (
             TriggerConfig {
-                input_schema: Some(r#"{"pattern":"^secretword"}"#.into()),
+                input_schema: Some(r#"{"pattern":"(secretword"}"#.into()),
                 ..manual()
             },
             TriggerErrorCode::InputSchemaInvalid,

@@ -105,7 +105,20 @@ fn same_dir(a: &Path, b: &Path) -> bool {
 pub fn effective(
     root: &Path,
     loaded: &Loaded,
-    _site: &Site,
+    site: &Site,
+    apps: &[String],
+) -> Result<Arc<EffectiveMeta>> {
+    // An app set the site does not serve yet (an install plans one) is checked for seam
+    // conflicts before anything is built from it or written (WP-EXT-03.T3).
+    if !site.apps.is_empty() && apps != site.apps.as_slice() {
+        check_seam_conflicts(root, loaded, site, apps)?;
+    }
+    effective_unchecked(root, loaded, apps)
+}
+
+fn effective_unchecked(
+    root: &Path,
+    loaded: &Loaded,
     apps: &[String],
 ) -> Result<Arc<EffectiveMeta>> {
     if apps.is_empty() {
@@ -123,6 +136,67 @@ pub fn effective(
                     .join("\n"),
             )
         })
+}
+
+/// Refuses the app set `planned` when the controllers' strict registry finds seam conflicts
+/// (`seam.duplicate_provider`, `seam.version_mismatch`, ...): one line per conflict, with its
+/// catalogued code, the apps involved and the seam, names only. Nothing is written. A planned
+/// set that builds, or fails for a reason that is not a seam conflict, passes (the other
+/// reasons surface when the site starts, as before).
+///
+/// # Errors
+/// One [`Error`] listing every seam conflict.
+pub fn check_seam_conflicts(
+    root: &Path,
+    loaded: &Loaded,
+    site: &Site,
+    planned: &[String],
+) -> Result<()> {
+    let mut candidate = site.clone();
+    candidate.apps = planned.to_vec();
+    let meta = effective_unchecked(root, loaded, planned)?;
+    let perms = crate::services::controllers::app_permissions(root, loaded, &candidate)?;
+    let Err(error) = crate::services::controllers::build(root, loaded, &candidate, &meta, &perms)
+    else {
+        return Ok(());
+    };
+    let lines = seam_lines(&error.0);
+    if lines.is_empty() {
+        return Ok(());
+    }
+    Err(Error(format!(
+        "the app set cannot be installed: {}\n{}",
+        planned.join(", "),
+        lines.join("\n")
+    )))
+}
+
+/// The `seam.*` conflicts in the debug text of the registry's conflicts, as `code: message
+/// (apps: a, b)`. The registry hands the host the conflicts flattened into text.
+fn seam_lines(text: &str) -> Vec<String> {
+    fn quoted(piece: &str, key: &str) -> Option<String> {
+        let start = piece.find(key)? + key.len();
+        let rest = piece.get(start..)?;
+        let end = rest.find('"')?;
+        Some(rest[..end].to_owned())
+    }
+    text.split("Conflict {")
+        .skip(1)
+        .filter_map(|piece| {
+            let code = quoted(piece, "code: \"")?;
+            if !code.starts_with("seam.") {
+                return None;
+            }
+            let message = quoted(piece, "message: \"").unwrap_or_default();
+            let apps = piece
+                .split("apps: [")
+                .nth(1)
+                .and_then(|r| r.split(']').next())
+                .unwrap_or_default()
+                .replace('"', "");
+            Some(format!("{code}: {message} (apps: {apps})"))
+        })
+        .collect()
 }
 
 /// The definitions of the apps `site` has installed, platform first, exactly as the app

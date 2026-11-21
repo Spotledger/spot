@@ -32,6 +32,8 @@ time = { version = "0.3", features = ["serde", "macros"] }
 async-trait = "0.1"
 # The body hash that keys a webhook delivery when the caller sends no idempotency header.
 sha2 = "0.10"
+# The input schema's `pattern` keyword: linear-time matching (no backtracking), compiled with a size limit.
+regex = "1.13"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "time", "rt", "macros", "rt-multi-thread", "test-util"] }

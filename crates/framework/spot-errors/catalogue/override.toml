@@ -12,10 +12,10 @@ since = "0.1.0"
 [[entry]]
 code = "override.unknown_by"
 class = "none"
-summary = "An override's by field names an app that is not installed."
+summary = "An override's by field names a step that no installed app declares."
 explanation_key = "error.override.unknown_by"
 params = []
-remedy = "Name the overriding app exactly as installed."
+remedy = "Declare the by step in a controller of an installed app, and name it exactly as `app:step`."
 since = "0.1.0"
 
 [[entry]]
